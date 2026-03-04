@@ -1,0 +1,22 @@
+{
+    "id": "student_fl_exempt",
+    "catalogYear": "2023",
+    "declaredPrograms": [
+        "cas_core"
+    ],
+    "flags": [
+        "nonEnglishSecondary"
+    ],
+    "coursesTaken": [
+        {
+            "courseId": "EXPOS-UA 1",
+            "grade": "A",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "FYRS-UA 500",
+            "grade": "A-",
+            "semester": "2023-fall"
+        }
+    ]
+}

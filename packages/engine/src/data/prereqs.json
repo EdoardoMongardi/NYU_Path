@@ -1,0 +1,378 @@
+[
+    {
+        "course": "CSCI-UA 101",
+        "prereqGroups": [
+            {
+                "type": "OR",
+                "courses": [
+                    "CSCI-UA 0002",
+                    "CSCI-UA 0003",
+                    "PLACEMENT_EXAM"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 102",
+        "prereqGroups": [
+            {
+                "type": "OR",
+                "courses": [
+                    "CSCI-UA 101",
+                    "CSCI-UA 110"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 201",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 102"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 202",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 201"
+                ]
+            },
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 310"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 310",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 102"
+                ]
+            },
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 120"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 421",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 102"
+                ]
+            },
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 140"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 453",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 310"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 467",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 201"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 469",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 310"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 470",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 201"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 471",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 310"
+                ]
+            },
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 140"
+                ]
+            },
+            {
+                "type": "OR",
+                "courses": [
+                    "MATH-UA 233",
+                    "MATH-UA 235"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 472",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 310"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 473",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 310"
+                ]
+            },
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 140"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 474",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 201"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 475",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 310"
+                ]
+            },
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 140"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 476",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 201"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 478",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 310"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 479",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 310"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "CSCI-UA 480",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "CSCI-UA 201"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "MATH-UA 122",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 121"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "MATH-UA 123",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 122"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "MATH-UA 140",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 121"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "MATH-UA 233",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 122"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "MATH-UA 234",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 233"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "MATH-UA 235",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 121"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "MATH-UA 252",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 140"
+                ]
+            },
+            {
+                "type": "AND",
+                "courses": [
+                    "MATH-UA 122"
+                ]
+            }
+        ],
+        "coreqs": []
+    },
+    {
+        "course": "EXPOS-UA 9",
+        "prereqGroups": [
+            {
+                "type": "AND",
+                "courses": [
+                    "EXPOS-UA 4"
+                ]
+            }
+        ],
+        "coreqs": []
+    }
+]

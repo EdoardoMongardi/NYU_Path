@@ -1,0 +1,1526 @@
+[
+    {
+        "id": "CSCI-UA 101",
+        "title": "Introduction to Computer Science",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [
+            "CSCI-UA 110"
+        ],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 102",
+        "title": "Data Structures",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 110",
+        "title": "Introduction to Computer Programming (Python)",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [
+            "CSCI-UA 101"
+        ],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 201",
+        "title": "Computer Systems Organization",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 202",
+        "title": "Operating Systems",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 310",
+        "title": "Basic Algorithms",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 421",
+        "title": "Numerical Computing",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 453",
+        "title": "Theory of Computation",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 467",
+        "title": "Applied Internet Technology",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 469",
+        "title": "Natural Language Processing",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 470",
+        "title": "Object Oriented Programming",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 471",
+        "title": "Introduction to Machine Learning",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [
+            "DS-UA 301"
+        ],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 472",
+        "title": "Artificial Intelligence",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 473",
+        "title": "Fundamentals of Machine Learning",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 474",
+        "title": "Software Engineering",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 475",
+        "title": "Predictive Analytics",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 476",
+        "title": "Processing Big Data for Analytics Applications",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 478",
+        "title": "Introduction to Cryptography",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 479",
+        "title": "Data Management and Analysis",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 480",
+        "title": "Special Topics in Computer Science",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CSCI-UA 490",
+        "title": "Special Topics in Computer Science (Advanced)",
+        "credits": 4,
+        "departments": [
+            "CSCI-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MATH-UA 120",
+        "title": "Discrete Mathematics",
+        "credits": 4,
+        "departments": [
+            "MATH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MATH-UA 121",
+        "title": "Calculus I",
+        "credits": 4,
+        "departments": [
+            "MATH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring",
+            "summer"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MATH-UA 122",
+        "title": "Calculus II",
+        "credits": 4,
+        "departments": [
+            "MATH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring",
+            "summer"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MATH-UA 123",
+        "title": "Calculus III",
+        "credits": 4,
+        "departments": [
+            "MATH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MATH-UA 140",
+        "title": "Linear Algebra",
+        "credits": 4,
+        "departments": [
+            "MATH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MATH-UA 233",
+        "title": "Theory of Probability",
+        "credits": 4,
+        "departments": [
+            "MATH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MATH-UA 234",
+        "title": "Mathematical Statistics",
+        "credits": 4,
+        "departments": [
+            "MATH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MATH-UA 235",
+        "title": "Probability and Statistics",
+        "credits": 4,
+        "departments": [
+            "MATH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MATH-UA 252",
+        "title": "Numerical Analysis",
+        "credits": 4,
+        "departments": [
+            "MATH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "DS-UA 301",
+        "title": "Introduction to Machine Learning (Data Science)",
+        "credits": 4,
+        "departments": [
+            "DS-UA"
+        ],
+        "crossListed": [
+            "CSCI-UA 471"
+        ],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "EXPOS-UA 1",
+        "title": "Writing as Inquiry",
+        "credits": 4,
+        "departments": [
+            "EXPOS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYRS-UA 500",
+        "title": "First-Year Seminar (Representative)",
+        "credits": 4,
+        "departments": [
+            "FYRS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CORE-UA 500",
+        "title": "Texts and Ideas (Representative)",
+        "credits": 4,
+        "departments": [
+            "CORE-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CORE-UA 600",
+        "title": "Cultures and Contexts (Representative)",
+        "credits": 4,
+        "departments": [
+            "CORE-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CORE-UA 700",
+        "title": "Societies and the Social Sciences (Representative)",
+        "credits": 4,
+        "departments": [
+            "CORE-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CORE-UA 800",
+        "title": "Expressive Culture (Representative)",
+        "credits": 4,
+        "departments": [
+            "CORE-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CORE-UA 100",
+        "title": "Quantitative Reasoning: Problems, Statistics, & Decision Making",
+        "credits": 4,
+        "departments": [
+            "CORE-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CORE-UA 110",
+        "title": "Quantitative Reasoning: Great Ideas in Mathematics",
+        "credits": 4,
+        "departments": [
+            "CORE-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CORE-UA 200",
+        "title": "Physical Science: Einsteins Universe",
+        "credits": 4,
+        "departments": [
+            "CORE-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CORE-UA 300",
+        "title": "Life Science: Brain and Behavior",
+        "credits": 4,
+        "departments": [
+            "CORE-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "SPAN-UA 4",
+        "title": "Spanish Intermediate II",
+        "credits": 4,
+        "departments": [
+            "SPAN-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FREN-UA 12",
+        "title": "French Intermediate II",
+        "credits": 4,
+        "departments": [
+            "FREN-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "EAST-UA 204",
+        "title": "Chinese Intermediate II",
+        "credits": 4,
+        "departments": [
+            "EAST-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "EAST-UA 250",
+        "title": "Japanese Intermediate II",
+        "credits": 4,
+        "departments": [
+            "EAST-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "EAST-UA 257",
+        "title": "Korean Intermediate II",
+        "credits": 4,
+        "departments": [
+            "EAST-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "ITAL-UA 12",
+        "title": "Italian Intermediate II",
+        "credits": 4,
+        "departments": [
+            "ITAL-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "GERM-UA 4",
+        "title": "German Intermediate II",
+        "credits": 4,
+        "departments": [
+            "GERM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "PORT-UA 4",
+        "title": "Portuguese Intermediate II",
+        "credits": 4,
+        "departments": [
+            "PORT-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "RUSSN-UA 4",
+        "title": "Russian Intermediate II",
+        "credits": 4,
+        "departments": [
+            "RUSSN-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MEIS-UA 104",
+        "title": "Arabic Intermediate II",
+        "credits": 4,
+        "departments": [
+            "MEIS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "HBRJD-UA 4",
+        "title": "Hebrew Intermediate II",
+        "credits": 4,
+        "departments": [
+            "HBRJD-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "SPAN-UA 20",
+        "title": "Spanish Intensive Intermediate",
+        "credits": 4,
+        "departments": [
+            "SPAN-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FREN-UA 20",
+        "title": "French Intensive Intermediate",
+        "credits": 4,
+        "departments": [
+            "FREN-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "ITAL-UA 20",
+        "title": "Italian Intensive Intermediate",
+        "credits": 4,
+        "departments": [
+            "ITAL-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "GERM-UA 20",
+        "title": "German Intensive Intermediate",
+        "credits": 4,
+        "departments": [
+            "GERM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "EAST-UA 232",
+        "title": "Chinese Intermediate for Advanced Beginners",
+        "credits": 4,
+        "departments": [
+            "EAST-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "EAST-UA 282",
+        "title": "Korean Intermediate for Advanced Learners",
+        "credits": 4,
+        "departments": [
+            "EAST-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "EAST-UA 413",
+        "title": "Cantonese Intermediate II",
+        "credits": 4,
+        "departments": [
+            "EAST-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "SCA-UA 324",
+        "title": "Filipino (Tagalog) Intermediate II",
+        "credits": 4,
+        "departments": [
+            "SCA-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "SCA-UA 124",
+        "title": "Swahili Intermediate II",
+        "credits": 4,
+        "departments": [
+            "SCA-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CLASS-UA 10",
+        "title": "Greek: Homer",
+        "credits": 4,
+        "departments": [
+            "CLASS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "CLASS-UA 6",
+        "title": "Latin: Vergil",
+        "credits": 4,
+        "departments": [
+            "CLASS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "HEL-UA 106",
+        "title": "Modern Greek Intermediate II",
+        "credits": 4,
+        "departments": [
+            "HEL-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "IRISH-UA 103",
+        "title": "Modern Irish Intermediate II",
+        "credits": 4,
+        "departments": [
+            "IRISH-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MEIS-UA 304",
+        "title": "Urdu Intermediate II",
+        "credits": 4,
+        "departments": [
+            "MEIS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MEIS-UA 404",
+        "title": "Persian Intermediate II",
+        "credits": 4,
+        "departments": [
+            "MEIS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MEIS-UA 408",
+        "title": "Hindi Intermediate II",
+        "credits": 4,
+        "departments": [
+            "MEIS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "MEIS-UA 504",
+        "title": "Turkish Intermediate II",
+        "credits": 4,
+        "departments": [
+            "MEIS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "HBRJD-UA 17",
+        "title": "Yiddish Intermediate II",
+        "credits": 4,
+        "departments": [
+            "HBRJD-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "PORT-UA 21",
+        "title": "Portuguese Intensive Intermediate for Spanish Speakers",
+        "credits": 4,
+        "departments": [
+            "PORT-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "SPAN-UA 84",
+        "title": "Quechua Intermediate II",
+        "credits": 4,
+        "departments": [
+            "SPAN-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "SPAN-UA 11",
+        "title": "Spanish for Spanish Speakers",
+        "credits": 4,
+        "departments": [
+            "SPAN-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "RUSSN-UA 6",
+        "title": "Russian Grammar and Composition II",
+        "credits": 4,
+        "departments": [
+            "RUSSN-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "EXPOS-UA 4",
+        "title": "International Writing Workshop I",
+        "credits": 4,
+        "departments": [
+            "EXPOS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "EXPOS-UA 9",
+        "title": "International Writing Workshop II",
+        "credits": 4,
+        "departments": [
+            "EXPOS-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYSEM-UA 1",
+        "title": "Complexities: Ocean",
+        "credits": 4,
+        "departments": [
+            "FYSEM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYSEM-UA 506",
+        "title": "Game Theory and the Humanities",
+        "credits": 4,
+        "departments": [
+            "FYSEM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYSEM-UA 753",
+        "title": "Heroic Journeys: Homer, Virgil, Dante",
+        "credits": 4,
+        "departments": [
+            "FYSEM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYSEM-UA 781",
+        "title": "Happiness in Film",
+        "credits": 4,
+        "departments": [
+            "FYSEM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYSEM-UA 783",
+        "title": "DNA: From the Double Helix to Nanotechnology",
+        "credits": 4,
+        "departments": [
+            "FYSEM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYSEM-UA 801",
+        "title": "History of Italian Opera",
+        "credits": 4,
+        "departments": [
+            "FYSEM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYSEM-UA 853",
+        "title": "Reading Freud",
+        "credits": 4,
+        "departments": [
+            "FYSEM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYSEM-UA 856",
+        "title": "Language and Migration",
+        "credits": 4,
+        "departments": [
+            "FYSEM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    },
+    {
+        "id": "FYSEM-UA 900",
+        "title": "Topics in First-Year Seminar",
+        "credits": 4,
+        "departments": [
+            "FYSEM-UA"
+        ],
+        "crossListed": [],
+        "exclusions": [],
+        "termsOffered": [
+            "fall",
+            "spring"
+        ],
+        "catalogYearsActive": [
+            "2020",
+            "2025"
+        ]
+    }
+]

@@ -1,0 +1,75 @@
+{
+    "id": "eval_struggling_student",
+    "catalogYear": "2023",
+    "declaredPrograms": [
+        "cs_major_ba",
+        "cas_core"
+    ],
+    "coursesTaken": [
+        {
+            "courseId": "CSCI-UA 101",
+            "grade": "B-",
+            "semester": "2022-fall"
+        },
+        {
+            "courseId": "MATH-UA 121",
+            "grade": "C+",
+            "semester": "2022-fall"
+        },
+        {
+            "courseId": "EXPOS-UA 1",
+            "grade": "B",
+            "semester": "2022-fall"
+        },
+        {
+            "courseId": "FYRS-UA 500",
+            "grade": "B+",
+            "semester": "2022-fall"
+        },
+        {
+            "courseId": "CSCI-UA 102",
+            "grade": "C-",
+            "semester": "2023-spring"
+        },
+        {
+            "courseId": "MATH-UA 120",
+            "grade": "B-",
+            "semester": "2023-spring"
+        },
+        {
+            "courseId": "CORE-UA 500",
+            "grade": "B",
+            "semester": "2023-spring"
+        },
+        {
+            "courseId": "CSCI-UA 102",
+            "grade": "B",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CSCI-UA 201",
+            "grade": "D",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "MATH-UA 140",
+            "grade": "C",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "SPAN-UA 4",
+            "grade": "A-",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CSCI-UA 201",
+            "grade": "B-",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "CORE-UA 700",
+            "grade": "B+",
+            "semester": "2024-spring"
+        }
+    ]
+}

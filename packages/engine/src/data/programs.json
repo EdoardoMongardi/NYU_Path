@@ -1,0 +1,314 @@
+[
+    {
+        "programId": "cs_major_ba",
+        "name": "Computer Science BA",
+        "catalogYear": "2023",
+        "school": "CAS",
+        "department": "Computer Science",
+        "totalCreditsRequired": 128,
+        "rules": [
+            {
+                "ruleId": "cs_ba_intro",
+                "label": "Introduction to Computer Science",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "CSCI-UA 101",
+                    "CSCI-UA 110"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2023",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "cs_ba_core",
+                "label": "CS Core Courses",
+                "type": "must_take",
+                "courses": [
+                    "CSCI-UA 102",
+                    "CSCI-UA 201",
+                    "CSCI-UA 202",
+                    "CSCI-UA 310"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2023",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "cs_ba_electives",
+                "label": "CS Electives (300/400-level)",
+                "type": "choose_n",
+                "n": 5,
+                "fromPool": [
+                    "CSCI-UA 4*"
+                ],
+                "minLevel": 300,
+                "doubleCountPolicy": "limit_1",
+                "mathSubstitutionPool": [
+                    "MATH-UA 122",
+                    "MATH-UA 140",
+                    "MATH-UA 185",
+                    "MATH-UA 233",
+                    "MATH-UA 234",
+                    "MATH-UA 235"
+                ],
+                "maxMathSubstitutions": 2,
+                "catalogYearRange": [
+                    "2023",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "cs_ba_math_calculus",
+                "label": "Calculus I",
+                "type": "must_take",
+                "courses": [
+                    "MATH-UA 121"
+                ],
+                "doubleCountPolicy": "allow",
+                "catalogYearRange": [
+                    "2023",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "cs_ba_math_discrete",
+                "label": "Discrete Mathematics",
+                "type": "must_take",
+                "courses": [
+                    "MATH-UA 120"
+                ],
+                "doubleCountPolicy": "allow",
+                "catalogYearRange": [
+                    "2023",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "cs_ba_math_linear_algebra",
+                "label": "Linear Algebra",
+                "type": "must_take",
+                "courses": [
+                    "MATH-UA 140"
+                ],
+                "doubleCountPolicy": "allow",
+                "catalogYearRange": [
+                    "2023",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "cs_ba_math_elective",
+                "label": "Math Elective (Calculus II or Probability/Statistics)",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "MATH-UA 122",
+                    "MATH-UA 233",
+                    "MATH-UA 235"
+                ],
+                "doubleCountPolicy": "allow",
+                "catalogYearRange": [
+                    "2023",
+                    "2025"
+                ]
+            }
+        ]
+    },
+    {
+        "programId": "cas_core",
+        "name": "CAS Core Curriculum",
+        "catalogYear": "2023",
+        "school": "CAS",
+        "department": "College Core",
+        "totalCreditsRequired": 128,
+        "rules": [
+            {
+                "ruleId": "core_expos",
+                "label": "Expository Writing",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "EXPOS-UA 1",
+                    "EXPOS-UA 9"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "core_fys",
+                "label": "First-Year Seminar",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "FYSEM-UA *"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "core_foreign_lang",
+                "label": "Foreign Language (Intermediate Proficiency)",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "SPAN-UA 4",
+                    "SPAN-UA 20",
+                    "SPAN-UA 84",
+                    "SPAN-UA 11",
+                    "FREN-UA 12",
+                    "FREN-UA 20",
+                    "EAST-UA 204",
+                    "EAST-UA 232",
+                    "EAST-UA 250",
+                    "EAST-UA 257",
+                    "EAST-UA 282",
+                    "EAST-UA 413",
+                    "ITAL-UA 12",
+                    "ITAL-UA 20",
+                    "GERM-UA 4",
+                    "GERM-UA 20",
+                    "PORT-UA 4",
+                    "PORT-UA 21",
+                    "RUSSN-UA 4",
+                    "RUSSN-UA 6",
+                    "MEIS-UA 104",
+                    "MEIS-UA 304",
+                    "MEIS-UA 404",
+                    "MEIS-UA 408",
+                    "MEIS-UA 504",
+                    "HBRJD-UA 4",
+                    "HBRJD-UA 17",
+                    "CLASS-UA 6",
+                    "CLASS-UA 10",
+                    "HEL-UA 106",
+                    "IRISH-UA 103",
+                    "SCA-UA 124",
+                    "SCA-UA 324"
+                ],
+                "flagExemption": [
+                    "nonEnglishSecondary",
+                    "eslPathway",
+                    "bsBsProgram",
+                    "flExemptByExam"
+                ],
+                "exemptionLabel": "Exempt from foreign language requirement",
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "core_fcc_texts",
+                "label": "FCC: Texts and Ideas",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "CORE-UA 5*"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "core_fcc_cultures",
+                "label": "FCC: Cultures and Contexts",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "CORE-UA 6*"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "core_fcc_societies",
+                "label": "FCC: Societies and the Social Sciences",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "CORE-UA 7*"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "core_fcc_expressive",
+                "label": "FCC: Expressive Culture",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "CORE-UA 8*"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "core_fsi_quant",
+                "label": "FSI: Quantitative Reasoning",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "CORE-UA 1*",
+                    "MATH-UA 121",
+                    "MATH-UA 122"
+                ],
+                "doubleCountPolicy": "allow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "core_fsi_physical",
+                "label": "FSI: Physical Science",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "CORE-UA 2*"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            },
+            {
+                "ruleId": "core_fsi_life",
+                "label": "FSI: Life Science",
+                "type": "choose_n",
+                "n": 1,
+                "fromPool": [
+                    "CORE-UA 3*"
+                ],
+                "doubleCountPolicy": "disallow",
+                "catalogYearRange": [
+                    "2020",
+                    "2025"
+                ]
+            }
+        ]
+    }
+]

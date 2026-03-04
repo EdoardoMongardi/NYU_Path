@@ -1,0 +1,17 @@
+{
+    "id": "student_esl_planner",
+    "catalogYear": "2023",
+    "declaredPrograms": [
+        "cas_core"
+    ],
+    "flags": [
+        "eslPathway"
+    ],
+    "coursesTaken": [
+        {
+            "courseId": "EXPOS-UA 4",
+            "grade": "A-",
+            "semester": "2023-fall"
+        }
+    ]
+}

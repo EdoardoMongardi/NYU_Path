@@ -1,0 +1,44 @@
+{
+    "id": "student_exclusive",
+    "catalogYear": "2023",
+    "declaredPrograms": [
+        "cs_major_ba"
+    ],
+    "coursesTaken": [
+        {
+            "courseId": "CSCI-UA 101",
+            "grade": "A",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CSCI-UA 110",
+            "grade": "B+",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "CSCI-UA 102",
+            "grade": "B",
+            "semester": "2024-fall"
+        },
+        {
+            "courseId": "MATH-UA 121",
+            "grade": "A-",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "MATH-UA 120",
+            "grade": "B+",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "MATH-UA 140",
+            "grade": "B",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "MATH-UA 235",
+            "grade": "A",
+            "semester": "2024-fall"
+        }
+    ]
+}

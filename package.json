@@ -1,0 +1,29 @@
+{
+  "name": "nyupath",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NYU-Specific Degree & Opportunity Intelligence Agent",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "audit:cli": "pnpm --filter @nyupath/cli audit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@types/node": "^25.3.2",
+    "@types/pdf-parse": "^1.1.5",
+    "openai": "^6.25.0",
+    "pdf-parse": "^2.4.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "unpdf": "^1.4.0"
+  }
+}

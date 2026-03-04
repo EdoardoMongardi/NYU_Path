@@ -1,0 +1,30 @@
+{
+    "name": "@nyupath/engine",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "dependencies": {
+        "@nyupath/shared": "workspace:*"
+    },
+    "scripts": {
+        "build": "tsc",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "exports": {
+        ".": "./src/index.ts",
+        "./chat/transcriptParser": "./src/chat/transcriptParser.ts",
+        "./chat/llmClient": "./src/chat/llmClient.ts",
+        "./chat/chatOrchestrator": "./src/chat/chatOrchestrator.ts",
+        "./chat/intentRouter": "./src/chat/intentRouter.ts",
+        "./chat/explanationGenerator": "./src/chat/explanationGenerator.ts",
+        "./audit/degreeAudit": "./src/audit/degreeAudit.ts",
+        "./planner/semesterPlanner": "./src/planner/semesterPlanner.ts",
+        "./data/courses.json": "./src/data/courses.json",
+        "./data/programs.json": "./src/data/programs.json",
+        "./data/prereqs.json": "./src/data/prereqs.json",
+        "./api/nyuClassSearch": "./src/api/nyuClassSearch.ts"
+    }
+}

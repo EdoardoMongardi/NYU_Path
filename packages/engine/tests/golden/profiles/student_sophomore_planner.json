@@ -1,0 +1,48 @@
+{
+    "id": "student_sophomore_planner",
+    "catalogYear": "2023",
+    "declaredPrograms": [
+        "cs_major_ba"
+    ],
+    "transferCourses": [
+        {
+            "source": "AP Calculus BC",
+            "scoreOrGrade": "5",
+            "nyuEquivalent": "MATH-UA 121",
+            "credits": 4
+        },
+        {
+            "source": "AP English Language",
+            "scoreOrGrade": "4",
+            "credits": 4
+        },
+        {
+            "source": "AP US History",
+            "scoreOrGrade": "4",
+            "credits": 4
+        }
+    ],
+    "genericTransferCredits": 8,
+    "coursesTaken": [
+        {
+            "courseId": "CSCI-UA 101",
+            "grade": "A",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CSCI-UA 102",
+            "grade": "B+",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "MATH-UA 120",
+            "grade": "A-",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "MATH-UA 121",
+            "grade": "B",
+            "semester": "2024-spring"
+        }
+    ]
+}
