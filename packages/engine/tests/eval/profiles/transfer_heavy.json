@@ -1,0 +1,84 @@
+{
+    "id": "transfer_heavy",
+    "catalogYear": "2023",
+    "declaredPrograms": [
+        "cs_major_ba"
+    ],
+    "coursesTaken": [
+        {
+            "courseId": "MATH-UA 120",
+            "grade": "A",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "CSCI-UA 201",
+            "grade": "B+",
+            "semester": "2024-fall"
+        },
+        {
+            "courseId": "CSCI-UA 310",
+            "grade": "B",
+            "semester": "2024-fall"
+        },
+        {
+            "courseId": "EXPOS-UA 1",
+            "grade": "A-",
+            "semester": "2024-fall"
+        },
+        {
+            "courseId": "CSCI-UA 202",
+            "grade": "A-",
+            "semester": "2025-spring"
+        }
+    ],
+    "transferCourses": [
+        {
+            "source": "AP Computer Science A",
+            "scoreOrGrade": "5",
+            "nyuEquivalent": "CSCI-UA 101",
+            "credits": 4
+        },
+        {
+            "source": "AP Calculus BC",
+            "scoreOrGrade": "5",
+            "nyuEquivalent": "MATH-UA 121",
+            "credits": 4
+        },
+        {
+            "source": "AP Calculus BC (subscore)",
+            "scoreOrGrade": "5",
+            "nyuEquivalent": "MATH-UA 122",
+            "credits": 4
+        },
+        {
+            "source": "AP English Literature",
+            "scoreOrGrade": "5",
+            "credits": 4
+        },
+        {
+            "source": "AP Psychology",
+            "scoreOrGrade": "5",
+            "credits": 4
+        },
+        {
+            "source": "AP Physics C: Mechanics",
+            "scoreOrGrade": "5",
+            "nyuEquivalent": "PHYS-UA 11",
+            "credits": 4
+        },
+        {
+            "source": "AP Biology",
+            "scoreOrGrade": "5",
+            "nyuEquivalent": "BIOL-UA 12",
+            "credits": 4
+        },
+        {
+            "source": "IB Computer Science HL",
+            "scoreOrGrade": "6",
+            "nyuEquivalent": "CSCI-UA 102",
+            "credits": 4
+        }
+    ],
+    "genericTransferCredits": 0,
+    "visaStatus": "domestic"
+}

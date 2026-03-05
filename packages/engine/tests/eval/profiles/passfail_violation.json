@@ -1,0 +1,44 @@
+{
+    "id": "passfail_violation",
+    "catalogYear": "2023",
+    "declaredPrograms": [
+        "cs_major_ba"
+    ],
+    "coursesTaken": [
+        {
+            "courseId": "CSCI-UA 101",
+            "grade": "P",
+            "gradeMode": "pf",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "MATH-UA 121",
+            "grade": "A",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CORE-UA 501",
+            "grade": "P",
+            "gradeMode": "pf",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "EXPOS-UA 1",
+            "grade": "P",
+            "gradeMode": "pf",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "SPAN-UA 1",
+            "grade": "P",
+            "gradeMode": "pf",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "CORE-UA 601",
+            "grade": "B+",
+            "semester": "2024-spring"
+        }
+    ],
+    "visaStatus": "domestic"
+}

@@ -1,0 +1,45 @@
+{
+    "id": "low_gpa",
+    "catalogYear": "2023",
+    "declaredPrograms": [
+        "cs_major_ba"
+    ],
+    "coursesTaken": [
+        {
+            "courseId": "CSCI-UA 101",
+            "grade": "D",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "MATH-UA 121",
+            "grade": "D+",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "EXPOS-UA 1",
+            "grade": "C-",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CORE-UA 501",
+            "grade": "F",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CSCI-UA 102",
+            "grade": "D",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "MATH-UA 120",
+            "grade": "C-",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "CORE-UA 601",
+            "grade": "F",
+            "semester": "2024-spring"
+        }
+    ],
+    "visaStatus": "domestic"
+}

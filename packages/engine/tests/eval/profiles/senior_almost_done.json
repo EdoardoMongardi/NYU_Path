@@ -1,0 +1,85 @@
+{
+    "id": "senior_almost_done",
+    "catalogYear": "2023",
+    "declaredPrograms": [
+        "cs_major_ba"
+    ],
+    "coursesTaken": [
+        {
+            "courseId": "CSCI-UA 101",
+            "grade": "A",
+            "semester": "2022-fall"
+        },
+        {
+            "courseId": "CSCI-UA 102",
+            "grade": "A-",
+            "semester": "2023-spring"
+        },
+        {
+            "courseId": "CSCI-UA 201",
+            "grade": "B+",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CSCI-UA 202",
+            "grade": "A-",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "CSCI-UA 310",
+            "grade": "B",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CSCI-UA 467",
+            "grade": "A",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "CSCI-UA 472",
+            "grade": "B+",
+            "semester": "2024-fall"
+        },
+        {
+            "courseId": "CSCI-UA 474",
+            "grade": "A",
+            "semester": "2024-fall"
+        },
+        {
+            "courseId": "CSCI-UA 480",
+            "grade": "A-",
+            "semester": "2025-spring"
+        },
+        {
+            "courseId": "CSCI-UA 473",
+            "grade": "B+",
+            "semester": "2025-spring"
+        },
+        {
+            "courseId": "CSCI-UA 478",
+            "grade": "A",
+            "semester": "2025-fall"
+        },
+        {
+            "courseId": "MATH-UA 121",
+            "grade": "A",
+            "semester": "2022-fall"
+        },
+        {
+            "courseId": "MATH-UA 120",
+            "grade": "A-",
+            "semester": "2023-spring"
+        },
+        {
+            "courseId": "MATH-UA 140",
+            "grade": "B+",
+            "semester": "2023-spring"
+        },
+        {
+            "courseId": "MATH-UA 122",
+            "grade": "B",
+            "semester": "2024-spring"
+        }
+    ],
+    "visaStatus": "domestic"
+}

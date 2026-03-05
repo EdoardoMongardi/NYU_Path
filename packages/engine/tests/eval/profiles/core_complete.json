@@ -1,90 +1,85 @@
 {
-    "id": "eval_cs_junior",
+    "id": "core_complete",
     "catalogYear": "2023",
     "declaredPrograms": [
-        "cs_major_ba",
-        "cas_core"
+        "cs_major_ba"
     ],
     "coursesTaken": [
         {
-            "courseId": "CSCI-UA 101",
-            "grade": "A",
+            "courseId": "EXPOS-UA 1",
+            "grade": "B+",
+            "semester": "2022-fall"
+        },
+        {
+            "courseId": "FYSEM-UA 740",
+            "grade": "A-",
+            "semester": "2022-fall"
+        },
+        {
+            "courseId": "SPAN-UA 1",
+            "grade": "B",
             "semester": "2022-fall"
         },
         {
             "courseId": "MATH-UA 121",
-            "grade": "A-",
+            "grade": "A",
             "semester": "2022-fall"
         },
         {
-            "courseId": "EXPOS-UA 1",
-            "grade": "A-",
-            "semester": "2022-fall"
-        },
-        {
-            "courseId": "FYRS-UA 500",
-            "grade": "B+",
-            "semester": "2022-fall"
-        },
-        {
-            "courseId": "CSCI-UA 102",
+            "courseId": "SPAN-UA 2",
             "grade": "B+",
             "semester": "2023-spring"
         },
         {
-            "courseId": "MATH-UA 120",
-            "grade": "B+",
-            "semester": "2023-spring"
-        },
-        {
-            "courseId": "CORE-UA 500",
+            "courseId": "CORE-UA 501",
             "grade": "B",
             "semester": "2023-spring"
+        },
+        {
+            "courseId": "CORE-UA 601",
+            "grade": "A-",
+            "semester": "2023-spring"
+        },
+        {
+            "courseId": "SPAN-UA 3",
+            "grade": "A",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CORE-UA 701",
+            "grade": "B+",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CORE-UA 801",
+            "grade": "B",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "CSCI-UA 101",
+            "grade": "A",
+            "semester": "2023-fall"
         },
         {
             "courseId": "SPAN-UA 4",
             "grade": "A-",
-            "semester": "2023-spring"
+            "semester": "2024-spring"
         },
         {
-            "courseId": "CSCI-UA 201",
+            "courseId": "PHYS-UA 11",
+            "grade": "B+",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "BIOL-UA 12",
             "grade": "B",
-            "semester": "2023-fall"
+            "semester": "2024-spring"
         },
         {
-            "courseId": "MATH-UA 140",
-            "grade": "B-",
-            "semester": "2023-fall"
-        },
-        {
-            "courseId": "CORE-UA 700",
+            "courseId": "CSCI-UA 102",
             "grade": "A-",
-            "semester": "2023-fall"
-        },
-        {
-            "courseId": "CSCI-UA 467",
-            "grade": "A",
-            "semester": "2023-fall"
-        },
-        {
-            "courseId": "CSCI-UA 310",
-            "grade": "B+",
-            "semester": "2024-spring"
-        },
-        {
-            "courseId": "MATH-UA 233",
-            "grade": "B",
-            "semester": "2024-spring"
-        },
-        {
-            "courseId": "CORE-UA 600",
-            "grade": "A",
-            "semester": "2024-spring"
-        },
-        {
-            "courseId": "CSCI-UA 472",
-            "grade": "B+",
             "semester": "2024-spring"
         }
-    ]
+    ],
+    "visaStatus": "domestic"
 }

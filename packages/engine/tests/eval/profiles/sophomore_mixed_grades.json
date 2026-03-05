@@ -1,30 +1,28 @@
 {
-    "id": "eval_f1_student",
+    "id": "sophomore_mixed_grades",
     "catalogYear": "2023",
     "declaredPrograms": [
-        "cs_major_ba",
-        "cas_core"
+        "cs_major_ba"
     ],
-    "visaStatus": "f1",
     "coursesTaken": [
         {
             "courseId": "CSCI-UA 101",
-            "grade": "A-",
+            "grade": "C",
             "semester": "2023-fall"
         },
         {
             "courseId": "MATH-UA 121",
-            "grade": "B+",
+            "grade": "A",
             "semester": "2023-fall"
         },
         {
-            "courseId": "EXPOS-UA 9",
-            "grade": "B+",
-            "semester": "2023-fall"
-        },
-        {
-            "courseId": "CORE-UA 500",
+            "courseId": "EXPOS-UA 1",
             "grade": "B",
+            "semester": "2023-fall"
+        },
+        {
+            "courseId": "SPAN-UA 1",
+            "grade": "B+",
             "semester": "2023-fall"
         },
         {
@@ -38,32 +36,45 @@
             "semester": "2024-spring"
         },
         {
-            "courseId": "CORE-UA 700",
-            "grade": "B+",
+            "courseId": "CORE-UA 501",
+            "grade": "D",
+            "semester": "2024-spring"
+        },
+        {
+            "courseId": "SPAN-UA 2",
+            "grade": "A",
             "semester": "2024-spring"
         },
         {
             "courseId": "CSCI-UA 201",
-            "grade": "B+",
+            "grade": "C",
             "semester": "2024-fall"
         },
         {
-            "courseId": "MATH-UA 140",
+            "courseId": "CSCI-UA 310",
             "grade": "B",
             "semester": "2024-fall"
         },
         {
-            "courseId": "CSCI-UA 467",
+            "courseId": "CORE-UA 701",
+            "grade": "C-",
+            "semester": "2024-fall"
+        },
+        {
+            "courseId": "SPAN-UA 3",
             "grade": "A-",
             "semester": "2024-fall"
         },
         {
-            "courseId": "CORE-UA 600",
-            "grade": "A",
-            "semester": "2024-fall"
+            "courseId": "CSCI-UA 202",
+            "grade": "C-",
+            "semester": "2025-spring"
+        },
+        {
+            "courseId": "SPAN-UA 4",
+            "grade": "B+",
+            "semester": "2025-spring"
         }
     ],
-    "flags": [
-        "nonEnglishSecondary"
-    ]
+    "visaStatus": "domestic"
 }
