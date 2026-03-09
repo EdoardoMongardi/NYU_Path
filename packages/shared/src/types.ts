@@ -110,6 +110,10 @@ export interface CourseTaken {
     semester: string; // e.g. "2023-fall"
     /** Optional explicit credit value for courses not in the master catalog */
     credits?: number;
+    /** Whether this course was taken online [GEN-ACAD] §A3.3 */
+    isOnline?: boolean;
+    /** Grade mode: letter (default) or pass/fail [GEN-ACAD] §A3.5 */
+    gradeMode?: "letter" | "pf";
 }
 
 export interface TransferCredit {
@@ -145,6 +149,16 @@ export interface StudentProfile {
         term: string;
         courses: Array<{ courseId: string; title: string; credits: number }>;
     };
+    /** Total UA-suffix (CAS) credits completed [GEN-ACAD] §A3.2 — for 64-credit residency check */
+    uaSuffixCredits?: number;
+    /** Credits from non-CAS NYU schools [GEN-ACAD] §A3.3 — max 16 allowed */
+    nonCASNYUCredits?: number;
+    /** Total online credits taken [GEN-ACAD] §A3.3 — max 24 allowed */
+    onlineCredits?: number;
+    /** Total P/F credits taken career-wide [GEN-ACAD] §A3.5 — max 32 allowed */
+    passfailCredits?: number;
+    /** Year of matriculation [GEN-ACAD] §A3.9 — for 8-year time limit check */
+    matriculationYear?: number;
 }
 
 // ---- Audit Result ----

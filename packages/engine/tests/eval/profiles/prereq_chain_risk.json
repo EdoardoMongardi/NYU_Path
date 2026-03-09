@@ -1,0 +1,45 @@
+{
+    "id": "prereq_chain_risk",
+    "catalogYear": "2025",
+    "declaredPrograms": [
+        "cs_major_ba"
+    ],
+    "coursesTaken": [
+        {
+            "courseId": "MATH-UA 120",
+            "grade": "B",
+            "semester": "2025-fall"
+        },
+        {
+            "courseId": "MATH-UA 121",
+            "grade": "B+",
+            "semester": "2025-fall"
+        },
+        {
+            "courseId": "MATH-UA 122",
+            "grade": "A-",
+            "semester": "2026-spring"
+        },
+        {
+            "courseId": "EXPOS-UA 1",
+            "grade": "A",
+            "semester": "2025-fall"
+        },
+        {
+            "courseId": "CORE-UA 501",
+            "grade": "B+",
+            "semester": "2025-fall"
+        },
+        {
+            "courseId": "CORE-UA 601",
+            "grade": "B",
+            "semester": "2026-spring"
+        },
+        {
+            "courseId": "CORE-UA 700",
+            "grade": "A-",
+            "semester": "2026-spring"
+        }
+    ],
+    "visaStatus": "domestic"
+}

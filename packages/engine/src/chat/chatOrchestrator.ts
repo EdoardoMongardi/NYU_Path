@@ -104,7 +104,7 @@ export async function handleMessage(
             return handleElectiveSearch(intent, context, llm);
 
         case "audit_status":
-            return handleAuditStatus(intent, context, llm, history);
+            return handleAuditStatus(userMessage, intent, context, llm, history);
 
         case "plan_explain":
             return handlePlanExplain(intent, context, llm, history);
@@ -153,6 +153,7 @@ async function handleElectiveSearch(
 }
 
 async function handleAuditStatus(
+    userMessage: string,
     intent: ClassifiedIntent,
     context: ChatContext,
     llm: LLMClient,
@@ -166,7 +167,7 @@ async function handleAuditStatus(
     }
 
     const audit = await context.runAudit();
-    const message = await explainAudit(audit, llm, history);
+    const message = await explainAudit(audit, llm, history, userMessage);
 
     return { message, intent };
 }

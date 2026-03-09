@@ -1,0 +1,70 @@
+# Major Rules
+
+## General Department Policies
+
+- Each major offered in the Computer Science Department requires a **minimum of 32 credits** with the CSCI-UA designation. The Registrar's Office will not approve a major with 31 credits. 31 credits or less is considered a "minor".
+- A **minimum grade point average of 2.0** is required.
+- Only grades of **"C" or higher** are applicable to our majors and minors (and the required prerequisites).
+- **50% of the majors** MUST be completed here at the College of Arts and Sciences due to State and University residency requirements.
+- CSCI-UA 2, 4, 60, 61, 330, 380, 381, 520/1, 897/8 & 997/8 are **NOT applicable** to the majors in the Computer Science Department.
+- The Registrar's Office will allow students to **double count a maximum of two courses** towards their major(s) and/or minor(s).
+- Grades of "P" or "F" are **not applicable** towards the Computer Science Majors or Minors. In addition, grades of "P" are also not accepted if the student is trying to register for a higher level course that requires the class/course as a prerequisite.
+- Students that take a placement exam and pass, **DO NOT EARN CREDIT**. If the course that a student is placing out of is required for the CS major or minor, the course must be replaced with a CS 400 level elective with the CSCI-UA designation (or approved equivalent) in our department.
+- College Board AP Credits, A Levels, International Baccalaureate HL Exam Scores, internal NYU Study Abroad courses are equivalent to our courses and approved transfer courses/credits from other universities/colleges: **DO NOT SATISFY** the residency requirement for the College of Arts & Sciences at the New York City, Washington Square campus.
+
+---
+
+## Major in Computer Science (12 Courses)
+
+The major in Computer Science requires the successful completion of the following:
+
+- A minimum of **12 courses / 48 credits**
+- A minimum grade point average of **2.0**
+- Only grades of **"C" or higher** are applicable to our majors and minors (and the required prerequisites)
+
+### Core Requirements (7)
+
+| Course | Title | Semester | Prerequisite |
+|---|---|---|---|
+| CSCI-UA.0101 | Introduction to Computer Science | Fall / Spring | CSCI-UA.0002 or CSCI-UA.0003 or placement exam |
+| CSCI-UA.0102 | Data Structures | Fall / Spring | CSCI-UA.0101 |
+| CSCI-UA.0201 | Computer Systems Organization | Fall / Spring | CSCI-UA.0102 |
+| CSCI-UA.0202 | Operating Systems | Fall / Spring | CSCI-UA.0201 |
+| CSCI-UA.0310 | Basic Algorithms | Fall / Spring | Data Structures (CSCI-UA 102), Discrete Mathematics (MATH-UA 120) and Calculus I (MATH-UA 121) or Math for Economics I (MATH-UA 131) |
+| MATH-UA.0121 | Calculus I | Fall / Spring / Summer | MATH-UA.0009 |
+| MATH-UA.0120 | Discrete Mathematics | Fall / Spring | See prerequisites below |
+
+#### Discrete Mathematics Prerequisites
+
+One of the following:
+
+- SAT score of 670 or higher on mathematics portion
+- ACT/ACTE Math score of 30 or higher
+- AB score of 3 or higher
+- BC score of 3 or higher
+- A level Maths score of C or higher (anyone who took Further Maths should contact the math department as it varies depending on the exam board)
+- AS level Maths score of B or higher
+- IB HL score of 5 or higher
+- IB SL score of 6 or higher
+- Completion of Algebra and Calculus (MATH-UA 009) with a grade of C or higher
+- Passing placement exam
+
+### Electives (5)
+
+**FIVE electives**, numbered CSCI-UA.04xx
+
+Electives vary every fall, spring semester and there is one elective option offered in the summer semester. Students may substitute a 400-level elective with one of the following Math classes: **MATH-UA.0122 Calculus II**, **MATH-UA.0140 Linear Algebra**, and/or **MATH-UA.0185 Probability and Statistics** — a maximum of two classes can be substituted.
+
+---
+
+## Credit Distribution
+
+The Computer Science Major of 12 courses/48 credits can be distributed in the following ways:
+
+| Distribution | CS Courses (Credits) | Math Courses (Credits) | Total Credits | Ratio | % CS / % Math |
+|---|---|---|---|---|---|
+| Option 1 | 10 (40) | 2 (8) | 48 | 5 to 1 | 83% CS & 17% Math |
+| Option 2 | 9 (36) | 3 (12) | 48 | 3 to 1 | 75% CS & 25% Math |
+| Option 3 | 8 (32) | 4 (16) | 48 | 2 to 1 | 67% CS & 33% Math |
+
+Students must complete a **minimum of 32 credits with the CSCI-UA designation** as part of their 48 credits for the CS major.

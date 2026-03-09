@@ -15,6 +15,10 @@ NYU Path separates **language understanding** from **deterministic constraint ex
 | Chat Orchestrator | Routing logic | `chatOrchestrator.ts` | Integration test |
 | Explanation Generator | LLM-grounded | `explanationGenerator.ts` | LLM output evaluation |
 | Degree Audit | Deterministic | `degreeAudit.ts`, `ruleEvaluator.ts` | Full unit/golden tests |
+| Credit Cap Validator | Deterministic | `creditCapValidator.ts` | Unit tests |
+| Pass/Fail Guard | Deterministic | `passfailGuard.ts` | Unit tests |
+| Academic Standing | Deterministic | `academicStanding.ts` | Unit tests |
+| Exam Equivalencies | Deterministic | `examEquivalencies.ts` | Lookup tests |
 | Semester Planner | Deterministic | `semesterPlanner.ts`, `priorityScorer.ts`, `balancedSelector.ts` | Full unit/golden tests |
 | Enrollment Validator | Deterministic | `enrollmentValidator.ts` | Unit tests |
 | Semantic Search | Deterministic (cosine sim) | `semanticSearch.ts` | Unit tests |
@@ -35,7 +39,7 @@ Every user query to NYU Path falls into one of the following **task categories**
 For evaluation purposes, intents are grouped into **decidable** categories with clear gold-label boundaries:
 
 | Intent | Description | Decidability | Example Queries |
-|--------|------------|--------------|------------------|
+|--------|------------|--------------|-----------------|
 | `audit_status` | Degree progress, credits remaining, requirement status. **Includes what-if scenarios** (grade adjustment). | High — triggers deterministic audit | "How many credits do I need?", "Am I on track?", "I think I'll fail CSCI-UA 201" |
 | `plan_explain` | Request for a **new** semester course plan. Excludes follow-ups about a previous plan. | High — triggers deterministic planner | "What should I take next fall?", "Plan my semester" |
 | `elective_search` | Course discovery by topic/interest | High — triggers semantic search | "Find ML courses", "Something about philosophy" |
@@ -54,7 +58,7 @@ For evaluation purposes, intents are grouped into **decidable** categories with 
 ### 2.2 Constraint Evaluation Categories
 
 | Category | Scope | # of Rule Types |
-|----------|-------|----------------|
+|----------|-------|-----------------|
 | Must-take rules | Fixed course lists (e.g., CS core) | `must_take` |
 | Choose-N rules | Pick N from pool, with optional wildcards, min-level | `choose_n` |
 | Min-credits rules | Accumulate credits from a pool | `min_credits` |
@@ -65,6 +69,10 @@ For evaluation purposes, intents are grouped into **decidable** categories with 
 | Transfer/AP credits | Mapped (nyuEquivalent) and generic transfer credits | Credit resolution |
 | Equivalence resolution | Cross-listed courses, exclusive courses | `equivalenceResolver` |
 | Enrollment validation | F-1 visa rules, domestic half-time warnings | `enrollmentValidator` |
+| Credit cap validation | 7 credit caps (residency, CSCI, non-CAS, online, transfer, advanced standing, P/F) | `creditCapValidator` |
+| Pass/Fail guard | Major/Core restrictions, per-term limit, career limit | `passfailGuard` |
+| Academic standing | GPA-based standing with escalation levels | `academicStanding` |
+| Grade-aware filtering | Core=D minimum, Major=C minimum | `degreeAudit` |
 
 ### 2.3 Advisory Categories
 
@@ -78,123 +86,215 @@ For evaluation purposes, intents are grouped into **decidable** categories with 
 
 ---
 
-## 3. Evaluation Dataset Construction
+## 3. Rule-By-Rule Test Scenarios
 
-### 3.1 Dataset Specification
+> [!IMPORTANT]
+> Every test case below is sourced from a specific line/section in the five Original rules files.  
+> Source abbreviations: **MR** = Major rules CS BA major, **CC** = CAS core rules, **GA** = General CAS academic rules, **TC** = General rules for transfer credits, **F1** = F1 student rule.
 
-**Target**: 150 annotated examples covering all task categories.
+### 3.1 CS BA Major Rules (source: MR)
 
-| Partition | Count | Purpose |
-|-----------|-------|---------|
-| Intent classification | 50 | Router accuracy |
-| Constraint scenarios | 50 | Audit + planner correctness |
-| Advisory grounding | 30 | LLM faithfulness + hallucination detection |
-| Stress tests | 20 | Edge cases, adversarial prompts |
+| ID | Rule | Source | Test Scenario | Expected |
+|----|------|--------|---------------|----------|
+| MR-01 | 128 credits total with GPA ≥ 2.0 | MR line 3, GA line 28 | Student with 127 credits, GPA 2.1 | `in_progress`, 1 credit remaining |
+| MR-02 | Major GPA ≥ 2.0 | MR line 4 | Student with major GPA 1.95 | Warning: major GPA below 2.0 |
+| MR-03 | Min 32 CSCI-UA credits | MR line 5 | Student with 28 CSCI-UA credits | Warning: 4 CSCI-UA credits short |
+| MR-04 | Grade C or better for major | MR line 7 | Student with C- in CSCI-UA 201 | Course does NOT satisfy requirement |
+| MR-05 | Grade D in major course | MR line 7 | Student with D+ in CSCI-UA 310 | Does NOT count toward major; DOES earn graduation credits |
+| MR-06 | 50% major courses at CAS | MR line 8 | Student transferred 5/8 major courses | Warning: residency violation |
+| MR-07 | Intro: CSCI-UA 101 + 102 | MR line 21 | Student took 101 only | `in_progress`, 102 remaining |
+| MR-08 | Core CS: all 5 courses | MR lines 25-36 | Student missing CSCI-UA 310 | `in_progress`, 310 listed |
+| MR-09 | Electives: 5 at 400-level | MR line 54 | Student took CSCI-UA 310 (300-level) as elective | Does NOT satisfy elective; must be CSCI-UA 04xx |
+| MR-10 | Elective minLevel=400 | MR line 54 | Student took CSCI-UA 480, 473, 474, 478, 490 | All 5 satisfied |
+| MR-11 | Math substitution: max 2 | MR line 60 | Student used MATH-UA 140 + 233 + 325 | Only 2 count; 3rd blocked |
+| MR-12 | Discrete Math prereqs | MR lines 39-50 | Student with SAT Math 620 | Not eligible for CSCI-UA 310 without MATH-UA 120 |
+| MR-13 | Discrete Math prereqs | MR lines 39-50 | Student with AP Calc BC score 5 | Eligible for CSCI-UA 310 |
 
-### 3.2 Annotation Schema
+### 3.2 CAS Core Curriculum Rules (source: CC)
 
-```jsonc
-// eval_dataset.jsonl — one JSON object per line
-{
-  // ---- Metadata ----
-  "id": "eval_001",
-  "category": "intent_classification | constraint | advisory | stress",
-  "subcategory": "audit_status | plan_explain | elective_search | ...",
-  "difficulty": "easy | medium | hard",
-  "tags": ["cross-listing", "transfer-credit", "f1-visa", ...],
+| ID | Rule | Source | Test Scenario | Expected |
+|----|------|--------|---------------|----------|
+| CC-01 | First-Year Seminar | CC line 25 | Freshman with no FYSEM | `not_started` |
+| CC-02 | FYSEM exemption for transfers | CC line 27 | Transfer student with 32+ credits | Exempt from FYSEM |
+| CC-03 | Foreign Language completion | CC line 77 | Student completed FREN-UA 4 | FL satisfied |
+| CC-04 | FL exemption: nonEnglishSecondary flag | CC line 66 | Student flagged `nonEnglishSecondary` | FL exempt |
+| CC-05 | FL: AP score 4/5 satisfies | TC line 173+ | AP Chinese score 5 → 4cr, EAST-UA 204 | FL satisfied |
+| CC-06 | FL: IB HL score 6/7 satisfies | TC line 145+ | IB French HL score 7 → 8cr | FL satisfied |
+| CC-07 | FL: A-Level grade B minimum | TC line 104 | A-Level French grade B → 8cr | FL satisfied |
+| CC-08 | FL: A-Level grade C rejected | TC line 104 | A-Level French grade C | NOT satisfied |
+| CC-09 | Expository Writing | CC line 123 | Student took EXPOS-UA 1 | Satisfied |
+| CC-10 | Expository Writing: ISW path | CC line 123-124 | Student took EXPOS-UA 4 | Satisfied |
+| CC-11 | FCC: Texts and Ideas | CC line 186 | Student took CORE-UA 511 | Texts/Ideas satisfied |
+| CC-12 | FCC: Cultures and Contexts | CC line 199 | Student took CORE-UA 601 | Cultures satisfied |
+| CC-13 | FCC: Societies exemption | CC line 212 | Social science major | Exempt from Societies |
+| CC-14 | FCC: Expressive Culture exemption | CC line 218 | Humanities major | Exempt from Expressive Culture |
+| CC-15 | FSI: QR via MATH-UA 121 | CC line 235 | Student took MATH-UA 121 | QR satisfied |
+| CC-16 | FSI: QR via PSYCH-UA 10 | CC line 243 | Student took PSYCH-UA 10 | QR satisfied |
+| CC-17 | FSI: QR via ECON-UA 20 | CC line 238 | Student took ECON-UA 20 | QR satisfied |
+| CC-18 | FSI: Physical Science via CHEM-UA 125 | CC line 263 | Student took CHEM-UA 125 | Physical Science satisfied |
+| CC-19 | FSI: Life Science via BIOL-UA 12 | CC line 274 | Student took BIOL-UA 12 | Life Science satisfied |
+| CC-20 | FSI: CS major exempt from FSI | CC line 226 | CS BA student | Exempt physical+life science |
+| CC-21 | Core minimum grade: D | GA line 38 | Student got D in CORE-UA 501 | Core requirement satisfied |
+| CC-22 | Core minimum grade: F fails | GA line 38 | Student got F in CORE-UA 501 | Core NOT satisfied |
+| CC-23 | P/F NOT for Core courses | GA line 356 | Student took CORE-UA 701 P/F (grade P) | Does NOT satisfy Core |
+| CC-24 | P/F exception: FL below Intermediate II | GA line 356 | Student took SPAN-UA 1 P/F (grade P) | FL course counts toward FL requirement |
 
-  // ---- Input ----
-  "query": "How many credits do I still need to graduate?",
-  "student_profile_id": "student_senior_ba",   // references profiles/ dir
-  "conversation_history": [],                    // prior turns if multi-turn
+### 3.3 Grade-Aware Filtering (source: GA, MR)
 
-  // ---- Expected Output: Intent ----
-  "expected_intent": "audit_status",
-  "expected_confidence_min": 0.8,
-  "expected_course_id": null,
-  "expected_search_query": null,
+| ID | Rule | Source | Test Scenario | Expected |
+|----|------|--------|---------------|----------|
+| GF-01 | Major requires C | MR line 7 | C- in CSCI-UA 201 → major audit | NOT satisfied for major |
+| GF-02 | Core requires D | GA line 38 | C- in CORE-UA 601 → core audit | Satisfied for Core |
+| GF-03 | D+ earns graduation credits | GA line 291 | D+ in any course | Counted in 128-credit total |
+| GF-04 | F earns nothing | GA line 291 | F in CSCI-UA 101 | Not counted anywhere |
+| GF-05 | P grade earns credits | GA line 329 | P in elective | Counted in 128-credit total, not in GPA |
+| GF-06 | F under P/F is in GPA | GA line 329 | F under P/F option | Computed in GPA |
+| GF-07 | Transfer grade C minimum | GA line 228 | Transfer course with C- | Does NOT transfer |
+| GF-08 | Transfer grade C or better | GA line 228 | Transfer course with C | Transfers |
 
-  // ---- Expected Output: Deterministic ----
-  "expected_audit": {                            // null if not applicable
-    "overall_status": "satisfied",
-    "total_credits_completed": 52,
-    "rules_satisfied": ["cs_ba_intro", "cs_ba_core", ...],
-    "rules_remaining": [],
-    "warnings_contain": []
-  },
-  "expected_plan": null,                         // SemesterPlan assertions
+### 3.4 Credit Cap Validation (source: GA)
 
-  // ---- Expected Output: Advisory (LLM) ----
-  "advisory_assertions": {
-    "must_contain": ["52 credits", "128"],              // facts that MUST appear
-    "numeric_facts": {                                  // every number must match engine output
-      "total_credits": 52,
-      "credits_required": 128,
-      "rules_remaining": 0
-    },
-    "allowed_course_ids": ["CSCI-UA 101", "..."],       // only IDs from the retrieved set
-    "must_cite_sources": ["audit_result"],               // must reference grounding source
-    "no_fabricated_ids": true,                           // fail if any course ID not in catalog or audit
-    "grounding_source": "audit_result",                  // what grounds the answer
-    "tone": "encouraging"                                // qualitative check
-  },
+| ID | Cap | Limit | Source | Test Scenario | Expected |
+|----|-----|-------|--------|---------------|----------|
+| CAP-01 | Residency (UA credits) | ≥ 64 | GA line 196 | Student with 60 UA credits | Warning: 4 short of 64 |
+| CAP-02 | CSCI-UA credits | ≥ 32 | MR line 5 | Student with 32 exactly | Satisfied |
+| CAP-03 | Non-CAS NYU | ≤ 16 | GA line 188 | Student with 20 non-CAS | Warning: 4 over limit |
+| CAP-04 | Online | ≤ 24 | GA line 220 | Student with 28 online credits | Warning: 4 over 24-credit limit |
+| CAP-05 | Transfer | ≤ 64 | GA line 228 | Student with 64 transfer | At limit, no warning |
+| CAP-06 | Transfer | ≤ 64 | GA line 228 | Student with 68 transfer | Warning: 4 over |
+| CAP-07 | Advanced standing | ≤ 32 | GA line 271 | First-year with 36 AP+IB credits | Warning: 4 over 32-credit cap |
+| CAP-08 | P/F career | ≤ 32 | GA line 353 | Student with 36 P/F credits | Warning: 4 over career limit |
+| CAP-09 | Last 32 at CAS | Last 32 CR | GA line 248 | Student taking last course externally | Warning: residency |
+| CAP-10 | Per-semester max | ≤ 18 (without approval) | GA line 455 | Student enrolled in 20 credits | Note: adviser approval needed |
 
-  // ---- Evidence Sufficiency (human-assigned) ----
-  "support_status": "supported",                   // supported | unsupported | ambiguous | under_evidenced
-  "expected_behavior": "answer",                   // answer | refuse | ask_clarifying
+### 3.5 Pass/Fail Guard (source: GA §Pass/Fail Option)
 
-  // ---- Failure Annotations (for known-failure examples) ----
-  "expected_failure": null,                        // or failure taxonomy code
-  "notes": "Tests basic audit_status intent with a near-complete student"
-}
-```
+| ID | Rule | Source | Test Scenario | Expected |
+|----|------|--------|---------------|----------|
+| PF-01 | Max 1 P/F per term | GA line 353 | Student with 2 P/F courses in same term | Violation flagged |
+| PF-02 | Max 32 P/F career | GA line 353 | Student with 30 P/F credits taking another 4cr P/F | No violation (total=34 triggers CAP-08 instead) |
+| PF-03 | P/F not for major | GA line 356 | Student takes CSCI-UA 310 P/F | Violation: major course |
+| PF-04 | P/F not for minor | GA line 356 | Student takes minor course P/F | Violation: minor course |
+| PF-05 | P/F not for Core | GA line 356 | Student takes CORE-UA 501 P/F | Violation: Core course |
+| PF-06 | P/F OK for FL below Intermediate II | GA line 356 | Student takes SPAN-UA 1 P/F | No violation |
+| PF-07 | Deadline: 14th week | GA line 354 | After week 14 | Cannot initiate or change P/F |
 
-### 3.3 Dataset Construction Protocol
+### 3.6 Academic Standing (source: GA §Academic Standing)
 
-**Phase 1: Seed from existing golden profiles** (30 examples)
-- Convert the 19 existing golden test profiles into evaluation examples
-- Add expected intent, audit results, and advisory assertions
-- These become the **regression baseline**
+| ID | Condition | Source | Test Scenario | Expected |
+|----|-----------|--------|---------------|----------|
+| AS-01 | Good standing | GA line 418 | Student with cum GPA 2.5, sem GPA 2.3 | Good standing |
+| AS-02 | Academic concern | GA line 418 | Student with cum GPA 1.8 | Notice of Academic Concern |
+| AS-03 | Academic concern (semester) | GA line 418 | Cum GPA 2.5 but semester GPA 1.7 | Notice of Academic Concern |
+| AS-04 | Return to good standing | GA line 420-423 | Semester GPA ≥ 2.0 + cum GPA ≥ 2.0 + 75% credits completed | Returns to Good Standing |
+| AS-05 | Dismissal risk | GA line 449 | After 2nd semester, < 50% attempted credits completed | Dismissal risk flagged |
+| AS-06 | Continued concern | GA line 436 | Did not meet return criteria after 1 semester | Notice of Continued Academic Concern |
 
-**Phase 2: Systematic expansion** (70 examples)
-- For each intent type: 7 easy + 3 hard = 70 intent classification examples
-- Cover: greetings, misspellings, ambiguous queries, code-switching, compound queries
+### 3.7 Enrollment Validation (source: F1)
 
-**Phase 3: Constraint edge cases** (30 examples)
-- Cross-listed courses counted toward wrong rule
-- Transfer credits with and without `nyuEquivalent`
-- Double-count `disallow` vs `limit_1` interactions
-- Grade boundary: C vs C- (major credit vs graduation credit)
-- Residency check (32 CSCI-UA credits minimum)
-- Over-enrollment in `choose_n` rules
-- Math substitution policy edge cases (max 2 substitutions)
+| ID | Rule | Source | Test Scenario | Expected |
+|----|------|--------|---------------|----------|
+| EV-01 | F-1: 12 credits minimum | F1 line 5 | F-1 student with 11 credits | Error: below minimum |
+| EV-02 | F-1: max 1 online | F1 line 10 | F-1 student with 2 online classes | Warning: max 1 online for F-1 |
+| EV-03 | F-1: 9 in-person minimum | F1 line 8 | F-1 student with 8 in-person | Warning: need ≥ 9 in-person |
+| EV-04 | F-1: final semester exception | F1 line 15 | F-1 student, final semester, 9 credits | Allowed with RCL approval |
+| EV-05 | Summer/January exempt | F1 line 20 | F-1 student taking 4 credits in summer | No violation |
+| EV-06 | Domestic half-time | — | Domestic student with 5 credits | Warning: below half-time (6 credits) |
 
-**Phase 4: Advisory + Stress** (20 examples)
-- Hallucinated course recommendations
-- Advice contradicting `ACADEMIC_RULES`
-- Adversarial prompt injection attempts
-- Conflicting requirements (e.g., exclusive courses both needed)
-- Incomplete student profiles (missing fields)
+### 3.8 Exam Equivalencies (source: TC)
 
-### 3.4 Student Profile Templates
+| ID | Exam | Score | Source | Test Scenario | Expected |
+|----|------|-------|--------|---------------|----------|
+| EQ-01 | AP CS A | 4/5 | TC line 163 | Student with AP CS A score 5 | 4cr, CSCI-UA 101 |
+| EQ-02 | AP CS Principles | 4/5 | TC note 8 | Student with AP CS Principles score 4 | 4cr, CSCI-UA 2; does NOT count toward CS major |
+| EQ-03 | AP Calculus BC | 5 | TC line 157 | Student with AP Calc BC score 5 | 8cr, MATH-UA 121 + 122 |
+| EQ-04 | AP Calculus BC | 4 | TC line 157 | Student with AP Calc BC score 4 | 4cr, MATH-UA 121 only |
+| EQ-05 | AP Chinese | 4/5 | TC line 173 | Student with AP Chinese score 5 | 4cr (NOT 8), EAST-UA 204, FL satisfied |
+| EQ-06 | AP Spanish Lang | 4/5 | TC line 197 | Student with AP Spanish Lang score 4 | 4cr, SPAN-UA 4 |
+| EQ-07 | AP Spanish Lit | 5 | TC line 199 | Student with AP Spanish Lit score 5 | 4cr, SPAN-UA 50, needs dept evaluation |
+| EQ-08 | IB Math HL | 6 | TC line 145 | Student with IB Math HL score 6 | 8cr, MATH-UA 121 (4 of 8 equivalent) |
+| EQ-09 | IB Math HL | 7 | TC line 145 | Student with IB Math HL score 7 | 8cr, MATH-UA 121 + 122 |
+| EQ-10 | IB Bio HL | 6/7 | TC line 147 | Student with IB Bio HL score 7 | 8cr, BIOL-UA 11 + 12, Physical+Life Science Core |
+| EQ-11 | A-Level CS | B | TC line 108 | Student with A-Level CS grade B | 8cr, CSCI-UA 101 + 102 |
+| EQ-12 | A-Level CS | C | TC line 108 | Student with A-Level CS grade C | Rejected: below minimum B |
+| EQ-13 | A-Level Math | B | TC line 112 | Student with A-Level Math grade B | 8cr, MATH-UA 121 (4 of 8) |
+| EQ-14 | AP after high school | — | GA line 259 | Student took AP exam in college | No credit awarded |
+| EQ-15 | Advanced standing cap | 32 | GA line 271 | First-year with 36 total exam credits | Only 32 count |
+| EQ-16 | AP conflict | — | GA line 259 | Student has AP CS A credit + takes CSCI-UA 101 at NYU | AP credit lost |
 
-Build parameterized profiles covering the student lifecycle:
+### 3.9 Transfer Credit Rules (source: GA, TC)
 
-```
-Profile Matrix:
-├── Progression: freshman → sophomore → junior → senior → graduate-ready
-├── Transfer: no-transfer, AP-only, IB-only, A-Level, multi-transfer
-├── Visa: domestic, f1, other
-├── Flags: [], [nonEnglishSecondary], [eslPathway], [flExemptByExam]
-├── Edge cases: cross-listed, exclusive courses, failing grades
-└── Programs: cs_major_ba, cas_core, both
-```
+| ID | Rule | Source | Test Scenario | Expected |
+|----|------|--------|---------------|----------|
+| TR-01 | Max 64 transfer credits | GA line 228 | 68 transfer credits | Only 64 count |
+| TR-02 | C minimum to transfer | GA line 228 | Transfer course with B- | Accepted |
+| TR-03 | C- rejected | GA line 231 | Transfer course with C- | Rejected |
+| TR-04 | P/F grades rejected | GA line 228 | Transfer course grade P | Rejected |
+| TR-05 | No math below precalculus | GA line 100 | Transfer course: College Algebra | Rejected |
+| TR-06 | No 2-year institution (off-campus) | GA line 249 | Off-campus course from community college | Rejected |
+| TR-07 | Core substitutions not permitted | GA line 253 | Transfer course as Core substitute | Not allowed |
+| TR-08 | Grades don't count in GPA | GA line 231 | Transfer courses in GPA calc | Not included |
+| TR-09 | 10-year freshness limit | GA line 459 | Course taken 12 years ago | Transfer credit not granted |
+| TR-10 | Dual enrollment: FCC restriction | GA line 270 | Dual enrollment credit for FCC | Cannot apply toward FCC |
+| TR-11 | Dual enrollment: no expository writing for first-years | GA line 269 | First-year with dual enrollment writing | No credit for EXPOS |
+| TR-12 | Online from for-profit rejected | GA line 223 | Online course from for-profit school | Not accepted |
+
+### 3.10 Course Repetition Rules (source: GA)
+
+| ID | Rule | Source | Test Scenario | Expected |
+|----|------|--------|---------------|----------|
+| REP-01 | May repeat once | GA line 173 | Student repeating CSCI-UA 101 for first time | Allowed |
+| REP-02 | Max 2 repeats career | GA line 173 | Student attempting 3rd course repeat | Blocked |
+| REP-03 | No additional credit | GA line 175 | Student repeats course | Both grades in GPA, no extra credits |
+| REP-04 | No sequential repeat | GA line 174 | Completed Calc II, wants to repeat Calc I | Not permitted |
+
+### 3.11 Time Limit and Graduation (source: GA)
+
+| ID | Rule | Source | Test Scenario | Expected |
+|----|------|--------|---------------|----------|
+| TL-01 | 8-year time limit | GA line 459 | Student matriculated 9 years ago | Warning: past 8-year limit |
+| TL-02 | 126-127 credit petition | GA line 463 | Student with 127 credits | May petition to graduate |
+| TL-03 | Degree conferral dates | GA line 113 | January/May/August | Correct dates shown |
+| TL-04 | Normal load: 16 credits/term | GA line 455 | Student taking 16 | Normal full-time |
+| TL-05 | Minimum full-time: 12 | GA line 455 | Student taking 11 | Below full-time threshold |
+
+### 3.12 Double-Count Policy (source: GA, MR)
+
+| ID | Rule | Source | Test Scenario | Expected |
+|----|------|--------|---------------|----------|
+| DC-01 | Max 2 courses double-counted | GA line 182 | 3 courses shared between major and minor | 3rd blocked |
+| DC-02 | No triple-counting | GA line 182 | Course in 2 majors + 1 minor | Blocked |
+| DC-03 | disallow policy | programs.json | Course used in disallow rule + another | Second use blocked |
+| DC-04 | limit_1 policy | programs.json | 2 courses trying to double-count in limit_1 | Only 1 permitted |
+| DC-05 | allow policy | programs.json | QR course also counts for major | Both count |
 
 ---
 
-## 4. Evaluation Metrics
+## 4. Student Profile Test Matrix
 
-### 4.1 Intent Router Metrics
+Build parameterized profiles covering the student lifecycle:
+
+| Profile | Credits | Transfer | Visa | Flags | Grade Edge Case | Programs |
+|---------|---------|----------|------|-------|-----------------|----------|
+| `freshman_clean` | 0 | None | domestic | [] | — | cs_major_ba + cas_core |
+| `freshman_ap` | 16 AP | AP CS A(5), Calc BC(5), Lit(4), Chinese(5) | domestic | [] | — | cs_major_ba + cas_core |
+| `sophomore_f1` | 32 | None | f1 | [] | — | cs_major_ba + cas_core |
+| `sophomore_mixed_grades` | 40 | None | domestic | [] | C- in CSCI-UA 201, D in CORE-UA 501 | cs_major_ba + cas_core |
+| `junior_transfer` | 64 (32 transfer + 32 NYU) | 32 credits | domestic | [] | — | cs_major_ba + cas_core |
+| `junior_ib` | 48 (16 IB + 32 NYU) | IB Math HL(7), CS HL(6), Bio HL(6) | domestic | [] | — | cs_major_ba + cas_core |
+| `senior_almost_done` | 120 | None | domestic | [] | — | cs_major_ba + cas_core |
+| `senior_gpa_risk` | 112 | None | domestic | [] | Cum GPA 1.95 | cs_major_ba + cas_core |
+| `senior_pf_heavy` | 108 | None | domestic | [] | 30 P/F credits | cs_major_ba + cas_core |
+| `f1_final_semester` | 120 | None | f1 | [] | 8 credits remaining | cs_major_ba + cas_core |
+| `fl_exempt_student` | 16 | None | domestic | [nonEnglishSecondary] | — | cs_major_ba + cas_core |
+| `overloaded_transfer` | 0 NYU | 68 transfer | domestic | [] | — | cs_major_ba + cas_core |
+| `alevel_student` | 24 (all A-Level) | A-Level CS(B), Math(B), French(B) | domestic | [] | — | cs_major_ba + cas_core |
+
+---
+
+## 5. Evaluation Metrics
+
+### 5.1 Intent Router Metrics
 
 | Metric | Formula | Target |
 |--------|---------|--------|
@@ -206,16 +306,7 @@ Profile Matrix:
 | **Latency (rule-based)** | p99 ms | < 5ms |
 | **Latency (LLM fallback)** | p99 ms | < 2000ms |
 
-**Measurement**:
-```typescript
-// For each test query:
-const classified = await classifyIntentHybrid(query, llm);
-const quickResult = quickClassify(query);
-metrics.recordClassification(classified.intent, expected.intent, classified.confidence);
-metrics.recordFallback(quickResult === null);
-```
-
-### 4.2 Constraint Engine Metrics (Deterministic — Snapshot-Exact Correctness)
+### 5.2 Constraint Engine Metrics (Deterministic — Snapshot-Exact Correctness)
 
 | Metric | Scope | Formula |
 |--------|-------|---------|
@@ -225,15 +316,19 @@ metrics.recordFallback(quickResult === null);
 | **Warning Correctness** | Per profile | precision + recall on expected warnings |
 | **Equivalence Resolution** | Per cross-listed pair | canonical_match_rate |
 | **Double-Count Enforcement** | Per rule interaction | correct_enforcement / total_interactions |
+| **Grade Filter Accuracy** | Per program type | correct grade threshold applied (C for major, D for Core) |
+| **Credit Cap Accuracy** | Per cap rule | correct_warning / total_cap_checks |
+| **P/F Guard Accuracy** | Per P/F scenario | correct_violation_detection / total_pf_checks |
+| **Standing Accuracy** | Per profile | correct_standing / total_standing_checks |
 
 > [!IMPORTANT]
 > **Given a fixed data snapshot** (`courses.json`, `programs.json`, `prereqs.json` at a pinned version), deterministic components should produce **exact results** (1.0 on all metrics). Any deviation indicates either:
 > 1. A **code bug** in the engine, or
 > 2. **Missing/ambiguous data** (e.g., course not in catalog → default 4-credit assumption, catalog year mismatch, incomplete equivalence mapping)
 >
-> Deviations of type (2) must be classified as **data coverage gaps** (code `D2xx`) in the failure taxonomy, not engine bugs. The evaluation harness must log which data-gap cases triggered fallback assumptions so they can be separately tracked and resolved.
+> Deviations of type (2) must be classified as **data coverage gaps** (code `D2xx`) in the failure taxonomy, not engine bugs.
 
-### 4.3 Planner Metrics
+### 5.3 Planner Metrics
 
 | Metric | Scope | Formula |
 |--------|-------|---------|
@@ -244,7 +339,7 @@ metrics.recordFallback(quickResult === null);
 | **Graduation Risk Recall** | Per profile | detected_risks / actual_risks |
 | **F-1 Compliance** | Per F-1 plan | f1_violations / total_f1_plans |
 
-### 4.4 Advisory Quality Metrics (LLM Output)
+### 5.4 Advisory Quality Metrics (LLM Output)
 
 | Metric | Formula | Target |
 |--------|---------|--------|
@@ -255,15 +350,7 @@ metrics.recordFallback(quickResult === null);
 | **Tone Appropriateness** | appropriate_tone / total_responses | ≥ 0.95 |
 | **Response Length** | median token count | 100–300 tokens |
 
-**Claim extraction protocol**:
-1. Parse each LLM response into atomic claims (manual annotation or LLM-as-judge)
-2. For each claim, check if it is:
-   - **Grounded**: directly derivable from the deterministic output passed to the LLM
-   - **Policy-grounded**: matches a rule in `ACADEMIC_RULES`
-   - **Fabricated**: not derivable from any source
-   - **Contradictory**: conflicts with deterministic output or `ACADEMIC_RULES`
-
-### 4.5 Abstention Correctness Metrics
+### 5.5 Abstention Correctness Metrics
 
 | Metric | Formula | Target |
 |--------|---------|--------|
@@ -272,11 +359,7 @@ metrics.recordFallback(quickResult === null);
 | **Clarification Rate** | asked_clarification_when_ambiguous / total_ambiguous | ≥ 0.70 |
 | **Overconfidence Rate** | answered_when_should_refuse / total_unsupported | ≤ 0.10 |
 
-> [!NOTE]
-> These metrics use the human-assigned `support_status` and `expected_behavior` fields.
-> A system that always answers scores 0.0 on abstention precision — this metric specifically rewards **knowing what you don't know**.
-
-### 4.6 End-to-End Metrics
+### 5.6 End-to-End Metrics
 
 | Metric | Formula | Target |
 |--------|---------|--------|
@@ -287,9 +370,9 @@ metrics.recordFallback(quickResult === null);
 
 ---
 
-## 5. Failure Taxonomy
+## 6. Failure Taxonomy
 
-### 5.1 Failure Codes
+### 6.1 Failure Codes
 
 ```
 F1xx — Intent Classification Failures
@@ -307,8 +390,13 @@ F2xx — Constraint Engine Failures
   F204: Exemption not applied (conditional or flag exemption missed)
   F205: Exemption wrongly applied (student not eligible)
   F206: Transfer credit mapping error
-  F207: Grade boundary error (C vs C- distinction)
-  F208: Residency check error
+  F207: Grade boundary error (C vs C- for major; D vs D- for Core)
+  F208: Residency check error (64 UA credits)
+  F209: Credit cap calculation error (7 cap checks)
+  F210: P/F guard missed violation or false positive
+  F211: Academic standing miscalculation
+  F212: Elective level check error (minLevel 400)
+  F213: Exam equivalency wrong credits or course mapping
 
 D2xx — Data Coverage Gaps (not engine bugs — separate tracking)
   D200: Course ID not in catalog (triggered default 4-credit assumption)
@@ -335,6 +423,8 @@ F4xx — Advisory Failures (LLM Output)
   F404: Omitted critical information (e.g., unmet requirement not mentioned)
   F405: Wrong tone (panic-inducing for minor issue, dismissive for critical)
   F406: Suggested courses student already completed
+  F407: Wrong credit amount cited (e.g., AP exam gives 8 instead of 4)
+  F408: Wrong minimum score cited (e.g., A-Level needs B+ instead of B)
 
 F5xx — System-Level Failures
   F500: Timeout (> 10s end-to-end)
@@ -344,54 +434,68 @@ F5xx — System-Level Failures
   F504: Missing context (no profile loaded, no audit available)
 ```
 
-### 5.2 Failure Severity Levels
+### 6.2 Failure Severity Levels
 
 | Severity | Impact | Examples |
 |----------|--------|----------|
-| **Critical** | Incorrect constraint evaluation leading to wrong degree status | F200, F201, F202, F207 |
-| **High** | User receives wrong advice that could affect enrollment | F300, F304, F400, F401, F402 |
-| **Medium** | Degraded experience but user can recover | F100, F103, F404, F405 |
+| **Critical** | Incorrect constraint evaluation leading to wrong degree status | F200, F201, F202, F207, F209, F211, F213 |
+| **High** | User receives wrong advice that could affect enrollment | F300, F304, F400, F401, F402, F407, F408 |
+| **Medium** | Degraded experience but user can recover | F100, F103, F404, F405, F210, F212 |
 | **Low** | Minor UX issues, slightly suboptimal suggestions | F101, F306 |
 
 ---
 
-## 6. Stress Testing Protocol
+## 7. Stress Testing Protocol
 
-### 6.1 Ambiguous Queries
+### 7.1 Rule-Accurate Boundary Conditions
 
-```jsonc
-[
-  {"query": "what about algorithms", "ambiguity": "audit_status vs course_info vs general"},
-  {"query": "can I take that?", "ambiguity": "requires conversation context, no explicit course"},
-  {"query": "more options", "ambiguity": "elective_search follow-up vs plan_explain"},
-  {"query": "CS 310", "ambiguity": "course_info vs schedule_check (no verb)"},
-  {"query": "I need help with my schedule", "ambiguity": "plan_explain vs audit_status vs general"}
-]
-```
+| Test | Input | Rule Source | Expected |
+|------|-------|-------------|----------|
+| Exactly 128 credits | 128 total | GA line 28 | `totalCreditsRequired` met |
+| 127 credits | 1 short | GA line 28 | `in_progress`; may petition (GA line 463) |
+| 126 credits | 2 short | GA line 463 | May petition if courses < 4 credits |
+| Exactly 64 UA credits | 64 UA | GA line 196 | Residency met |
+| 63 UA credits | 1 short | GA line 196 | Residency warning |
+| Exactly 32 CSCI-UA credits | 32 | MR line 5 | Major credit minimum met |
+| 31 CSCI-UA credits | 1 short | MR line 5 | Warning: 1 credit short |
+| Exactly 16 non-CAS credits | 16 | GA line 188 | At limit, no warning |
+| 17 non-CAS credits | 1 over | GA line 188 | Warning: over limit |
+| Exactly 24 online credits | 24 | GA line 220 | At limit, no warning |
+| 25 online credits | 1 over | GA line 220 | Warning: over limit |
+| Exactly 32 advanced standing | 32 | GA line 271 | At limit |
+| 33 advanced standing | 1 over | GA line 271 | Warning: 1 over cap |
+| GPA exactly 2.0 | 2.000 | GA line 418 | Good standing |
+| GPA 1.999 | ε below | GA line 418 | Academic concern |
+| Grade C (major) | C grade | MR line 7 | Satisfies major requirement |
+| Grade C- (major) | C- grade | MR line 7 | Does NOT satisfy major |
+| Grade D (Core) | D grade | GA line 38 | Satisfies Core requirement |
+| Grade D (graduation) | D grade | GA line 291 | Earns graduation credits |
+| AP exam score 3 | Score 3 | TC passim | No credit (min 4 for most) |
+| A-Level grade B | Grade B | TC line 104 | Minimum accepted |
+| A-Level grade C | Grade C | TC line 104 | Rejected |
+| 8 years since matriculation | 8.0 years | GA line 459 | At deadline |
+| 8 years + 1 day | Over | GA line 459 | Past time limit |
+| 2 course repeats used | 2 repeats | GA line 173 | At limit |
+| 3rd course repeat | Over | GA line 173 | Blocked |
+| 18 credits/term | 18 | GA line 455 | Normal, no approval needed |
+| 19 credits/term | 19 | GA line 455 | Needs adviser approval |
+| F-1 with 12 credits | 12 | F1 line 5 | At minimum, OK |
+| F-1 with 11 credits | 11 | F1 line 5 | Below minimum, violation |
 
-**Expected behavior**: System should classify with confidence < 0.7 or ask for clarification.
+### 7.2 Conflicting Constraints
 
-### 6.2 Incomplete Requirements
+| Scenario | Conflict | Rule Sources | Expected |
+|----------|----------|--------------|----------|
+| Exclusive courses both required | CSCI-UA 101 + CSCI-UA 110 | Course catalog | Warning: mutually exclusive |
+| F-1 + final semester + low credits | 8 credits, F-1 visa, final semester | F1 lines 5,15 | RCL approval warning |
+| AP CS A + CS major | AP CS A score 5 | TC note 8 | CSCI-UA 101 equivalent, does NOT count toward CS minor in Web Prog only |
+| AP credit + takes NYU course | AP Calc BC(5) + takes MATH-UA 121 | GA line 259 | AP credit lost |
+| Transfer + residency tension | 60 transfer, only 30 UA | GA lines 196,228 | Residency warning + must take 34 more UA credits |
+| Double-count limit exhausted | 3 courses crossing in limit_1 | GA line 182 | 3rd course blocked |
+| Online courses for major | 3 online CSCI-UA courses | GA line 222 | Warning: online not for major without dept approval |
+| P/F + dropping below F-1 load | Drop course to go from 12→8 + P/F remaining | GA line 356, F1 line 5 | Multiple warnings |
 
-| Scenario | Missing Data | Expected Behavior |
-|----------|-------------|-------------------|
-| No catalog year | `catalogYear: ""` | Graceful error, ask to re-upload transcript |
-| Empty coursesTaken | No courses at all | All rules `not_started`, credits = 0 |
-| Missing program ID | Invalid `declaredPrograms` | Error: "Program not found" |
-| No prereqs defined | Course has no prereq entry | Treated as unlocked (no prerequisites) |
-| Missing course in catalog | Course ID not in `courses.json` | Default 4 credits assumption |
-
-### 6.3 Conflicting Constraints
-
-| Scenario | Conflict | Expected |
-|----------|----------|----------|
-| Exclusive courses both required | CSCI-UA 101 + CSCI-UA 110 | Warning: mutually exclusive |
-| F-1 + final semester + low credits | 8 credits planned, F-1 visa, final semester | RCL approval warning |
-| AP credit for CS 101 + CS major | AP CS A (score 5) | Does NOT count toward CS major, only Web Programming minor |
-| Transfer + residency tension | Many transfer credits, few at NYU | Residency warning |
-| Double-count limit exhausted | 3+ courses trying to cross rules with limit_1 | Third course blocked |
-
-### 6.4 Adversarial Prompts
+### 7.3 Adversarial Prompts
 
 ```jsonc
 [
@@ -418,23 +522,49 @@ F5xx — System-Level Failures
 ]
 ```
 
-### 6.5 Boundary Conditions
+---
 
-| Test | Input | Expected |
-|------|-------|----------|
-| Exactly 128 credits | Student with exactly 128 total | `totalCreditsRequired` met |
-| 127 credits | 1 credit short | Still `in_progress` |
-| 0 electives remaining, 1 free slot | All requirements met, credits short | Suggest free elective |
-| Grade exactly at boundary | C grade (passes major) vs C- (passes graduation only) | Different behavior per context |
-| Maximum AP credits | 32 AP credits (max allowed) | All count, no overflow |
-| Empty embedding index | No courses in search index | "No results found" message |
-| All courses completed | Student has taken everything | No suggestions, "all done" |
+## 8. Rule Coverage Matrix
+
+> This matrix maps every implemented feature to its test IDs, ensuring 100% coverage of all rules from the five source files.
+
+| Feature | Module | Test IDs | Count |
+|---------|--------|----------|-------|
+| 128-credit total | degreeAudit | MR-01, TL-04, TL-05 | 3 |
+| Major GPA ≥ 2.0 | degreeAudit | MR-02 | 1 |
+| 32 CSCI-UA credits | creditCapValidator | MR-03, CAP-02 | 2 |
+| Major grade C minimum | degreeAudit | MR-04, MR-05, GF-01, GF-04 | 4 |
+| Core grade D minimum | degreeAudit | CC-21, CC-22, GF-02 | 3 |
+| 50% major at CAS | — | MR-06 | 1 |
+| Intro CS courses | ruleEvaluator | MR-07 | 1 |
+| Core CS courses | ruleEvaluator | MR-08 | 1 |
+| Elective minLevel=400 | ruleEvaluator | MR-09, MR-10 | 2 |
+| Math substitution limit | ruleEvaluator | MR-11 | 1 |
+| Discrete Math prereqs | prereqGraph | MR-12, MR-13 | 2 |
+| First-Year Seminar | ruleEvaluator | CC-01, CC-02 | 2 |
+| Foreign Language | ruleEvaluator | CC-03 through CC-08 | 6 |
+| Expository Writing | ruleEvaluator | CC-09, CC-10 | 2 |
+| FCC requirements | ruleEvaluator | CC-11 through CC-14 | 4 |
+| FSI: QR | ruleEvaluator | CC-15 through CC-17 | 3 |
+| FSI: Physical/Life | ruleEvaluator | CC-18 through CC-20 | 3 |
+| P/F Core restriction | passfailGuard + degreeAudit | CC-23, CC-24, PF-03 through PF-06 | 6 |
+| Grade-aware filtering | degreeAudit | GF-01 through GF-08 | 8 |
+| Credit caps (7 types) | creditCapValidator | CAP-01 through CAP-10 | 10 |
+| P/F guard | passfailGuard | PF-01 through PF-07 | 7 |
+| Academic standing | academicStanding | AS-01 through AS-06 | 6 |
+| Enrollment validation | enrollmentValidator | EV-01 through EV-06 | 6 |
+| Exam equivalencies | examEquivalencies | EQ-01 through EQ-16 | 16 |
+| Transfer credits | degreeAudit + creditCapValidator | TR-01 through TR-12 | 12 |
+| Course repetition | — (future) | REP-01 through REP-04 | 4 |
+| Time limit | — (future) | TL-01 through TL-05 | 5 |
+| Double-count | degreeAudit | DC-01 through DC-05 | 5 |
+| **TOTAL** | | | **117** |
 
 ---
 
-## 7. Experiment Design
+## 9. Experiment Design
 
-### 7.1 Baselines
+### 9.1 Baselines
 
 | Baseline | Description | What It Tests |
 |----------|-------------|---------------|
@@ -443,9 +573,9 @@ F5xx — System-Level Failures
 | **B3: Rule-Only** | Deterministic engine only, no LLM explanation | Measures value of natural language layer |
 | **B4: NYU Path (full)** | Complete hybrid system | The system under test |
 
-### 7.2 Comparison Protocol
+### 9.2 Comparison Protocol
 
-For each baseline, evaluate on the **same 150-example dataset**:
+For each baseline, evaluate on the **same dataset**:
 
 ```
 ┌─────────────────────┬───────────┬───────────┬───────────┬───────────┐
@@ -462,7 +592,7 @@ For each baseline, evaluate on the **same 150-example dataset**:
 ‡ = Expected low due to no natural language output
 ```
 
-### 7.3 Ablation Studies
+### 9.3 Ablation Studies
 
 | Experiment | What's Removed | Hypothesis |
 |------------|---------------|------------|
@@ -472,8 +602,10 @@ For each baseline, evaluate on the **same 150-example dataset**:
 | No double-count policy | Treat all rules as `allow` | Students get inflated progress reports |
 | No conversation history | Don't pass `history` to LLM | Follow-up questions lose context |
 | No enrollment validator | Remove F-1 checks | F-1 students not warned about visa violations |
+| No grade-aware filtering | Use single C-or-better set for both major and Core | Students with D in Core courses incorrectly shown as not satisfied |
+| No credit cap validator | Remove 7 cap checks | Over-limit credits not flagged |
 
-### 7.4 Statistical Methodology
+### 9.4 Statistical Methodology
 
 - **Sample size**: n ≥ 50 per intent category for meaningful confidence intervals
 - **Confidence intervals**: Wilson score interval for proportions
@@ -483,9 +615,9 @@ For each baseline, evaluate on the **same 150-example dataset**:
 
 ---
 
-## 8. Reproducibility Protocol
+## 10. Reproducibility Protocol
 
-### 8.1 Environment Specification
+### 10.1 Environment Specification
 
 ```yaml
 runtime: Node.js >= 20
@@ -498,24 +630,16 @@ environment_variables:
   - EVAL_MODE=true  # enables deterministic LLM behavior
 ```
 
-### 8.2 Stochasticity Control Policy
+### 10.2 Stochasticity Control Policy
 
 | Component | Temperature | Randomness Control | Rationale |
-|-----------|------------|--------------------|-----------|
+|-----------|------------|--------------------|-----------| 
 | Intent router (`classifyIntentHybrid`) | **0** | Fixed prompt, deterministic | Classification must be reproducible |
 | Entity extraction (courseId, searchQuery) | **0** | Fixed prompt, deterministic | Parsing must be reproducible |
 | Explanation generator (advisory) | **0.4** | **Cached** — first run records to `snapshots/` | Advisory is stochastic by nature |
 | LLM-as-judge | **0** | Fixed prompt, deterministic | Judge must be reproducible |
 
-**Evaluation policy for advisory outputs**:
-- Primary results are computed on **cached generations** (snapshot files in `tests/eval/snapshots/`)
-- Reruns with `EVAL_CACHE=true` validate **deterministic stability** (same inputs → same cached outputs → same metrics)
-- **Fresh runs** (`EVAL_CACHE=false`) are used periodically to check for model drift or API changes
-- If budget allows: sample k=3 per query and report mean ± std (more rigorous but 3× cost)
-
-**Reporting language**: *"Results are computed on cached generations at temperature 0.4. Deterministic stability was verified via replay; periodic fresh runs confirm consistency across API versions."*
-
-### 8.3 Data Versioning
+### 10.3 Data Versioning
 
 ```
 packages/engine/tests/
@@ -526,7 +650,7 @@ packages/engine/tests/
 │   └── snapshots/                 # LLM response snapshots for regression
 ```
 
-### 8.4 Execution Protocol
+### 10.4 Execution Protocol
 
 ```bash
 # 1. Run deterministic tests (no LLM calls)
@@ -545,177 +669,9 @@ pnpm --filter @nyupath/engine test:eval:e2e
 pnpm --filter @nyupath/engine eval:report
 ```
 
-### 8.5 LLM Response Caching
-
-To ensure reproducibility across runs:
-1. First run records all LLM responses to `tests/eval/snapshots/`
-2. Subsequent runs can use cached responses via `EVAL_CACHE=true`
-3. Re-run with `EVAL_CACHE=false` to re-evaluate with fresh LLM calls
-4. Version snapshot files alongside the dataset
-
 ---
 
-## 9. Output Artifacts
-
-### 9.1 File Manifest
-
-| File | Purpose | Location |
-|------|---------|----------|
-| `validation_spec.md` | This document — framework specification | repo root |
-| `eval_dataset.jsonl` | Annotated evaluation dataset (150 examples) | `packages/engine/tests/eval/` |
-| `eval_profiles/` | Student profile fixtures for evaluation | `packages/engine/tests/eval/profiles/` |
-| `evaluation_script.ts` | Main evaluation harness | `packages/engine/tests/eval/` |
-| `metrics.ts` | Metric computation utilities | `packages/engine/tests/eval/` |
-| `baselines/pure_llm.ts` | Baseline B1 implementation | `packages/engine/tests/eval/baselines/` |
-| `baselines/simple_rag.ts` | Baseline B2 implementation | `packages/engine/tests/eval/baselines/` |
-| `results_table.csv` | Evaluation results in tabular format | `packages/engine/tests/eval/results/` |
-| `failure_analysis.md` | Categorized failure report | `packages/engine/tests/eval/results/` |
-| `confusion_matrix.csv` | Intent classification confusion matrix | `packages/engine/tests/eval/results/` |
-
-### 9.2 Results Table Schema
-
-```csv
-run_id,timestamp,system,metric,value,ci_lower,ci_upper,n
-run_001,2026-03-03T16:00:00Z,nyupath_full,intent_accuracy,0.93,0.87,0.97,50
-run_001,2026-03-03T16:00:00Z,nyupath_full,constraint_correctness,1.0,1.0,1.0,50
-run_001,2026-03-03T16:00:00Z,nyupath_full,hallucination_rate,0.02,0.0,0.06,30
-run_001,2026-03-03T16:00:00Z,pure_llm,intent_accuracy,—,—,—,—
-run_001,2026-03-03T16:00:00Z,pure_llm,constraint_correctness,0.38,0.28,0.48,50
-...
-```
-
-### 9.3 Failure Analysis Report Structure
-
-```markdown
-# Failure Analysis — Run [run_id]
-
-## Summary
-- Total examples: 150
-- Total failures: N
-- Critical failures: N (F2xx)
-- High failures: N (F3xx, F4xx)
-- Medium/Low failures: N
-
-## Failure Distribution
-| Code | Count | Description | Severity |
-|------|-------|-------------|----------|
-| F100 | 3     | Wrong intent classification | Medium |
-| F402 | 1     | Contradicted deterministic output | High |
-| ...  |       |              |          |
-
-## Detailed Failure Cases
-### F100-001: "what about algorithms" → classified as course_info, expected general
-- Query: "what about algorithms"
-- Expected intent: general (ambiguous)
-- Actual intent: course_info
-- Confidence: 0.72
-- Root cause: quickClassify regex matched "about" pattern with no course ID
-```
-
----
-
-## 10. Implementation Roadmap
-
-### Design Principle: Results Every Week
-
-Each week produces a **showable deliverable** (results table, confusion matrix, failure report) suitable for discussion with Prof. Cho. Later phases (baselines, stress tests, ablation) build on top.
-
----
-
-### Week 1: v0.1 End-to-End + Deterministic Baseline
-
-**Goal**: First `results_table.csv` + `failure_analysis.md` from a small but complete eval run.
-
-| Step | Who | Deliverable |
-|------|-----|-------------|
-| Scaffold eval harness (`evaluation_script.ts`, `metrics.ts`) | **Opus** | Runnable framework |
-| Generate 40 candidate eval queries (across all intent types) | **Opus** | `candidate_queries.jsonl` |
-| Select 20–40 queries, **assign gold labels** | **Human** | `eval_dataset.jsonl` v0.1 |
-| Expand golden profiles (19 → 30) with new edge cases | **Opus** drafts, **Human** approves | `eval/profiles/` |
-| Run deterministic tests — 100% on supported scope under pinned data snapshot; failures classified as bugs (F2xx) or data gaps (D2xx) | **Opus** (automated) | vitest pass report |
-| Run first E2E eval, generate results table | **Opus** (automated) | `results_table.csv` v0.1 |
-| Classify all failures into taxonomy codes | **Opus** drafts, **Human** spot-checks 10 | `failure_analysis.md` v0.1 |
-
-> [!IMPORTANT]
-> "100% pass" means 100% on the **supported scope** under a **pinned data snapshot** (`courses.json`, `programs.json`, `prereqs.json` at a committed version). Failures are classified as either **bugs** (F2xx — code fix needed) or **data coverage gaps** (D2xx — data expansion needed). This distinction prevents the critique "your data is incomplete" from invalidating the results.
-
-**Week 1 output for Prof. Cho**: Results table + failure distribution + priority list.
-
----
-
-### Week 2: Intent Evaluation + Confusion Matrix
-
-**Goal**: Rigorous intent classification metrics with confusion matrix and calibration.
-
-| Step | Who | Deliverable |
-|------|-----|-------------|
-| Generate 80 candidate intent queries (10+ per intent type) | **Opus** | `candidate_intent_queries.jsonl` |
-| Select ~50 queries, **assign gold intent labels** | **Human** | intent partition of `eval_dataset.jsonl` |
-| Implement confusion matrix generator + ECE calibration | **Opus** | `metrics.ts` extensions |
-| Measure `quickClassify` coverage (rule-classified / total) | **Opus** (automated) | coverage stat in results |
-| Run intent eval, generate confusion matrix | **Opus** (automated) | `confusion_matrix.csv` |
-| **Spot-check** 10–20% of misclassified queries | **Human** | verified failure codes |
-| Update `eval_dataset.jsonl` intent mapping (`grade_adjustment` → `audit_status`, `general` → `meta` / `follow_up`) | **Opus** | mapping logic in harness |
-
-**Week 2 output**: Confusion matrix, per-intent F1, ECE calibration score, `quickClassify` coverage rate.
-
----
-
-### Week 3: Advisory Grounding v0.1
-
-**Goal**: Measure hallucination and contradiction rate with human-calibrated LLM-as-judge.
-
-| Step | Who | Deliverable |
-|------|-----|-------------|
-| Select 30 advisory eval queries (audit explanations + plan explanations + general advisory) | **Human** picks, **Opus** formats | advisory partition of `eval_dataset.jsonl` |
-| **Human-annotate 10–15 examples** as `grounded` / `hallucinated` / `contradicted` | **Human** | `judge_calibration_set.jsonl` |
-| Write LLM-as-judge prompt for claim extraction + grounding check | **Opus** | `judge_prompt.md` |
-| Calibrate judge against human annotations — iterate if agreement < 85% | **Opus** runs, **Human** reviews | calibration report |
-| Run judge on remaining 15–20 examples | **Opus** (automated) | advisory metrics |
-| **Spot-check** 10 judge decisions from the scaled run | **Human** | verified judge accuracy |
-| Build LLM response caching layer | **Opus** | snapshot files in `tests/eval/snapshots/` |
-
-**Week 3 output**: Hallucination rate, contradiction rate, factual grounding rate, evidence sufficiency score.
-
----
-
-### Future Phases (Week 4+, optional)
-
-| Phase | Content | Prerequisites |
-|-------|---------|---------------|
-| **Baselines** | Pure LLM (B1), Simple RAG (B2) comparison on same dataset | Weeks 1–3 dataset finalized |
-| **Stress Tests** | Adversarial prompts, ambiguous queries, conflicting constraints | Week 2 intent eval stable |
-| **Ablation Studies** | Remove `quickClassify`, `ACADEMIC_RULES`, equivalence resolver | Week 3 advisory eval stable |
-
----
-
-## 11. Human vs. Opus Responsibility Matrix
-
-### Things That Must Be Human (否则指标没有意义)
-
-| Responsibility | Why | Minimum Effort |
-|---------------|-----|----------------|
-| **Gold labels** (expected intent, expected deterministic outcome) | Self-alignment makes metrics meaningless | Review/approve every label |
-| **"Insufficient evidence" judgments** | LLM tends to be overconfident about coverage | Tag each advisory example |
-| **Failure taxonomy spot-checks** | LLM-as-judge can mis-classify, self-justify, or miss failures | 10 random failures per eval run |
-| **Advisory grounding calibration set** | Establishes the reference standard for the judge | 10–15 hand-annotated examples |
-| **Final audit of each week's deliverables** | Quality gate before showing to Prof. Cho | ~30 min review per week |
-
-### Things Opus Can Own (saves your time)
-
-| Responsibility | Output |
-|---------------|--------|
-| Evaluation framework scaffolding (scripts, harness, CI) | `evaluation_script.ts`, `metrics.ts` |
-| Generating **candidate** test queries (you select + label) | `candidate_queries.jsonl` |
-| Results computation (confusion matrix, CI, ECE) | `results_table.csv`, `confusion_matrix.csv` |
-| LLM-as-judge prompt drafting (you calibrate) | `judge_prompt.md` |
-| LLM response caching for reproducibility | `tests/eval/snapshots/` |
-| Failure analysis report drafting (you spot-check) | `failure_analysis.md` |
-| Expanding golden test profiles (you approve) | `tests/eval/profiles/*.json` |
-
----
-
-## 12. Three-Layer Review Protocol
+## 11. Three-Layer Review Protocol
 
 > This is the review methodology we report in the evaluation. It is a standard pattern in NLP evaluation literature and defensible in a research discussion.
 
@@ -726,8 +682,10 @@ Each week produces a **showable deliverable** (results table, confusion matrix, 
 | Unit tests / golden tests | `vitest` — 100% pass required | **None** (code review only) |
 | Deterministic output vs. expected | Exact match on `AuditResult`, `SemesterPlan` fields | **None** (human wrote expected values) |
 | Credit calculation, rule status | Automated assertions | **None** |
+| Grade filtering accuracy | Core=D, Major=C | **None** |
+| Credit cap warnings | All 7 caps correct | **None** |
 
-**Credibility**: Highest. Deterministic tests are reproducible, verifiable, and have no stochastic component. If they pass, the engine is correct *for the tested scenarios*.
+**Credibility**: Highest. Deterministic tests are reproducible, verifiable, and have no stochastic component.
 
 ---
 
@@ -740,7 +698,7 @@ Each week produces a **showable deliverable** (results table, confusion matrix, 
 | ECE calibration | Automated computation | **None** |
 | Failure attribution | Opus assigns failure codes | **Spot-check 10–20% of failures** |
 
-**Credibility**: High. Gold labels are human-authored; metrics are automatically computed. Spot-checks validate that failure codes are not self-serving.
+**Credibility**: High. Gold labels are human-authored; metrics are automatically computed.
 
 ---
 
@@ -751,18 +709,11 @@ Each week produces a **showable deliverable** (results table, confusion matrix, 
 | Claim extraction | LLM-as-judge parses response into atomic claims | **Opus drafts prompt, human calibrates** |
 | Grounding classification | Judge checks each claim against deterministic output + `ACADEMIC_RULES` | **Human annotates 10–15 calibration examples** |
 | Hallucination / contradiction rate | Judge assigns labels, metrics auto-computed | **Spot-check 10 examples per run** |
-| Evidence sufficiency | Judge flags "insufficient context" cases | **Human must verify** — LLM tends to be overconfident |
+| Evidence sufficiency | Judge flags "insufficient context" cases | **Human must verify** |
 
 **Judge calibration report must include**:
 - **Cohen's κ** (not raw accuracy — handles class imbalance)
 - **Per-class precision/recall** for each label: `grounded`, `hallucinated`, `contradicted`, `insufficient_evidence`
-- **Confusion matrix** between judge and human annotations
 - If κ < 0.7: iterate on judge prompt before scaling
 - If κ ≥ 0.7 and < 0.85: report with caveat
 - If κ ≥ 0.85: judge is trusted for scale-up
-
-**Credibility**: Moderate-to-high. The human calibration set establishes a reference; the judge is only trusted *after* demonstrating κ ≥ 0.85 with human annotations. Spot-checks prevent drift.
-
-**Reporting standard**: When presenting results, state:
-- *"Advisory metrics were computed using an LLM-as-judge calibrated against N human annotations (Cohen's κ = X, per-class F1: grounded=A, hallucinated=B, contradicted=C, insufficient=D). Y% of judge decisions were independently verified by human review."*
-

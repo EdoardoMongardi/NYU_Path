@@ -1,0 +1,1114 @@
+[
+  {
+    "id": "AQ-01",
+    "query": "How many credits do I still need to graduate?",
+    "response": "You still need **96 credits** to graduate, as you have completed **32 credits** out of the **128 credits** required.\n\nIn terms of your requirements:\n- You have **3 courses** remaining for the CS BA Core: CSCI-UA 201, CSCI-UA 202, and CSCI-UA 310.\n- You also need to complete **5 courses** for the CS BA Electives (CSCI-UA 4xx).\n\nKeep working towards fulfilling these requirements, and consider planning your upcoming semesters to include these courses! \n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [
+      {
+        "text": "You still need 96 credits to graduate",
+        "label": "grounded",
+        "evidence": "The ground truth states that the student has 96 credits remaining to graduate."
+      },
+      {
+        "text": "you have completed 32 credits out of the 128 credits required",
+        "label": "grounded",
+        "evidence": "The ground truth confirms that the student has completed 32 credits and that 128 credits are required for graduation."
+      },
+      {
+        "text": "You have 3 courses remaining for the CS BA Core: CSCI-UA 201, CSCI-UA 202, and CSCI-UA 310",
+        "label": "grounded",
+        "evidence": "The ground truth indicates that the student has 3 remaining core courses: CSCI-UA 201, CSCI-UA 202, and CSCI-UA 310."
+      },
+      {
+        "text": "You also need to complete 5 courses for the CS BA Electives (CSCI-UA 4xx)",
+        "label": "grounded",
+        "evidence": "The ground truth shows that the student has 5 remaining courses for CS BA Electives, which must be CSCI-UA 4xx."
+      },
+      {
+        "text": "I'm assuming all your current courses will receive a grade of C or better",
+        "label": "grounded",
+        "evidence": "This is a standard advisory statement that is logically true given the student's situation."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-02",
+    "query": "What should I take next fall semester?",
+    "response": "Hello! It's great to help you plan your upcoming semester. Here’s a structured course plan for your fall 2025 semester:\n\n1. **Required Courses**  \n   - **CSCI-UA 310 — Basic Algorithms (4 credits)**: This course is essential for understanding algorithm design and analysis, a core component of computer science.  \n   - **CSCI-UA 201 — Computer Systems Organization (4 credits)**: This course provides foundational knowledge about computer architecture and systems, which is crucial for advanced studies in CS.  \n   - **CSCI-UA 490 — Special Topics in Computer Science (Advanced) (4 credits)**: This course allows you to explore current trends and topics in computer science, enhancing your knowledge and skills in specialized areas.\n\n2. **CAS Core Requirement**  \n   - It appears that you have not yet satisfied the **Foundations of Contemporary Culture (FCC)** requirement, specifically the **Expressive Culture** category. I recommend checking available courses for this requirement once the course list is released for the semester.\n\n3. **Major Electives**  \n   - **CSCI-UA 110 — Introduction to Computer Programming (Python) (4 credits)**: While this course is a great introduction to programming, please note that it counts as a free elective and not a major elective.  \n   - For major electives, you will need to select from CSCI-UA 4xx courses in future semesters. Remember, you can also substitute up to 2 of your major electives with math courses (MATH-UA 122, 140, 185) if that aligns with your interests.\n\n4. **Free Elective**  \n   - You have **1 free elective slot** available, which allows you to take any NYU course of your choice. If you have specific interests, I’d be happy to help you search for courses that match them!\n\nThis plan totals **16 credits**, which is a solid workload for the semester. Would you like the full description of any courses? Or shall I search for free electives that match your interests?",
+    "claims": [],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-03",
+    "query": "Which CS electives should I consider?",
+    "response": "I'd love to help you find courses, but I don't have access to the course search right now. Please try again later.",
+    "claims": [],
+    "tone": "inappropriate",
+    "toneNote": "The response does not address the student's specific query about CS electives and instead provides irrelevant information."
+  },
+  {
+    "id": "AQ-04",
+    "query": "Am I on track to graduate on time?",
+    "response": "You have completed 32 credits out of the 128 required for graduation, so you still need 96 credits to reach your degree total. \n\nRegarding your major requirements, you have completed 3 out of 5 rules. Here are the unmet requirements:\n\n**CS Major Requirements:**\n1. **Core Courses:** 3 courses remaining \n   - CSCI-UA 201\n   - CSCI-UA 202\n   - CSCI-UA 310\n2. **Electives:** 5 courses remaining \n   - CSCI-UA 4xx electives\n\nTo stay on track for graduation, you'll need to complete these core courses and electives in upcoming semesters. Make sure to plan your course load accordingly to meet these requirements.\n\nKeep pushing forward, and consider discussing your course options with your professors or peers to ensure you're making the most of your time! \n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [
+      {
+        "text": "You have completed 32 credits out of the 128 required for graduation.",
+        "label": "grounded",
+        "evidence": "This matches the ground truth data showing the student has completed 32 credits and requires 128 for graduation."
+      },
+      {
+        "text": "You still need 96 credits to reach your degree total.",
+        "label": "grounded",
+        "evidence": "This is supported by the ground truth data indicating 96 credits remaining."
+      },
+      {
+        "text": "You have completed 3 out of 5 rules.",
+        "label": "grounded",
+        "evidence": "This is consistent with the ground truth data showing 3 out of 5 rules completed."
+      },
+      {
+        "text": "Core Courses: 3 courses remaining.",
+        "label": "grounded",
+        "evidence": "This is supported by the ground truth data indicating 3 core courses remaining."
+      },
+      {
+        "text": "CSCI-UA 201, CSCI-UA 202, CSCI-UA 310.",
+        "label": "grounded",
+        "evidence": "These courses are listed in the ground truth as the unmet core requirements."
+      },
+      {
+        "text": "Electives: 5 courses remaining.",
+        "label": "grounded",
+        "evidence": "This matches the ground truth data showing 5 elective courses remaining."
+      },
+      {
+        "text": "CSCI-UA 4xx electives.",
+        "label": "grounded",
+        "evidence": "This is consistent with the ground truth data specifying that electives must be CSCI-UA 4xx."
+      },
+      {
+        "text": "To stay on track for graduation, you'll need to complete these core courses and electives in upcoming semesters.",
+        "label": "grounded",
+        "evidence": "This is a logical inference based on the student's current progress and remaining requirements."
+      },
+      {
+        "text": "I'm assuming all your current courses will receive a grade of C or better.",
+        "label": "grounded",
+        "evidence": "This is a standard advisory statement that is logically true given the student's situation."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-05",
+    "query": "Can I use MATH-UA 122 as a CS elective?",
+    "response": "You can also substitute up to 2 electives with MATH-UA 122, 140, or 185.",
+    "claims": [
+      {
+        "text": "You can also substitute up to 2 electives with MATH-UA 122, 140, or 185.",
+        "label": "grounded",
+        "evidence": "The MATH substitution policy allows students to substitute up to 2 of the 5 electives with MATH-UA 122, 140, or 185, which is consistent with the academic rules."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-06",
+    "query": "What are the prerequisites for Algorithms (CSCI-UA 310)?",
+    "response": "The prerequisites for CSCI-UA 310 (Basic Algorithms) are:\n\n1. CSCI-UA 102 (Data Structures)\n2. MATH-UA 120 (Discrete Mathematics)\n3. MATH-UA 121 (Calculus I)\n\nMake sure you have completed these courses before enrolling in CSCI-UA 310!",
+    "claims": [
+      {
+        "text": "CSCI-UA 310 (Basic Algorithms) are: 1. CSCI-UA 102 (Data Structures)",
+        "label": "contradicted",
+        "evidence": "CSCI-UA 310 requires CSCI-UA 102, but the chatbot incorrectly states it as a prerequisite without mentioning the other required course, MATH-UA 121, which can be satisfied by either MATH-UA 121 or MATH-UA 131."
+      },
+      {
+        "text": "CSCI-UA 310 (Basic Algorithms) are: 2. MATH-UA 120 (Discrete Mathematics)",
+        "label": "grounded",
+        "evidence": "MATH-UA 120 is indeed a prerequisite for CSCI-UA 310 as per the ground truth data."
+      },
+      {
+        "text": "CSCI-UA 310 (Basic Algorithms) are: 3. MATH-UA 121 (Calculus I)",
+        "label": "grounded",
+        "evidence": "MATH-UA 121 is a valid prerequisite for CSCI-UA 310 as per the ground truth data."
+      },
+      {
+        "text": "Make sure you have completed these courses before enrolling in CSCI-UA 310!",
+        "label": "grounded",
+        "evidence": "This statement is a general advisory that aligns with the requirement to complete prerequisites before enrolling in a course."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-07",
+    "query": "Do I still need to take a writing course?",
+    "response": "You've already completed the writing course requirement with EXPOS-UA 1!",
+    "claims": [
+      {
+        "text": "You've already completed the writing course requirement with EXPOS-UA 1!",
+        "label": "grounded",
+        "evidence": "The student has completed EXPOS-UA 1, which fulfills the writing course requirement."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-08",
+    "query": "What happens if I fail CSCI-UA 201?",
+    "response": "If you fail CSCI-UA 201, you will earn 0 credits for that course. If you retake the course and pass, you will earn the course credits, but you won't receive any additional credits beyond the original course value. Both grades will appear on your transcript and will be included in your GPA calculation.",
+    "claims": [
+      {
+        "text": "If you fail CSCI-UA 201, you will earn 0 credits for that course.",
+        "label": "grounded",
+        "evidence": "Failing a course results in earning 0 credits, which is consistent with academic policies."
+      },
+      {
+        "text": "If you retake the course and pass, you will earn the course credits, but you won't receive any additional credits beyond the original course value.",
+        "label": "grounded",
+        "evidence": "The policy states that no additional credit is awarded for repeating a course, which aligns with the response."
+      },
+      {
+        "text": "Both grades will appear on your transcript and will be included in your GPA calculation.",
+        "label": "grounded",
+        "evidence": "The academic rules specify that both grades are computed in the GPA, confirming this claim."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-09",
+    "query": "How many CS courses do I have left?",
+    "response": "You have 6 CS courses left to complete: \n\n- 1 core course: CSCI-UA 202\n- 5 elective courses (CSCI-UA 4xx)\n\nKeep up the good work, and consider planning your upcoming semesters to include these courses! \n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [
+      {
+        "text": "You have 6 CS courses left to complete",
+        "label": "contradicted",
+        "evidence": "The student has already completed CSCI-UA 202, which is listed as a core course left to complete. Therefore, the claim of having 6 CS courses left is incorrect."
+      },
+      {
+        "text": "1 core course: CSCI-UA 202",
+        "label": "contradicted",
+        "evidence": "CSCI-UA 202 has already been completed by the student, so it cannot be listed as a core course left to complete."
+      },
+      {
+        "text": "5 elective courses (CSCI-UA 4xx)",
+        "label": "grounded",
+        "evidence": "The student has 5 elective courses remaining as per the degree audit results, which aligns with the requirement for the CS major."
+      },
+      {
+        "text": "Keep up the good work, and consider planning your upcoming semesters to include these courses!",
+        "label": "grounded",
+        "evidence": "This is a general advisory statement that is appropriate given the student's situation."
+      },
+      {
+        "text": "I'm assuming all your current courses will receive a grade of C or better.",
+        "label": "grounded",
+        "evidence": "This is a standard advisory statement that reflects the system's expected behavior."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-10",
+    "query": "Is taking 18 credits in one semester too much?",
+    "response": "Taking 18 credits in one semester is considered a heavier load, but it is allowed without adviser approval. The typical load is 16 credits, so while 18 is more than usual, it is manageable for many students. Just be sure you can handle the workload and balance your courses effectively!",
+    "claims": [
+      {
+        "text": "Taking 18 credits in one semester is considered a heavier load",
+        "label": "grounded",
+        "evidence": "The academic rules state that a typical load is 16 credits, and taking 18 credits is indeed more than usual."
+      },
+      {
+        "text": "it is allowed without adviser approval",
+        "label": "grounded",
+        "evidence": "The academic rules specify that students may take up to 18 credits per semester without adviser approval."
+      },
+      {
+        "text": "The typical load is 16 credits",
+        "label": "grounded",
+        "evidence": "The academic rules indicate that a standard load is 4 courses (16 credits)."
+      },
+      {
+        "text": "while 18 is more than usual, it is manageable for many students",
+        "label": "insufficient_evidence",
+        "evidence": "While it is a common belief that many students can manage 18 credits, this is subjective and cannot be confirmed or denied by the provided data."
+      },
+      {
+        "text": "Just be sure you can handle the workload and balance your courses effectively!",
+        "label": "grounded",
+        "evidence": "This is a general advisory statement that encourages students to assess their own capacity, which is a standard advisory practice."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-11",
+    "query": "What Core requirements do I still need to complete?",
+    "response": "You still need to complete the following Core requirements:\n\n1. **CSCI-UA 201 — Computer Systems Organization**\n2. **CSCI-UA 202 — Operating Systems**\n3. **CSCI-UA 310 — Basic Algorithms**\n\nAdditionally, you have 5 elective courses remaining for the CS major, which must be numbered CSCI-UA 4xx.\n\nCurrently, you have completed 32 credits out of the required 128. Keep pushing forward, and let me know if you need assistance in selecting your next courses! \n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [
+      {
+        "text": "You still need to complete the following Core requirements: CSCI-UA 201 — Computer Systems Organization, CSCI-UA 202 — Operating Systems, CSCI-UA 310 — Basic Algorithms.",
+        "label": "grounded",
+        "evidence": "The unmet core requirements listed match the ground truth data, which shows that the student still needs CSCI-UA 201, CSCI-UA 202, and CSCI-UA 310."
+      },
+      {
+        "text": "Additionally, you have 5 elective courses remaining for the CS major, which must be numbered CSCI-UA 4xx.",
+        "label": "grounded",
+        "evidence": "The claim about having 5 remaining electives for the CS major is supported by the ground truth data, which indicates 5 electives are still required and must be CSCI-UA 4xx."
+      },
+      {
+        "text": "Currently, you have completed 32 credits out of the required 128.",
+        "label": "grounded",
+        "evidence": "This claim is directly supported by the ground truth data, which states the student has completed 32 credits out of a total of 128 required."
+      },
+      {
+        "text": "Keep pushing forward, and let me know if you need assistance in selecting your next courses!",
+        "label": "grounded",
+        "evidence": "This is a general encouragement statement that is appropriate for the student's situation."
+      },
+      {
+        "text": "I'm assuming all your current courses will receive a grade of C or better.",
+        "label": "grounded",
+        "evidence": "This is a standard advisory statement that is logically true given the student's current course situation."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-12",
+    "query": "Should I take Operating Systems or Algorithms first?",
+    "response": "To take CSCI-UA 202 (Operating Systems), you need to have completed CSCI-UA 201 (Computer Systems Organization) as a prerequisite. Similarly, for CSCI-UA 310 (Basic Algorithms), you need to have completed CSCI-UA 102 (Data Structures) along with MATH-UA 120 (Discrete Mathematics) and MATH-UA 121 (Calculus I).\n\nSince you have completed CSCI-UA 102, MATH-UA 120, and MATH-UA 121, you can take Algorithms (CSCI-UA 310) now. However, you must first complete CSCI-UA 201 before you can take Operating Systems (CSCI-UA 202). Therefore, you should take Algorithms first if you haven't completed Computer Systems Organization yet.",
+    "claims": [
+      {
+        "text": "To take CSCI-UA 202 (Operating Systems), you need to have completed CSCI-UA 201 (Computer Systems Organization) as a prerequisite.",
+        "label": "grounded",
+        "evidence": "This matches the academic rules stating that CSCI-UA 202 has CSCI-UA 201 as a prerequisite."
+      },
+      {
+        "text": "for CSCI-UA 310 (Basic Algorithms), you need to have completed CSCI-UA 102 (Data Structures) along with MATH-UA 120 (Discrete Mathematics) and MATH-UA 121 (Calculus I).",
+        "label": "grounded",
+        "evidence": "This is supported by the academic rules which specify the prerequisites for CSCI-UA 310."
+      },
+      {
+        "text": "Since you have completed CSCI-UA 102, MATH-UA 120, and MATH-UA 121, you can take Algorithms (CSCI-UA 310) now.",
+        "label": "grounded",
+        "evidence": "The student's completed courses match the prerequisites required for CSCI-UA 310."
+      },
+      {
+        "text": "you must first complete CSCI-UA 201 before you can take Operating Systems (CSCI-UA 202).",
+        "label": "grounded",
+        "evidence": "This is consistent with the academic rules regarding the prerequisites for CSCI-UA 202."
+      },
+      {
+        "text": "Therefore, you should take Algorithms first if you haven't completed Computer Systems Organization yet.",
+        "label": "grounded",
+        "evidence": "This is a logical inference based on the student's completed courses and the prerequisites for both courses."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-13",
+    "query": "Can I take a class pass/fail for my major?",
+    "response": "You can take any NYU course as pass/fail (P/F), but keep in mind that P/F grades will not count toward satisfying major requirements. So, if you take a course required for your major pass/fail, it won't satisfy that requirement even if you earn credit.",
+    "claims": [
+      {
+        "text": "You can take any NYU course as pass/fail (P/F)",
+        "label": "grounded",
+        "evidence": "The academic rules state that any NYU course can be elected P/F."
+      },
+      {
+        "text": "P/F grades will not count toward satisfying major requirements.",
+        "label": "grounded",
+        "evidence": "The academic rules explicitly state that P/F grades will not count toward satisfying major requirements."
+      },
+      {
+        "text": "if you take a course required for your major pass/fail, it won't satisfy that requirement even if you earn credit.",
+        "label": "grounded",
+        "evidence": "This is consistent with the academic rules that specify P/F grades do not satisfy major requirements."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-14",
+    "query": "I'm an F-1 student. What's the minimum credit load?",
+    "response": "As an F-1 student, you must maintain a minimum credit load of 12 credits per semester to ensure full-time status.",
+    "claims": [
+      {
+        "text": "you must maintain a minimum credit load of 12 credits per semester to ensure full-time status",
+        "label": "grounded",
+        "evidence": "This claim is directly supported by the academic rules for F-1 visa students, which state that they must maintain a minimum of 12 credits per semester."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-15",
+    "query": "Plan my next semester — I'm interested in machine learning",
+    "response": "I'd love to help you find courses, but I don't have access to the course search right now. Please try again later.",
+    "claims": [],
+    "tone": "inappropriate",
+    "toneNote": "The response does not address the student's query about planning courses for the next semester."
+  },
+  {
+    "id": "AQ-16",
+    "query": "Am I at risk of academic dismissal?",
+    "response": "Based on your current academic standing, you have completed 20 credits out of the 128 required for graduation. You have not yet satisfied any of the major requirements, with a total of 5 courses remaining for your CS major.\n\nHere’s a breakdown of your unmet requirements:\n- **CS Major Intro**: 1 course remaining (CSCI-UA 101 or CSCI-UA 110)\n- **CS Major Core**: 4 courses remaining (CSCI-UA 102, CSCI-UA 201, CSCI-UA 202, CSCI-UA 310)\n- **CS Major Electives**: 5 courses remaining (CSCI-UA 4xx)\n- **Math Requirements**: 1 course remaining (MATH-UA 121 for Calculus I) and 1 course remaining (MATH-UA 120 for Discrete Mathematics)\n\nTo avoid academic dismissal, you should aim to complete at least 75% of your attempted credits. Since you have completed only 20 credits, you should ensure that you successfully complete your current courses and plan to take additional courses in the upcoming semesters to stay on track.\n\nConsider meeting with an academic advisor to discuss a plan for completing your remaining requirements. You're not at risk of dismissal yet, but it's important to stay proactive in your studies.\n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-17",
+    "query": "What happens if my GPA stays below 2.0?",
+    "response": "If your GPA stays below 2.0, you will not be in Good Standing at NYU. Here are the potential consequences:\n\n1. **Not in Good Standing**: Your academic status will be classified as \"not in good standing.\"\n2. **Dismissal Risk**: After your second semester, you may face dismissal risk if you have completed less than 50% of your attempted credits.\n3. **Required Leave**: You might enter a stage called \"Required Leave\" if you continue to have a GPA below 2.0.\n4. **Dismissal**: If your GPA does not improve, you could eventually be dismissed from the university.\n\nTo return to good standing, you would need to achieve a semester GPA of 2.0 or higher and a cumulative GPA of 2.0 while completing at least 75% of your attempted credits. It's important to seek support and resources to help improve your academic performance.",
+    "claims": [
+      {
+        "text": "If your GPA stays below 2.0, you will not be in Good Standing at NYU.",
+        "label": "grounded",
+        "evidence": "This is consistent with the academic rules stating that a GPA below 2.0 results in not being in Good Standing."
+      },
+      {
+        "text": "Your academic status will be classified as 'not in good standing.'",
+        "label": "grounded",
+        "evidence": "This aligns with the academic rules regarding GPA and academic standing."
+      },
+      {
+        "text": "After your second semester, you may face dismissal risk if you have completed less than 50% of your attempted credits.",
+        "label": "grounded",
+        "evidence": "This is supported by the academic rules that state dismissal risk occurs if less than 50% of attempted credits are completed after the second semester."
+      },
+      {
+        "text": "You might enter a stage called 'Required Leave' if you continue to have a GPA below 2.0.",
+        "label": "grounded",
+        "evidence": "This is consistent with the escalation process outlined in the academic rules for students with a GPA below 2.0."
+      },
+      {
+        "text": "If your GPA does not improve, you could eventually be dismissed from the university.",
+        "label": "grounded",
+        "evidence": "This follows the academic rules that indicate a student may face dismissal if their GPA does not improve."
+      },
+      {
+        "text": "To return to good standing, you would need to achieve a semester GPA of 2.0 or higher and a cumulative GPA of 2.0 while completing at least 75% of your attempted credits.",
+        "label": "grounded",
+        "evidence": "This is directly supported by the academic rules regarding returning to good standing."
+      },
+      {
+        "text": "It's important to seek support and resources to help improve your academic performance.",
+        "label": "grounded",
+        "evidence": "This is a general advisory statement that is logically true and appropriate for the student's situation."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-18",
+    "query": "I got an F in Data Structures. What do I do?",
+    "response": "Since you received an F in CSCI-UA 102 (Data Structures), you will need to retake the course to earn the credits. Remember, if you retake the course and pass, you will earn the course credits, but both grades will appear on your transcript and be computed in your GPA. It’s important to focus on improving your understanding of the material when you retake it. If you have any specific questions about retaking or how it might affect your academic plan, feel free to ask!",
+    "claims": [
+      {
+        "text": "you will need to retake the course to earn the credits",
+        "label": "grounded",
+        "evidence": "The student received an F in CSCI-UA 102, and according to academic rules, a course must be retaken to earn credits if a grade of C or better is not achieved."
+      },
+      {
+        "text": "if you retake the course and pass, you will earn the course credits",
+        "label": "grounded",
+        "evidence": "The academic rules state that students earn course credits upon passing a retake of a course."
+      },
+      {
+        "text": "both grades will appear on your transcript and be computed in your GPA",
+        "label": "grounded",
+        "evidence": "The academic rules specify that both grades will be computed in the GPA when a course is retaken."
+      },
+      {
+        "text": "It’s important to focus on improving your understanding of the material when you retake it",
+        "label": "grounded",
+        "evidence": "This is a general advisory statement that is logically true given the student's situation of having failed the course."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-19",
+    "query": "How many transfer credits do I have?",
+    "response": "You currently have 52 credits completed out of the 128 required for graduation. However, the audit data does not specify the number of transfer credits you have. \n\nTo determine your total transfer credits, you may want to check your academic record or contact the registrar's office for detailed information regarding your transfer credit status. \n\nKeep up the good work, and let me know if you have any other questions!",
+    "claims": [
+      {
+        "text": "You currently have 52 credits completed out of the 128 required for graduation.",
+        "label": "grounded",
+        "evidence": "This matches the total credits completed and total credits required as per the ground truth data."
+      },
+      {
+        "text": "the audit data does not specify the number of transfer credits you have.",
+        "label": "grounded",
+        "evidence": "The ground truth confirms that the specific number of transfer credits is not provided in the audit data."
+      },
+      {
+        "text": "To determine your total transfer credits, you may want to check your academic record or contact the registrar's office for detailed information regarding your transfer credit status.",
+        "label": "grounded",
+        "evidence": "This is a reasonable suggestion based on standard academic advising practices."
+      },
+      {
+        "text": "Keep up the good work, and let me know if you have any other questions!",
+        "label": "grounded",
+        "evidence": "This is a general encouragement statement that is appropriate for the context."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": "The tone is supportive and encouraging, which is suitable for academic advising."
+  },
+  {
+    "id": "AQ-20",
+    "query": "Can my transfer credits count toward my CS major?",
+    "response": "Your transfer credits can count toward your CS major, but only if you received a grade of C or better in those courses. Additionally, keep in mind that at least 50% of your major courses must be completed at CAS, and only courses with the CSCI-UA designation will count towards the major requirements.\n\nCurrently, you have completed 52 credits out of the 128 required for graduation. For your CS major, you have satisfied 4 out of 5 major requirements, with 4 elective courses (CSCI-UA 4*) still needed.\n\nNext steps:\n1. Make sure your transfer credits are evaluated and officially applied to your major.\n2. Consider planning to take the remaining 4 elective courses to fulfill your major requirements.\n\nKeep up the good work, and let me know if you have any more questions! \n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-21",
+    "query": "What are the pass/fail rules for foreign language courses?",
+    "response": "For foreign language courses at NYU, you may take language courses below the Intermediate II level on a Pass/Fail (P/F) basis. However, the Intermediate II course itself, which satisfies the Core Foreign Language requirement, must be taken for a letter grade. \n\nKeep in mind that while you can elect to take a course P/F, P/F grades will not count toward satisfying major, minor, or Core requirements. If you receive a grade of P, you will still earn credit, but it won't satisfy any requirement.",
+    "claims": [
+      {
+        "text": "you may take language courses below the Intermediate II level on a Pass/Fail (P/F) basis.",
+        "label": "grounded",
+        "evidence": "This matches the academic rules stating that foreign language courses below Intermediate II can be taken P/F."
+      },
+      {
+        "text": "the Intermediate II course itself, which satisfies the Core Foreign Language requirement, must be taken for a letter grade.",
+        "label": "grounded",
+        "evidence": "This is supported by the academic rules that specify the Intermediate II course must be taken for a letter grade."
+      },
+      {
+        "text": "P/F grades will not count toward satisfying major, minor, or Core requirements.",
+        "label": "grounded",
+        "evidence": "This is consistent with the academic rules stating that P/F grades do not satisfy major, minor, or Core requirements."
+      },
+      {
+        "text": "If you receive a grade of P, you will still earn credit, but it won't satisfy any requirement.",
+        "label": "grounded",
+        "evidence": "This aligns with the academic rules that state a grade of P earns credit but does not satisfy requirements."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-22",
+    "query": "How many pass/fail courses can I take per semester?",
+    "response": "You can take a maximum of 1 pass/fail (P/F) course per semester. Additionally, you can accumulate a total of up to 32 P/F credits throughout your academic career. Keep in mind that P/F grades will not count toward satisfying major, minor, or Core requirements, but you will still earn credit if you receive a grade of P.",
+    "claims": [
+      {
+        "text": "You can take a maximum of 1 pass/fail (P/F) course per semester.",
+        "label": "grounded",
+        "evidence": "This matches the academic rules stating that the maximum is 1 P/F course per term."
+      },
+      {
+        "text": "Additionally, you can accumulate a total of up to 32 P/F credits throughout your academic career.",
+        "label": "grounded",
+        "evidence": "This is supported by the academic rules which specify a maximum of 32 P/F credits for the entire academic career."
+      },
+      {
+        "text": "P/F grades will not count toward satisfying major, minor, or Core requirements.",
+        "label": "grounded",
+        "evidence": "This is consistent with the academic rules that state P/F grades do not satisfy major, minor, or Core requirements."
+      },
+      {
+        "text": "you will still earn credit if you receive a grade of P.",
+        "label": "grounded",
+        "evidence": "This is supported by the academic rules which indicate that a grade of P earns credit."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-23",
+    "query": "I already used 2 math courses for CS electives. Can I use a third?",
+    "response": "No, you cannot use a third math course for CS electives. The policy allows you to substitute up to 2 of the 5 electives with math courses (MATH-UA 122, 140, or 185). Since you've already used 2 math courses, you can no longer substitute any additional math courses for your elective slots.",
+    "claims": [
+      {
+        "text": "you cannot use a third math course for CS electives",
+        "label": "grounded",
+        "evidence": "The policy states that a maximum of 2 math courses can be substituted for CS electives."
+      },
+      {
+        "text": "The policy allows you to substitute up to 2 of the 5 electives with math courses (MATH-UA 122, 140, or 185)",
+        "label": "grounded",
+        "evidence": "This is directly supported by the MATH SUBSTITUTION POLICY in the academic rules."
+      },
+      {
+        "text": "you can no longer substitute any additional math courses for your elective slots",
+        "label": "grounded",
+        "evidence": "Since the student has already used 2 math courses, they cannot substitute more, which aligns with the policy."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": "The tone is appropriate as it provides clear and accurate information regarding the student's query."
+  },
+  {
+    "id": "AQ-24",
+    "query": "How many math substitutions am I allowed?",
+    "response": "You can substitute up to 2 of your 5 CS major elective slots with MATH-UA 122, MATH-UA 140, or MATH-UA 185. Since you've already completed MATH-UA 122, MATH-UA 140, and MATH-UA 185, you can count them toward your elective slots.",
+    "claims": [
+      {
+        "text": "You can substitute up to 2 of your 5 CS major elective slots with MATH-UA 122, MATH-UA 140, or MATH-UA 185.",
+        "label": "grounded",
+        "evidence": "This matches the MATH SUBSTITUTION POLICY which states that students may substitute up to 2 of the 5 electives with the specified Math courses."
+      },
+      {
+        "text": "Since you've already completed MATH-UA 122, MATH-UA 140, and MATH-UA 185, you can count them toward your elective slots.",
+        "label": "contradicted",
+        "evidence": "The student has completed MATH-UA 122 and MATH-UA 140, but they have not completed MATH-UA 185. Therefore, the claim that all three can be counted toward elective slots is incorrect."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-25",
+    "query": "I have a lot of transfer and online credits. Are there any limits?",
+    "response": "Yes, there are limits on transfer and online credits at NYU. Here are the key points:\n\n- You can transfer a maximum of **64 credits**.\n- For online courses, the maximum is **24 credits** (this limit was raised from 16 credits in Fall 2024).\n- Additionally, a maximum of **16 credits** can come from other NYU divisions (non-CAS).\n\nCurrently, you have completed **28 credits** out of the **128** required for graduation, and you still need to complete **5 CS electives** (CSCI-UA 4xx) to fulfill your major requirements. \n\nMake sure to keep track of these limits as you plan your remaining courses! If you have any specific courses in mind or need further assistance, feel free to ask.\n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [
+      {
+        "text": "You can transfer a maximum of 64 credits.",
+        "label": "grounded",
+        "evidence": "This matches the academic rules regarding transfer credit limits."
+      },
+      {
+        "text": "For online courses, the maximum is 24 credits (this limit was raised from 16 credits in Fall 2024).",
+        "label": "contradicted",
+        "evidence": "The student has already exceeded the 24 credit limit for online courses (28/24), which contradicts the claim that the limit is currently 24 credits."
+      },
+      {
+        "text": "Additionally, a maximum of 16 credits can come from other NYU divisions (non-CAS).",
+        "label": "contradicted",
+        "evidence": "The student has exceeded the limit for non-CAS credits (20/16), which contradicts the claim that the limit is 16 credits."
+      },
+      {
+        "text": "Currently, you have completed 28 credits out of the 128 required for graduation.",
+        "label": "grounded",
+        "evidence": "This matches the student's total credits completed and total credits required for graduation."
+      },
+      {
+        "text": "You still need to complete 5 CS electives (CSCI-UA 4xx) to fulfill your major requirements.",
+        "label": "grounded",
+        "evidence": "This is consistent with the student's unmet rules indicating 5 remaining CS electives."
+      },
+      {
+        "text": "I'm assuming all your current courses will receive a grade of C or better.",
+        "label": "grounded",
+        "evidence": "This is a standard advisory statement and is logically true given the student's situation."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-26",
+    "query": "What is the maximum number of online credits that count toward my degree?",
+    "response": "The maximum number of online credits that can count toward your degree is 24 credits. Keep in mind that this is part of the overall requirement of 128 credits needed to graduate. \n\nCurrently, you have completed 28 credits, and you still need to fulfill 5 courses for your CS electives (CSCI-UA 4xx). \n\nIf you have any further questions or need assistance with course planning, feel free to ask!",
+    "claims": [
+      {
+        "text": "The maximum number of online credits that can count toward your degree is 24 credits.",
+        "label": "grounded",
+        "evidence": "This matches the academic rule stating that the maximum for online courses is 24 credits."
+      },
+      {
+        "text": "this is part of the overall requirement of 128 credits needed to graduate.",
+        "label": "grounded",
+        "evidence": "The total degree requirement is indeed 128 credits."
+      },
+      {
+        "text": "Currently, you have completed 28 credits.",
+        "label": "contradicted",
+        "evidence": "The student's profile shows they have completed 28 credits, which is correct, but it is misleading in the context of the query about online credits."
+      },
+      {
+        "text": "you still need to fulfill 5 courses for your CS electives (CSCI-UA 4xx).",
+        "label": "grounded",
+        "evidence": "The requirement for 5 CSCI-UA 4xx electives is consistent with the academic rules."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-27",
+    "query": "My AP Computer Science A score counted. Which course did it replace?",
+    "response": "Your AP Computer Science A score of 4 or 5 is equivalent to CSCI-UA 101, which satisfies the introductory course requirement for the CS major. However, it does not count toward the major itself; it only counts toward the minor in Web Programming. Therefore, it effectively replaced the need to take CSCI-UA 101.",
+    "claims": [
+      {
+        "text": "Your AP Computer Science A score of 4 or 5 is equivalent to CSCI-UA 101",
+        "label": "grounded",
+        "evidence": "The equivalence of AP Computer Science A scores of 4 or 5 to CSCI-UA 101 is a known academic policy."
+      },
+      {
+        "text": "which satisfies the introductory course requirement for the CS major",
+        "label": "grounded",
+        "evidence": "CSCI-UA 101 is listed as the introductory course requirement for the CS major in the academic rules."
+      },
+      {
+        "text": "it does not count toward the major itself; it only counts toward the minor in Web Programming",
+        "label": "hallucinated",
+        "evidence": "There is no mention in the ground truth that AP Computer Science A counts toward a minor in Web Programming; this is fabricated."
+      },
+      {
+        "text": "Therefore, it effectively replaced the need to take CSCI-UA 101",
+        "label": "grounded",
+        "evidence": "Since the AP score is equivalent to CSCI-UA 101, it effectively replaces the need to take that course."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-28",
+    "query": "Do my AP credits count toward the 128-credit requirement?",
+    "response": "Yes, your AP credits do count toward the 128-credit requirement. Currently, you have completed 40 credits, so you will need an additional 88 credits to meet the total of 128 credits required for graduation.\n\nHere’s a summary of your remaining requirements:\n\n**Unmet CS Major Requirements:**\n- **Core Courses:** 3 courses remaining (CSCI-UA 201, CSCI-UA 202, CSCI-UA 310)\n- **Electives:** 4 courses remaining (CSCI-UA 4*)\n- **Math Requirement:** 1 course remaining (MATH-UA 120)\n\nKeep working on completing your remaining courses, and remember that your AP credits will help you progress toward the total needed for graduation! If you have any further questions or need guidance on your course selection, feel free to ask.\n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [
+      {
+        "text": "your AP credits do count toward the 128-credit requirement.",
+        "label": "grounded",
+        "evidence": "AP credits are generally accepted toward total credit requirements for graduation."
+      },
+      {
+        "text": "Currently, you have completed 40 credits.",
+        "label": "grounded",
+        "evidence": "The ground truth states the total credits completed is 40."
+      },
+      {
+        "text": "you will need an additional 88 credits to meet the total of 128 credits required for graduation.",
+        "label": "grounded",
+        "evidence": "The ground truth indicates that the total credits required is 128 and the student has completed 40, thus needing 88 more."
+      },
+      {
+        "text": "3 courses remaining (CSCI-UA 201, CSCI-UA 202, CSCI-UA 310)",
+        "label": "grounded",
+        "evidence": "The ground truth shows that there are 3 unmet core courses listed."
+      },
+      {
+        "text": "4 courses remaining (CSCI-UA 4*)",
+        "label": "grounded",
+        "evidence": "The ground truth indicates that there are 4 unmet elective courses remaining."
+      },
+      {
+        "text": "1 course remaining (MATH-UA 120)",
+        "label": "grounded",
+        "evidence": "The ground truth confirms that there is 1 unmet math requirement."
+      },
+      {
+        "text": "your AP credits will help you progress toward the total needed for graduation!",
+        "label": "grounded",
+        "evidence": "This is a general advisory statement that aligns with the fact that AP credits count toward total credits."
+      },
+      {
+        "text": "I'm assuming all your current courses will receive a grade of C or better.",
+        "label": "grounded",
+        "evidence": "This is a standard advisory statement that reflects the expectation of satisfactory grades."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-29",
+    "query": "Am I eligible to graduate this semester?",
+    "response": "You have completed 60 credits, but you need a total of 128 credits to graduate. While you have satisfied all 5 CS major requirements, you still need an additional 68 credits to meet the graduation requirement.\n\nTo be eligible to graduate this semester, you would need to complete those remaining credits. Keep working on your courses, and consider discussing your options with your professors or an academic advisor to plan your remaining semesters effectively. \n\nYou're making progress — keep it up!",
+    "claims": [
+      {
+        "text": "You have completed 60 credits",
+        "label": "grounded",
+        "evidence": "The ground truth states that the total credits completed by the student is indeed 60."
+      },
+      {
+        "text": "you need a total of 128 credits to graduate",
+        "label": "grounded",
+        "evidence": "The ground truth indicates that the total credits required for graduation is 128."
+      },
+      {
+        "text": "you have satisfied all 5 CS major requirements",
+        "label": "grounded",
+        "evidence": "The ground truth shows that the student has completed all 5 major requirements."
+      },
+      {
+        "text": "you still need an additional 68 credits to meet the graduation requirement",
+        "label": "grounded",
+        "evidence": "The ground truth confirms that the credits remaining for graduation are 68."
+      },
+      {
+        "text": "To be eligible to graduate this semester, you would need to complete those remaining credits",
+        "label": "grounded",
+        "evidence": "This statement logically follows from the requirement of 128 total credits and the current completion of 60 credits."
+      },
+      {
+        "text": "Keep working on your courses, and consider discussing your options with your professors or an academic advisor to plan your remaining semesters effectively.",
+        "label": "grounded",
+        "evidence": "This is general advice that is appropriate for the student's situation."
+      },
+      {
+        "text": "You're making progress — keep it up!",
+        "label": "grounded",
+        "evidence": "This is an encouraging statement that is appropriate given the student's current status."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-30",
+    "query": "What do I still need to complete before graduation?",
+    "response": "You have completed 60 credits out of the 128 required for graduation. While all your CS major requirements are satisfied (5/5), you still need an additional 68 credits to reach the total needed for graduation.\n\nCurrently, there are no unmet major requirements, which is great! However, you'll need to focus on completing the remaining credits. These can include additional courses, electives, or any other requirements you might still have.\n\nTo summarize:\n- **Credits Completed:** 60\n- **Credits Required for Graduation:** 128\n- **Additional Credits Needed:** 68\n\nI encourage you to explore course options that interest you to fulfill these remaining credits. If you have any specific areas of focus or courses in mind, let me know, and I can help you with that!\n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [
+      {
+        "text": "You have completed 60 credits out of the 128 required for graduation.",
+        "label": "grounded",
+        "evidence": "This matches the total credits completed and required for graduation as per the ground truth."
+      },
+      {
+        "text": "While all your CS major requirements are satisfied (5/5), you still need an additional 68 credits to reach the total needed for graduation.",
+        "label": "contradicted",
+        "evidence": "The claim that all CS major requirements are satisfied is correct, but the additional credits needed should be 68, which is correct. However, the phrasing implies that there are no unmet requirements, which is misleading since the student still needs to complete additional credits."
+      },
+      {
+        "text": "Currently, there are no unmet major requirements, which is great!",
+        "label": "contradicted",
+        "evidence": "While the major requirements are satisfied, the student still has unmet credit requirements to graduate, which contradicts the claim."
+      },
+      {
+        "text": "Credits Completed: 60",
+        "label": "grounded",
+        "evidence": "This is directly supported by the ground truth data."
+      },
+      {
+        "text": "Credits Required for Graduation: 128",
+        "label": "grounded",
+        "evidence": "This is directly supported by the ground truth data."
+      },
+      {
+        "text": "Additional Credits Needed: 68",
+        "label": "grounded",
+        "evidence": "This is directly supported by the ground truth data."
+      },
+      {
+        "text": "I encourage you to explore course options that interest you to fulfill these remaining credits.",
+        "label": "grounded",
+        "evidence": "This is a general advisory statement that is logically true given the student's situation."
+      },
+      {
+        "text": "I'm assuming all your current courses will receive a grade of C or better.",
+        "label": "grounded",
+        "evidence": "This is a standard advisory statement that reflects the system's expected behavior."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-31",
+    "query": "Can I take more than 5 CS electives?",
+    "response": "Yes, you can take more than 5 CS electives. The CS major requires 5 electives, but any additional CSCI-UA 4xx courses you take will count as free electives toward your total credit requirement of 128.",
+    "claims": [
+      {
+        "text": "you can take more than 5 CS electives",
+        "label": "grounded",
+        "evidence": "The academic rules state that students may take more than 5 electives if they wish."
+      },
+      {
+        "text": "The CS major requires 5 electives",
+        "label": "grounded",
+        "evidence": "The academic rules specify that 5 electives are required for the CS major."
+      },
+      {
+        "text": "any additional CSCI-UA 4xx courses you take will count as free electives toward your total credit requirement of 128",
+        "label": "grounded",
+        "evidence": "The academic rules indicate that additional electives beyond the required 5 count as free electives."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-32",
+    "query": "Can I drop to part-time as an F-1 student?",
+    "response": "As an F-1 student, you must maintain a minimum of 12 credits per semester to comply with visa regulations. Dropping below this credit limit would not be allowed unless you have specific authorization from your DSO (Designated School Official). If you're considering dropping to part-time status, it's essential to discuss your situation with your academic advisor or DSO to understand your options and the implications for your visa status.",
+    "claims": [
+      {
+        "text": "As an F-1 student, you must maintain a minimum of 12 credits per semester to comply with visa regulations.",
+        "label": "grounded",
+        "evidence": "This is consistent with the academic rules for F-1 visa students, which state they must maintain a minimum of 12 credits."
+      },
+      {
+        "text": "Dropping below this credit limit would not be allowed unless you have specific authorization from your DSO (Designated School Official).",
+        "label": "grounded",
+        "evidence": "This aligns with the academic rules that require F-1 students to maintain full-time status unless authorized by their DSO."
+      },
+      {
+        "text": "If you're considering dropping to part-time status, it's essential to discuss your situation with your academic advisor or DSO to understand your options and the implications for your visa status.",
+        "label": "grounded",
+        "evidence": "This is a reasonable advisory statement that encourages the student to seek guidance, which is appropriate given their visa status."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-33",
+    "query": "How many online courses can I take as an international student?",
+    "response": "As an F-1 visa student, you can take a maximum of 24 online credits in total, which has been raised from 16 starting in Fall 2024. Additionally, there are per-semester restrictions; you must maintain a minimum of 12 credits per semester to stay in compliance with your visa requirements.",
+    "claims": [
+      {
+        "text": "As an F-1 visa student, you can take a maximum of 24 online credits in total.",
+        "label": "grounded",
+        "evidence": "The ground truth states that the maximum for online courses has been raised to 24 credits, which aligns with the chatbot's claim."
+      },
+      {
+        "text": "which has been raised from 16 starting in Fall 2024.",
+        "label": "grounded",
+        "evidence": "The ground truth confirms that the limit for online credits was raised from 16 to 24 starting in Fall 2024."
+      },
+      {
+        "text": "Additionally, there are per-semester restrictions; you must maintain a minimum of 12 credits per semester to stay in compliance with your visa requirements.",
+        "label": "grounded",
+        "evidence": "The academic rules specify that F-1 visa students must maintain a minimum of 12 credits per semester."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-34",
+    "query": "My grade in CORE-UA 701 was C-. Does it count toward Core?",
+    "response": "A grade of D or better is required to satisfy Core requirements. Since you received a C- in CORE-UA 701, it does not count toward satisfying the Core requirement.",
+    "claims": [
+      {
+        "text": "A grade of D or better is required to satisfy Core requirements.",
+        "label": "grounded",
+        "evidence": "This statement aligns with the academic rules that specify a minimum grade requirement for core courses."
+      },
+      {
+        "text": "Since you received a C- in CORE-UA 701, it does not count toward satisfying the Core requirement.",
+        "label": "grounded",
+        "evidence": "The student's grade of C- is below the required D or better, thus it does not satisfy the core requirement."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-35",
+    "query": "I got a D+ in CSCI-UA 202.  Does it count toward my major?",
+    "response": "A grade of D+ does not meet the minimum requirement of a C or higher to count toward your CS major. Therefore, CSCI-UA 202 will not count toward satisfying your major requirements. You may need to retake the course to earn a qualifying grade.",
+    "claims": [
+      {
+        "text": "A grade of D+ does not meet the minimum requirement of a C or higher to count toward your CS major.",
+        "label": "grounded",
+        "evidence": "The academic rules state that only grades of 'C' or higher count toward the major."
+      },
+      {
+        "text": "Therefore, CSCI-UA 202 will not count toward satisfying your major requirements.",
+        "label": "grounded",
+        "evidence": "Since the student received a D+ in CSCI-UA 202, which does not meet the minimum grade requirement, it cannot count toward the major."
+      },
+      {
+        "text": "You may need to retake the course to earn a qualifying grade.",
+        "label": "grounded",
+        "evidence": "It is common practice for students to retake courses in which they received a grade below the minimum requirement to satisfy major requirements."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": "The tone is appropriate as it provides clear and factual information regarding the student's situation."
+  },
+  {
+    "id": "AQ-36",
+    "query": "What is a good 4-year graduation plan for me?",
+    "response": "Hello! It looks like you have a solid plan for the upcoming semester. Here’s a structured course plan based on your current selections:\n\n1. **Required Courses**  \n   - **CSCI-UA 310 — Basic Algorithms (4 credits)**: This course is essential for understanding algorithm design and analysis, which is foundational for advanced computer science topics.\n   - **CSCI-UA 201 — Computer Systems Organization (4 credits)**: This course provides crucial insights into how computer systems operate, which is vital for any computer scientist.\n   - **CSCI-UA 490 — Special Topics in Computer Science (Advanced) (4 credits)**: This course allows you to explore advanced topics in computer science, enhancing your knowledge and skills in the field.\n\n2. **CAS Core Requirement**  \n   - You currently do not have any unmet core requirements based on the data provided. If you have any specific interests or areas you’d like to explore, let me know!\n\n3. **Major Electives**  \n   - **CSCI-UA 110 — Introduction to Computer Programming (Python) (4 credits)**: While this course is an elective, it’s a great way to strengthen your programming skills. Remember, lower-level CS courses like this one count as free electives, not major electives. \n   - You can also consider using up to 2 of the following math courses to satisfy elective slots if you're interested: MATH-UA 122 (Calculus II), MATH-UA 140 (Linear Algebra), or MATH-UA 185 (Probability and Statistics).\n\n4. **Free Elective**  \n   - You have **1 free elective slot** where you can take any NYU course. If you have specific interests, I would be happy to help you search for courses that match!\n\nThis semester totals **16 credits**, which is a great load for balancing your required courses with some flexibility. \n\nWould you like the full description of any courses? Or shall I search for free electives that match your interests?",
+    "claims": [],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-37",
+    "query": "Can I double-count a course for both Core and my CS major?",
+    "response": "You can double-count a maximum of 2 courses across majors or minors. However, for your Core requirements and your CS major, there are specific rules. Generally, courses that satisfy Core requirements do not count toward the major unless explicitly allowed. Since you are pursuing a CS major, you should check if any of your Core courses can be counted toward your major, but typically, Core courses and major courses are considered separately.",
+    "claims": [
+      {
+        "text": "You can double-count a maximum of 2 courses across majors or minors.",
+        "label": "grounded",
+        "evidence": "This matches the academic rules stating that a maximum of 2 courses can be double-counted across majors/minors."
+      },
+      {
+        "text": "For your Core requirements and your CS major, there are specific rules.",
+        "label": "grounded",
+        "evidence": "This is a general statement that aligns with the academic rules regarding the separation of Core and major requirements."
+      },
+      {
+        "text": "Generally, courses that satisfy Core requirements do not count toward the major unless explicitly allowed.",
+        "label": "grounded",
+        "evidence": "This is consistent with the academic rules that state Core courses and major courses are considered separately."
+      },
+      {
+        "text": "Since you are pursuing a CS major, you should check if any of your Core courses can be counted toward your major.",
+        "label": "insufficient_evidence",
+        "evidence": "While it is true that students should check for specific allowances, the statement is speculative as it cannot be confirmed without specific course details."
+      },
+      {
+        "text": "Typically, Core courses and major courses are considered separately.",
+        "label": "grounded",
+        "evidence": "This aligns with the academic rules that indicate Core and major requirements are distinct."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-38",
+    "query": "I need to withdraw from a course. What happens to my credits?",
+    "response": "When you withdraw from a course, you will not earn any credits for that course. The course will not affect your GPA, as it will not be counted as a grade. However, it's important to consider how this withdrawal might impact your overall credit load for the semester, especially if you're aiming to maintain full-time status. If you have any specific concerns about your situation or how it may affect your academic progress, feel free to ask!",
+    "claims": [
+      {
+        "text": "When you withdraw from a course, you will not earn any credits for that course.",
+        "label": "grounded",
+        "evidence": "This aligns with the academic rules stating that withdrawing from a course means no credits are earned for that course."
+      },
+      {
+        "text": "The course will not affect your GPA, as it will not be counted as a grade.",
+        "label": "grounded",
+        "evidence": "This is consistent with academic policies regarding course withdrawals, which state that withdrawn courses do not impact GPA."
+      },
+      {
+        "text": "it's important to consider how this withdrawal might impact your overall credit load for the semester, especially if you're aiming to maintain full-time status.",
+        "label": "grounded",
+        "evidence": "This is a logical advisory statement based on the requirement for maintaining full-time status, which is relevant to the student's situation."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-39",
+    "query": "Can I repeat a course I already passed to get a better grade?",
+    "response": "Yes, you can repeat a course that you have already passed to try and achieve a better grade. However, keep in mind that you may only repeat a course once, and you can only repeat a maximum of 2 courses during your entire career at NYU. Additionally, if you pass the retake, you will earn the course credits, but you won't receive any additional credits beyond the original course value. Both grades will appear on your transcript and will be computed in your GPA.",
+    "claims": [
+      {
+        "text": "you can repeat a course that you have already passed to try and achieve a better grade",
+        "label": "grounded",
+        "evidence": "The academic rules state that students may repeat a course only once, which supports the claim."
+      },
+      {
+        "text": "you may only repeat a course once",
+        "label": "grounded",
+        "evidence": "This is directly supported by the academic rules regarding course repetition."
+      },
+      {
+        "text": "you can only repeat a maximum of 2 courses during your entire career at NYU",
+        "label": "grounded",
+        "evidence": "The academic rules specify that a maximum of 2 course repeats is allowed."
+      },
+      {
+        "text": "if you pass the retake, you will earn the course credits, but you won't receive any additional credits beyond the original course value",
+        "label": "grounded",
+        "evidence": "The academic rules confirm that passing a retake earns course credits but does not award additional credits."
+      },
+      {
+        "text": "both grades will appear on your transcript and will be computed in your GPA",
+        "label": "grounded",
+        "evidence": "The academic rules state that both grades will be computed in the GPA, which supports this claim."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-40",
+    "query": "What's the minimum GPA I need to stay in the CS major?",
+    "response": "To stay in the CS major, you need to maintain a minimum GPA of 2.0 for your major courses.",
+    "claims": [
+      {
+        "text": "you need to maintain a minimum GPA of 2.0 for your major courses.",
+        "label": "grounded",
+        "evidence": "The academic rules state that a minimum GPA of 2.0 is required for the major."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-41",
+    "query": "What elective options do I have if I've already taken MATH-UA 122 and 140?",
+    "response": "Since you've already completed both MATH-UA 122 and MATH-UA 140, you can count these courses toward your CS major elective slots. Therefore, you can count MATH-UA 122 and MATH-UA 140 toward your elective requirements, which means you still need to complete three additional CSCI-UA 4xx electives to satisfy the major requirement. \n\nIf you're looking for specific elective options, please check the course offerings for the upcoming semester, as they can vary.",
+    "claims": [
+      {
+        "text": "you can count these courses toward your CS major elective slots",
+        "label": "grounded",
+        "evidence": "MATH-UA 122 and MATH-UA 140 can be substituted for CS major electives according to the MATH SUBSTITUTION POLICY."
+      },
+      {
+        "text": "you still need to complete three additional CSCI-UA 4xx electives to satisfy the major requirement",
+        "label": "grounded",
+        "evidence": "The student has already completed 2 math courses that can substitute for electives, leaving 3 more CSCI-UA 4xx electives required for the major."
+      },
+      {
+        "text": "please check the course offerings for the upcoming semester, as they can vary",
+        "label": "insufficient_evidence",
+        "evidence": "The statement is a general advisory and cannot be confirmed or denied based on the provided data."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  },
+  {
+    "id": "AQ-42",
+    "query": "Can I take 19 credits in a semester?",
+    "response": "Yes, you can take 19 credits in a semester, but you will need to obtain adviser approval since that exceeds the standard limit of 18 credits. \n\nCurrently, you have completed 32 credits out of the 128 required for graduation. You still need to complete 3 core courses (CSCI-UA 201, CSCI-UA 202, CSCI-UA 310) and 5 elective courses (CSCI-UA 4xx) for your CS major. \n\nIf you're considering taking on a heavier course load, just ensure that you can manage the workload effectively. Let me know if you have any further questions! \n\n⚠️ I'm assuming all your current courses will receive a grade of C or better. If you expect differently, tell me — for example: 'I think I'll fail CSCI-UA 201' or 'I might get a D in MATH-UA 121'.",
+    "claims": [
+      {
+        "text": "Yes, you can take 19 credits in a semester, but you will need to obtain adviser approval since that exceeds the standard limit of 18 credits.",
+        "label": "grounded",
+        "evidence": "The statement accurately reflects the academic rule that students may take up to 18 credits without adviser approval, and taking more than that requires approval."
+      },
+      {
+        "text": "Currently, you have completed 32 credits out of the 128 required for graduation.",
+        "label": "grounded",
+        "evidence": "This matches the student's profile, which states they have completed 32 credits and need a total of 128 for graduation."
+      },
+      {
+        "text": "You still need to complete 3 core courses (CSCI-UA 201, CSCI-UA 202, CSCI-UA 310) and 5 elective courses (CSCI-UA 4xx) for your CS major.",
+        "label": "grounded",
+        "evidence": "This is consistent with the student's course history and the academic rules regarding core and elective requirements for the CS major."
+      },
+      {
+        "text": "If you're considering taking on a heavier course load, just ensure that you can manage the workload effectively.",
+        "label": "grounded",
+        "evidence": "This is a general advisory statement that is logically true given the student's situation."
+      },
+      {
+        "text": "I'm assuming all your current courses will receive a grade of C or better.",
+        "label": "grounded",
+        "evidence": "This is a standard advisory statement that reflects the expectation for courses to be passed with a grade of C or better for major requirements."
+      }
+    ],
+    "tone": "appropriate",
+    "toneNote": ""
+  }
+]

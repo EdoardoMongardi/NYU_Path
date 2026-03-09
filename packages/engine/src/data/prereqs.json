@@ -70,6 +70,13 @@
                 "courses": [
                     "MATH-UA 120"
                 ]
+            },
+            {
+                "type": "OR",
+                "courses": [
+                    "MATH-UA 121",
+                    "MATH-UA 131"
+                ]
             }
         ],
         "coreqs": []

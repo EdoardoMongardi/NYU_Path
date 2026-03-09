@@ -46,15 +46,12 @@
                 "fromPool": [
                     "CSCI-UA 4*"
                 ],
-                "minLevel": 300,
+                "minLevel": 400,
                 "doubleCountPolicy": "limit_1",
                 "mathSubstitutionPool": [
                     "MATH-UA 122",
                     "MATH-UA 140",
-                    "MATH-UA 185",
-                    "MATH-UA 233",
-                    "MATH-UA 234",
-                    "MATH-UA 235"
+                    "MATH-UA 185"
                 ],
                 "maxMathSubstitutions": 2,
                 "catalogYearRange": [
@@ -87,35 +84,6 @@
                     "2023",
                     "2025"
                 ]
-            },
-            {
-                "ruleId": "cs_ba_math_linear_algebra",
-                "label": "Linear Algebra",
-                "type": "must_take",
-                "courses": [
-                    "MATH-UA 140"
-                ],
-                "doubleCountPolicy": "allow",
-                "catalogYearRange": [
-                    "2023",
-                    "2025"
-                ]
-            },
-            {
-                "ruleId": "cs_ba_math_elective",
-                "label": "Math Elective (Calculus II or Probability/Statistics)",
-                "type": "choose_n",
-                "n": 1,
-                "fromPool": [
-                    "MATH-UA 122",
-                    "MATH-UA 233",
-                    "MATH-UA 235"
-                ],
-                "doubleCountPolicy": "allow",
-                "catalogYearRange": [
-                    "2023",
-                    "2025"
-                ]
             }
         ]
     },
@@ -134,6 +102,7 @@
                 "n": 1,
                 "fromPool": [
                     "EXPOS-UA 1",
+                    "EXPOS-UA 4",
                     "EXPOS-UA 9"
                 ],
                 "doubleCountPolicy": "disallow",
@@ -245,6 +214,11 @@
                 "fromPool": [
                     "CORE-UA 7*"
                 ],
+                "conditionalExemption": [
+                    "social_science_major",
+                    "social_science_minor"
+                ],
+                "exemptionLabel": "Exempt via designated social science major/minor",
                 "doubleCountPolicy": "disallow",
                 "catalogYearRange": [
                     "2020",
@@ -259,6 +233,11 @@
                 "fromPool": [
                     "CORE-UA 8*"
                 ],
+                "conditionalExemption": [
+                    "humanities_major",
+                    "humanities_minor"
+                ],
+                "exemptionLabel": "Exempt via designated humanities major/minor",
                 "doubleCountPolicy": "disallow",
                 "catalogYearRange": [
                     "2020",
@@ -273,7 +252,19 @@
                 "fromPool": [
                     "CORE-UA 1*",
                     "MATH-UA 121",
-                    "MATH-UA 122"
+                    "MATH-UA 122",
+                    "MATH-UA 131",
+                    "BIOL-UA 42",
+                    "DS-UA 111",
+                    "ECON-UA 18",
+                    "ECON-UA 20",
+                    "ENVST-UA 310",
+                    "LING-UA 6",
+                    "POL-UA 850",
+                    "PSYCH-UA 10",
+                    "PSYCH-UA 11",
+                    "SOC-UA 302",
+                    "UGPH-GU 20"
                 ],
                 "doubleCountPolicy": "allow",
                 "catalogYearRange": [
@@ -287,8 +278,16 @@
                 "type": "choose_n",
                 "n": 1,
                 "fromPool": [
-                    "CORE-UA 2*"
+                    "CORE-UA 2*",
+                    "CHEM-UA 125",
+                    "CHEM-UA 129",
+                    "PHYS-UA 11",
+                    "PHYS-UA 91"
                 ],
+                "conditionalExemption": [
+                    "cas_core"
+                ],
+                "exemptionLabel": "Satisfied by AP/IB/A-Level science credit or departmental sequence",
                 "doubleCountPolicy": "disallow",
                 "catalogYearRange": [
                     "2020",
@@ -301,8 +300,15 @@
                 "type": "choose_n",
                 "n": 1,
                 "fromPool": [
-                    "CORE-UA 3*"
+                    "CORE-UA 3*",
+                    "ANTH-UA 2",
+                    "BIOL-UA 12",
+                    "ENVST-UA 275"
                 ],
+                "conditionalExemption": [
+                    "cas_core"
+                ],
+                "exemptionLabel": "Satisfied by AP/IB/A-Level science credit or departmental sequence",
                 "doubleCountPolicy": "disallow",
                 "catalogYearRange": [
                     "2020",

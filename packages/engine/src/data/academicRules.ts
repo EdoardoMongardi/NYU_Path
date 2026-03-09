@@ -13,7 +13,7 @@ DEGREE REQUIREMENTS:
 - 12 courses / 48 credits minimum
 - Minimum GPA: 2.0
 - Only grades of "C" or higher count toward the major
-- P/F grades are NOT applicable
+- P/F grades will NOT count toward satisfying major requirements (the course can still be elected P/F, but it won't satisfy the requirement)
 - Minimum 32 credits must have the CSCI-UA designation
 - 50% of major courses must be completed at CAS (residency requirement)
 - Max 2 courses can be double-counted across majors/minors
@@ -29,6 +29,7 @@ CORE REQUIREMENTS (7 courses):
 
 ELECTIVES (5 courses):
 - Must be numbered CSCI-UA 4xx (400-level)
+- 5 electives are REQUIRED for the major; students may take MORE than 5 if they wish — only 5 count toward the major requirement, additional ones count as free electives
 - Elective offerings vary each fall and spring semester
 - One elective option is offered in summer
 - If elective list for the target semester hasn't been published yet, inform student to wait
@@ -61,7 +62,7 @@ PLACEMENT EXAM POLICY:
 
 AP/IB/A-LEVEL CREDITS:
 - College Board AP credits, A Levels, IB HL scores, internal NYU Study Abroad courses DO NOT satisfy CAS residency requirement
-- AP CS A (score 4/5): equivalent to CSCI-UA 101, but does NOT count toward CS major (only toward minor in Web Programming)
+- AP CS A (score 4/5): equivalent to CSCI-UA 101 and DOES satisfy the introductory course requirement for the CS BA major (also counts toward minor)
 - AP CS Principles (score 4/5): equivalent to CSCI-UA 2/3, elective credit only — not for CS major
 - IB CS HL (score 6/7): equivalent to CSCI-UA 101 + 102 — must consult CS department about counting toward major
 - A-Level CS (grade B+): equivalent to CSCI-UA 101 + 102 — must consult CS department about counting toward major
@@ -134,7 +135,7 @@ Chemistry:
   Note: Not for Bio/Chem majors/minors; prehealth cannot place out
 
 Chinese Language:
-  Score 4/5 → 8 cr, EAST-UA 204
+  Score 4/5 → 4 cr, EAST-UA 204
   Core: Satisfies FOREIGN LANGUAGE
   Note: Cannot use for placement; must take CAS placement exam
 
@@ -163,11 +164,11 @@ European/US/World History:
   Note: Max 4 AP cr toward History major
 
 French Language:
-  Score 4/5 → 8 cr, FREN-UA 30
+  Score 4/5 → 4 cr, FREN-UA 30
   Core: Satisfies FOREIGN LANGUAGE
 
 German Language:
-  Score 4/5 → 8 cr, GERM-UA 4
+  Score 4/5 → 4 cr, GERM-UA 4
   Core: Satisfies FOREIGN LANGUAGE
 
 Government & Politics (US or Comparative):
@@ -175,16 +176,16 @@ Government & Politics (US or Comparative):
   Core: None
 
 Italian Language:
-  Score 4/5 → 8 cr, ITAL-UA 12
+  Score 4/5 → 4 cr, ITAL-UA 12
   Core: Satisfies FOREIGN LANGUAGE
 
 Japanese Language:
-  Score 4/5 → 8 cr, EAST-UA 250
+  Score 4/5 → 4 cr, EAST-UA 250
   Core: Satisfies FOREIGN LANGUAGE
   Note: Cannot use for placement at NYU
 
 Latin:
-  Score 4/5 → 8 cr, CLASS-UA 6
+  Score 4/5 → 4 cr, CLASS-UA 6
   Core: Satisfies FOREIGN LANGUAGE
 
 Macroeconomics:
@@ -231,13 +232,13 @@ Psychology:
   Core: None
 
 Spanish Language:
-  Score 4 → 8 cr, SPAN-UA 4
-  Score 5 → 8 cr, SPAN-UA 50
+  Score 4/5 → 4 cr, SPAN-UA 4
   Core: Satisfies FOREIGN LANGUAGE
-  Note: Non-natives must take placement exam; scores >18 months old invalid for placement
+  Note: Non-natives must take CAS placement exam; scores >18 months old invalid for placement
 
 Spanish Literature:
-  Score 4/5 → 8 cr, SPAN-UA 50
+  Score 4 → 4 cr, SPAN-UA 50
+  Score 5 → 4 cr, SPAN-UA 50 or above (must take special advanced placement evaluation through Spanish dept)
   Core: Satisfies FOREIGN LANGUAGE
 
 Statistics:
@@ -379,44 +380,44 @@ GENERAL A-LEVEL RULES:
 A-LEVEL EXAM → COURSE EQUIVALENT → CORE SATISFACTION:
 
 Biology:
-  Grade B+ → 8 cr, BIOL-UA 11 + BIOL-UA 12
+  Grade B or higher → 8 cr, BIOL-UA 11 + BIOL-UA 12
   Core: Satisfies PHYSICAL SCIENCE + LIFE SCIENCE
   Note: Prehealth cannot place out
 
 Chemistry:
-  Grade B+ → 8 cr, CHEM-UA 125 + CHEM-UA 126
+  Grade B or higher → 8 cr, CHEM-UA 125 + CHEM-UA 126
   Core: Satisfies PHYSICAL SCIENCE + LIFE SCIENCE
   Note: Not for Bio/Chem majors/minors; prehealth cannot place out
 
 Chinese:
-  Grade B+ → 8 cr, EAST-UA 203/204
+  Grade B or higher → 8 cr, EAST-UA 203/204
   Core: Satisfies FOREIGN LANGUAGE
   Note: Must take CAS placement exam
 
 Classical Languages (Greek/Latin):
-  Grade B+ → 8 cr, CLASS-UA 9/10 or 5/6
+  Grade B or higher → 8 cr, CLASS-UA 9/10 or 5/6
   Core: Satisfies FOREIGN LANGUAGE
   Note: Consult Classics department for placement
 
 Computer Science:
-  Grade B+ → 8 cr, CSCI-UA 101 + CSCI-UA 102
+  Grade B or higher → 8 cr, CSCI-UA 101 + CSCI-UA 102
   Core: None
   Note: MUST consult CS department about counting toward major/minor
 
 Economics:
-  Grade B+ → 8 cr, ECON-UA 1 + ECON-UA 2
+  Grade B or higher → 8 cr, ECON-UA 1 + ECON-UA 2
   Core: None
 
 French:
-  Grade B+ → 8 cr, FREN-UA 11/12
+  Grade B or higher → 8 cr, FREN-UA 11/12
   Core: Satisfies FOREIGN LANGUAGE
 
 German:
-  Grade B+ → 8 cr, GERM-UA 3/4
+  Grade B or higher → 8 cr, GERM-UA 3/4
   Core: Satisfies FOREIGN LANGUAGE
 
 History (any):
-  Grade B+ → 8 cr, elective
+  Grade B or higher → 8 cr, elective
   Note: Max 4 of 8 credits toward History major
 
 History of Art:
@@ -425,15 +426,15 @@ History of Art:
   Note: Never counts toward minor
 
 Italian:
-  Grade B+ → 8 cr, ITAL-UA 11/12
+  Grade B or higher → 8 cr, ITAL-UA 11/12
   Core: Satisfies FOREIGN LANGUAGE
 
 Latin:
-  Grade B+ → 8 cr, CLASS-UA 5/6
+  Grade B or higher → 8 cr, CLASS-UA 5/6
   Core: Satisfies FOREIGN LANGUAGE
 
 Mathematics:
-  Grade B+ → 8 cr, MATH-UA 121 (Calculus I) equivalent
+  Grade B or higher → 8 cr, MATH-UA 121 (Calculus I) equivalent (4 of 8 cr)
   Core: Satisfies QUANTITATIVE REASONING
   Note: Further/Pure Mathematics — consult Math department for equivalencies
   Note: Econ majors cannot use for MATH-UA 131/132/133
@@ -443,39 +444,39 @@ Philosophy:
   Grade B → 8 cr, elective only
 
 Physics:
-  Grade B+ → 8 cr, elective
+  Grade B or higher → 8 cr, elective
   Core: Satisfies PHYSICAL SCIENCE + LIFE SCIENCE
   Note: Not for Physics or Chemistry majors/minors
 
 Portuguese:
-  Grade B+ → 8 cr, PORT-UA 3/4
+  Grade B or higher → 8 cr, PORT-UA 3/4
   Core: Satisfies FOREIGN LANGUAGE
 
 Psychology:
-  Grade B+ → 8 cr, PSYCH-UA 1 + elective
+  Grade B or higher → 8 cr, PSYCH-UA 1 + elective
   Note: 4 cr exempt from PSYCH-UA 1 for major/minor
 
 Religious Studies:
-  Grade B+ → 8 cr, elective
+  Grade B or higher → 8 cr, elective
   Note: Cannot count toward Religious Studies major/minor
 
 Sociology:
-  Grade B+ → 8 cr, elective
+  Grade B or higher → 8 cr, elective
   Note: 4 cr toward major with dept approval; cannot exempt from SOC-UA 1/2
 
 Spanish:
-  Grade B+ → 8 cr, SPAN-UA 3/4
+  Grade B or higher → 8 cr, SPAN-UA 3/4
   Core: Satisfies FOREIGN LANGUAGE
   Note: Non-natives placement exam required; scores >18 months old invalid
 
 Statistics:
-  Grade B+ → 8 cr, elective
+  Grade B or higher → 8 cr, elective
   Core: Satisfies QUANTITATIVE REASONING
   Note: Not for Econ/IR/Sociology/Business Studies; consult Math/Psych for equivalency
   Note: Cannot get full 8 cr for each if presenting multiple math A-Level exams
 
 Any other Foreign Language:
-  Grade B+ (A-Level) or M2+ (Pre-U) → satisfies FOREIGN LANGUAGE Core requirement
+  Grade B or higher (A-Level) or M2+ (Pre-U) → satisfies FOREIGN LANGUAGE Core requirement
 
 === FIRST-YEAR SEMINAR (FYSEM) RULES ===
 
@@ -511,4 +512,64 @@ COURSE SWAP EVALUATION:
 - If student drops below 12 credits: WARN about F-1 visa implications
 - Consider remaining semesters until graduation when advising swaps
 - If a swap doesn't affect graduation timeline and the student has good reasons, support it
+
+=== GENERAL DEGREE & ACADEMIC RULES ===
+
+DEGREE REQUIREMENTS:
+- Total: 128 credits with cumulative GPA ≥ 2.0
+- Major: must also be completed with GPA ≥ 2.0
+- Minor (optional): must also be completed with GPA ≥ 2.0
+
+RESIDENCY:
+- 64 credits minimum must have -UA suffix (CAS courses). Courses from other NYU schools and NYU AD/SHU do NOT count.
+- Last 32 credits must be taken while registered in CAS
+- 50% of major/minor courses must be taken at CAS
+- Students from other NYU schools cannot count non-UA courses toward the 64-credit CAS minimum
+
+CREDIT CAPS:
+- Max 16 credits from other NYU divisions (non-CAS)
+- Max 24 credits from online courses (raised from 16 in Fall 2024)
+- Max 64 transfer credits
+- Max 32 advanced standing credits (AP + IB + A-Level + prior college for first-years)
+- Students may take up to 18 credits per semester WITHOUT adviser approval
+- Taking MORE than 18 credits (i.e., 19+) requires adviser approval
+
+PASS/FAIL OPTION:
+- Max 1 P/F course per term, max 32 P/F credits career
+- Any NYU course can be elected P/F, but P/F grades will NOT count toward satisfying major, minor, or Core requirements
+- The student still earns credit if they receive a P, but the requirement is not satisfied
+- Exception: foreign language courses BELOW Intermediate II level may be taken P/F (the Intermediate II course itself, which satisfies the Core FL requirement, must be taken for a letter grade)
+- Grade of P is NOT computed in GPA; grade of F under P/F IS computed
+- Must elect P/F before end of 14th week (5th week in summer)
+
+COURSE REPETITION:
+- May repeat a course only once; max 2 course repeats during entire career
+- No additional credit beyond the original course value is awarded for repeats (i.e., you earn the course credits if you pass the retake, but you don't get double credit); both grades computed in GPA
+
+CORE MINIMUM GRADE:
+- Grade of D or better required for Core requirements (NOT C)
+- P/F grades do NOT satisfy Core requirements, except FL below Intermediate II
+
+TIME LIMIT:
+- All degree requirements must be met within 8 years of matriculation
+- Transfer credit not granted for courses taken more than 10 years before matriculation
+
+ACADEMIC STANDING:
+- GPA below 2.0 (cumulative or semester) → Not in Good Standing
+- To return: semester GPA ≥ 2.0, cumulative GPA ≥ 2.0, complete ≥ 75% attempted credits
+- After 2nd semester: dismissal risk if < 50% attempted credits completed
+- Escalation: Academic Concern → Continued Concern → Required Leave → Pre-dismissal → Dismissal
+
+TRANSFER CREDITS:
+- Only grades of C or better transfer
+- P/F, S/U grades do NOT transfer
+- No credit for math below precalculus
+- No credit from 2-year institutions for off-campus study
+- Dual enrollment: cannot count toward FCC requirements in Core
+- First-year dual enrollment: no credit for expository writing or math below precalculus
+
+GRADUATION:
+- Apply for graduation by start of final semester
+- NYU confers degrees in January, May, and August
+- Students may petition to graduate with 126-127 credits if courses had fewer than 4 credits
 `;

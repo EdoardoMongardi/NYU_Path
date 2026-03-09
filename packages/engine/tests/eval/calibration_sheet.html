@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Calibration Sheet — Layer C</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 24px;
+        }
+
+        h1 {
+            color: #e94560;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+
+        .subtitle {
+            color: #888;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 12px 20px;
+            min-width: 120px;
+        }
+
+        .stat .num {
+            font-size: 28px;
+            font-weight: 700;
+            color: #e94560;
+        }
+
+        .stat .label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: #c73e54;
+        }
+
+        button.secondary {
+            background: #16213e;
+            border: 1px solid #333;
+        }
+
+        button.secondary:hover {
+            background: #1a2a4e;
+        }
+
+        .scenario {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #e94560;
+        }
+
+        .scenario-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .scenario-id {
+            font-weight: 700;
+            color: #e94560;
+            font-size: 16px;
+        }
+
+        .scenario-query {
+            color: #aaa;
+            font-style: italic;
+            margin-bottom: 6px;
+        }
+
+        .scenario-profile {
+            color: #6fa;
+            font-size: 12px;
+            margin-bottom: 12px;
+            padding: 8px;
+            background: rgba(102, 255, 170, 0.05);
+            border-radius: 6px;
+            border: 1px solid rgba(102, 255, 170, 0.15);
+        }
+
+        .claim {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+
+        .claim-text {
+            margin-bottom: 8px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .claim-meta {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .label-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .label-badge.grounded {
+            background: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
+        }
+
+        .label-badge.hallucinated {
+            background: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
+        }
+
+        .label-badge.contradicted {
+            background: rgba(243, 156, 18, 0.2);
+            color: #f39c12;
+        }
+
+        .label-badge.insufficient_evidence {
+            background: rgba(155, 89, 182, 0.2);
+            color: #9b59b6;
+        }
+
+        select {
+            background: #1a1a2e;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        select.labeled {
+            border-color: #2ecc71;
+        }
+
+        .evidence {
+            font-size: 12px;
+            color: #888;
+            margin-top: 6px;
+        }
+
+        .notes-input {
+            background: #1a1a2e;
+            color: #e0e0e0;
+            border: 1px solid #333;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            width: 300px;
+        }
+
+        #loading {
+            text-align: center;
+            padding: 60px;
+            color: #888;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>📋 Calibration Sheet — Layer C (Round 3)</h1>
+    <p class="subtitle">Advisory Quality Evaluation · LLM-as-Judge Calibration</p>
+
+    <div class="stats">
+        <div class="stat">
+            <div class="num" id="totalClaims">-</div>
+            <div class="label">Total Claims</div>
+        </div>
+        <div class="stat">
+            <div class="num" id="labeledCount">0</div>
+            <div class="label">Labeled</div>
+        </div>
+        <div class="stat">
+            <div class="num" id="remainingCount">-</div>
+            <div class="label">Remaining</div>
+        </div>
+        <div class="stat">
+            <div class="num" id="agreeCount">-</div>
+            <div class="label">Agree ✅</div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button onclick="autoFillAgree()">⚡ Auto-fill: Agree with Judge</button>
+        <button class="secondary" onclick="exportCSV()">📥 Export CSV</button>
+        <button class="secondary" onclick="clearAll()">🗑 Clear All Labels</button>
+    </div>
+
+    <div id="loading">Loading calibration_sheet.csv...</div>
+    <div id="scenarios"></div>
+
+    <script>
+        // Profile info for each scenario (scenario ID → description)
+        const PROFILES = {
+            "AQ-01": "🧑‍🎓 freshman_clean — Freshman, 32cr, domestic, 8 courses taken",
+            "AQ-02": "🧑‍🎓 freshman_clean — Freshman, 32cr, domestic, 8 courses taken",
+            "AQ-03": "🧑‍🎓 freshman_clean — Freshman, 32cr, domestic, 8 courses taken",
+            "AQ-04": "🧑‍🎓 freshman_clean — Freshman, 32cr, domestic, 8 courses taken",
+            "AQ-05": "🧑‍🎓 freshman_clean — Freshman, 32cr, domestic, 8 courses taken",
+            "AQ-06": "🧑‍🎓 prereq_chain_risk — Sophomore, prereqs completed for 310",
+            "AQ-07": "🧑‍🎓 fl_exempt — Sophomore, has EXPOS-UA 1 (B+), FL exempt",
+            "AQ-08": "🧑‍🎓 freshman_clean — Freshman, 32cr, domestic, CSCI-UA 201 in progress",
+            "AQ-09": "🧑‍🎓 junior_heavy — Junior, 56cr, 6 courses remaining",
+            "AQ-10": "🧑‍🎓 junior_heavy — Junior, 56cr, domestic student",
+            "AQ-11": "🧑‍🎓 freshman_clean — Freshman, 32cr, domestic",
+            "AQ-12": "🧑‍🎓 sophomore_mid — Sophomore, has CSCI-UA 102 but not 201",
+            "AQ-13": "🧑‍🎓 freshman_clean — Freshman, 32cr, domestic",
+            "AQ-14": "🧑‍🎓 f1_visa_student — F-1 visa student",
+            "AQ-15": "🧑‍🎓 freshman_clean — Freshman, 32cr, interested in ML",
+        };
+
+        let claims = [];
+
+        // Parse CSV (handles quoted fields)
+        function parseCSV(text) {
+            const rows = [];
+            let current = [];
+            let field = "";
+            let inQuotes = false;
+
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (inQuotes) {
+                    if (ch === '"' && text[i + 1] === '"') {
+                        field += '"';
+                        i++;
+                    } else if (ch === '"') {
+                        inQuotes = false;
+                    } else {
+                        field += ch;
+                    }
+                } else {
+                    if (ch === '"') {
+                        inQuotes = true;
+                    } else if (ch === ',') {
+                        current.push(field);
+                        field = "";
+                    } else if (ch === '\n' || (ch === '\r' && text[i + 1] === '\n')) {
+                        current.push(field);
+                        field = "";
+                        if (current.length > 1) rows.push(current);
+                        current = [];
+                        if (ch === '\r') i++;
+                    } else {
+                        field += ch;
+                    }
+                }
+            }
+            if (field || current.length) {
+                current.push(field);
+                if (current.length > 1) rows.push(current);
+            }
+            return rows;
+        }
+
+        // Load CSV
+        async function loadCSV() {
+            try {
+                const resp = await fetch('calibration_sheet.csv');
+                const text = await resp.text();
+                const rows = parseCSV(text);
+
+                // Skip header row
+                const header = rows[0];
+                claims = rows.slice(1).map((row, idx) => ({
+                    idx,
+                    scenario_id: row[0] || "",
+                    query: row[1] || "",
+                    claim_text: row[2] || "",
+                    judge_label: row[3] || "",
+                    human_label: row[4] || "",
+                    evidence: row[5] || "",
+                    notes: row[6] || "",
+                }));
+
+                renderAll();
+            } catch (err) {
+                document.getElementById('loading').textContent =
+                    'Error loading CSV. Make sure you open this file via a local server (e.g., npx serve .)';
+            }
+        }
+
+        function renderAll() {
+            document.getElementById('loading').style.display = 'none';
+
+            // Group by scenario
+            const grouped = {};
+            for (const c of claims) {
+                if (!grouped[c.scenario_id]) grouped[c.scenario_id] = [];
+                grouped[c.scenario_id].push(c);
+            }
+
+            const container = document.getElementById('scenarios');
+            container.innerHTML = '';
+
+            for (const [scenarioId, scenarioClaims] of Object.entries(grouped)) {
+                const div = document.createElement('div');
+                div.className = 'scenario';
+
+                const profileInfo = PROFILES[scenarioId] || "";
+                div.innerHTML = `
+                    <div class="scenario-header">
+                        <div>
+                            <span class="scenario-id">${scenarioId}</span>
+                            <div class="scenario-query">"${scenarioClaims[0].query}"</div>
+                            ${profileInfo ? `<div class="scenario-profile">${profileInfo}</div>` : ''}
+                        </div>
+                        <span style="color:#888;font-size:13px">${scenarioClaims.length} claim(s)</span>
+                    </div>
+                `;
+
+                for (const claim of scenarioClaims) {
+                    const claimDiv = document.createElement('div');
+                    claimDiv.className = 'claim';
+                    claimDiv.innerHTML = `
+                        <div class="claim-text">${claim.claim_text}</div>
+                        <div class="claim-meta">
+                            <span>Judge: <span class="label-badge ${claim.judge_label}">${claim.judge_label}</span></span>
+                            <span>Human: 
+                                <select id="human-${claim.idx}" class="${claim.human_label ? 'labeled' : ''}" onchange="updateLabel(${claim.idx}, this)">
+                                    <option value="">— select —</option>
+                                    <option value="grounded" ${claim.human_label === 'grounded' ? 'selected' : ''}>grounded</option>
+                                    <option value="hallucinated" ${claim.human_label === 'hallucinated' ? 'selected' : ''}>hallucinated</option>
+                                    <option value="contradicted" ${claim.human_label === 'contradicted' ? 'selected' : ''}>contradicted</option>
+                                    <option value="insufficient_evidence" ${claim.human_label === 'insufficient_evidence' ? 'selected' : ''}>insufficient_evidence</option>
+                                </select>
+                            </span>
+                            <input class="notes-input" placeholder="Notes..." value="${claim.notes}" 
+                                onchange="claims[${claim.idx}].notes = this.value">
+                        </div>
+                        <div class="evidence">${claim.evidence}</div>
+                    `;
+                    div.appendChild(claimDiv);
+                }
+
+                container.appendChild(div);
+            }
+
+            updateStats();
+        }
+
+        function updateLabel(idx, select) {
+            claims[idx].human_label = select.value;
+            select.className = select.value ? 'labeled' : '';
+            updateStats();
+        }
+
+        function updateStats() {
+            const total = claims.length;
+            const labeled = claims.filter(c => c.human_label).length;
+            const agree = claims.filter(c => c.human_label && c.human_label === c.judge_label).length;
+
+            document.getElementById('totalClaims').textContent = total;
+            document.getElementById('labeledCount').textContent = labeled;
+            document.getElementById('remainingCount').textContent = total - labeled;
+            document.getElementById('agreeCount').textContent = agree;
+        }
+
+        function autoFillAgree() {
+            for (const claim of claims) {
+                if (!claim.human_label) {
+                    claim.human_label = claim.judge_label;
+                }
+            }
+            renderAll();
+        }
+
+        function clearAll() {
+            if (!confirm('Clear all human labels?')) return;
+            for (const claim of claims) {
+                claim.human_label = '';
+            }
+            renderAll();
+        }
+
+        function escapeCSV(val) {
+            if (!val) return '';
+            if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                return '"' + val.replace(/"/g, '""') + '"';
+            }
+            return val;
+        }
+
+        function exportCSV() {
+            let csv = 'scenario_id,query,claim_text,judge_label,human_label,evidence,notes\n';
+            for (const c of claims) {
+                csv += [
+                    escapeCSV(c.scenario_id),
+                    escapeCSV(c.query),
+                    escapeCSV(c.claim_text),
+                    escapeCSV(c.judge_label),
+                    escapeCSV(c.human_label),
+                    escapeCSV(c.evidence),
+                    escapeCSV(c.notes),
+                ].join(',') + '\n';
+            }
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'calibration_sheet.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Load on page load
+        loadCSV();
+    </script>
+</body>
+
+</html>
