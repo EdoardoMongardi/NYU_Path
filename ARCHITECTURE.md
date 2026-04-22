@@ -668,6 +668,11 @@ User question (or agent uncertainty query)
 │                          │    prevents cross-school contamination.
 │                          │    Explicit school names in the query
 │                          │    are a deterministic, safe signal.
+│                          │
+│     NOTE: V1 matches      │    Future enhancement: expand to
+│     literal school names  │    aliases ("business school" → Stern,
+│     only ("Stern",        │    "engineering" → Tandon, etc.)
+│     "Tandon", etc.)       │
 └────────┬────────────────┘
          │
          ▼
@@ -826,7 +831,15 @@ Template Matcher (runs before agent loop for every user message)
    academic year (or within 12 months).
    → If stale → skip to agent loop + flag for maintenance.
 
-All 5 pass → Return curated template directly (no LLM, no RAG).
+All 5 pass → serve curated template, BUT first run a lightweight post-check:
+
+POST-CHECK (after gate passes, before returning):
+  - Verify template.id is logged (for audit trail)
+  - Verify template.source is a valid, known document
+  - Verify the served content references the correct school name
+  If post-check fails → fall through to agent loop (silent template corruption).
+  This keeps the direct path cheap but prevents silent failures.
+
 Any gate fails → Fall through to agent loop (§6.1).
 ```
 
