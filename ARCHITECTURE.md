@@ -259,38 +259,71 @@ Inspired by Claude Code's `query.ts` architecture (a 1730-line `while(true)` gen
 ```typescript
 // Simplified conceptual model inspired by Claude Code's query loop
 // See: query.ts L307 while(true), L659-863 model streaming, L1380-1408 tool execution
+// See: §6.1 for full State type, turn limit, abort, transition tracking, and result budgeting
 async function* handleMessage(message: string, profile: StudentProfile) {
-  const messages = [systemPrompt, ...conversationHistory, message]
+  const state: State = {
+    messages: [systemPrompt, ...conversationHistory, message],
+    turnCount: 0,
+    transition: undefined,
+    abortController: new AbortController(),  // §6.2: propagated to all tool calls
+    currentModel: 'gpt-4o',
+    toolResultTokenEstimate: 0,
+  };
   
   while (true) {
+    // 0. Safety: turn-limit guard (§6.1 — prevents infinite tool-calling loops)
+    if (state.turnCount >= MAX_TURNS) {
+      return { reason: 'max_turns', message: 'Here\'s what I found so far...' };
+    }
+    
+    // 0b. Safety: abort check (§6.2 — user navigated away or sent new message)
+    if (state.abortController.signal.aborted) {
+      return { reason: 'aborted' };
+    }
+
+    // 0c. Context management: enforce tool result budget before API call (§6.6 Tier 1)
+    state.messages = enforceToolResultBudget(state.messages);
+    
     // 1. LLM decides next action (call tool OR respond)
-    const response = await llm.generate(messages, { tools: registeredTools })
+    const response = await llm.generate(state.messages, {
+      tools: registeredTools,
+      model: state.currentModel,
+      signal: state.abortController.signal,
+    });
     
     // 2. Text response → validate and return
     if (response.type === 'text') {
-      const validation = responseValidator.validate(response, toolResults, profile)
+      const validation = responseValidator.validate(response, toolResults, profile);
       if (validation.passed) {
-        yield response.content
-        return
+        yield response.content;
+        return;
       }
-      // Re-prompt with validation errors
-      messages.push({ role: 'system', content: validation.repromptMessage })
-      continue
+      // Re-prompt with validation errors (transition tracking for debugging)
+      state.messages.push({ role: 'system', content: validation.repromptMessage });
+      state.transition = { reason: 'validation_retry', tool: 'response_validator' };
+      continue;
     }
     
     // 3. Tool calls → validate inputs, execute, summarize
     for (const call of response.toolCalls) {
-      const inputCheck = call.tool.validateInput(call.input, profile)
+      const inputCheck = call.tool.validateInput(call.input, profile);
       if (!inputCheck.valid) {
         // Tool itself says "I need X first" → LLM sees this and adapts
-        messages.push({ role: 'tool_result', content: inputCheck.message, is_error: true })
-        continue
+        state.messages.push({ role: 'tool_result', content: inputCheck.message, is_error: true });
+        continue;
       }
       
-      const result = await call.tool.execute(call.input, { profile })
-      const summarized = summarizeForContext(result, call.tool.maxResultChars)
-      messages.push({ role: 'tool_result', content: summarized })
+      const result = await call.tool.execute(call.input, {
+        profile,
+        abortSignal: state.abortController.signal,  // §6.2: tools can bail early
+      });
+      const summarized = summarizeForContext(result, call.tool.maxResultChars);
+      state.messages.push({ role: 'tool_result', content: summarized });
     }
+    
+    // 4. Track transition reason and increment turn count
+    state.transition = { reason: 'next_turn' };
+    state.turnCount++;
     // Loop continues — LLM sees tool results and decides what's next
   }
 }
@@ -719,6 +752,80 @@ The orchestrator is modeled after Claude Code's proven `while(true)` agentic loo
 | Dynamic `prompt()` method | Tool descriptions adapt to student's declared programs |
 | Dependency injection (`QueryDeps`) | Tools injected, not imported — enables testing |
 | Error cascade (fallback → retry → escalate) | Multi-layer recovery before surfacing error |
+| `maxTurns` turn-limit guard (`query.ts L1704-1711`) | Same — exit after `MAX_TURNS` (8) to prevent infinite tool-calling loops |
+| `abortController` propagation (`Tool.ts L180`) | Same — `AbortSignal` in ToolContext; tools bail early on abort |
+| `transition` reason tracking (`query.ts L216`) | Same — `State.transition` records why each iteration continued, prevents infinite recovery loops |
+| `applyToolResultBudget()` (`query.ts L379-394`) | Same — aggregate token budget across all tool results in messages[], oldest results get summarized |
+| Model fallback on 429/503 (`query.ts L893-953`) | Same — GPT-4o → GPT-4o-mini fallback chain with user notification |
+
+#### Orchestrator State Type
+
+> **📖 Claude Code Reference:** `query.ts` L204-217 — the mutable `State` type carried between loop iterations. We adopt a simplified version with the same key fields: `messages`, `turnCount`, `transition`.
+
+```typescript
+// agentOrchestrator.ts — mutable state between loop iterations
+// Modeled after query.ts L204-217 State type
+
+type Transition =
+  | { reason: 'next_turn' }
+  | { reason: 'stop_hook_retry'; error: string }
+  | { reason: 'validation_retry'; tool: string }
+  | { reason: 'error_recovery'; attempt: number }
+  | { reason: 'model_fallback'; from: string; to: string };
+
+type State = {
+  messages: Message[];
+  turnCount: number;              // Incremented after each tool execution batch
+  transition?: Transition;        // Why the previous iteration continued (debuggability + loop prevention)
+  abortController: AbortController;     // Propagated to all tool calls
+  currentModel: string;                 // GPT-4o by default, falls back to GPT-4o-mini
+  toolResultTokenEstimate: number;      // Running sum of all tool_result tokens in messages[]
+};
+
+const MAX_TURNS = 8;   // Academic advising rarely needs >5 tool calls
+const MAX_TOOL_RESULT_BUDGET = 8000; // Max aggregate tool_result tokens before compaction
+```
+
+#### Turn-Limit Guard
+
+> **📖 Claude Code Reference:** `query.ts` L1704-1711 — if `nextTurnCount > maxTurns`, yield `max_turns_reached` and exit. Prevents infinite tool-calling loops from burning unlimited API tokens.
+
+```typescript
+// In the main loop, after tool results are collected and appended:
+state.turnCount++;
+if (state.turnCount >= MAX_TURNS) {
+  // Force the LLM to summarize what it has so far instead of calling more tools
+  return {
+    reason: 'max_turns',
+    message: 'I\'ve gathered all the information I can in this turn. Here\'s what I found...'
+  };
+}
+```
+
+#### Tool Result Budget Enforcement
+
+> **📖 Claude Code Reference:** `query.ts` L379-394 — `applyToolResultBudget()` runs before every API call. When aggregate tool results exceed the budget, largest results are replaced with their `summarizeResult()` output.
+
+```typescript
+// Before each API call in the loop:
+function enforceToolResultBudget(messages: Message[]): Message[] {
+  const toolResults = messages.filter(m => m.role === 'tool_result');
+  const totalTokens = toolResults.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+
+  if (totalTokens <= MAX_TOOL_RESULT_BUDGET) return messages;
+
+  // Sort by size descending, keep most recent 2 full, summarize the rest
+  const sorted = [...toolResults].sort((a, b) => estimateTokens(b.content) - estimateTokens(a.content));
+  const toSummarize = sorted.slice(0, -2); // Preserve 2 most recent
+  const summarizedIds = new Set(toSummarize.map(m => m.toolUseId));
+
+  return messages.map(m =>
+    m.role === 'tool_result' && summarizedIds.has(m.toolUseId)
+      ? { ...m, content: m.tool.summarizeResult(m.fullResult) }
+      : m
+  );
+}
+```
 
 ### 6.2 Tool Interface (inspired by Claude Code `Tool.ts`)
 
@@ -765,6 +872,19 @@ interface AgentTool<Input extends z.ZodObject, Output> {
 type ValidationResult = 
   | { valid: true }
   | { valid: false; message: string }  // LLM sees this message
+
+// Context passed to every tool call
+// 📖 Claude Code Reference: Tool.ts L158-300 — ToolUseContext carries abort controllers,
+// state getters/setters, options, and tracking through every tool call. Our version is simplified.
+type ToolContext = {
+  profile: StudentProfile;
+  schoolConfig: SchoolConfig;
+  programConfigs: ProgramConfig[];
+  abortSignal: AbortSignal;       // From State.abortController — tools check this before expensive ops
+  // Usage in tools:
+  //   if (ctx.abortSignal.aborted) return { aborted: true };
+  //   // ... expensive DB read or computation
+};
 
 // Factory with safe defaults
 // 📖 Claude Code Reference: Tool.ts L757-792 — TOOL_DEFAULTS and buildTool()
@@ -855,6 +975,63 @@ Tool call fails
 | Eval composite score (Appendix D) | < 0.85 | Overall correctness below threshold → diagnose which dimension is failing before upgrading |
 
 > **Note:** Always tighten system prompt and validator rules BEFORE upgrading the model. A model upgrade is the most expensive lever — exhaust structural fixes first.
+
+#### Model Fallback Cascade
+
+> **📖 Claude Code Reference:** `query.ts` L893-953 — on `FallbackTriggeredError` (rate limit, high demand), the loop switches to `fallbackModel`, clears orphaned tool results, and retries. User sees: "Switched to [fallback] due to high demand."
+
+```
+Model Fallback Chain:
+1. GPT-4o (primary) — 500ms, best function calling
+2. GPT-4o-mini (fallback) — 200ms, adequate for tool selection + synthesis
+3. Graceful error message if both fail
+
+On API error (429 rate limit, 503 model unavailable):
+  - Set state.currentModel = fallbackModel
+  - Set state.transition = { reason: 'model_fallback', from: 'gpt-4o', to: 'gpt-4o-mini' }
+  - Log: "model_fallback_triggered"
+  - System message to user: "I'm using a faster backup model right now."
+  - Continue the loop (retry same request with fallback model)
+  - If fallback also fails → "I'm having trouble connecting. Please try again in a moment."
+```
+
+### 6.6 Context Management (Within-Session)
+
+> **📖 Claude Code Reference:** `query.ts` L454-543 — `autoCompactIfNeeded()` runs every iteration, forking a lightweight LLM call to summarize history when approaching the context window limit. Additional strategies: reactive compact (on 413 error), microcompact (stale tool result removal), snip compact (message pruning), context collapse (staged summarization).
+>
+> We adopt a simplified 3-tier strategy appropriate for our domain (advising sessions are typically <20 turns, but "what if" scenarios can generate large audit payloads).
+
+```
+TIER 1 — Tool Result Compaction (automatic, cheap, runs every turn):
+  After each tool execution batch:
+  1. Count aggregate tool_result tokens in messages[]
+  2. If sum > MAX_TOOL_RESULT_BUDGET (8000 tokens):
+     - Keep the 2 most recent tool_results at full fidelity
+     - Replace older tool_results with summarizeResult() output
+     - This reuses the summarizeResult() method every tool already defines
+  Rationale: A full audit result (~2000 tokens) from 3 turns ago is
+  unlikely to need full detail — the summary suffices for context.
+
+TIER 2 — Conversation Summarization (expensive, last resort):
+  When estimated context tokens > 80% of model's context window:
+  1. Fork a cheap model call (GPT-4o-mini) with prompt:
+     "Summarize this academic advising conversation. Preserve: student name,
+      school, declared programs, key decisions made, open questions."
+  2. Replace all messages before the summary with a single system message:
+     "Previous conversation summary: [summary]"
+  3. Continue the loop with compacted messages
+  4. Log: "session_compacted" with pre/post token counts
+
+TIER 3 — Graceful Termination (safety net):
+  When estimated context tokens > 95% of model's context window:
+  1. Finalize the current response
+  2. Message: "We've covered a lot! To keep things accurate, I recommend
+     starting a fresh session. Everything we discussed is saved."
+  3. Persist session summary via sessionSummaries[] (§7.3)
+  4. Return { reason: 'context_limit' }
+```
+
+> **Cross-session vs within-session:** §7.3 handles session summaries for *resumption across sessions* (rolling window of 5 summaries). This section handles *within a single session* where the context window fills up during extended advising conversations.
 
 ---
 
@@ -3510,8 +3687,21 @@ CREATE: packages/engine/src/search/policyEmbeddings.ts
 CREATE: packages/engine/src/agent/agentOrchestrator.ts
   + The agentic while(true) loop
   + 📖 Model after: query.ts L241-1728 (queryLoop function)
+  + State type with: messages[], turnCount, transition, abortController,
+    currentModel, toolResultTokenEstimate (§6.1)
   + 📖 State shape from: query.ts L204-217 (State type)
   + 📖 Loop continuation from: query.ts L1715-1728 (state = { messages: [...] })
+  + Turn-limit guard: exit after MAX_TURNS (8) with summary (§6.1)
+  + 📖 Model after: query.ts L1704-1711 (maxTurns check)
+  + Abort controller: propagated to all tool calls via ToolContext.abortSignal (§6.2)
+  + 📖 Model after: Tool.ts L180 (abortController in ToolUseContext)
+  + Transition tracking: State.transition records why each iteration continued (§6.1)
+  + 📖 Model after: query.ts L216 (State.transition: Continue)
+  + Tool result budget enforcement: enforceToolResultBudget() before each API call (§6.6 Tier 1)
+  + 📖 Model after: query.ts L379-394 (applyToolResultBudget)
+  + Model fallback cascade: GPT-4o → GPT-4o-mini on 429/503 (§6.5)
+  + 📖 Model after: query.ts L893-953 (FallbackTriggeredError handling)
+  + Context compaction: Tier 2 (conversation summarization at 80%) + Tier 3 (graceful exit at 95%) (§6.6)
   + Tool registry and execution
   + 📖 Model after: services/tools/toolOrchestration.ts L19-82 (runTools generator)
   + Message history management
