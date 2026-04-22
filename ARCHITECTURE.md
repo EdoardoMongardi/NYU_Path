@@ -248,19 +248,60 @@ Layer 3: AGENT ORCHESTRATOR
   Examples:       Multi-step reasoning, data collection, result synthesis
 ```
 
-### 3.2 How They Interact: The Agentic Loop
+### 3.2 How They Interact: Template Matcher → Agentic Loop
 
-Inspired by Claude Code's `query.ts` architecture (a 1730-line `while(true)` generator), our orchestrator is NOT a rigid pipeline. It's an adaptive loop where the LLM decides its next action based on what the last tool returned.
+Every user message passes through two stages: a **pre-loop template matcher** (deterministic, no LLM) and the **agent loop** (LLM-driven, tool-calling). The template matcher intercepts the ~20-30% of queries that are FAQ-type policy questions with curated, verified answers. Everything else goes through the full agent loop.
+
+> **Design principle:** Minimize agentic surface area. If we have a verified answer, serve it directly. Only invoke the LLM when the question genuinely requires dynamic reasoning, multi-tool coordination, or conversational context.
+
+```
+User message arrives
+       │
+       ▼
+┌──────────────────────────────────────┐
+│  STAGE 1: TEMPLATE MATCHER (§5.5)    │  No LLM, no RAG, deterministic
+│                                      │
+│  5-step gate (see §5.5 matching):    │
+│  1. Query similarity to curated FAQ  │
+│  2. Context safety (no follow-ups)   │
+│  3. School match                     │
+│  4. Applicability predicates         │
+│  5. Freshness check                  │
+│                                      │
+│  All pass → serve curated answer     │──→ Return directly
+│  Any fail → fall through ↓           │
+└──────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────┐
+│  STAGE 2: AGENT LOOP (§6.1)          │  LLM-driven, tool-calling
+│  while(true) orchestrator            │  Full safety nets:
+│  with all safety nets                │  invocation auditor,
+│  (see below)                         │  completeness checker,
+│                                      │  response validator
+└──────────────────────────────────────┘
+```
+
+Inspired by Claude Code's `query.ts` architecture (a 1730-line `while(true)` generator), the agent loop is an adaptive loop where the LLM decides its next action based on what the last tool returned.
 
 > **📖 Claude Code Reference:** `query.ts` L241-280 — the `queryLoop()` entry point creates a mutable `State` object (`messages`, `toolUseContext`, `turnCount`, `maxOutputTokensRecoveryCount`, etc.) then enters `while(true)`. Study this for the state shape we need.
 >
 > **📖 Claude Code Reference:** `query.ts` L1715-1728 — the loop continuation site where tool results get appended to messages and state is updated for the next iteration: `state = { messages: [...messagesForQuery, ...assistantMessages, ...toolResults], ... }`.
 
 ```typescript
-// Simplified conceptual model inspired by Claude Code's query loop
-// See: query.ts L307 while(true), L659-863 model streaming, L1380-1408 tool execution
+// Simplified conceptual model
+// Stage 1: template matcher (§5.5 — see matching logic for full 5-step gate)
+// Stage 2: agent loop inspired by Claude Code's query loop
 // See: §6.1 for full State type, turn limit, abort, transition tracking, and result budgeting
-async function* handleMessage(message: string, profile: StudentProfile) {
+async function* handleMessage(message: string, profile: StudentProfile, history: Message[]) {
+  // STAGE 1: Template matcher — deterministic, no LLM
+  const templateMatch = matchCuratedTemplate(message, profile, history);
+  if (templateMatch) {
+    yield templateMatch.content;  // Serve verified answer directly
+    return;
+  }
+
+  // STAGE 2: Agent loop — LLM-driven with full safety nets
   const state: State = {
     messages: [systemPrompt, ...conversationHistory, message],
     turnCount: 0,
@@ -604,20 +645,47 @@ User question (or agent uncertainty query)
          │
          ▼
 ┌─────────────────────────┐
-│  2. VECTOR SEARCH        │    Cosine similarity
-│     Top-K = 20 chunks    │    From chunked policy docs
+│  2. SCOPE FILTER (hard)  │    Applied BEFORE vector search
+│                          │
+│  a. Year freshness:      │    Hard-filter out chunks where
+│     chunk.year < current │    year < current catalog year.
+│     catalog year         │    Stale policies are the most
+│                          │    dangerous retrieval error.
+│                          │
+│  b. School filter:       │    DEFAULT-HARD to homeSchool + "all"
+│     Default: chunk.school│    (NYU-wide chunks always included).
+│     ∈ {homeSchool, "all"}│
+│                          │    EXPLICIT OVERRIDE: if the search
+│     Override: if query   │    query contains an explicit school
+│     contains non-home    │    name (e.g., "Stern", "Tandon"),
+│     school name →        │    include that school's chunks too.
+│     include that school  │
+│                          │    WHY default-hard, not soft:
+│                          │    We don't trust the LLM to always
+│                          │    reformulate context-dependent
+│                          │    references (e.g., "there") into
+│                          │    explicit school names. Hard filter
+│                          │    prevents cross-school contamination.
+│                          │    Explicit school names in the query
+│                          │    are a deterministic, safe signal.
 └────────┬────────────────┘
          │
          ▼
 ┌─────────────────────────┐
-│  3. COHERE RERANK v3.5   │    Cross-encoder reranking
+│  3. VECTOR SEARCH        │    Cosine similarity
+│     Top-K = 20 chunks    │    From scoped policy docs
+└────────┬────────────────┘
+         │
+         ▼
+┌─────────────────────────┐
+│  4. COHERE RERANK v3.5   │    Cross-encoder reranking
 │     Re-score all 20      │    Returns relevance scores 0.0-1.0
 │     Keep top 3-5         │    Much more accurate than embedding-only
 └────────┬────────────────┘
          │
          ▼
 ┌─────────────────────────┐
-│  4. CONFIDENCE GATING    │
+│  5. CONFIDENCE GATING    │
 │     ≥ 0.6: cite directly │
 │     0.3-0.6: cite + warn │
 │     < 0.3: escalate      │
@@ -705,6 +773,10 @@ triggerQueries:       # Queries that should match this template
 source: "CAS Academic Policies, §Pass/Fail Option"
 school: "cas"  # Template applies to this school (or "all" for NYU-wide)
 lastVerified: "2025-04-15"
+applicability:        # Optional — only needed for templates with known cross-school conflicts
+  excludeIfPrograms:  # Don't use this template if student has programs in these schools
+    - "stern"         # Stern has different P/F rules (4 courses/yr, major P/F allowed)
+  requiresNoTransferIntent: true  # Don't use if student is exploring transfer
 ---
 
 **Short answer:** P/F grades are accepted but will not satisfy major or minor
@@ -720,9 +792,47 @@ the FL requirement), the P/F restriction does not apply (CAS Policy §FL Excepti
 For Stern, Tandon, or other schools, the agent falls through to RAG search.
 ```
 
-**Matching logic:** Before calling RAG, the orchestrator checks if the user's query matches any `triggerQueries` via embedding similarity (threshold ≥ 0.85) or keyword match. If matched, the curated template is returned directly — no LLM synthesis.
+> **Applicability predicates:** Only the 5-6 templates with known cross-school conflicts (P/F, double-counting, credit caps, overload, transfer credits) need `applicability` rules. The remaining 20+ templates are school-scoped and the school check alone is sufficient.
 
-**Maintenance:** Templates are reviewed quarterly against the NYU Bulletin. Each has a `lastVerified` date.
+**Matching logic (5-step gate before entering the agent loop):**
+
+```
+Template Matcher (runs before agent loop for every user message)
+
+1. QUERY SIMILARITY: Check user query against triggerQueries
+   via embedding similarity (≥ 0.85) or keyword match.
+   → No match → skip to agent loop.
+
+2. CONTEXT SAFETY: If conversation history has > 2 messages,
+   check if query contains context-dependent references:
+   "that", "those", "it", "there", "the one", "we discussed",
+   "the plan", "those courses", etc.
+   → If context-dependent → skip to agent loop.
+   (The query might look like a FAQ but actually references
+   prior conversation context that the template can't see.)
+
+3. SCHOOL CHECK: template.school === profile.homeSchool
+   OR template.school === "all"
+   → School mismatch → skip to agent loop.
+   (The same question has different answers per school.)
+
+4. APPLICABILITY CHECK (if template has applicability field):
+   - excludeIfPrograms: any of student's declared programs in a listed school?
+   - requiresNoTransferIntent: student has transferIntent in profile?
+   → If excluded → skip to agent loop.
+   (Cross-school program combinations may invalidate the template.)
+
+5. FRESHNESS CHECK: template.lastVerified is within current
+   academic year (or within 12 months).
+   → If stale → skip to agent loop + flag for maintenance.
+
+All 5 pass → Return curated template directly (no LLM, no RAG).
+Any gate fails → Fall through to agent loop (§6.1).
+```
+
+> **Why not skip the agent loop for more queries?** Accuracy > latency. The template matcher only handles queries where we have a *verified, school-appropriate, context-independent* answer. Everything else goes through the full agent loop with all safety nets (invocation auditor, completeness checker, response validator).
+
+**Maintenance:** Templates are reviewed quarterly against the NYU Bulletin. Each has a `lastVerified` date. Templates that fail the freshness check are flagged for review but still fall through to RAG (never served stale).
 
 ---
 
@@ -3714,6 +3824,27 @@ CREATE: packages/engine/src/agent/toolRegistry.ts
   + 📖 Each tool follows: Tool.ts L362-466 (Tool type signature)
   + Each tool declares outputMode: 'template' | 'synthesis'
 
+CREATE: packages/engine/src/agent/templateMatcher.ts
+  + Pre-loop dispatch layer (§3.2 Stage 1, §5.5 matching logic)
+  + 5-step gate: query similarity → context safety → school check →
+    applicability predicates → freshness check
+  + matchCuratedTemplate(message, profile, history) → template | null
+  + Context safety: skip templates when conversation has > 2 messages
+    AND query contains context-dependent references ("that", "those", etc.)
+  + School check: template.school === profile.homeSchool OR "all"
+  + Applicability check: excludeIfPrograms, requiresNoTransferIntent
+  + Freshness check: template.lastVerified within current academic year
+  + If all pass → return curated answer (no LLM, no RAG)
+  + If any fail → return null → fall through to agent loop
+
+CREATE: packages/engine/src/agent/ragScopeFilter.ts
+  + Pre-retrieval scope filter for search_policy tool (§5.1 step 2)
+  + Hard year filter: exclude chunks where year < current catalog year
+  + Default-hard school filter: chunk.school ∈ {homeSchool, "all"}
+  + Explicit cross-school override: if query contains non-home school
+    name → include that school's chunks
+  + applyScopeFilter(query, profile, chunks) → filtered chunks
+
 CREATE: packages/engine/src/agent/responseValidator.ts
   + Part 4a: Grounding checks (ungrounded numbers, uncited policies, false completions)
   + Part 4b: Tool invocation auditing (was the required tool actually called?)
@@ -3732,11 +3863,16 @@ CREATE: packages/engine/src/agent/fallbackLogger.ts
 
 CREATE: packages/engine/src/agent/systemPrompt.ts
   + 25 system prompt rules (see Appendix A)
+  + Rule #5 scoped to CREDIT COUNTS / GPA / GRADUATION PROGRESS / SEMESTER PLANNING
+    (not all "degree advice" — prereqs, policy lookups excluded)
   + Dynamic context injection (student programs, visa status)
 
 CREATE: packages/engine/src/data/policyTemplates/
   + 20-30 curated policy FAQ templates (§5.5)
-  + Each with triggerQueries, source, lastVerified
+  + Each with triggerQueries, source, school, lastVerified
+  + Cross-school conflict templates (P/F, double-counting, credit caps,
+    overload, transfer credits) include applicability predicates:
+    excludeIfPrograms, requiresNoTransferIntent
 
 CREATE: packages/engine/src/agent/templateFormatter.ts
   + Hardened output templates for deterministic responses (§2.4)
@@ -3808,8 +3944,10 @@ CORE RULES (mandatory):
 3. NEVER answer a policy question from training data. ALWAYS call
    search_policy first and cite the returned source document and section.
 4. For double-major/minor questions, ALWAYS call check_overlap.
-5. Before giving any degree advice, call at minimum:
-   get_academic_standing → get_credit_caps (2-tool minimum).
+5. Before discussing CREDIT COUNTS, GPA, GRADUATION PROGRESS, or SEMESTER
+   PLANNING, call at minimum: get_academic_standing → get_credit_caps.
+   This does NOT apply to simple questions like prerequisites, course
+   descriptions, or policy lookups — those have their own required tools.
 6. For planning, call plan_semester. Do NOT manually suggest courses.
 
 FALLBACK RULES (mandatory):
