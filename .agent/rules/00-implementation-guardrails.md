@@ -1,3 +1,7 @@
+---
+trigger: manual
+---
+
 # NYU CAS CS BA Advisor — Implementation Guardrails
 
 **This rule is ALWAYS active for every implementation task in this project.**

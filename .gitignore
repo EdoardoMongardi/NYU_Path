@@ -41,3 +41,4 @@ coverage
 # Vercel
 .vercel
 packages/engine/src/data/course_embeddings.json
+data/
