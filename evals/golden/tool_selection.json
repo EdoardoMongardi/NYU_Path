@@ -1,0 +1,343 @@
+{
+    "_meta": {
+        "evalSet": "TS-Tool",
+        "schemaRef": "evals/modelBakeoff.ts:41 ToolSelectionCase",
+        "frozenAt": "2026-04-26",
+        "caseCount": 18,
+        "notes": "Tool-selection cases for the Phase-5-prep model bakeoff. Each case pins the user message to the EXACT tool the model must call and a JSONSchema-style shape the args must match. Provenance is in eval_set_provenance.md."
+    },
+    "cases": [
+        {
+            "id": "tool-001-audit-progress-question",
+            "userMessage": "How far along am I in my degree, and what's still standing between me and graduation?",
+            "expectedToolName": "run_full_audit",
+            "expectedArgsShape": {
+                "type": "object",
+                "properties": {
+                    "programFilter": {
+                        "type": "string",
+                        "optional": true
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-002-audit-remaining-requirements",
+            "userMessage": "Pull up my degree audit — I want to see every requirement I haven't finished yet.",
+            "expectedToolName": "run_full_audit",
+            "expectedArgsShape": {
+                "type": "object",
+                "properties": {
+                    "programFilter": {
+                        "type": "string",
+                        "optional": true
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-003-current-gpa-not-synthesized",
+            "userMessage": "What is my current cumulative GPA?",
+            "expectedToolName": "run_full_audit",
+            "expectedArgsShape": {
+                "type": "object",
+                "properties": {
+                    "programFilter": {
+                        "type": "string",
+                        "optional": true
+                    }
+                },
+                "_note": "Per Cardinal Rule §2.1, GPA must come from a tool. run_full_audit returns cumulativeGPA in its summarizeResult. Some implementations also expose get_academic_standing — but the agent must NOT synthesize a GPA from training data or context. Counter-case for tool-skip behavior."
+            }
+        },
+        {
+            "id": "tool-004-plan-spring-semester",
+            "userMessage": "I'm registering for next term in two weeks. What should my Spring schedule look like?",
+            "expectedToolName": "plan_semester",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["term", "year"],
+                "properties": {
+                    "term": {
+                        "type": "string",
+                        "enum": ["fall", "spring", "summer"]
+                    },
+                    "year": {
+                        "type": "number"
+                    },
+                    "auditResult": {},
+                    "maxCredits": {
+                        "type": "number",
+                        "optional": true
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-005-plan-summer-courses",
+            "userMessage": "I'm thinking of catching up over Summer 2026. Can you put together a course list for me?",
+            "expectedToolName": "plan_semester",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["term", "year"],
+                "properties": {
+                    "term": {
+                        "type": "string",
+                        "enum": ["fall", "spring", "summer"]
+                    },
+                    "year": {
+                        "type": "number"
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-006-transfer-to-stern",
+            "userMessage": "I'm in CAS now but I want to move over to Stern. Walk me through what that takes.",
+            "expectedToolName": "check_transfer_eligibility",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["targetSchool"],
+                "properties": {
+                    "targetSchool": {
+                        "type": "string",
+                        "const": "stern"
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-007-transfer-to-tandon",
+            "userMessage": "What would I need to switch into Tandon for engineering?",
+            "expectedToolName": "check_transfer_eligibility",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["targetSchool"],
+                "properties": {
+                    "targetSchool": {
+                        "type": "string",
+                        "const": "tandon"
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-008-whatif-add-math-minor",
+            "userMessage": "If I picked up a Math minor on top of what I have now, how would that change my degree?",
+            "expectedToolName": "what_if_audit",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["hypotheticalPrograms"],
+                "properties": {
+                    "hypotheticalPrograms": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 1
+                    },
+                    "compareWithCurrent": {
+                        "type": "boolean",
+                        "optional": true
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-009-whatif-compare-majors",
+            "userMessage": "Could you compare what's left for me as a CS major versus an Economics major? I want to see the trade-off.",
+            "expectedToolName": "what_if_audit",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["hypotheticalPrograms"],
+                "properties": {
+                    "hypotheticalPrograms": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 2
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-010-policy-pf-major-course",
+            "userMessage": "There's a course I have to take for my major but I'd really rather take it Pass/Fail. Is that allowed?",
+            "expectedToolName": "search_policy",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "minLength": 5
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-011-policy-credit-overload",
+            "userMessage": "Is there a hard cap on how many credits I'm allowed to register for in one semester at CAS?",
+            "expectedToolName": "search_policy",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "minLength": 5
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-012-policy-online-course-limit",
+            "userMessage": "Can I count an online course toward my CAS degree? Is there a limit?",
+            "expectedToolName": "search_policy",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "minLength": 5
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-013-policy-withdrawal-deadline",
+            "userMessage": "When's the latest in the term I can drop a course and have it just disappear from my transcript?",
+            "expectedToolName": "search_policy",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "minLength": 5
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-014-policy-double-counting-cap",
+            "userMessage": "How many courses am I allowed to share between two majors?",
+            "expectedToolName": "search_policy",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["query"],
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "minLength": 5
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-015-profile-declared-major",
+            "userMessage": "Quick update — I officially declared my Politics major last week. Please save that to my file.",
+            "expectedToolName": "update_profile",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["mutations"],
+                "properties": {
+                    "mutations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["action", "field", "value", "reason"],
+                            "properties": {
+                                "action": {
+                                    "type": "string",
+                                    "enum": ["add", "remove", "update"]
+                                },
+                                "field": {
+                                    "type": "string",
+                                    "const": "declaredPrograms"
+                                },
+                                "reason": {
+                                    "type": "string",
+                                    "minLength": 5
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-016-profile-update-grad-term",
+            "userMessage": "I changed my graduation plan — I'm now aiming for Spring 2027 instead of Fall. Update that, please.",
+            "expectedToolName": "update_profile",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["mutations"],
+                "properties": {
+                    "mutations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["action", "field", "value", "reason"],
+                            "properties": {
+                                "action": {
+                                    "type": "string",
+                                    "enum": ["update", "add"]
+                                },
+                                "field": {
+                                    "type": "string",
+                                    "const": "targetGraduationTerm"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-017-profile-correct-transfer-credit",
+            "userMessage": "Hey, I just noticed my profile lists AP Calc BC but I never actually took that exam. Please remove it.",
+            "expectedToolName": "update_profile",
+            "expectedArgsShape": {
+                "type": "object",
+                "required": ["mutations"],
+                "properties": {
+                    "mutations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["action", "field", "reason"],
+                            "properties": {
+                                "action": {
+                                    "type": "string",
+                                    "const": "remove"
+                                },
+                                "field": {
+                                    "type": "string",
+                                    "const": "transferCourses"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "id": "tool-018-counter-graduation-claim-needs-audit",
+            "userMessage": "Am I on track to graduate on time?",
+            "expectedToolName": "run_full_audit",
+            "expectedArgsShape": {
+                "type": "object",
+                "properties": {
+                    "programFilter": {
+                        "type": "string",
+                        "optional": true
+                    }
+                },
+                "_note": "Counter-case: 'on track' is a degree-progress claim — System Prompt Rule §17 forbids the LLM from saying 'all requirements met' without a fresh run_full_audit. The model must call run_full_audit (NOT answer from session memory or training data)."
+            }
+        }
+    ]
+}

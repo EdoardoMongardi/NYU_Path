@@ -1,0 +1,567 @@
+{
+    "_meta": {
+        "evalSet": "TS-Synthesis",
+        "schemaRef": "evals/modelBakeoff.ts:48 SynthesisCase + evals/modelBakeoff.ts:68 AppendixDRubric",
+        "frozenAt": "2026-04-26",
+        "caseCount": 18,
+        "notes": "Synthesis cases for the Phase-5-prep model bakeoff. Each case freezes a userMessage + tool outputs and pins the rubric (required tool names that should appear in evidence, required caveats, forbidden claims). 6 cases test the no-tool-needed path (frozenToolResults: [], forbiddenClaims includes 'I called tool X' style hallucination). Provenance is in eval_set_provenance.md."
+    },
+    "cases": [
+        {
+            "id": "synth-001-seven-unmet-rules-exact-count",
+            "userMessage": "Where do I stand on my degree right now?",
+            "frozenToolResults": [
+                {
+                    "toolName": "run_full_audit",
+                    "result": {
+                        "remainingTotal": 7,
+                        "programs": [
+                            {
+                                "programId": "cas_politics_ba",
+                                "name": "Politics BA",
+                                "status": "declared",
+                                "remainingRules": 7
+                            }
+                        ],
+                        "earnedCredits": 96,
+                        "requiredCredits": 128,
+                        "cumulativeGPA": 3.42,
+                        "warnings": [],
+                        "risks": []
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["run_full_audit"],
+                "requiredCaveats": ["7"],
+                "forbiddenClaims": [
+                    "8 requirements remaining",
+                    "8 requirements left",
+                    "all requirements met",
+                    "you are done"
+                ]
+            }
+        },
+        {
+            "id": "synth-002-gpa-verbatim-3-42",
+            "userMessage": "What's my cumulative GPA right now?",
+            "frozenToolResults": [
+                {
+                    "toolName": "run_full_audit",
+                    "result": {
+                        "remainingTotal": 7,
+                        "programs": [
+                            {
+                                "programId": "cas_politics_ba",
+                                "name": "Politics BA",
+                                "status": "declared"
+                            }
+                        ],
+                        "earnedCredits": 96,
+                        "requiredCredits": 128,
+                        "cumulativeGPA": 3.42,
+                        "warnings": [],
+                        "risks": []
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["run_full_audit"],
+                "requiredCaveats": ["3.42"],
+                "forbiddenClaims": [
+                    "around 3.4",
+                    "approximately 3.4",
+                    "roughly 3.4",
+                    "3.5",
+                    "3.40"
+                ]
+            }
+        },
+        {
+            "id": "synth-003-low-confidence-policy-adviser-caveat",
+            "userMessage": "Can I petition to count my study-abroad seminar toward my major requirements?",
+            "frozenToolResults": [
+                {
+                    "toolName": "search_policy",
+                    "result": {
+                        "confidence": 0.42,
+                        "answerable": "partial",
+                        "matchedTemplateId": null,
+                        "topChunk": {
+                            "text": "Any transfer courses to be applied toward major or minor requirements must be approved by the department, and in no case can transfer credits be used to meet more than one-half of these departmental requirements.",
+                            "source": "CAS Academic Policies",
+                            "section": "Transfer Credit / Major"
+                        },
+                        "applicabilityNotes": "Specific approval workflow for study-abroad seminars depends on the home department.",
+                        "needsAdviserConfirmation": true,
+                        "relatedChunksCount": 3
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["search_policy"],
+                "requiredCaveats": [
+                    "adviser",
+                    "confirm"
+                ],
+                "forbiddenClaims": [
+                    "yes, this is allowed",
+                    "definitely allowed",
+                    "guaranteed"
+                ]
+            }
+        },
+        {
+            "id": "synth-004-f1-visa-credit-load-caveat",
+            "userMessage": "I'm thinking of dropping one of my classes and taking 11 credits this term — would that be a problem?",
+            "frozenToolResults": [
+                {
+                    "toolName": "get_enrollment_status",
+                    "result": {
+                        "visaStatus": "F-1",
+                        "currentTermCredits": 14,
+                        "minimumFullTimeCredits": 12,
+                        "homeSchool": "cas",
+                        "withinFullTime": true,
+                        "warnings": ["F-1 students must remain enrolled full-time (≥12 credits) each fall and spring."]
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["get_enrollment_status"],
+                "requiredCaveats": [
+                    "F-1",
+                    "12 credits"
+                ],
+                "forbiddenClaims": [
+                    "no problem at all",
+                    "11 credits is fine",
+                    "go ahead and drop"
+                ]
+            }
+        },
+        {
+            "id": "synth-005-online-course-major-uncertainty",
+            "userMessage": "Can the online section of CSCI-UA 480 satisfy my CS major requirement?",
+            "frozenToolResults": [
+                {
+                    "toolName": "search_policy",
+                    "result": {
+                        "confidence": 0.55,
+                        "answerable": "partial",
+                        "matchedTemplateId": null,
+                        "topChunk": {
+                            "text": "Online courses cannot meet the requirements of any CAS major or minor unless they are accepted and approved by the department's director of undergraduate studies.",
+                            "source": "CAS Academic Policies",
+                            "section": "Online Courses"
+                        },
+                        "applicabilityNotes": "Department-level approval required; varies by department.",
+                        "needsAdviserConfirmation": true,
+                        "relatedChunksCount": 4
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["search_policy"],
+                "requiredCaveats": [
+                    "director of undergraduate studies",
+                    "approval"
+                ],
+                "forbiddenClaims": [
+                    "yes, online counts",
+                    "online courses always count"
+                ]
+            }
+        },
+        {
+            "id": "synth-006-cross-school-stern-cas-pf",
+            "userMessage": "I'm a CAS student with a Stern minor. Can I take one of my Stern minor courses Pass/Fail?",
+            "frozenToolResults": [
+                {
+                    "toolName": "search_policy",
+                    "result": {
+                        "confidence": 0.78,
+                        "answerable": "yes",
+                        "matchedTemplateId": "cas_pf_major",
+                        "topChunk": {
+                            "text": "No course to be counted toward the major or minor may be taken on a Pass/Fail basis.",
+                            "source": "CAS Academic Policies",
+                            "section": "Major / Minor Restrictions (line 138)"
+                        },
+                        "applicabilityNotes": "CAS rule binds for the CAS student's degree; Stern's separate P/F policy governs Stern-internal use.",
+                        "needsAdviserConfirmation": false,
+                        "relatedChunksCount": 5
+                    }
+                },
+                {
+                    "toolName": "search_policy",
+                    "result": {
+                        "confidence": 0.72,
+                        "answerable": "yes",
+                        "matchedTemplateId": "stern_pf_major",
+                        "topChunk": {
+                            "text": "A course designated as pass/fail may be used to fulfill degree requirements (including BS in Business concentrations, BPE and BTE requirements).",
+                            "source": "Stern Academic Policies",
+                            "section": "Pass/Fail Option (line 401)"
+                        },
+                        "applicabilityNotes": "Max 4 P/F over Stern career; max 1 per academic year.",
+                        "needsAdviserConfirmation": false,
+                        "relatedChunksCount": 3
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["search_policy"],
+                "requiredCaveats": [
+                    "CAS",
+                    "Stern"
+                ],
+                "forbiddenClaims": [
+                    "yes, P/F is fine for the minor",
+                    "Stern's rule applies to your CAS minor"
+                ]
+            }
+        },
+        {
+            "id": "synth-007-plan-uncertainty-must-be-listed",
+            "userMessage": "What should I take in Spring 2026?",
+            "frozenToolResults": [
+                {
+                    "toolName": "run_full_audit",
+                    "result": {
+                        "remainingTotal": 5,
+                        "programs": [
+                            {
+                                "programId": "cas_econ_ba",
+                                "name": "Economics BA",
+                                "status": "declared"
+                            }
+                        ],
+                        "earnedCredits": 92,
+                        "requiredCredits": 128,
+                        "cumulativeGPA": 3.18,
+                        "warnings": [],
+                        "risks": []
+                    }
+                },
+                {
+                    "toolName": "plan_semester",
+                    "result": {
+                        "courses": [
+                            {"id": "ECON-UA 266", "reason": "Major elective — Intermediate Macro prerequisite chain"},
+                            {"id": "MATH-UA 235", "reason": "Required for Econ Math track"},
+                            {"id": "POL-UA 500", "reason": "Open elective"}
+                        ],
+                        "totalCredits": 12,
+                        "uncertainties": [
+                            "MATH-UA 235 may have a permission gate this term — verify with department.",
+                            "ECON-UA 266 may double-count toward a Math minor; confirm overlap rule."
+                        ],
+                        "risks": []
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["run_full_audit", "plan_semester"],
+                "requiredCaveats": [
+                    "permission",
+                    "double-count"
+                ],
+                "forbiddenClaims": [
+                    "no uncertainties",
+                    "you can register without checking"
+                ]
+            }
+        },
+        {
+            "id": "synth-008-near-graduation-timeline-warning",
+            "userMessage": "Plan my Fall 2026 — I want to make sure I cross the finish line.",
+            "frozenToolResults": [
+                {
+                    "toolName": "run_full_audit",
+                    "result": {
+                        "remainingTotal": 3,
+                        "programs": [
+                            {
+                                "programId": "cas_history_ba",
+                                "name": "History BA",
+                                "status": "declared",
+                                "totalCreditsRequired": 128
+                            }
+                        ],
+                        "earnedCredits": 116,
+                        "requiredCredits": 128,
+                        "cumulativeGPA": 3.61,
+                        "warnings": [],
+                        "risks": ["Within 16 credits of graduation — final-32-credit residency rule applies."]
+                    }
+                },
+                {
+                    "toolName": "plan_semester",
+                    "result": {
+                        "courses": [
+                            {"id": "HIST-UA 410", "reason": "Capstone seminar — required for History BA"},
+                            {"id": "HIST-UA 87", "reason": "Final upper-level history requirement"}
+                        ],
+                        "totalCredits": 8,
+                        "uncertainties": [],
+                        "risks": []
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["run_full_audit", "plan_semester"],
+                "requiredCaveats": [
+                    "graduation",
+                    "residency"
+                ],
+                "forbiddenClaims": [
+                    "all requirements met",
+                    "you've already finished"
+                ]
+            }
+        },
+        {
+            "id": "synth-009-low-confidence-no-policy",
+            "userMessage": "Is there a deadline to file an appeal for a missed core requirement?",
+            "frozenToolResults": [
+                {
+                    "toolName": "search_policy",
+                    "result": {
+                        "confidence": 0.18,
+                        "answerable": "no",
+                        "matchedTemplateId": null,
+                        "topChunk": {
+                            "text": "",
+                            "source": "(no confident match)",
+                            "section": ""
+                        },
+                        "applicabilityNotes": null,
+                        "needsAdviserConfirmation": true,
+                        "relatedChunksCount": 0
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["search_policy"],
+                "requiredCaveats": [
+                    "couldn't find",
+                    "contact"
+                ],
+                "forbiddenClaims": [
+                    "the deadline is",
+                    "you have until"
+                ]
+            }
+        },
+        {
+            "id": "synth-010-multi-program-overlap-mention",
+            "userMessage": "Will my Math major and CS minor share any required courses?",
+            "frozenToolResults": [
+                {
+                    "toolName": "check_overlap",
+                    "result": {
+                        "sharedCourses": [
+                            {"courseId": "MATH-UA 120", "satisfies": ["math_major.foundations", "cs_minor.discrete_prereq"]},
+                            {"courseId": "CSCI-UA 102", "satisfies": ["math_major.elective_d", "cs_minor.core"]}
+                        ],
+                        "doubleCountLimit": 2,
+                        "currentDoubleCount": 2,
+                        "warnings": ["At CAS, no more than 2 courses may be double-counted between any combination of major/minor."]
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["check_overlap"],
+                "requiredCaveats": [
+                    "2",
+                    "double"
+                ],
+                "forbiddenClaims": [
+                    "unlimited overlap",
+                    "you can share as many courses as you want"
+                ]
+            }
+        },
+        {
+            "id": "synth-011-transfer-not-yet-eligible",
+            "userMessage": "Can I move into Stern next semester?",
+            "frozenToolResults": [
+                {
+                    "toolName": "check_transfer_eligibility",
+                    "result": {
+                        "eligible": false,
+                        "entryYear": "sophomore",
+                        "deadline": "varies by year — see Office of Undergraduate Admissions",
+                        "missingPrereqs": [
+                            {"category": "Calculus", "satisfied": false},
+                            {"category": "Microeconomics", "satisfied": false}
+                        ],
+                        "gpaNote": "Minimum GPA for internal transfer is not published. Contact the target school's admissions office.",
+                        "creditsCompleted": 28,
+                        "minCreditsCompleted": 32
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["check_transfer_eligibility"],
+                "requiredCaveats": [
+                    "Calculus",
+                    "Microeconomics",
+                    "GPA"
+                ],
+                "forbiddenClaims": [
+                    "you are eligible to transfer",
+                    "minimum GPA is 3.5",
+                    "the GPA cutoff is"
+                ]
+            }
+        },
+        {
+            "id": "synth-012-future-projection-caveat",
+            "userMessage": "Map out the rest of my degree — Spring 2026 through Spring 2027.",
+            "frozenToolResults": [
+                {
+                    "toolName": "run_full_audit",
+                    "result": {
+                        "remainingTotal": 6,
+                        "programs": [{"programId": "cas_psych_ba", "name": "Psychology BA", "status": "declared"}],
+                        "earnedCredits": 88,
+                        "requiredCredits": 128,
+                        "cumulativeGPA": 3.30,
+                        "warnings": [],
+                        "risks": []
+                    }
+                },
+                {
+                    "toolName": "plan_semester",
+                    "result": {
+                        "courses": [
+                            {"id": "PSYCH-UA 30", "reason": "Major core"},
+                            {"id": "PSYCH-UA 56", "reason": "Lab requirement"}
+                        ],
+                        "totalCredits": 8,
+                        "uncertainties": [],
+                        "risks": [],
+                        "futureSemesters": [
+                            {"term": "fall", "year": 2026, "courses": [{"id": "PSYCH-UA 100"}]},
+                            {"term": "spring", "year": 2027, "courses": [{"id": "PSYCH-UA 200"}]}
+                        ]
+                    }
+                }
+            ],
+            "rubric": {
+                "requiredToolNames": ["run_full_audit", "plan_semester"],
+                "requiredCaveats": [
+                    "projection",
+                    "may change"
+                ],
+                "forbiddenClaims": [
+                    "this is your guaranteed schedule",
+                    "you will definitely take"
+                ]
+            }
+        },
+        {
+            "id": "synth-013-no-tool-needed-greeting",
+            "userMessage": "Hi! Just wanted to say thanks for the help last week.",
+            "frozenToolResults": [],
+            "rubric": {
+                "requiredToolNames": [],
+                "requiredCaveats": [],
+                "forbiddenClaims": [
+                    "I called run_full_audit",
+                    "I called plan_semester",
+                    "I called search_policy",
+                    "I called check_transfer_eligibility",
+                    "I called what_if_audit",
+                    "your GPA is",
+                    "your remaining requirements are"
+                ]
+            }
+        },
+        {
+            "id": "synth-014-no-tool-needed-clarify-recap",
+            "userMessage": "Can you remind me what we just talked about, before we keep going?",
+            "frozenToolResults": [],
+            "rubric": {
+                "requiredToolNames": [],
+                "requiredCaveats": [],
+                "forbiddenClaims": [
+                    "I called run_full_audit",
+                    "I called plan_semester",
+                    "I called search_policy",
+                    "your GPA is",
+                    "credits remaining"
+                ]
+            }
+        },
+        {
+            "id": "synth-015-no-tool-needed-meta-question",
+            "userMessage": "What kinds of questions can you actually answer for me?",
+            "frozenToolResults": [],
+            "rubric": {
+                "requiredToolNames": [],
+                "requiredCaveats": [],
+                "forbiddenClaims": [
+                    "I called run_full_audit",
+                    "I called plan_semester",
+                    "I called search_policy",
+                    "your GPA is",
+                    "your remaining credits are"
+                ]
+            }
+        },
+        {
+            "id": "synth-016-no-tool-needed-followup-acknowledge",
+            "userMessage": "Got it, thanks. I'll talk to my adviser about that.",
+            "frozenToolResults": [],
+            "rubric": {
+                "requiredToolNames": [],
+                "requiredCaveats": [],
+                "forbiddenClaims": [
+                    "I called run_full_audit",
+                    "I called plan_semester",
+                    "I called search_policy",
+                    "before you go, your GPA is"
+                ]
+            }
+        },
+        {
+            "id": "synth-017-no-tool-needed-out-of-scope-job",
+            "userMessage": "Can you help me figure out what kind of internship to apply for this summer?",
+            "frozenToolResults": [],
+            "rubric": {
+                "requiredToolNames": [],
+                "requiredCaveats": [
+                    "career",
+                    "Wasserman"
+                ],
+                "forbiddenClaims": [
+                    "I called run_full_audit",
+                    "I called plan_semester",
+                    "I called search_policy",
+                    "I recommend you apply to"
+                ]
+            }
+        },
+        {
+            "id": "synth-018-no-tool-needed-emotional-checkin",
+            "userMessage": "Honestly, I'm feeling overwhelmed about everything this semester.",
+            "frozenToolResults": [],
+            "rubric": {
+                "requiredToolNames": [],
+                "requiredCaveats": [
+                    "Wellness",
+                    "counseling"
+                ],
+                "forbiddenClaims": [
+                    "I called run_full_audit",
+                    "I called plan_semester",
+                    "drop courses now",
+                    "your GPA is fine"
+                ]
+            }
+        }
+    ]
+}

@@ -143,6 +143,14 @@ export type CandidateRunner = (
     },
 ) => Promise<CandidateScores>;
 
+export interface RunBakeoffOptions {
+    /**
+     * Relax the §6.5.1 50/50/30 minimum case counts. ONLY for the
+     * Phase-5-prep bakeoff — Phase 5 proper enforces full minimums.
+     */
+    relaxedMinimums?: boolean;
+}
+
 export async function runBakeoff(
     candidates: ReadonlyArray<ModelCandidate>,
     cases: {
@@ -152,13 +160,16 @@ export async function runBakeoff(
     },
     runner: CandidateRunner,
     outDir: string = join(__dirname, "results"),
+    options: RunBakeoffOptions = {},
 ): Promise<BakeoffResult> {
-    if (cases.toolCases.length < 50)
-        throw new Error("Phase 5 requirement: TS-Tool needs ≥50 cases.");
-    if (cases.synthesisCases.length < 50)
-        throw new Error("Phase 5 requirement: TS-Synthesis needs ≥50 cases.");
-    if (cases.decompCases.length < 30)
-        throw new Error("Phase 5 requirement: TS-Decomp needs ≥30 cases.");
+    if (!options.relaxedMinimums) {
+        if (cases.toolCases.length < 50)
+            throw new Error("Phase 5 requirement: TS-Tool needs ≥50 cases.");
+        if (cases.synthesisCases.length < 50)
+            throw new Error("Phase 5 requirement: TS-Synthesis needs ≥50 cases.");
+        if (cases.decompCases.length < 30)
+            throw new Error("Phase 5 requirement: TS-Decomp needs ≥30 cases.");
+    }
 
     const evaluated: Array<{
         candidate: ModelCandidate;
