@@ -1,0 +1,110 @@
+{
+    "_meta": {
+        "evalSet": "TS-Decomp",
+        "schemaRef": "evals/modelBakeoff.ts:59 DecompCase",
+        "frozenAt": "2026-04-26",
+        "caseCount": 10,
+        "notes": "Multi-intent decomposition cases for the Phase-5-prep model bakeoff. Each case pins the count of distinct sub-questions and substring markers that signal each one is answered. Markers are deliberately partial — the harness scans the response for each marker without overfitting to a model's phrasing. Provenance is in eval_set_provenance.md."
+    },
+    "cases": [
+        {
+            "id": "decomp-001-pf-and-credits-tally",
+            "userMessage": "Two things — can I take CSCI-UA 102 Pass/Fail, and how many credits will I have on my transcript after this semester wraps up?",
+            "subQuestionCount": 2,
+            "subQuestionMarkers": [
+                "Pass/Fail",
+                "credits"
+            ]
+        },
+        {
+            "id": "decomp-002-stern-deadline-prereqs-minor",
+            "userMessage": "I'm strongly considering moving to Stern but I want to keep my CAS Math minor. Three things: what's the application deadline, what prerequisites am I still short, and would my Math minor still count after the move?",
+            "subQuestionCount": 3,
+            "subQuestionMarkers": [
+                "deadline",
+                "prerequisite",
+                "minor"
+            ]
+        },
+        {
+            "id": "decomp-003-spring-plan-graduation-honors",
+            "userMessage": "Plan my Spring 2026 schedule, and tell me whether I'm on track to graduate by Fall 2027, and what the latest is that I can declare my Honors track.",
+            "subQuestionCount": 3,
+            "subQuestionMarkers": [
+                "Spring 2026",
+                "graduate",
+                "Honors"
+            ]
+        },
+        {
+            "id": "decomp-004-overload-risk-cost",
+            "userMessage": "If I take 19 credits next term, do I need adviser sign-off, will it raise my tuition bill, and how risky is it for my GPA given my last semester?",
+            "subQuestionCount": 3,
+            "subQuestionMarkers": [
+                "adviser",
+                "tuition",
+                "GPA"
+            ]
+        },
+        {
+            "id": "decomp-005-double-major-overlap-grad",
+            "userMessage": "Suppose I add an Econ second major: how many courses can overlap with my Politics major, will it push my graduation back, and does the second major also need a 2.0 GPA to be conferred?",
+            "subQuestionCount": 3,
+            "subQuestionMarkers": [
+                "overlap",
+                "graduation",
+                "2.0"
+            ]
+        },
+        {
+            "id": "decomp-006-transfer-credit-residency-online",
+            "userMessage": "I have transfer credits coming in from a community college. Can they count toward my CAS major requirements, do they count toward my 64-credit residency requirement, and is it different if they were online courses?",
+            "subQuestionCount": 3,
+            "subQuestionMarkers": [
+                "major",
+                "residency",
+                "online"
+            ]
+        },
+        {
+            "id": "decomp-007-fall-plan-and-summer-catchup",
+            "userMessage": "Build me a Fall 2026 plan, and separately tell me if I should also take a course in Summer 2026 to stay on track. If yes, which one?",
+            "subQuestionCount": 3,
+            "subQuestionMarkers": [
+                "Fall 2026",
+                "Summer 2026",
+                "which"
+            ]
+        },
+        {
+            "id": "decomp-008-withdraw-late-and-plan-impact",
+            "userMessage": "I'm thinking of dropping ECON-UA 1 in week 10. Will it appear on my transcript, will it hurt my GPA, and how should I rebuild my plan if I drop it?",
+            "subQuestionCount": 3,
+            "subQuestionMarkers": [
+                "transcript",
+                "GPA",
+                "plan"
+            ]
+        },
+        {
+            "id": "decomp-009-undeclared-explore-and-deadline",
+            "userMessage": "I'm still undeclared. Can you compare CS and Data Science as possible majors for me, and also tell me by when I have to officially declare?",
+            "subQuestionCount": 2,
+            "subQuestionMarkers": [
+                "Data Science",
+                "declare"
+            ]
+        },
+        {
+            "id": "decomp-010-four-part-comprehensive",
+            "userMessage": "Big picture — where am I right now in my degree, what should I take next term, can I still squeeze in a minor without delaying graduation, and is there any policy I should know about taking a graduate course as an undergrad?",
+            "subQuestionCount": 4,
+            "subQuestionMarkers": [
+                "degree",
+                "next term",
+                "minor",
+                "graduate course"
+            ]
+        }
+    ]
+}

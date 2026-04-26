@@ -1,0 +1,2029 @@
+{
+  "anthropic:claude-opus-4-7": {
+    "scores": {
+      "tsToolScore": 0.8611111111111112,
+      "tsSynthesisScore": 0.8082010582010581,
+      "tsDecompScore": 1,
+      "p50LatencyMs": 5651,
+      "costPerThousandTurnsUsd": 31.45141304347826
+    },
+    "trace": {
+      "tool": [
+        {
+          "caseId": "tool-001-audit-progress-question",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 1708,
+          "promptTokens": 1217,
+          "completionTokens": 63,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-002-audit-remaining-requirements",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 1415,
+          "promptTokens": 1216,
+          "completionTokens": 55,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-003-current-gpa-not-synthesized",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 1175,
+          "promptTokens": 1207,
+          "completionTokens": 54,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-004-plan-spring-semester",
+          "score": 0.5,
+          "actualToolName": "plan_semester",
+          "expectedToolName": "plan_semester",
+          "latencyMs": 1946,
+          "promptTokens": 1217,
+          "completionTokens": 94,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-005-plan-summer-courses",
+          "score": 0.5,
+          "actualToolName": "plan_semester",
+          "expectedToolName": "plan_semester",
+          "latencyMs": 2559,
+          "promptTokens": 1220,
+          "completionTokens": 88,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-006-transfer-to-stern",
+          "score": 1,
+          "actualToolName": "check_transfer_eligibility",
+          "expectedToolName": "check_transfer_eligibility",
+          "latencyMs": 2664,
+          "promptTokens": 1221,
+          "completionTokens": 149,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-007-transfer-to-tandon",
+          "score": 1,
+          "actualToolName": "check_transfer_eligibility",
+          "expectedToolName": "check_transfer_eligibility",
+          "latencyMs": 2476,
+          "promptTokens": 1211,
+          "completionTokens": 128,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-008-whatif-add-math-minor",
+          "score": 1,
+          "actualToolName": "what_if_audit",
+          "expectedToolName": "what_if_audit",
+          "latencyMs": 1848,
+          "promptTokens": 1220,
+          "completionTokens": 122,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-009-whatif-compare-majors",
+          "score": 1,
+          "actualToolName": "what_if_audit",
+          "expectedToolName": "what_if_audit",
+          "latencyMs": 3997,
+          "promptTokens": 1224,
+          "completionTokens": 193,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-010-policy-pf-major-course",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 3146,
+          "promptTokens": 1225,
+          "completionTokens": 114,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-011-policy-credit-overload",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 1995,
+          "promptTokens": 1220,
+          "completionTokens": 62,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-012-policy-online-course-limit",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 1840,
+          "promptTokens": 1215,
+          "completionTokens": 87,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-013-policy-withdrawal-deadline",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 1492,
+          "promptTokens": 1220,
+          "completionTokens": 59,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-014-policy-double-counting-cap",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 1434,
+          "promptTokens": 1211,
+          "completionTokens": 62,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-015-profile-declared-major",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 2512,
+          "promptTokens": 1217,
+          "completionTokens": 89,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-016-profile-update-grad-term",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 2093,
+          "promptTokens": 1224,
+          "completionTokens": 90,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-017-profile-correct-transfer-credit",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 1841,
+          "promptTokens": 1222,
+          "completionTokens": 106,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-018-counter-graduation-claim-needs-audit",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 1843,
+          "promptTokens": 1207,
+          "completionTokens": 70,
+          "notes": "tool + shape match"
+        }
+      ],
+      "synthesis": [
+        {
+          "caseId": "synth-001-seven-unmet-rules-exact-count",
+          "score": 0.8333333333333334,
+          "latencyMs": 6676,
+          "promptTokens": 1312,
+          "completionTokens": 290,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit"
+          ]
+        },
+        {
+          "caseId": "synth-002-gpa-verbatim-3-42",
+          "score": 0.8571428571428572,
+          "latencyMs": 3566,
+          "promptTokens": 1302,
+          "completionTokens": 96,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit"
+          ]
+        },
+        {
+          "caseId": "synth-003-low-confidence-policy-adviser-caveat",
+          "score": 0.8333333333333334,
+          "latencyMs": 9317,
+          "promptTokens": 1364,
+          "completionTokens": 403,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-004-f1-visa-credit-load-caveat",
+          "score": 0.8333333333333334,
+          "latencyMs": 6759,
+          "promptTokens": 1304,
+          "completionTokens": 289,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "get_enrollment_status"
+          ]
+        },
+        {
+          "caseId": "synth-005-online-course-major-uncertainty",
+          "score": 0.8,
+          "latencyMs": 8216,
+          "promptTokens": 1348,
+          "completionTokens": 322,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-006-cross-school-stern-cas-pf",
+          "score": 0.8,
+          "latencyMs": 6019,
+          "promptTokens": 1557,
+          "completionTokens": 251,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-007-plan-uncertainty-must-be-listed",
+          "score": 0.6666666666666667,
+          "latencyMs": 6858,
+          "promptTokens": 1494,
+          "completionTokens": 352,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-008-near-graduation-timeline-warning",
+          "score": 0.6666666666666667,
+          "latencyMs": 11162,
+          "promptTokens": 1455,
+          "completionTokens": 533,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-009-low-confidence-no-policy",
+          "score": 0.6,
+          "latencyMs": 6859,
+          "promptTokens": 1300,
+          "completionTokens": 274,
+          "requiredCaveatsMissing": [
+            "couldn't find"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-010-multi-program-overlap-mention",
+          "score": 0.8,
+          "latencyMs": 7378,
+          "promptTokens": 1373,
+          "completionTokens": 302,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "check_overlap"
+          ]
+        },
+        {
+          "caseId": "synth-011-transfer-not-yet-eligible",
+          "score": 0.8571428571428572,
+          "latencyMs": 6828,
+          "promptTokens": 1343,
+          "completionTokens": 311,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "check_transfer_eligibility"
+          ]
+        },
+        {
+          "caseId": "synth-012-future-projection-caveat",
+          "score": 0.33333333333333337,
+          "latencyMs": 9553,
+          "promptTokens": 1529,
+          "completionTokens": 490,
+          "requiredCaveatsMissing": [
+            "projection",
+            "may change"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-013-no-tool-needed-greeting",
+          "score": 1,
+          "latencyMs": 4401,
+          "promptTokens": 1193,
+          "completionTokens": 82,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-014-no-tool-needed-clarify-recap",
+          "score": 1,
+          "latencyMs": 5651,
+          "promptTokens": 1195,
+          "completionTokens": 229,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-015-no-tool-needed-meta-question",
+          "score": 1,
+          "latencyMs": 10363,
+          "promptTokens": 1191,
+          "completionTokens": 491,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-016-no-tool-needed-followup-acknowledge",
+          "score": 1,
+          "latencyMs": 2213,
+          "promptTokens": 1194,
+          "completionTokens": 74,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-017-no-tool-needed-out-of-scope-job",
+          "score": 1,
+          "latencyMs": 8644,
+          "promptTokens": 1197,
+          "completionTokens": 305,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-018-no-tool-needed-emotional-checkin",
+          "score": 0.6666666666666667,
+          "latencyMs": 6411,
+          "promptTokens": 1193,
+          "completionTokens": 268,
+          "requiredCaveatsMissing": [
+            "Wellness",
+            "counseling"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        }
+      ],
+      "decomp": [
+        {
+          "caseId": "decomp-001-pf-and-credits-tally",
+          "score": 1,
+          "latencyMs": 4909,
+          "promptTokens": 150,
+          "completionTokens": 185,
+          "markersHit": 2,
+          "markersExpected": 2
+        },
+        {
+          "caseId": "decomp-002-stern-deadline-prereqs-minor",
+          "score": 1,
+          "latencyMs": 7025,
+          "promptTokens": 160,
+          "completionTokens": 246,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-003-spring-plan-graduation-honors",
+          "score": 1,
+          "latencyMs": 7725,
+          "promptTokens": 153,
+          "completionTokens": 322,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-004-overload-risk-cost",
+          "score": 1,
+          "latencyMs": 7990,
+          "promptTokens": 155,
+          "completionTokens": 319,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-005-double-major-overlap-grad",
+          "score": 1,
+          "latencyMs": 7373,
+          "promptTokens": 162,
+          "completionTokens": 289,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-006-transfer-credit-residency-online",
+          "score": 1,
+          "latencyMs": 6345,
+          "promptTokens": 158,
+          "completionTokens": 235,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-007-fall-plan-and-summer-catchup",
+          "score": 1,
+          "latencyMs": 8499,
+          "promptTokens": 152,
+          "completionTokens": 348,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-008-withdraw-late-and-plan-impact",
+          "score": 1,
+          "latencyMs": 8807,
+          "promptTokens": 158,
+          "completionTokens": 325,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-009-undeclared-explore-and-deadline",
+          "score": 1,
+          "latencyMs": 4300,
+          "promptTokens": 147,
+          "completionTokens": 154,
+          "markersHit": 2,
+          "markersExpected": 2
+        },
+        {
+          "caseId": "decomp-010-four-part-comprehensive",
+          "score": 1,
+          "latencyMs": 8602,
+          "promptTokens": 163,
+          "completionTokens": 357,
+          "markersHit": 4,
+          "markersExpected": 4
+        }
+      ],
+      "totalPromptTokens": 47316,
+      "totalCompletionTokens": 9827
+    }
+  },
+  "anthropic:claude-sonnet-4-6": {
+    "scores": {
+      "tsToolScore": 0.7222222222222222,
+      "tsSynthesisScore": 0.7896825396825398,
+      "tsDecompScore": 1,
+      "p50LatencyMs": 6246,
+      "costPerThousandTurnsUsd": 5.823326086956522
+    },
+    "trace": {
+      "tool": [
+        {
+          "caseId": "tool-001-audit-progress-question",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 1932,
+          "promptTokens": 1217,
+          "completionTokens": 62,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-002-audit-remaining-requirements",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 1825,
+          "promptTokens": 1216,
+          "completionTokens": 58,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-003-current-gpa-not-synthesized",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 1875,
+          "promptTokens": 1207,
+          "completionTokens": 57,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-004-plan-spring-semester",
+          "score": 0.5,
+          "actualToolName": "plan_semester",
+          "expectedToolName": "plan_semester",
+          "latencyMs": 2048,
+          "promptTokens": 1217,
+          "completionTokens": 77,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-005-plan-summer-courses",
+          "score": 0.5,
+          "actualToolName": "plan_semester",
+          "expectedToolName": "plan_semester",
+          "latencyMs": 2252,
+          "promptTokens": 1220,
+          "completionTokens": 85,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-006-transfer-to-stern",
+          "score": 1,
+          "actualToolName": "check_transfer_eligibility",
+          "expectedToolName": "check_transfer_eligibility",
+          "latencyMs": 1945,
+          "promptTokens": 1221,
+          "completionTokens": 73,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-007-transfer-to-tandon",
+          "score": 1,
+          "actualToolName": "check_transfer_eligibility",
+          "expectedToolName": "check_transfer_eligibility",
+          "latencyMs": 2765,
+          "promptTokens": 1211,
+          "completionTokens": 77,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-008-whatif-add-math-minor",
+          "score": 0,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "what_if_audit",
+          "latencyMs": 2111,
+          "promptTokens": 1220,
+          "completionTokens": 74,
+          "notes": "wrong tool: got run_full_audit, expected what_if_audit"
+        },
+        {
+          "caseId": "tool-009-whatif-compare-majors",
+          "score": 0,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "what_if_audit",
+          "latencyMs": 3008,
+          "promptTokens": 1224,
+          "completionTokens": 129,
+          "notes": "wrong tool: got run_full_audit, expected what_if_audit"
+        },
+        {
+          "caseId": "tool-010-policy-pf-major-course",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 2456,
+          "promptTokens": 1225,
+          "completionTokens": 79,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-011-policy-credit-overload",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 2586,
+          "promptTokens": 1220,
+          "completionTokens": 75,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-012-policy-online-course-limit",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 2639,
+          "promptTokens": 1215,
+          "completionTokens": 78,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-013-policy-withdrawal-deadline",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 2662,
+          "promptTokens": 1220,
+          "completionTokens": 78,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-014-policy-double-counting-cap",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 2460,
+          "promptTokens": 1211,
+          "completionTokens": 86,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-015-profile-declared-major",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 1771,
+          "promptTokens": 1217,
+          "completionTokens": 73,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-016-profile-update-grad-term",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 2119,
+          "promptTokens": 1224,
+          "completionTokens": 76,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-017-profile-correct-transfer-credit",
+          "score": 0,
+          "expectedToolName": "update_profile",
+          "latencyMs": 6535,
+          "promptTokens": 1222,
+          "completionTokens": 193,
+          "notes": "no tool call (text reply: I'd be happy to help you correct your profile. However, I need to clarify how to…)"
+        },
+        {
+          "caseId": "tool-018-counter-graduation-claim-needs-audit",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 2035,
+          "promptTokens": 1207,
+          "completionTokens": 55,
+          "notes": "tool + shape match"
+        }
+      ],
+      "synthesis": [
+        {
+          "caseId": "synth-001-seven-unmet-rules-exact-count",
+          "score": 0.8333333333333334,
+          "latencyMs": 6588,
+          "promptTokens": 1312,
+          "completionTokens": 232,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit"
+          ]
+        },
+        {
+          "caseId": "synth-002-gpa-verbatim-3-42",
+          "score": 0.8571428571428572,
+          "latencyMs": 2453,
+          "promptTokens": 1302,
+          "completionTokens": 51,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit"
+          ]
+        },
+        {
+          "caseId": "synth-003-low-confidence-policy-adviser-caveat",
+          "score": 0.6666666666666667,
+          "latencyMs": 7552,
+          "promptTokens": 1364,
+          "completionTokens": 316,
+          "requiredCaveatsMissing": [
+            "adviser"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-004-f1-visa-credit-load-caveat",
+          "score": 0.8333333333333334,
+          "latencyMs": 8847,
+          "promptTokens": 1304,
+          "completionTokens": 326,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "get_enrollment_status"
+          ]
+        },
+        {
+          "caseId": "synth-005-online-course-major-uncertainty",
+          "score": 0.8,
+          "latencyMs": 5821,
+          "promptTokens": 1348,
+          "completionTokens": 236,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-006-cross-school-stern-cas-pf",
+          "score": 0.8,
+          "latencyMs": 6762,
+          "promptTokens": 1557,
+          "completionTokens": 246,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-007-plan-uncertainty-must-be-listed",
+          "score": 0.6666666666666667,
+          "latencyMs": 7038,
+          "promptTokens": 1494,
+          "completionTokens": 266,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-008-near-graduation-timeline-warning",
+          "score": 0.6666666666666667,
+          "latencyMs": 9548,
+          "promptTokens": 1455,
+          "completionTokens": 364,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-009-low-confidence-no-policy",
+          "score": 0.6,
+          "latencyMs": 6246,
+          "promptTokens": 1300,
+          "completionTokens": 204,
+          "requiredCaveatsMissing": [
+            "couldn't find"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-010-multi-program-overlap-mention",
+          "score": 0.8,
+          "latencyMs": 7989,
+          "promptTokens": 1373,
+          "completionTokens": 241,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "check_overlap"
+          ]
+        },
+        {
+          "caseId": "synth-011-transfer-not-yet-eligible",
+          "score": 0.8571428571428572,
+          "latencyMs": 6619,
+          "promptTokens": 1343,
+          "completionTokens": 280,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "check_transfer_eligibility"
+          ]
+        },
+        {
+          "caseId": "synth-012-future-projection-caveat",
+          "score": 0.33333333333333337,
+          "latencyMs": 7616,
+          "promptTokens": 1529,
+          "completionTokens": 318,
+          "requiredCaveatsMissing": [
+            "projection",
+            "may change"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-013-no-tool-needed-greeting",
+          "score": 1,
+          "latencyMs": 2250,
+          "promptTokens": 1193,
+          "completionTokens": 63,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-014-no-tool-needed-clarify-recap",
+          "score": 1,
+          "latencyMs": 4918,
+          "promptTokens": 1195,
+          "completionTokens": 163,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-015-no-tool-needed-meta-question",
+          "score": 1,
+          "latencyMs": 9829,
+          "promptTokens": 1191,
+          "completionTokens": 401,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-016-no-tool-needed-followup-acknowledge",
+          "score": 1,
+          "latencyMs": 3071,
+          "promptTokens": 1194,
+          "completionTokens": 84,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-017-no-tool-needed-out-of-scope-job",
+          "score": 0.8333333333333334,
+          "latencyMs": 6653,
+          "promptTokens": 1197,
+          "completionTokens": 244,
+          "requiredCaveatsMissing": [
+            "Wasserman"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-018-no-tool-needed-emotional-checkin",
+          "score": 0.6666666666666667,
+          "latencyMs": 8475,
+          "promptTokens": 1193,
+          "completionTokens": 267,
+          "requiredCaveatsMissing": [
+            "Wellness",
+            "counseling"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        }
+      ],
+      "decomp": [
+        {
+          "caseId": "decomp-001-pf-and-credits-tally",
+          "score": 1,
+          "latencyMs": 5172,
+          "promptTokens": 150,
+          "completionTokens": 213,
+          "markersHit": 2,
+          "markersExpected": 2
+        },
+        {
+          "caseId": "decomp-002-stern-deadline-prereqs-minor",
+          "score": 1,
+          "latencyMs": 8373,
+          "promptTokens": 160,
+          "completionTokens": 277,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-003-spring-plan-graduation-honors",
+          "score": 1,
+          "latencyMs": 9010,
+          "promptTokens": 153,
+          "completionTokens": 273,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-004-overload-risk-cost",
+          "score": 1,
+          "latencyMs": 7710,
+          "promptTokens": 155,
+          "completionTokens": 279,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-005-double-major-overlap-grad",
+          "score": 1,
+          "latencyMs": 6831,
+          "promptTokens": 162,
+          "completionTokens": 262,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-006-transfer-credit-residency-online",
+          "score": 1,
+          "latencyMs": 7064,
+          "promptTokens": 158,
+          "completionTokens": 254,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-007-fall-plan-and-summer-catchup",
+          "score": 1,
+          "latencyMs": 7111,
+          "promptTokens": 152,
+          "completionTokens": 247,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-008-withdraw-late-and-plan-impact",
+          "score": 1,
+          "latencyMs": 8766,
+          "promptTokens": 158,
+          "completionTokens": 313,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-009-undeclared-explore-and-deadline",
+          "score": 1,
+          "latencyMs": 6679,
+          "promptTokens": 147,
+          "completionTokens": 227,
+          "markersHit": 2,
+          "markersExpected": 2
+        },
+        {
+          "caseId": "decomp-010-four-part-comprehensive",
+          "score": 1,
+          "latencyMs": 7913,
+          "promptTokens": 163,
+          "completionTokens": 263,
+          "markersHit": 4,
+          "markersExpected": 4
+        }
+      ],
+      "totalPromptTokens": 47316,
+      "totalCompletionTokens": 8395
+    }
+  },
+  "openai:gpt-4.1": {
+    "scores": {
+      "tsToolScore": 0.8055555555555556,
+      "tsSynthesisScore": 0.7878306878306879,
+      "tsDecompScore": 1,
+      "p50LatencyMs": 1310,
+      "costPerThousandTurnsUsd": 1.5697391304347827
+    },
+    "trace": {
+      "tool": [
+        {
+          "caseId": "tool-001-audit-progress-question",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 978,
+          "promptTokens": 449,
+          "completionTokens": 12,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-002-audit-remaining-requirements",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 916,
+          "promptTokens": 448,
+          "completionTokens": 12,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-003-current-gpa-not-synthesized",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 614,
+          "promptTokens": 438,
+          "completionTokens": 12,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-004-plan-spring-semester",
+          "score": 0.5,
+          "actualToolName": "plan_semester",
+          "expectedToolName": "plan_semester",
+          "latencyMs": 613,
+          "promptTokens": 448,
+          "completionTokens": 19,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-005-plan-summer-courses",
+          "score": 0.5,
+          "actualToolName": "plan_semester",
+          "expectedToolName": "plan_semester",
+          "latencyMs": 700,
+          "promptTokens": 452,
+          "completionTokens": 19,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-006-transfer-to-stern",
+          "score": 1,
+          "actualToolName": "check_transfer_eligibility",
+          "expectedToolName": "check_transfer_eligibility",
+          "latencyMs": 733,
+          "promptTokens": 451,
+          "completionTokens": 18,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-007-transfer-to-tandon",
+          "score": 1,
+          "actualToolName": "check_transfer_eligibility",
+          "expectedToolName": "check_transfer_eligibility",
+          "latencyMs": 592,
+          "promptTokens": 443,
+          "completionTokens": 19,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-008-whatif-add-math-minor",
+          "score": 1,
+          "actualToolName": "what_if_audit",
+          "expectedToolName": "what_if_audit",
+          "latencyMs": 605,
+          "promptTokens": 453,
+          "completionTokens": 28,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-009-whatif-compare-majors",
+          "score": 0,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "what_if_audit",
+          "latencyMs": 649,
+          "promptTokens": 455,
+          "completionTokens": 12,
+          "notes": "wrong tool: got run_full_audit, expected what_if_audit"
+        },
+        {
+          "caseId": "tool-010-policy-pf-major-course",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 792,
+          "promptTokens": 455,
+          "completionTokens": 20,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-011-policy-credit-overload",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 566,
+          "promptTokens": 451,
+          "completionTokens": 18,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-012-policy-online-course-limit",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 834,
+          "promptTokens": 447,
+          "completionTokens": 18,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-013-policy-withdrawal-deadline",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 786,
+          "promptTokens": 452,
+          "completionTokens": 24,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-014-policy-double-counting-cap",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 774,
+          "promptTokens": 443,
+          "completionTokens": 18,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-015-profile-declared-major",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 750,
+          "promptTokens": 450,
+          "completionTokens": 22,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-016-profile-update-grad-term",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 629,
+          "promptTokens": 454,
+          "completionTokens": 24,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-017-profile-correct-transfer-credit",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 667,
+          "promptTokens": 454,
+          "completionTokens": 20,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-018-counter-graduation-claim-needs-audit",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 649,
+          "promptTokens": 440,
+          "completionTokens": 12,
+          "notes": "tool + shape match"
+        }
+      ],
+      "synthesis": [
+        {
+          "caseId": "synth-001-seven-unmet-rules-exact-count",
+          "score": 0.8333333333333334,
+          "latencyMs": 1310,
+          "promptTokens": 522,
+          "completionTokens": 85,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit"
+          ]
+        },
+        {
+          "caseId": "synth-002-gpa-verbatim-3-42",
+          "score": 0.8571428571428572,
+          "latencyMs": 634,
+          "promptTokens": 511,
+          "completionTokens": 11,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit"
+          ]
+        },
+        {
+          "caseId": "synth-003-low-confidence-policy-adviser-caveat",
+          "score": 0.8333333333333334,
+          "latencyMs": 1540,
+          "promptTokens": 564,
+          "completionTokens": 125,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-004-f1-visa-credit-load-caveat",
+          "score": 0.8333333333333334,
+          "latencyMs": 1531,
+          "promptTokens": 511,
+          "completionTokens": 102,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "get_enrollment_status"
+          ]
+        },
+        {
+          "caseId": "synth-005-online-course-major-uncertainty",
+          "score": 0.8,
+          "latencyMs": 1538,
+          "promptTokens": 547,
+          "completionTokens": 105,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-006-cross-school-stern-cas-pf",
+          "score": 0.8,
+          "latencyMs": 1535,
+          "promptTokens": 710,
+          "completionTokens": 106,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-007-plan-uncertainty-must-be-listed",
+          "score": 0.6666666666666667,
+          "latencyMs": 2155,
+          "promptTokens": 666,
+          "completionTokens": 219,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-008-near-graduation-timeline-warning",
+          "score": 0.6666666666666667,
+          "latencyMs": 1839,
+          "promptTokens": 639,
+          "completionTokens": 175,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-009-low-confidence-no-policy",
+          "score": 0.4,
+          "latencyMs": 1125,
+          "promptTokens": 507,
+          "completionTokens": 53,
+          "requiredCaveatsMissing": [
+            "couldn't find",
+            "contact"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-010-multi-program-overlap-mention",
+          "score": 0.8,
+          "latencyMs": 1434,
+          "promptTokens": 566,
+          "completionTokens": 95,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "check_overlap"
+          ]
+        },
+        {
+          "caseId": "synth-011-transfer-not-yet-eligible",
+          "score": 0.8571428571428572,
+          "latencyMs": 1433,
+          "promptTokens": 545,
+          "completionTokens": 121,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "check_transfer_eligibility"
+          ]
+        },
+        {
+          "caseId": "synth-012-future-projection-caveat",
+          "score": 0.33333333333333337,
+          "latencyMs": 1948,
+          "promptTokens": 699,
+          "completionTokens": 198,
+          "requiredCaveatsMissing": [
+            "projection",
+            "may change"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-013-no-tool-needed-greeting",
+          "score": 1,
+          "latencyMs": 1149,
+          "promptTokens": 423,
+          "completionTokens": 36,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-014-no-tool-needed-clarify-recap",
+          "score": 1,
+          "latencyMs": 1008,
+          "promptTokens": 425,
+          "completionTokens": 52,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-015-no-tool-needed-meta-question",
+          "score": 1,
+          "latencyMs": 1886,
+          "promptTokens": 421,
+          "completionTokens": 185,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-016-no-tool-needed-followup-acknowledge",
+          "score": 1,
+          "latencyMs": 890,
+          "promptTokens": 423,
+          "completionTokens": 36,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-017-no-tool-needed-out-of-scope-job",
+          "score": 0.8333333333333334,
+          "latencyMs": 1718,
+          "promptTokens": 426,
+          "completionTokens": 90,
+          "requiredCaveatsMissing": [
+            "Wasserman"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-018-no-tool-needed-emotional-checkin",
+          "score": 0.6666666666666667,
+          "latencyMs": 1687,
+          "promptTokens": 420,
+          "completionTokens": 94,
+          "requiredCaveatsMissing": [
+            "Wellness",
+            "counseling"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        }
+      ],
+      "decomp": [
+        {
+          "caseId": "decomp-001-pf-and-credits-tally",
+          "score": 1,
+          "latencyMs": 1539,
+          "promptTokens": 146,
+          "completionTokens": 158,
+          "markersHit": 2,
+          "markersExpected": 2
+        },
+        {
+          "caseId": "decomp-002-stern-deadline-prereqs-minor",
+          "score": 1,
+          "latencyMs": 1797,
+          "promptTokens": 157,
+          "completionTokens": 184,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-003-spring-plan-graduation-honors",
+          "score": 1,
+          "latencyMs": 2297,
+          "promptTokens": 151,
+          "completionTokens": 223,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-004-overload-risk-cost",
+          "score": 1,
+          "latencyMs": 2513,
+          "promptTokens": 151,
+          "completionTokens": 221,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-005-double-major-overlap-grad",
+          "score": 1,
+          "latencyMs": 2255,
+          "promptTokens": 159,
+          "completionTokens": 192,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-006-transfer-credit-residency-online",
+          "score": 1,
+          "latencyMs": 2975,
+          "promptTokens": 156,
+          "completionTokens": 270,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-007-fall-plan-and-summer-catchup",
+          "score": 1,
+          "latencyMs": 2009,
+          "promptTokens": 151,
+          "completionTokens": 175,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-008-withdraw-late-and-plan-impact",
+          "score": 1,
+          "latencyMs": 2078,
+          "promptTokens": 153,
+          "completionTokens": 222,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-009-undeclared-explore-and-deadline",
+          "score": 1,
+          "latencyMs": 1844,
+          "promptTokens": 145,
+          "completionTokens": 141,
+          "markersHit": 2,
+          "markersExpected": 2
+        },
+        {
+          "caseId": "decomp-010-four-part-comprehensive",
+          "score": 1,
+          "latencyMs": 3173,
+          "promptTokens": 163,
+          "completionTokens": 240,
+          "markersHit": 4,
+          "markersExpected": 4
+        }
+      ],
+      "totalPromptTokens": 19140,
+      "totalCompletionTokens": 4241
+    }
+  },
+  "openai:gpt-4.1-mini": {
+    "scores": {
+      "tsToolScore": 0.8611111111111112,
+      "tsSynthesisScore": 0.7785714285714287,
+      "tsDecompScore": 1,
+      "p50LatencyMs": 1429,
+      "costPerThousandTurnsUsd": 0.29137391304347826
+    },
+    "trace": {
+      "tool": [
+        {
+          "caseId": "tool-001-audit-progress-question",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 820,
+          "promptTokens": 449,
+          "completionTokens": 12,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-002-audit-remaining-requirements",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 838,
+          "promptTokens": 448,
+          "completionTokens": 12,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-003-current-gpa-not-synthesized",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 697,
+          "promptTokens": 438,
+          "completionTokens": 12,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-004-plan-spring-semester",
+          "score": 0.5,
+          "actualToolName": "plan_semester",
+          "expectedToolName": "plan_semester",
+          "latencyMs": 937,
+          "promptTokens": 448,
+          "completionTokens": 19,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-005-plan-summer-courses",
+          "score": 0.5,
+          "actualToolName": "plan_semester",
+          "expectedToolName": "plan_semester",
+          "latencyMs": 917,
+          "promptTokens": 452,
+          "completionTokens": 19,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-006-transfer-to-stern",
+          "score": 1,
+          "actualToolName": "check_transfer_eligibility",
+          "expectedToolName": "check_transfer_eligibility",
+          "latencyMs": 1016,
+          "promptTokens": 451,
+          "completionTokens": 18,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-007-transfer-to-tandon",
+          "score": 1,
+          "actualToolName": "check_transfer_eligibility",
+          "expectedToolName": "check_transfer_eligibility",
+          "latencyMs": 2046,
+          "promptTokens": 443,
+          "completionTokens": 19,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-008-whatif-add-math-minor",
+          "score": 1,
+          "actualToolName": "what_if_audit",
+          "expectedToolName": "what_if_audit",
+          "latencyMs": 1000,
+          "promptTokens": 453,
+          "completionTokens": 27,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-009-whatif-compare-majors",
+          "score": 1,
+          "actualToolName": "what_if_audit",
+          "expectedToolName": "what_if_audit",
+          "latencyMs": 1254,
+          "promptTokens": 455,
+          "completionTokens": 28,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-010-policy-pf-major-course",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 1023,
+          "promptTokens": 455,
+          "completionTokens": 20,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-011-policy-credit-overload",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 780,
+          "promptTokens": 451,
+          "completionTokens": 18,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-012-policy-online-course-limit",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 1474,
+          "promptTokens": 447,
+          "completionTokens": 20,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-013-policy-withdrawal-deadline",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 2596,
+          "promptTokens": 452,
+          "completionTokens": 23,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-014-policy-double-counting-cap",
+          "score": 1,
+          "actualToolName": "search_policy",
+          "expectedToolName": "search_policy",
+          "latencyMs": 917,
+          "promptTokens": 443,
+          "completionTokens": 18,
+          "notes": "tool + shape match"
+        },
+        {
+          "caseId": "tool-015-profile-declared-major",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 993,
+          "promptTokens": 450,
+          "completionTokens": 21,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-016-profile-update-grad-term",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 1126,
+          "promptTokens": 454,
+          "completionTokens": 23,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-017-profile-correct-transfer-credit",
+          "score": 0.5,
+          "actualToolName": "update_profile",
+          "expectedToolName": "update_profile",
+          "latencyMs": 1120,
+          "promptTokens": 454,
+          "completionTokens": 21,
+          "notes": "tool match, shape mismatch"
+        },
+        {
+          "caseId": "tool-018-counter-graduation-claim-needs-audit",
+          "score": 1,
+          "actualToolName": "run_full_audit",
+          "expectedToolName": "run_full_audit",
+          "latencyMs": 1380,
+          "promptTokens": 440,
+          "completionTokens": 12,
+          "notes": "tool + shape match"
+        }
+      ],
+      "synthesis": [
+        {
+          "caseId": "synth-001-seven-unmet-rules-exact-count",
+          "score": 0.8333333333333334,
+          "latencyMs": 1286,
+          "promptTokens": 522,
+          "completionTokens": 69,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit"
+          ]
+        },
+        {
+          "caseId": "synth-002-gpa-verbatim-3-42",
+          "score": 0.8571428571428572,
+          "latencyMs": 724,
+          "promptTokens": 511,
+          "completionTokens": 11,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit"
+          ]
+        },
+        {
+          "caseId": "synth-003-low-confidence-policy-adviser-caveat",
+          "score": 0.8333333333333334,
+          "latencyMs": 1835,
+          "promptTokens": 564,
+          "completionTokens": 101,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-004-f1-visa-credit-load-caveat",
+          "score": 0.8333333333333334,
+          "latencyMs": 1440,
+          "promptTokens": 511,
+          "completionTokens": 74,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "get_enrollment_status"
+          ]
+        },
+        {
+          "caseId": "synth-005-online-course-major-uncertainty",
+          "score": 0.8,
+          "latencyMs": 2863,
+          "promptTokens": 547,
+          "completionTokens": 109,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-006-cross-school-stern-cas-pf",
+          "score": 0.8,
+          "latencyMs": 1539,
+          "promptTokens": 710,
+          "completionTokens": 113,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-007-plan-uncertainty-must-be-listed",
+          "score": 0.5,
+          "latencyMs": 1469,
+          "promptTokens": 666,
+          "completionTokens": 100,
+          "requiredCaveatsMissing": [
+            "double-count"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-008-near-graduation-timeline-warning",
+          "score": 0.6666666666666667,
+          "latencyMs": 2214,
+          "promptTokens": 639,
+          "completionTokens": 148,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-009-low-confidence-no-policy",
+          "score": 0.4,
+          "latencyMs": 1130,
+          "promptTokens": 507,
+          "completionTokens": 64,
+          "requiredCaveatsMissing": [
+            "couldn't find",
+            "contact"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "search_policy"
+          ]
+        },
+        {
+          "caseId": "synth-010-multi-program-overlap-mention",
+          "score": 0.8,
+          "latencyMs": 1840,
+          "promptTokens": 566,
+          "completionTokens": 97,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "check_overlap"
+          ]
+        },
+        {
+          "caseId": "synth-011-transfer-not-yet-eligible",
+          "score": 0.8571428571428572,
+          "latencyMs": 1429,
+          "promptTokens": 545,
+          "completionTokens": 80,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "check_transfer_eligibility"
+          ]
+        },
+        {
+          "caseId": "synth-012-future-projection-caveat",
+          "score": 0.33333333333333337,
+          "latencyMs": 2049,
+          "promptTokens": 699,
+          "completionTokens": 125,
+          "requiredCaveatsMissing": [
+            "projection",
+            "may change"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": [
+            "run_full_audit",
+            "plan_semester"
+          ]
+        },
+        {
+          "caseId": "synth-013-no-tool-needed-greeting",
+          "score": 1,
+          "latencyMs": 824,
+          "promptTokens": 423,
+          "completionTokens": 29,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-014-no-tool-needed-clarify-recap",
+          "score": 1,
+          "latencyMs": 769,
+          "promptTokens": 425,
+          "completionTokens": 21,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-015-no-tool-needed-meta-question",
+          "score": 1,
+          "latencyMs": 1888,
+          "promptTokens": 421,
+          "completionTokens": 126,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-016-no-tool-needed-followup-acknowledge",
+          "score": 1,
+          "latencyMs": 803,
+          "promptTokens": 423,
+          "completionTokens": 29,
+          "requiredCaveatsMissing": [],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-017-no-tool-needed-out-of-scope-job",
+          "score": 0.8333333333333334,
+          "latencyMs": 1247,
+          "promptTokens": 426,
+          "completionTokens": 71,
+          "requiredCaveatsMissing": [
+            "Wasserman"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        },
+        {
+          "caseId": "synth-018-no-tool-needed-emotional-checkin",
+          "score": 0.6666666666666667,
+          "latencyMs": 1142,
+          "promptTokens": 420,
+          "completionTokens": 64,
+          "requiredCaveatsMissing": [
+            "Wellness",
+            "counseling"
+          ],
+          "forbiddenClaimsPresent": [],
+          "requiredToolNamesMissing": []
+        }
+      ],
+      "decomp": [
+        {
+          "caseId": "decomp-001-pf-and-credits-tally",
+          "score": 1,
+          "latencyMs": 1659,
+          "promptTokens": 146,
+          "completionTokens": 107,
+          "markersHit": 2,
+          "markersExpected": 2
+        },
+        {
+          "caseId": "decomp-002-stern-deadline-prereqs-minor",
+          "score": 1,
+          "latencyMs": 1700,
+          "promptTokens": 157,
+          "completionTokens": 155,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-003-spring-plan-graduation-honors",
+          "score": 1,
+          "latencyMs": 2274,
+          "promptTokens": 151,
+          "completionTokens": 207,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-004-overload-risk-cost",
+          "score": 1,
+          "latencyMs": 1903,
+          "promptTokens": 151,
+          "completionTokens": 150,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-005-double-major-overlap-grad",
+          "score": 1,
+          "latencyMs": 2543,
+          "promptTokens": 159,
+          "completionTokens": 199,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-006-transfer-credit-residency-online",
+          "score": 1,
+          "latencyMs": 2707,
+          "promptTokens": 156,
+          "completionTokens": 277,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-007-fall-plan-and-summer-catchup",
+          "score": 1,
+          "latencyMs": 2180,
+          "promptTokens": 151,
+          "completionTokens": 204,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-008-withdraw-late-and-plan-impact",
+          "score": 1,
+          "latencyMs": 2044,
+          "promptTokens": 153,
+          "completionTokens": 172,
+          "markersHit": 3,
+          "markersExpected": 3
+        },
+        {
+          "caseId": "decomp-009-undeclared-explore-and-deadline",
+          "score": 1,
+          "latencyMs": 1579,
+          "promptTokens": 145,
+          "completionTokens": 120,
+          "markersHit": 2,
+          "markersExpected": 2
+        },
+        {
+          "caseId": "decomp-010-four-part-comprehensive",
+          "score": 1,
+          "latencyMs": 3590,
+          "promptTokens": 163,
+          "completionTokens": 228,
+          "markersHit": 4,
+          "markersExpected": 4
+        }
+      ],
+      "totalPromptTokens": 19140,
+      "totalCompletionTokens": 3592
+    }
+  }
+}

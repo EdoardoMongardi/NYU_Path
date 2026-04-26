@@ -1,0 +1,87 @@
+{
+  "runDate": "2026-04-26",
+  "candidates": [
+    {
+      "candidate": {
+        "id": "anthropic:claude-opus-4-7",
+        "displayName": "Claude Opus 4.7",
+        "runnerKey": "anthropic-opus-4-7"
+      },
+      "scores": {
+        "tsToolScore": 0.8611111111111112,
+        "tsSynthesisScore": 0.8082010582010581,
+        "tsDecompScore": 1,
+        "p50LatencyMs": 5651,
+        "costPerThousandTurnsUsd": 31.45141304347826
+      },
+      "agentScore": 0.8677248677248677,
+      "gatesPassed": {
+        "minAgentScorePassed": true,
+        "maxLatencyPassed": false,
+        "within5PctOfTopPassed": true
+      }
+    },
+    {
+      "candidate": {
+        "id": "anthropic:claude-sonnet-4-6",
+        "displayName": "Claude Sonnet 4.6",
+        "runnerKey": "anthropic-sonnet-4-6"
+      },
+      "scores": {
+        "tsToolScore": 0.7222222222222222,
+        "tsSynthesisScore": 0.7896825396825398,
+        "tsDecompScore": 1,
+        "p50LatencyMs": 6246,
+        "costPerThousandTurnsUsd": 5.823326086956522
+      },
+      "agentScore": 0.8047619047619048,
+      "gatesPassed": {
+        "minAgentScorePassed": false,
+        "maxLatencyPassed": false,
+        "within5PctOfTopPassed": false
+      }
+    },
+    {
+      "candidate": {
+        "id": "openai:gpt-4.1",
+        "displayName": "GPT-4.1",
+        "runnerKey": "openai-gpt-4-1"
+      },
+      "scores": {
+        "tsToolScore": 0.8055555555555556,
+        "tsSynthesisScore": 0.7878306878306879,
+        "tsDecompScore": 1,
+        "p50LatencyMs": 1310,
+        "costPerThousandTurnsUsd": 1.5697391304347827
+      },
+      "agentScore": 0.8373544973544973,
+      "gatesPassed": {
+        "minAgentScorePassed": false,
+        "maxLatencyPassed": true,
+        "within5PctOfTopPassed": true
+      }
+    },
+    {
+      "candidate": {
+        "id": "openai:gpt-4.1-mini",
+        "displayName": "GPT-4.1 mini",
+        "runnerKey": "openai-gpt-4-1-mini"
+      },
+      "scores": {
+        "tsToolScore": 0.8611111111111112,
+        "tsSynthesisScore": 0.7785714285714287,
+        "tsDecompScore": 1,
+        "p50LatencyMs": 1429,
+        "costPerThousandTurnsUsd": 0.29137391304347826
+      },
+      "agentScore": 0.8558730158730159,
+      "gatesPassed": {
+        "minAgentScorePassed": true,
+        "maxLatencyPassed": true,
+        "within5PctOfTopPassed": true
+      }
+    }
+  ],
+  "winner": "openai:gpt-4.1-mini",
+  "nextReviewDate": "2026-07-25"
+}
