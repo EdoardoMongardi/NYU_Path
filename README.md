@@ -56,6 +56,20 @@ Academic advising is high-stakes — a wrong answer about credit requirements or
 - **Response validation:** A post-generation validator checks for ungrounded numbers, missing tool calls, and uncited policies. Invalid responses are re-prompted or replaced with a safe fallback.
 - **School-scoped RAG:** Policy retrieval is filtered by the student's home school and catalog year to prevent cross-school policy contamination.
 
+## Program Coverage Strategy (Three-Tier)
+
+NYU has 300+ undergraduate programs. Hand-authoring full rule JSONs for all of them is intractable; pure RAG violates the "no LLM-computed numbers" cardinal rule. NYU Path uses three coverage tiers, with promotion driven by usage and validator signals (see ARCHITECTURE.md §11.6):
+
+- **T1 — Hand-authored** (~40 programs): full rule schema, hand-reviewed, deterministic audit + plan + what-if
+- **T2 — LLM-extracted** (~120 programs): rules extracted by LLM from the bulletin with ≥10% spot-check; deterministic audit runs but caveats to the user that requirements were extracted automatically
+- **T3 — RAG-only** (the long tail): no JSON file — engine refuses to compute an audit and instead quotes the bulletin verbatim
+
+A program moves T3→T2→T1 when traffic and usefulness justify the maintenance cost.
+
+## Data Provenance & Precedence
+
+Every JSON data file carries a `_meta` block (catalog year, source URL, last-verified date, source hash). When two data files disagree about the same fact, the engine resolves via precedence: **school config > program config > department config > course catalog**. Stale files (>180 days unverified or hash-changed upstream) trigger a verification banner on any response that depended on them. See ARCHITECTURE.md §11.0.
+
 ## Project Structure
 
 ```
@@ -67,18 +81,31 @@ nyupath/
 │       ├── planner/       # semesterPlanner, priorityScorer, graduationRisk, enrollmentValidator
 │       ├── graph/         # prereqGraph (DAG traversal)
 │       ├── equivalence/   # Cross-listed course resolution
+│       ├── transcript/    # Deterministic transcript parser + invariant checks (Phase 2)
+│       ├── api/           # nyuClassSearch.ts (FOSE client) + tool wrappers
 │       ├── agent/         # Agent orchestrator, tool registry, template matcher, response validator
-│       ├── search/        # Policy search (RAG), availability predictor
-│       └── data/          # Course catalog, program rules, prerequisites
+│       ├── cohort/        # Phase 6.5 staged-rollout gate
+│       ├── search/        # Policy search (RAG)
+│       └── data/          # Loaders: schools, programs, departments (stub), courses
 ├── apps/
 │   ├── cli/               # CLI interface for testing
 │   └── web/               # Next.js web application
 ├── data/
-│   ├── schools/           # Per-school config JSONs (CAS, Stern, Tandon, etc.)
-│   ├── programs/          # Per-school program requirement JSONs
+│   ├── schools/           # Per-school config JSONs (CAS, Stern, Tandon, ...)
+│   ├── programs/          # Per-school program requirement JSONs (T1 hand + T2 extracted)
+│   ├── departments/       # Reserved (precedence stub — see §11.9)
 │   ├── transfers/         # Internal transfer requirement files
-│   └── bulletin-raw/      # Raw NYU Bulletin data (source of truth)
-└── ARCHITECTURE.md        # Full system design document
+│   ├── courses/           # Course catalog (per-prefix, scraped + normalized)
+│   ├── bulletin-raw/      # Raw NYU Bulletin scrape (source of truth)
+│   └── _tiers.json        # Per-program tier assignment (T1/T2/T3)
+├── evals/
+│   ├── modelBakeoff.ts    # §6.5.1 model selection harness
+│   ├── results/           # Bakeoff results, per date
+│   └── cohorts/           # Frozen eval sets per Phase 6.5 cohort
+├── tools/
+│   └── program-extractor/ # T2 LLM extraction pipeline + prompt
+├── ARCHITECTURE.md        # Full system design document (canonical)
+└── MODEL_SELECTION.md     # Current selected model + bakeoff result + re-eval date
 ```
 
 ## Development
@@ -94,13 +121,15 @@ pnpm test
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 1. Multi-School Engine | 🔄 In Progress | De-hardcode CS-specific logic, add SchoolConfig types, create school/program data files, generalize engine to read config |
-| 2. Cross-Program + New Tools | ⬜ Planned | Multi-program audit coordinator, transfer eligibility, what-if analysis |
-| 3. Planner Extensions | ⬜ Planned | Exploratory/transfer-prep planning, multi-semester projection |
-| 4. RAG Pipeline | ⬜ Planned | Policy document chunking, embedding, vector search with Cohere Rerank |
-| 5. Agent Orchestrator | ⬜ Planned | Tool-calling agent loop, system prompt, template matcher, response validator |
-| 6. Integration + Hardening | ⬜ Planned | Web API, streaming, deprecation of old modules, fallback logging |
-| 7. Scale to All Majors | ⬜ Planned | Batch addition of program requirements across all NYU schools |
+| 0. Pre-flight | ⬜ Planned | FOSE client wiring, `_meta` provenance schema, catalog-year pinning, eval harness skeleton |
+| 1. Multi-School Engine | 🔄 In Progress | De-hardcode CS-specific logic, add SchoolConfig types, T1 program data files (5 majors), generalize engine to read config + precedence rule |
+| 2. Cross-Program + Transcript Ingestion | ⬜ Planned | Multi-program audit coordinator, transfer eligibility, what-if analysis, deterministic transcript parser with reconciliation invariants |
+| 3. Planner Extensions + Confirmation UI | ⬜ Planned | Exploratory/transfer-prep planning, multi-semester projection, two-step transcript confirmation |
+| 4. RAG Pipeline | ⬜ Planned | Policy document chunking, embedding, vector search with Cohere Rerank, T3 bulletin coverage |
+| 5. Agent Orchestrator + Model Bakeoff | ⬜ Planned | Run model bakeoff, agent loop, system prompt, template matcher, **launch-blocking** invocation auditor + completeness checker |
+| 6. Integration + Hardening | ⬜ Planned | Web API, streaming, T2 extraction pipeline, deprecation of old modules, fallback logging |
+| 6.5. Staged Rollout (Eval-Gated) | ⬜ Planned | Internal alpha → closed beta → invite-only → public, each cohort gated by ≥0.90 composite eval score |
+| 7. Scale to All Majors (Three-Tier) | ⬜ Planned | T1 hand-authored batches, T2 LLM extraction with spot-check, T3 RAG-only long tail |
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full design document.
 

@@ -1,10 +1,21 @@
 # NYU Path — Production Architecture & System Design
 
-> **Version:** 3.1  
-> **Date:** April 2025  
-> **Status:** Approved — canonical reference for all implementation work  
-> **Supersedes:** architecture_v2.md, implementation_plan.md  
-> **Changelog:** v3.1 adds hardening classification (§2.4), curated policy templates (§5.5), tool invocation auditing (§9.1 Part 4b), completeness checker (§9.1 Part 4c), and formal correctness specification (Appendix D)
+> **Version:** 3.2
+> **Date:** April 2026
+> **Status:** Approved — canonical reference for all implementation work
+> **Supersedes:** architecture_v2.md, implementation_plan.md, v3.1
+> **Changelog:**
+> - **v3.2 (Apr 2026)** — Implementation-readiness pass.
+>   - §6.5 Model Selection rewritten: eval-harness-driven, vendor-agnostic (replaces prior GPT-4o recommendation).
+>   - §11.0 (new) Data Provenance & Precedence: file-level `catalogYear` / `sourceUrl` / `lastVerified` / `sourceHash` + precedence rule (school > program > department > course catalog).
+>   - §11.6 rewritten as **Three-Tier Program Coverage** (hand-authored / LLM-extracted / RAG-only) with explicit promotion thresholds — solves 300+ program scaling.
+>   - §11.7 Course Data expanded: wires existing `nyuClassSearch.ts` FOSE client into tool registry with single-tier cache.
+>   - §11.8 (new) Transcript Ingestion Grammar with parser invariants (cumulative-totals reconciliation).
+>   - §11.9 (new) Department Config: precedence-only stub — schema deferred until data exists.
+>   - §12 Migration Roadmap: **Phase 0 (Pre-flight)** added — FOSE wiring + provenance metadata + catalog-year pinning. **Phase 6.5 Staged Rollout** added — operationalizes the Appendix D ≥0.90 eval gate.
+>   - §9.1 Part 9 (new) Launch-blocking gates — invocation auditor + completeness checker marked as v1.0 blockers (not deferred).
+>   - Claude Code Reference Index citation corrections (stopHooks.ts ~473 lines).
+> - **v3.1 (Apr 2025)** — Hardening classification (§2.4), curated policy templates (§5.5), tool invocation auditing (§9.1 Part 4b), completeness checker (§9.1 Part 4c), formal correctness specification (Appendix D).
 
 ---
 
@@ -21,7 +32,21 @@
 9. [Safety & Fallback System](#9-safety--fallback-system)
 10. [Deterministic vs RAG Decision Matrix](#10-deterministic-vs-rag-decision-matrix)
 11. [Data Architecture](#11-data-architecture)
+    - 11.0 [Data Provenance & Precedence](#110-data-provenance--precedence)
+    - 11.1 [Separation Principle](#111-separation-principle-school-config-vs-program-rules)
+    - 11.2 [School Config Schema](#112-school-config-schema)
+    - 11.3 [Extended Rule Schema](#113-extended-rule-schema-cross-school-patterns)
+    - 11.4 [Cross-School Audit Flow](#114-cross-school-audit-flow)
+    - 11.5 [Per-Major JSON Schema](#115-per-major-json-schema-updated)
+    - 11.6 [Three-Tier Program Coverage](#116-three-tier-program-coverage-scaling-strategy)
+    - 11.7 [Course Data & FOSE Integration](#117-course-data--fose-integration)
+    - 11.8 [Transcript Ingestion Grammar](#118-transcript-ingestion-grammar)
+    - 11.9 [Department Config (precedence-only stub)](#119-department-config-precedence-only-stub)
 12. [Migration Roadmap](#12-migration-roadmap)
+    - Phase 0: Pre-flight (FOSE wiring + provenance + catalog-year pinning)
+    - Phases 1–6: Engine, tools, RAG, orchestrator, integration
+    - Phase 6.5: Staged Rollout (operationalizes Appendix D eval gate)
+    - Phase 7: Scale to all majors (three-tier coverage)
 13. [Appendix A: System Prompt](#appendix-a-system-prompt)
 14. [Appendix B: Data Model](#appendix-b-data-model)
 15. [Appendix C: Policy Gaps Registry](#appendix-c-policy-gaps-registry-g1g45)
@@ -48,7 +73,7 @@
 | `tools/AgentTool/prompt.ts` | L99-113 ("Writing the prompt" section), L66-98 ("When to fork" section) | **Self-contained tool prompts** — "brief the agent like a colleague who just walked in", never delegate understanding | `systemPrompt.ts` |
 | `query/deps.ts` | L21-40 (`QueryDeps` type, `productionDeps()`) | **Dependency injection** — inject `callModel`, `autocompact`, `uuid` so tests can swap fakes without spyOn | All modules |
 | `context.ts` | L116-189 (`getSystemContext`, `getUserContext`) | **Dynamic context injection** — memoized system/user context appended before each query | `agentOrchestrator.ts` |
-| `query/stopHooks.ts` | Full file (370 lines) | **Post-response hooks** — run validators after model responds, inject blocking errors → re-prompt | `responseValidator.ts` |
+| `query/stopHooks.ts` | Full file (~473 lines) | **Post-response hooks** — run validators after model responds, inject blocking errors → re-prompt | `responseValidator.ts` |
 | `query.ts` | L1062-1357 (stop hooks, recovery, budget) | **Error recovery cascade** — max_output_tokens → escalate → retry → give up; prompt-too-long → collapse → compact → surface | `agentOrchestrator.ts` |
 
 ---
@@ -78,7 +103,7 @@ NYU Path is an AI-powered academic advising platform for NYU undergraduate stude
 │                                                                     │
 │  ┌──────────┐    Calls tools based on LLM decisions.               │
 │  │   LLM    │    Validates inputs/outputs. Handles errors.          │
-│  │(GPT-4o)  │    Asks user for missing data.                        │
+│  │ (§6.5)   │    Asks user for missing data.                        │
 │  └────┬─────┘    Synthesizes tool results into responses.           │
 │       │                                                             │
 │       ▼                                                             │
@@ -1073,49 +1098,90 @@ Tool call fails
 
 ### 6.5 Model Selection
 
-> **Primary agent model: GPT-4o.** The v3.1 architecture was specifically designed so the LLM's job is narrow: pick the right tools, then summarize deterministic results in natural language. Safety nets (validators, invocation auditing, completeness checks) compensate for model imperfections.
+> **Decision rule: model choice is an eval-harness output, not a vendor preference.** This section specifies the *selection procedure*, not the winner. Run the harness (below) against the current generation of frontier models — whichever tops the composite score at acceptable latency and cost wins. Revisit quarterly; models ship every few months and today's leader is next quarter's baseline.
 
-| Role | Model | Why |
-|------|-------|-----|
-| **Agent loop** (tool selection + synthesis) | GPT-4o | Fast (~500ms), excellent function calling, cost-effective ($2.50/$10 per 1M tokens). The architecture's safety nets compensate for reasoning gaps. |
-| **Semi-hardened Layer 3** (wraparound text) | GPT-4o | Simple task: add context without contradicting Layers 1-2. Validator enforces string match on deterministic layers. |
-| **Eval judge** (Appendix D scoring) | GPT-4.1 / Claude 3.5 Sonnet | Offline batch evaluation (~200 cases/week). Accuracy matters more than speed. Cost negligible at this scale. |
+#### 6.5.1 Selection Procedure (run before Phase 5)
 
-**Why NOT a stronger model for the agent loop:**
+**Step 1 — Candidate set.** Include every frontier model available at the time of selection that supports tool calling and streaming. As of this writing that's roughly: OpenAI's GPT-4o / GPT-4.1 / o-series, Anthropic's Claude 3.5/3.7/4 Sonnet & Opus, Google's Gemini 2.x Pro, and any open-weight model that passes a cost/latency pre-screen (e.g., Llama 3.x 70B via hosted inference). Do not pre-exclude based on vendor.
 
-1. **Hardened paths bypass the LLM entirely.** F-1 compliance, credit counts, audit summaries, SAP — all template-formatted. The LLM never touches them.
-2. **Tool calling is GPT-4o's strongest capability.** And that's the primary LLM task.
-3. **Latency matters for chat UX.** Students won't wait 3-5 seconds. GPT-4o's ~500ms response time is a real advantage.
-4. **Diminishing returns.** The claim-to-tool contract blocks responses that skip tools regardless of model. The completeness checker catches omissions regardless of model. A stronger model would marginally improve agentic synthesis quality, but the highest-risk outputs are already deterministic.
+**Step 2 — Eval harness.** Build `evals/modelBakeoff.ts` with three test sets, each ≥ 50 cases:
 
-**When to upgrade — watch these eval metrics:**
+| Test set | What it measures | Composition |
+|---|---|---|
+| **TS-Tool** (tool selection) | Does the model call the right tool, with correct args? | 50 graded conversations (expected tool name + arg shape). Grade: exact match on tool name, JSON-schema match on args. |
+| **TS-Synthesis** (Layer 3 + Agentic synthesis) | Given fixed tool results, does the model produce a correct, complete, well-grounded response? | 50 frozen-tool-output cases. Scored by Appendix D composite (grounding, completeness, uncertainty, non-fab). |
+| **TS-Decomp** (multi-intent) | Does the model decompose multi-part questions and address all parts? | 30 multi-intent cases. Grade: fraction of sub-questions answered × fraction correct. |
 
-| Metric | Threshold | If Exceeded → |
-|--------|-----------|--------------|
-| Tool selection error rate | > 5% | LLM calling wrong tool or skipping required tools despite system prompt → consider GPT-4.1 |
-| Layer 3 contradiction rate | > 2% | Semi-hardened wraparound contradicts deterministic layers → tighten prompt first, then consider upgrade |
-| Multi-intent decomposition miss | > 10% | User asks 3 things, LLM only addresses 2 → consider upgrade |
-| Eval composite score (Appendix D) | < 0.85 | Overall correctness below threshold → diagnose which dimension is failing before upgrading |
+**Step 3 — Scoring.** Composite per candidate:
 
-> **Note:** Always tighten system prompt and validator rules BEFORE upgrading the model. A model upgrade is the most expensive lever — exhaust structural fixes first.
+```
+AgentScore =  0.40 × TS-Tool          (tool-calling accuracy)
+            + 0.40 × TS-Synthesis     (Appendix D composite)
+            + 0.20 × TS-Decomp        (multi-intent handling)
+```
+
+Also record **P50 latency** and **$/1000-turn cost** from the harness runs.
+
+**Step 4 — Decision.** Rank candidates by `AgentScore`. Apply gates:
+
+- **Reject** any candidate with `AgentScore < 0.85` regardless of price.
+- **Reject** any candidate with P50 latency > 2.5s on streaming first-token (chat UX constraint).
+- Among the remaining, prefer the cheapest at ≤ 5% AgentScore below the top. Only pay for the top model if the gap is > 5%.
+
+**Step 5 — Document the result.** Commit the harness output to `evals/results/bakeoff-YYYY-MM-DD.json` and record the selected model in a short `MODEL_SELECTION.md` with: the winner, the AgentScore, the cost/latency, the runner-up, and the re-evaluation date (default: 90 days).
+
+> **Why this procedure instead of naming a model here:** an architecture document that hard-codes "use GPT-4o" (or any specific model) is out-of-date by the next release cycle. An architecture document that codifies the *selection procedure* stays correct. The same procedure picks the current winner and the next winner.
+
+#### 6.5.2 Role assignments (model-agnostic)
+
+| Role | What the model does | Constraint |
+|---|---|---|
+| **Agent loop** | Tool selection + agentic synthesis | Winner of §6.5.1 bakeoff |
+| **Semi-hardened Layer 3** | Wraparound natural-language context | Same model as agent loop (no benefit to a separate model; Layer 3 is a 1–2 sentence extension) |
+| **Eval judge** (Appendix D weekly scoring) | Offline LLM-as-judge scoring | Use a DIFFERENT model from the agent loop — avoids self-graded inflation. E.g., if agent=Claude, judge=GPT-4.x; if agent=GPT, judge=Claude. This is a best practice from LLM-as-judge research, not a vendor preference. |
+| **Fallback model** | Invoked on rate-limit / model-unavailable | A smaller/cheaper model from the SAME vendor as the primary (same API, same tool-calling format). Typically the "mini" / "haiku" / "flash" tier. |
+
+#### 6.5.3 Why the architecture is model-agnostic by design
+
+1. **Hardened paths bypass the LLM entirely** — F-1 compliance, credit counts, audit summaries, SAP, P/F eligibility. The LLM is not on the critical path for these. The model choice only affects the ~40–60% of queries routed through Layer 3 or full agentic synthesis.
+2. **Safety nets equalize models.** The claim-to-tool contract (§9.1 Part 4b), completeness checker (§9.1 Part 4c), and grounding validator all run regardless of model. They block the same failure modes whether the model is GPT, Claude, or Gemini.
+3. **Tool-calling is a commodity capability now.** All frontier models from 2025 onward have reliable function calling; the differentiators are synthesis quality, reasoning depth, and price.
+
+#### 6.5.4 Re-evaluation triggers
+
+Re-run the §6.5.1 bakeoff when any of these fires:
+
+| Trigger | Action |
+|---|---|
+| 90 days since last bakeoff | Scheduled re-evaluation |
+| New frontier-class model released (any vendor) | Add to next scheduled bakeoff |
+| `AgentScore` on rolling weekly eval drops > 0.05 | Off-cycle re-evaluation — current model may have regressed (hosted providers update weights silently) |
+| Tool-selection error rate > 5% on prod traffic | Off-cycle re-evaluation |
+| Layer 3 contradiction rate > 2% | Tighten prompt first; if still failing, re-evaluate |
+| Multi-intent decomposition miss > 10% | Off-cycle re-evaluation |
+| Eval composite score (Appendix D) < 0.85 | Diagnose dimension first; if model-bound, re-evaluate |
+
+> **Structural fixes before model upgrades.** Always tighten system prompt, validator rules, and tool descriptions BEFORE switching models. A model switch is the most expensive lever (cost, latency, re-testing). Exhaust structural fixes first — but if the harness says a different model wins on AgentScore at acceptable cost, switch.
 
 #### Model Fallback Cascade
 
 > **📖 Claude Code Reference:** `query.ts` L893-953 — on `FallbackTriggeredError` (rate limit, high demand), the loop switches to `fallbackModel`, clears orphaned tool results, and retries. User sees: "Switched to [fallback] due to high demand."
 
 ```
-Model Fallback Chain:
-1. GPT-4o (primary) — 500ms, best function calling
-2. GPT-4o-mini (fallback) — 200ms, adequate for tool selection + synthesis
+Model Fallback Chain (vendor-agnostic — instantiated at model selection time):
+1. PRIMARY    — winner of §6.5.1 bakeoff
+2. FALLBACK   — cheaper/faster tier from the same vendor (same API, same tool format)
 3. Graceful error message if both fail
 
-On API error (429 rate limit, 503 model unavailable):
+On API error (429 rate limit, 503 model unavailable, vendor outage):
   - Set state.currentModel = fallbackModel
-  - Set state.transition = { reason: 'model_fallback', from: 'gpt-4o', to: 'gpt-4o-mini' }
-  - Log: "model_fallback_triggered"
+  - Set state.transition = { reason: 'model_fallback', from: <primary>, to: <fallback> }
+  - Log: "model_fallback_triggered" with vendor + model names
   - System message to user: "I'm using a faster backup model right now."
   - Continue the loop (retry same request with fallback model)
   - If fallback also fails → "I'm having trouble connecting. Please try again in a moment."
+
+Concrete pairings are recorded in MODEL_SELECTION.md at bakeoff time.
 ```
 
 ### 6.6 Context Management (Within-Session)
@@ -1807,7 +1873,7 @@ STEP 5: SYNTHESIZE (LLM generates final response)
 > **📖 Claude Code References for safety patterns:**
 > - `Tool.ts` L321-336 — `ToolResult<T>` envelope. Success = return data. `contextModifier` for tools that change state.
 > - `Tool.ts` L489-492 — `validateInput()`. Called before execution. Errors go to LLM as `is_error: true`.
-> - `query/stopHooks.ts` (full file, 370 lines) — Post-response hooks that validate the model's output and inject blocking errors if validation fails. The model gets re-prompted with the error. **This is the pattern for our `responseValidator.ts`.**
+> - `query/stopHooks.ts` (full file, ~473 lines) — Post-response hooks that validate the model's output and inject blocking errors if validation fails. The model gets re-prompted with the error. **This is the pattern for our `responseValidator.ts`.** (Citation: reference by function name — `runStopHooks`, `handleBlockingErrors` — rather than line numbers, since line counts drift.)
 > - `query.ts` L1282-1306 — When stop hooks return `blockingErrors`, they get appended to messages and the loop continues: `state = { messages: [...messages, ...assistantMessages, ...blockingErrors], stopHookActive: true, ... }; continue`. This is how we implement re-prompting on validation failure.
 > - `services/tools/StreamingToolExecutor.ts` L153-205 — `createSyntheticErrorMessage()`. When a tool is cancelled (sibling error, user interrupt, streaming fallback), a synthetic `tool_result` with `is_error: true` is created so the LLM always gets a response for every `tool_use`.
 
@@ -1980,6 +2046,44 @@ STEP 5: SYNTHESIZE (LLM generates final response)
    - "response_blocked" → strengthen system prompt rules
    - "validation_blocked/invocation_audit" → agent skipping tools, tune system prompt
    - "validation_blocked/completeness" → agent omitting caveats, add to prompt rules
+
+9. LAUNCH-BLOCKING GATES (NEW in v3.2)
+   The following Parts are explicitly LAUNCH-BLOCKING — they MUST be active and
+   passing on the cohort eval set before transitioning each Phase 6.5 cohort:
+
+   ┌─────────────────────────────────────────────────────────────────────┐
+   │ PART  │ NAME                          │ LAUNCH GATE                 │
+   ├─────────────────────────────────────────────────────────────────────┤
+   │  1    │ Standardized tool contracts   │ Phase 1 (engine)            │
+   │  2    │ Input validation              │ Phase 1 (engine)            │
+   │  3    │ Confidence gating (RAG)       │ Phase 4 (RAG)               │
+   │  4a   │ Grounding checks              │ Phase 5, blocks Cohort A    │
+   │  4b   │ Tool invocation auditing      │ Phase 5, blocks Cohort A    │  ← v3.2: BLOCKING
+   │  4c   │ Completeness checker          │ Phase 5, blocks Cohort A    │  ← v3.2: BLOCKING
+   │  5    │ Fallback templates            │ Phase 5, blocks Cohort A    │
+   │  6    │ Mandatory logging             │ Phase 5, blocks Cohort A    │
+   │  7    │ System prompt rules           │ Phase 5, blocks Cohort A    │
+   │  8    │ Monitoring & iteration        │ Phase 6.5 ongoing           │
+   └─────────────────────────────────────────────────────────────────────┘
+
+   v3.1 left Parts 4b and 4c as "v1.0 features." v3.2 makes them launch-blocking
+   because both close failure modes that no amount of system-prompt tuning fixes:
+
+   - 4b (invocation auditing) closes the gap that validateInput() cannot:
+     the LLM answering from training data without calling any tool. If 4b is
+     not active, the agent can produce a confident, ungrounded GPA with no
+     tool involvement and the only safety net is the LLM's own judgment.
+
+   - 4c (completeness checker) closes the dominant academic-advising failure
+     mode (§2.5): correct-but-incomplete advice that omits a binding constraint
+     (F-1 minimum, non-home-school cap, SAP standing). The deterministic
+     profile-driven heuristics in 4c catch the most impactful omissions
+     without invoking another LLM.
+
+   Deferring either to "v1.1" means the v1.0 cohort is the eval set for these
+   checks — using real students as the test case for the most consequential
+   failure modes. That is not acceptable for an academic-advising domain
+   (§2.5 Domain Risk Acknowledgment).
 ```
 
 ### 9.2 What Happens When Data Is Insufficient
@@ -2118,6 +2222,89 @@ These need a **simple boolean/enum** in the student profile, and the RAG layer e
 ---
 
 ## 11. Data Architecture
+
+### 11.0 Data Provenance & Precedence
+
+> **Problem this solves.** NYU publishes academic requirements across multiple, non-identical sources: the school bulletin page, department pages, program pages, and the FOSE course catalog. These sources frequently disagree (a program page says "24 credits minimum" while a department page says "21 credits"). Without an explicit provenance model and conflict-resolution rule, the engine silently picks whichever file it loaded last. This section makes provenance explicit and the conflict rule deterministic.
+
+#### 11.0.1 File-level source metadata (required on every data file)
+
+Every JSON file under `data/schools/`, `data/programs/`, `data/transfers/`, and `data/departments/` MUST carry a top-level `_meta` object:
+
+```jsonc
+{
+  "_meta": {
+    "catalogYear": "2025-2026",                   // authoritative academic year
+    "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-requirements/core-curriculum/",
+    "lastVerified": "2026-04-12",                 // ISO date, UTC
+    "sourceHash": "sha256:a3f9...",               // hash of the scraped source at lastVerified time
+    "extractedBy": "manual" | "llm-assisted" | "scraper",
+    "verifiedBy": "hand-review" | "eval-suite" | "unreviewed",
+    "sourceRef": {                                // optional — only when non-obvious
+      "anchor": "#core-curriculum-writing",       // DOM anchor in sourceUrl
+      "pdfPage": null
+    }
+  },
+  // ... rest of the file
+}
+```
+
+**Why file-level and not per-field.** A per-field source envelope (`{value, source, lastVerified}` around every `creditsRequired`, `minGpa`, etc.) was considered and rejected: it multiplies schema complexity by ~40× for a ~10% gain in auditability. File-level metadata covers the 95% case (a whole program config is sourced from one URL) and the `sourceRef` field handles the 5% non-obvious cases.
+
+**`sourceHash` rationale.** Without a hash, `lastVerified` is just a comment — a scraper cannot detect when the upstream source has changed. The hash is computed over the normalized scraped content (HTML → text, whitespace-collapsed) at verification time. A staleness check compares `current_fetched_hash ≠ _meta.sourceHash` to flag files for re-verification.
+
+#### 11.0.2 Conflict-resolution precedence rule
+
+When two loaded data files disagree on the same fact about the same student, the engine applies this precedence (highest authority first):
+
+```
+1. school config         data/schools/<school>.json
+2. program config        data/programs/<school>/<program>.json
+3. department config     data/departments/<school>/<dept>.json       (see §11.9)
+4. course catalog        data/courses/*.json                          (FOSE-sourced, §11.7)
+```
+
+**Rationale per level:**
+- **School > program:** school-level rules (residency, overall GPA, credit caps) are university-level policy. A program cannot override university policy.
+- **Program > department:** when a program JSON explicitly names a rule (e.g., "CS BA requires CSCI-UA 310"), it is the authoritative instance. Department defaults fill gaps, they don't override.
+- **Department > course catalog:** course catalog fields (credits, prerequisites as listed by the registrar) are the baseline. Department config can encode department-specific interpretation (e.g., "this prerequisite is waived for this major").
+
+**Tie-breaking.** If two files at the same level disagree (e.g., two program files both claim authority over a cross-listed course), the one with the newer `lastVerified` wins, and the engine logs `data_conflict_unresolved` to `fallback_log.jsonl` with both filenames for manual review.
+
+**Implementation location.** `packages/engine/src/data/dataLoader.ts` — see `resolveFact(studentProfile, factKey)` in Phase 1.
+
+#### 11.0.3 Catalog-year pinning
+
+A student's audit MUST be evaluated against the catalog year they are entitled to under NYU policy:
+
+- **Default:** `StudentProfile.catalogYear` (assigned at matriculation).
+- **Readmitted students (G40):** `catalogYear = readmissionYear` — older catalog no longer applies.
+- **Declared-after-matriculation majors:** use the catalog year **in effect when the major was declared**, NOT the student's matriculation year. Stored per-program on `DeclaredProgram.declaredUnderCatalogYear`.
+
+`dataLoader` MUST load the program JSON file whose `_meta.catalogYear` matches the student's applicable catalog year. If no exact match exists, the loader uses the nearest earlier year and logs `catalog_year_fallback` with both years.
+
+Program JSON file-naming convention encodes the catalog year:
+
+```
+data/programs/cas/cas_cs_ba.json            ← current (latest catalogYear)
+data/programs/cas/cas_cs_ba__2023-2024.json ← historical snapshot
+data/programs/cas/cas_cs_ba__2024-2025.json
+```
+
+Snapshots are kept whenever an edit to the current file materially changes a rule. The copy-on-write rule: edits that change the observable audit result for any existing student MUST create a snapshot of the pre-edit file first.
+
+#### 11.0.4 Staleness policy
+
+A file is **stale** when any of:
+- `lastVerified` is older than 180 days
+- `sourceHash` no longer matches a fresh fetch of `sourceUrl`
+- the scraper (§11.7) detects a bulletin structural change
+
+Stale files are not removed from the system. The engine continues to use them and the response validator (§9.1 Part 4a) appends a caveat to any response that relied on a stale file: *"This answer is based on requirements last verified [date]. Verify with your adviser for the current catalog."*
+
+A weekly CI job scans `_meta.lastVerified` across all data files and opens issues for stale ones.
+
+---
 
 ### 11.1 Separation Principle: School Config vs Program Rules
 
@@ -3378,43 +3565,399 @@ Each major gets a single JSON file following the universal schema. Schema now in
 }
 ```
 
-### 11.6 Scaling Strategy
+### 11.6 Three-Tier Program Coverage (Scaling Strategy)
+
+> **Problem:** NYU has 300+ undergraduate programs across 11 schools. Hand-authoring a full JSON for each is ~4 hours/program × 300 = 1,200 hours of manual work. It also creates a maintenance cliff — every catalog year change multiplies by 300. But RAG-only for all programs violates the Cardinal Rule (§2.1) and produces ungrounded credit counts.
+>
+> **Solution:** three coverage tiers, promotion between tiers driven by usage and validator signals. Not every program needs the same fidelity — a program used by 2,000 students a month should be hand-authored; one used by 3 students a year can ride on RAG.
+
+#### 11.6.1 The three tiers
+
+| Tier | Name | Fidelity | Engine behavior | Coverage target |
+|---|---|---|---|---|
+| **T1** | **Hand-authored** | Full JSON rule schema (§11.5), hand-reviewed line by line | Deterministic audit, plan, what-if all return grounded results | ~40 programs at launch (highest-traffic majors) |
+| **T2** | **LLM-extracted (verified)** | JSON rule schema generated by LLM from bulletin + spot-reviewed by human on ≥10% of rules | Deterministic audit runs but flags `extraction_confidence: "medium"`; response validator appends verification caveat | ~120 programs (all majors with any traffic) |
+| **T3** | **RAG-only** | No JSON file. Bulletin pages indexed in RAG corpus. | Engine refuses to run deterministic audit for this program. Agent uses `search_policy` to cite bulletin language verbatim. User sees: *"I don't run a full audit for this program yet. Here's what the bulletin says:"* + verbatim quote + link. | All remaining programs (~140) |
+
+**Key property:** Tiers are per-program, not global. A student with one T1 major and one T2 minor gets a partially deterministic audit (the T1 part) plus caveated extraction (the T2 part).
+
+#### 11.6.2 Tier assignment (initial)
+
+At launch, tiers are assigned by **traffic projection + risk**:
 
 ```
-Phase 5 pipeline for adding a new major:
+T1 (Hand-authored) if ANY:
+  - Program has >500 enrolled students (NYU public data)
+  - Program has high-stakes sequencing (e.g., pre-med, nursing, F-1-sensitive STEM)
+  - Program has non-trivial double-counting rules (Stern concentrations, Gallatin)
 
-1. SCRAPE: Pull requirements from NYU Bulletin 
-   (https://bulletin.cas.nyu.edu/page/departments.and.programs)
-   
-2. DISTILL: Convert narrative requirements into JSON rules
-   - Manual for first batch (10 majors)
-   - LLM-assisted for remaining (with human verification)
-   
-3. VALIDATE: Run eval suite against known student scenarios
-   
-4. DEPLOY: Add JSON file to programs/ directory
-   
-5. UPDATE: Add department bulletin to RAG policy corpus
+T2 (LLM-extracted) if:
+  - Program has 50–500 enrolled students
+  - Rules are mostly course-list driven (not milestone-heavy)
 
-Time per major: ~2-4 hours (mostly manual verification)
-Batch targets: 10 majors/sprint
+T3 (RAG-only) if:
+  - Program has <50 enrolled students
+  - Program has non-codifiable rules (e.g., Gallatin individualized concentrations)
+  - Program is graduate-adjacent or transitional
 ```
 
-### 11.3 Course Data
+The exact tier assignment for launch is in `data/_tiers.json`. Example:
+
+```jsonc
+{
+  "cas_cs_ba":       { "tier": "T1", "rationale": "highest-traffic CAS major" },
+  "stern_finance":   { "tier": "T1", "rationale": "high-stakes concentration rules" },
+  "cas_philosophy":  { "tier": "T2", "rationale": "moderate traffic, course-list driven" },
+  "gallatin_ba":     { "tier": "T3", "rationale": "individualized — no deterministic rules" },
+  "silver_msw_prep": { "tier": "T3", "rationale": "low enrollment + pre-professional track" }
+}
+```
+
+#### 11.6.3 Promotion triggers (T3→T2, T2→T1)
+
+A program is **auto-flagged for promotion** when any threshold is crossed. Promotion is a human action — the flag creates a ticket, it does not auto-promote.
+
+| From → To | Trigger | Action |
+|---|---|---|
+| T3 → T2 | >30 queries/month for 2 consecutive months | File ticket: run LLM extraction on this program. Target SLA: 2 weeks. |
+| T3 → T2 | Any student with this program as a declared major is logged (not a one-off query) | Immediate: extract within 1 week. |
+| T2 → T1 | >200 queries/month for 2 consecutive months | File ticket: hand-review the T2 JSON. Target SLA: 4 weeks. |
+| T2 → T1 | T2 extraction produces `validation_blocked/completeness` rate > 5% | Immediate: T2 extraction is missing something the checker catches. Hand-review required. |
+| T2 → T1 | Response validator flags ≥3 distinct `grounding_failure` events on this program in a week | Immediate. |
+
+**Demotion** (T1 → T2) is rare but allowed if a T1 JSON falls out of date and no one will maintain it; better to have a caveated T2 than a stale T1.
+
+#### 11.6.4 Pipeline per tier
 
 ```
-Current: packages/engine/src/data/courses.json (80 hand-curated courses)
-Target:  Full NYU catalog via FOSE API scraping
+T1 PIPELINE (Hand-authored, ~4–6 hours per program):
+  1. Scrape bulletin page → markdown (already done in data/bulletin-raw/)
+  2. Manually translate requirements to JSON using §11.5 schema
+  3. Hand-review every rule against the bulletin
+  4. Write 3–5 eval cases (known student transcripts → expected audit result)
+  5. Commit with _meta.extractedBy: "manual", _meta.verifiedBy: "hand-review"
 
-FOSE API: https://schedge.a1liu.com/api/ (unofficial but comprehensive)
-Fields: id, title, credits, termsOffered, sections, instructor, location
+T2 PIPELINE (LLM-extracted, ~45 minutes per program):
+  1. Scrape bulletin page (same)
+  2. Run extraction prompt on bulletin content → draft JSON
+     - Prompt is in tools/program-extractor/prompt.md
+     - Model: winner of §6.5.1 bakeoff
+     - Output: JSON conforming to §11.5 schema + confidence scores per rule
+  3. Run schema validator (Zod) — reject if invalid
+  4. Human spot-check ≥10% of rules (minimum 5 rules) against bulletin
+  5. Run the T1 eval cases for this program's school (catches gross extraction errors)
+  6. Commit with _meta.extractedBy: "llm-assisted", _meta.verifiedBy: "spot-check"
+  7. Tag every rule with rule._meta.extraction_confidence: 0.0-1.0
 
-Scraping pipeline (Phase 5):
-  1. Hit FOSE API for all CAS departments
-  2. Normalize to our Course interface
-  3. Extract: isOnline, courseLevel, suffix (-UA/-UC/-AD)
-  4. Store as courses.json (or per-department files if > 5000 courses)
+T3 PIPELINE (RAG-only, trivial):
+  1. Ensure bulletin page is in RAG corpus with school-scoped metadata
+  2. Add entry to data/_tiers.json marking program as T3
+  3. No JSON file created. No eval cases.
+  4. Agent behavior: when asked about this program, calls search_policy and
+     responds with verbatim quotes. Explicitly refuses to compute an audit.
 ```
+
+#### 11.6.5 Engine integration
+
+`degreeAudit.ts` branches on tier at load time:
+
+```typescript
+function runAudit(profile: StudentProfile, programId: string): AuditResult {
+  const tier = getTier(programId);
+
+  if (tier === 'T3') {
+    return {
+      status: 'unsupported_deterministic',
+      reason: 'This program is not audited deterministically yet.',
+      fallback: 'rag_only',
+      bulletinUrl: getBulletinUrl(programId),
+    };
+  }
+
+  const programJson = loadProgram(profile, programId);  // respects catalog year
+  const result = evaluate(profile, programJson);
+
+  if (tier === 'T2') {
+    result.caveats.push({
+      type: 'extraction_confidence',
+      message: 'These requirements were extracted by an LLM from the NYU bulletin ' +
+               'and verified by spot-check. Confirm with your adviser for authoritative ' +
+               'requirements.',
+      sourceUrl: programJson._meta.sourceUrl,
+    });
+  }
+
+  return result;
+}
+```
+
+The response validator (§9.1 Part 4a) reads `result.caveats` and ensures they appear in the final response for T2 audits.
+
+#### 11.6.6 Coverage targets
+
+| Phase | T1 count | T2 count | T3 count | Total programs served |
+|---|---|---|---|---|
+| Phase 1 completion | 5 | 0 | 0 | 5 (CAS pilot) |
+| Phase 5 completion | 15 | 0 | all others via RAG | 15 hand + all via RAG |
+| Phase 6.5 launch | 25 | 75 | all remaining | 100 + RAG everywhere |
+| Phase 7 (ongoing) | 40 | 120 | remainder | 160 deterministic + RAG everywhere |
+
+> **Migration note:** The Appendix D eval gate (≥0.90 composite) applies to T1 programs strictly and to T2 programs with extraction-confidence caveats active. T3 programs are excluded from the gate because the engine does not make deterministic claims about them — it only quotes the bulletin.
+
+---
+
+### 11.7 Course Data & FOSE Integration
+
+> **Data source already exists.** `packages/engine/src/api/nyuClassSearch.ts` is a working FOSE/Leepfrog client against the official endpoint (`https://bulletins.nyu.edu/class-search/api/`). It returns `{key, code, title, crn, srcdb, stat, hours, instr, credits}` per section. This section is about **wiring** that client into the agent's tool registry — not building a new scraper.
+
+#### 11.7.1 The two kinds of "course data"
+
+The engine needs two distinct data surfaces, often conflated:
+
+| Surface | What | Source | Update cadence | Used by |
+|---|---|---|---|---|
+| **Course catalog** (static) | Course ID, title, credits, suffix, level, prereqs as listed by the registrar | Bulletin scrape + FOSE aggregation | Per term | `prereqGraph`, `ruleEvaluator`, `courseLookup` — the audit engine |
+| **Section availability** (live) | For a given term: which sections are offered, their times, instructors, open/waitlist/closed status, CRNs | FOSE live API | Real-time (within minutes) | `plan_semester` (availability filtering), the `search_courses` tool |
+
+They are NOT the same. A student planning for Fall 2026 in February asks about course catalog data (what's offered in the major, what the prereqs are). A student enrolling for Fall 2026 in August asks about section availability (is PHYS-UA 91 Lecture 001 with Prof. X on TTh 9:30 still open?).
+
+#### 11.7.2 Course catalog layer
+
+```
+Storage:  data/courses/<prefix>.json           (one file per course prefix — CSCI-UA.json, MATH-UA.json, ...)
+Schema:   Course[] (see Appendix B)
+Source:   data/bulletin-raw/ (already scraped) normalized through scripts/normalize-catalog.ts
+Metadata: each file carries _meta per §11.0.1
+
+Fields per course:
+  id, title, credits (number or range), suffix (-UA/-UB/...), level (1000/2000/...),
+  prerequisites[], isOnline (inferred), offeringPattern ("fall"|"spring"|"fall,spring"|"irregular"),
+  description (short), crossListedWith[]
+```
+
+The catalog is **rebuilt per term** by the scraper, not live-queried. Live queries go to the availability layer.
+
+#### 11.7.3 Section availability layer (wiring existing FOSE client)
+
+The existing `nyuClassSearch.ts` is wrapped by two new tools:
+
+```typescript
+// packages/engine/src/tools/searchAvailability.ts
+export const searchAvailability = buildTool({
+  name: 'search_availability',
+  isReadOnly: true,
+  maxResultChars: 2500,
+  inputSchema: z.object({
+    termCode:   z.string().describe('FOSE term code, e.g. "1258" for Fall 2025'),
+    courseCode: z.string().describe('Course code, e.g. "CSCI-UA 101"'),
+  }),
+  async call({ termCode, courseCode }, ctx) {
+    const cached = await availabilityCache.get(termCode, courseCode);
+    if (cached && !cached.stale) return cached.value;
+
+    const results = await searchCourses(termCode, courseCode);  // existing client
+    const value = {
+      sections: results.filter(r => r.code === courseCode).map(toSectionView),
+      fetchedAt: new Date().toISOString(),
+    };
+    await availabilityCache.set(termCode, courseCode, value);
+    return value;
+  },
+});
+```
+
+#### 11.7.4 Caching (single-tier, simple)
+
+Three-tier caches were considered and rejected as over-built. One tier is enough for the access pattern:
+
+```
+Cache:  Redis (or SQLite in dev) keyed on (termCode, courseCode)
+TTL:    15 minutes
+Stale-while-revalidate: serve stale for up to 1 hour if upstream fails
+Invalidation:  manual purge on known-bad cached entries; no auto-warm
+Size:   bounded by LRU at 10,000 entries (plenty — there are ~4,000 unique courses/term)
+```
+
+Why 15 minutes: FOSE availability changes are not sub-minute-precise; section status flips from Open → Waitlist in observable steps. 15 minutes lets a single advising session see consistent answers without hammering the upstream API.
+
+Why not per-section hot caching or pre-warming: the access pattern is long-tail (students ask about the courses in their plan, not all courses), so LRU handles it.
+
+#### 11.7.5 Failure modes
+
+| Failure | Tool behavior | Agent behavior |
+|---|---|---|
+| FOSE returns 5xx | Return cached (stale-OK for 1h) or `{ error: 'upstream_unavailable' }` | Agent falls back to catalog-layer info + caveat: *"I can't confirm live section availability right now. The catalog lists this course is offered in fall."* |
+| FOSE returns empty results for a known course | `{ sections: [], offeredThisTerm: false }` | Agent: *"This course does not appear to be offered in [term]. The catalog shows it's typically offered in [pattern]."* |
+| Course code is invalid (typo) | `{ error: 'not_found' }` | Agent asks user to confirm the course code |
+| Term code is invalid | `validateInput` fails with message: *"I need a valid term. Recent terms are: ..."* | Agent asks user for the term |
+
+#### 11.7.6 Term-code resolution
+
+`generateTermCode(year, term)` already exists in `nyuClassSearch.ts`. The agent rarely invokes it directly; instead, `search_availability` accepts either a raw term code or a human-friendly `{year, term}` pair, and resolves internally.
+
+---
+
+### 11.8 Transcript Ingestion Grammar
+
+> **Problem.** Students upload an unofficial NYU transcript (PDF or copy-paste). It looks structured but isn't machine-readable. If we let the LLM parse it, it will hallucinate grades and credit counts — a Cardinal Rule violation. If we parse it deterministically, we get robustness against LLM drift.
+>
+> **Decision.** Transcript parsing is **deterministic grammar** over the known NYU unofficial-transcript format, plus **invariant checks** that reconcile the parsed output against the transcript's own totals block. The LLM's only role is user-facing confirmation.
+
+#### 11.8.1 The known transcript shape (from observed samples)
+
+NYU unofficial transcripts follow a consistent layout:
+
+```
+<header: name, student id, program, date printed>
+
+<for each term:>
+  Term: Fall 2023
+  <table:>
+    COURSE   TITLE                          GRADE  EHRS   QHRS   QPTS
+    CSCI-UA 101  Intro to Computer Science   A     4.00   4.00  16.00
+    MATH-UA 121  Calculus I                  B+    4.00   4.00  13.32
+    IMNY-UT 99-1 IMA Workshop                P     0.00   0.00   0.00
+    PHYS-UA 91   Physics I                   ***   4.00   0.00   0.00
+  Term Totals:  AHRS 12.00   EHRS 12.00   QHRS 8.00   QPTS 29.32   GPA 3.67
+
+<overall totals block:>
+  AHRS  124.00
+  EHRS  120.00
+  QHRS  108.00
+  QPTS  378.00
+  GPA    3.50
+
+<exam credits block:>
+  AP Calculus BC  Score 5  → MATH-UA 121 (4 cr)
+```
+
+**Key tokens:**
+- `***` = in-progress grade (no QPTS yet)
+- `P` = pass (P/F grade — counts for credit only if EHRS > 0)
+- `W`, `I`, `NR`, `WF` = special grades per §G32–G34
+- Course IDs have school suffixes: `-UA` (CAS), `-UT` (Tisch), `-UY` (Tandon), etc.
+- `AHRS` = attempted, `EHRS` = earned, `QHRS` = quality hours, `QPTS` = quality points
+- `GPA = QPTS / QHRS`
+
+**School-transition detection (G40-adjacent).** When a student changes home school mid-career (e.g., Tisch BFA → CAS BA), earlier terms have a different suffix mix. The parser emits a `schoolTransition` event that the profile loader uses to set `declaredPrograms[i].declaredUnderCatalogYear`.
+
+#### 11.8.2 Parser architecture
+
+```
+packages/engine/src/transcript/
+  pdfExtractor.ts        PDF → text (pdf-parse or pdfjs)
+  lexer.ts               Text → token stream (lines classified: header, term_header, course_row, totals, exam_credit)
+  parser.ts              Token stream → TranscriptDocument (structured, typed)
+  invariants.ts          Structural checks (see §11.8.3)
+  profileMapper.ts       TranscriptDocument + user confirmations → StudentProfile
+  confirmationUI.ts      Two-step user confirmation flow
+```
+
+No LLM call happens inside `parser.ts`. The LLM is only invoked in `confirmationUI.ts` to phrase the confirmation prompts naturally — and even then, the data shown to the user comes from the deterministic parse, not from the LLM.
+
+#### 11.8.3 Invariant checks (reconciliation)
+
+After parsing, the parser MUST reconcile three invariants. Any failure throws a `TranscriptParseError` with which invariant failed — it does NOT silently fall back to LLM parsing.
+
+```typescript
+// invariants.ts
+export function reconcileTranscript(doc: TranscriptDocument): void {
+  // INVARIANT 1: Per-term GPA equals QPTS / QHRS
+  for (const term of doc.terms) {
+    const computedGpa = term.qpts / term.qhrs;
+    if (Math.abs(computedGpa - term.printedGpa) > 0.01) {
+      throw new TranscriptParseError({
+        kind: 'term_gpa_mismatch',
+        term: term.label,
+        computed: computedGpa,
+        printed: term.printedGpa,
+      });
+    }
+  }
+
+  // INVARIANT 2: Sum of term QPTS equals overall QPTS block
+  const summedQpts = sum(doc.terms.map(t => t.qpts));
+  if (Math.abs(summedQpts - doc.overall.qpts) > 0.01) {
+    throw new TranscriptParseError({
+      kind: 'overall_qpts_mismatch',
+      summed: summedQpts,
+      printed: doc.overall.qpts,
+    });
+  }
+
+  // INVARIANT 3: Cumulative GPA matches overall block
+  const computedCumulative = doc.overall.qpts / doc.overall.qhrs;
+  if (Math.abs(computedCumulative - doc.overall.printedGpa) > 0.01) {
+    throw new TranscriptParseError({
+      kind: 'cumulative_gpa_mismatch',
+      computed: computedCumulative,
+      printed: doc.overall.printedGpa,
+    });
+  }
+}
+```
+
+**Why these specific invariants:**
+- If per-term reconciliation fails, the parser misread a course row (wrong credits, wrong grade).
+- If overall QPTS doesn't match summed-term QPTS, the parser missed a term or double-counted.
+- If cumulative GPA mismatches, the parser has the wrong denominator somewhere.
+
+All three are cheap to compute (arithmetic on already-parsed numbers) and catch the majority of parse failures before the student ever sees a wrong audit.
+
+**On failure.** The error routes to the user as: *"I couldn't parse your transcript reliably. Please paste the text directly, or email it to [support]."* — NEVER fall back to LLM-based parsing. That would reintroduce the exact risk this section eliminates.
+
+#### 11.8.4 Two-step user confirmation
+
+After parsing succeeds, the agent shows the student what was extracted and asks for confirmation BEFORE writing to `StudentProfile`:
+
+```
+Step 1 — Summary preview:
+  "I read your transcript. Here's what I found — please confirm:
+   • Home school: CAS (inferred from -UA course suffixes from Fall 2024 onward)
+   • Earlier program: Tisch IMA (detected transition in Fall 2024)
+   • Completed credits: 120.00 (earned) / 124.00 (attempted)
+   • Cumulative GPA: 3.50
+   • In-progress this term: PHYS-UA 91
+   • Exam credits applied: 32 (AP Calculus BC, AP CS A, ...)
+   Does this look right? [Yes / Correct a field / Re-upload]"
+
+Step 2 — Field-level edit:
+  If the student says "correct a field":
+    Show the parsed fields in an editable form (HTML form, not free chat).
+    Save uses update_profile tool with explicit typed mutation.
+```
+
+The two-step confirmation exists because transcript PDFs occasionally have scan artifacts (OCR on image-based PDFs) that invariant checks don't catch — e.g., a course code typo'd from `CSCI-UA 102` to `CSCI-UA l02`.
+
+#### 11.8.5 Scope for v1.0
+
+Phase 2–3 implementation order:
+1. Parser + invariant checks (deterministic, no user-facing UI yet) — 1 week
+2. Two-step confirmation flow wired into chat — 3 days
+3. Golden-test corpus (10 real transcripts, de-identified) — ongoing
+
+Not in v1.0: official PDF parsing (requires NYU authentication), handwritten corrections upload, multi-transcript merging (transfer students from other institutions).
+
+---
+
+### 11.9 Department Config (precedence-only stub)
+
+> **Status.** We acknowledge the precedence slot (§11.0.2) for `data/departments/<school>/<dept>.json`. We do NOT freeze the schema until we have scraped ≥3 department pages and observed what fields they actually disagree on with program JSONs.
+>
+> **What exists at v1.0:** the precedence rule itself, a directory reservation, and a loader stub that returns `null` for any department lookup. The audit engine works correctly with `null` department configs — it just uses the program JSON directly.
+
+```
+data/
+  departments/                              ← RESERVED (empty at v1.0)
+    cas/
+      computer_science.json                 (not created yet)
+      mathematics.json                      (not created yet)
+  _README.md                                ← "See ARCHITECTURE.md §11.9 before adding files here"
+```
+
+**When to create the schema.** Trigger: after Phase 6.5 rollout, when either (a) the `data_conflict_unresolved` log shows ≥5 distinct cases where a department-level distinction would have resolved a conflict, OR (b) a specific ticket requires encoding a department-specific rule that doesn't fit cleanly into either the school or program schema (example: "the CS department waives CORE-UA 471 for students who took CS-UH 1010 at NYUAD" — neither a school rule nor a program rule).
+
+**Anti-pattern to avoid.** Designing the full schema up front based on hypothetical fields. That's how we end up with a 40-field struct where 35 fields are never populated. Wait for the data to shape the schema.
 
 ---
 
@@ -3462,7 +4005,7 @@ Scraping pipeline (Phase 5):
 
 ### Implementation Phases
 
-> **Updated:** Consolidated into 7 phases. The engine work (de-hardcoding, types, data, generalization) is merged into a single Phase 1 because the intermediate steps are not independently testable for non-CAS behavior. Comprehensive testing happens only when the engine can actually process non-CAS schools.
+> **Updated v3.2:** Added **Phase 0 (Pre-flight)** for interface stabilization (provenance schema, FOSE wiring, catalog-year pinning) — every later phase depends on these contracts. Added **Phase 6.5 (Staged Rollout)** to operationalize the Appendix D ≥0.90 eval gate (v3.1 specified the gate but not the rollout procedure). Phase 1's engine work is consolidated as before — intermediate steps are not independently testable for non-CAS behavior.
 >
 > Each phase is:
 > - **Independently verifiable** — tests prove correctness after each phase
@@ -3471,13 +4014,15 @@ Scraping pipeline (Phase 5):
 
 | Phase | Name | Scope | Verifiable By | Est. |
 |-------|------|-------|---------------|------|
-| **1** | **Multi-School Engine** | De-hardcode CS-specific code. Add types (SchoolConfig, ProgramDeclaration, Rule extensions). Create school configs + program data files. Refactor dataLoader. Wire engine (creditCapValidator, passfailGuard, ruleEvaluator) to read SchoolConfig with CAS fallback. | 126 existing CAS/CS tests pass identically + new Stern P/F test + new Tandon residency test + new Econ BA major-agnostic test + multi-program planner test | 2-3 weeks |
-| **2** | **Cross-Program + New Tools** | crossProgramAudit.ts (multi-program coordinator, double-counting). spsEnrollmentGuard.ts. checkTransferEligibility.ts. whatIfAudit.ts. I/NR/W grade handling, SAP formula fix, per-major GPA. | Multi-program student audit handles double-counting correctly. Transfer eligibility returns correct prereqs. Edge case grade profiles pass. | 1 week |
-| **3** | **Planner Extensions** | Exploratory/transfer-prep planning modes. Multi-semester projection. Cross-program priority scoring. | Undeclared student gets Core-first plan. Transfer student sees prereqs + deadline warnings. | 3-5 days |
-| **4** | **RAG Pipeline** | Policy document chunking + embedding. Vector store (policySearch.ts with Cohere Rerank). ragScopeFilter.ts (school/year hard-filtering, explicit cross-school override). | `search_policy("can I take courses P/F?")` returns relevant CAS P/F chunks, not Stern or Tandon. | 1-2 weeks |
-| **5** | **Agent Orchestrator** | Tool definitions + registry. Agent loop (while(true) with turn limits, abort, model fallback). System prompt (25 rules). templateMatcher.ts (5-step gate, pre-loop dispatch). responseValidator.ts (invocation auditor, grounding checks). | Test conversations produce correct tool calls. FAQ queries match templates without touching LLM. | 2-3 weeks |
-| **6** | **Integration + Hardening** | Wire agent to web API + streaming. Deprecate old chat/, academicRules.ts, semanticSearch.ts (replacements now exist). Fallback logging. | End-to-end conversation from web UI produces correct, validated responses. | 1 week |
-| **7** | **Scale to All Majors** | Per-major JSON files in batches of 10. Per-school bulletin chunks in RAG. Ongoing. | Eval suite passes for each new major with >90% accuracy. | Ongoing (2-4 weeks/batch) |
+| **0** | **Pre-flight (Interface Stabilization)** | (a) Wire existing FOSE client (`packages/engine/src/api/nyuClassSearch.ts`) into a thin tool registry stub. (b) Define file-level `_meta` provenance schema (§11.0.1) — Zod type + validator. (c) Lock the catalog-year pinning rule (§11.0.3) and file-naming convention. (d) Reserve `data/departments/` directory with stub loader returning `null`. (e) Set up `evals/` directory with placeholder bakeoff harness skeleton (§6.5.1). | Zod validator rejects a hand-crafted bad `_meta`. Catalog-year loader picks correct historical snapshot for a synthetic readmitted-student fixture. FOSE stub returns live data for `CSCI-UA 101` in current term. | 3-5 days |
+| **1** | **Multi-School Engine** | De-hardcode CS-specific code. Add types (SchoolConfig, ProgramDeclaration, Rule extensions). Create school configs + program data files (T1 only — 5 majors). Refactor dataLoader to use Phase 0's `_meta` schema and precedence rule (§11.0.2). Wire engine (creditCapValidator, passfailGuard, ruleEvaluator) to read SchoolConfig with CAS fallback. | 108 existing CAS/CS tests pass identically + new Stern P/F test + new Tandon residency test + new Econ BA major-agnostic test + multi-program planner test + dataLoader resolves a forced school↔program conflict using the precedence rule | 2-3 weeks |
+| **2** | **Cross-Program + Transcript Ingestion** | crossProgramAudit.ts (multi-program coordinator, double-counting). spsEnrollmentGuard.ts. checkTransferEligibility.ts. whatIfAudit.ts. I/NR/W grade handling, SAP formula fix, per-major GPA. **Transcript parser + invariant checks (§11.8)** — deterministic grammar with three reconciliation invariants. | Multi-program student audit handles double-counting correctly. Transfer eligibility returns correct prereqs. Transcript parser passes 10 golden-test transcripts AND throws `TranscriptParseError` (no silent fallback) on a corrupted sample. Cumulative-GPA reconciliation catches a hand-crafted off-by-one. | 1.5-2 weeks |
+| **3** | **Planner Extensions + Transcript Confirmation UI** | Exploratory/transfer-prep planning modes. Multi-semester projection. Cross-program priority scoring. Two-step transcript confirmation flow (§11.8.4). | Undeclared student gets Core-first plan. Transfer student sees prereqs + deadline warnings. Transcript upload → preview → field-level edit → committed `StudentProfile` via `update_profile` tool. | 1 week |
+| **4** | **RAG Pipeline** | Policy document chunking + embedding. Vector store (policySearch.ts with Cohere Rerank). ragScopeFilter.ts (school/year hard-filtering, explicit cross-school override). RAG corpus indexes T3 program bulletin pages (§11.6) for unsupported-deterministic fallback. | `search_policy("can I take courses P/F?")` returns relevant CAS P/F chunks, not Stern or Tandon. T3-program query returns verbatim bulletin quote with citation. | 1-2 weeks |
+| **5** | **Agent Orchestrator + Model Bakeoff** | Run §6.5.1 model bakeoff before this phase starts; record winner in `MODEL_SELECTION.md`. Tool definitions + registry (now including `search_availability` from Phase 0). Agent loop (while(true) with turn limits, abort, model fallback). System prompt (25 rules). templateMatcher.ts (5-step gate, pre-loop dispatch). responseValidator.ts (grounding + **invocation auditor** + **completeness checker** — all three are launch-blocking per §9.1 Part 9). | Test conversations produce correct tool calls. FAQ queries match templates without touching LLM. Invocation auditor blocks a synthesized "you have 3.5 GPA" with no tool call. Completeness checker blocks an F-1 student response that omits visa caveat. | 2-3 weeks |
+| **6** | **Integration + Hardening** | Wire agent to web API + streaming. Deprecate old chat/, academicRules.ts, semanticSearch.ts (replacements now exist). Fallback logging. T2 program extraction pipeline (§11.6.4) operational. | End-to-end conversation from web UI produces correct, validated responses. T2 extraction produces a schema-valid JSON for one new program; spot-check passes. | 1 week |
+| **6.5** | **Staged Rollout (Eval-Gated)** | See §12.6.5 below — operationalizes the Appendix D ≥0.90 gate. Internal alpha → closed beta (CAS/Tandon volunteers) → invite-only → public, each cohort gated by composite score on a frozen eval set. | Each cohort transition requires composite score ≥ 0.90 sustained for 1 week on the cohort's eval set. Logged per cohort. | 4-6 weeks |
+| **7** | **Scale to All Majors (Three-Tier)** | Per the §11.6 three-tier model. T1 batch additions (~5/sprint). T2 LLM-extraction pipeline running with spot-check. T3 RAG-only coverage of the long tail. Promotion-trigger tickets actioned per §11.6.3. | T1 program: eval composite ≥ 0.90. T2 program: schema-valid + spot-check signed off + caveats appear in responses. T3 program: bulletin verbatim quote returned with citation, no deterministic claim made. | Ongoing |
 
 #### Phase 1 Internal Steps
 
@@ -3493,7 +4038,7 @@ CHECKPOINT: Comprehensive test suite           → ALL 5 test groups pass
 ```
 
 The CHECKPOINT at the end of Phase 1 runs:
-1. **Regression** — all 126 existing CAS/CS tests produce identical output
+1. **Regression** — all 108 existing CAS/CS tests produce identical output
 2. **Major-agnostic** — new CAS Econ BA student audits correctly (proves engine isn't CS-specific)
 3. **SchoolConfig-driven** — Stern P/F rules, Tandon residency model work correctly
 4. **Multi-program planner** — merged audit results across programs, correct priority scoring
@@ -3506,6 +4051,87 @@ The CHECKPOINT at the end of Phase 1 runs:
 2. **CAS fallback everywhere.** Phase 1's engine changes always have a `if (!schoolConfig) { /* use current hardcoded CAS defaults */ }` path. This means existing tests pass without modification.
 
 3. **Comprehensive testing, not incremental false confidence.** Phase 1's intermediate steps (types, data files) cannot be meaningfully tested for non-CAS behavior. Rather than claim "tests pass" when those tests can only verify CAS regression, we consolidate into one phase and prove correctness at the end with a comprehensive suite covering multiple schools.
+
+4. **Phase 0 is interface stabilization, not feature work.** Phase 0 produces no end-user functionality. Its outputs are: (a) the `_meta` Zod schema that every later data file must conform to, (b) the catalog-year pinning rule that `dataLoader` enforces, (c) the FOSE tool-stub contract that Phase 5's tool registry plugs into, (d) the bakeoff harness skeleton that Phase 5 runs before tool implementation. These are contracts. Skipping Phase 0 means re-litigating these contracts inside Phases 1, 2, 4, and 5 — and that's how schema drift starts.
+
+5. **Launch-blocking gates are explicit (§9.1 Part 9).** The invocation auditor and completeness checker are NOT post-launch additions. They land in Phase 5 as launch-blocking and the Phase 6.5 cohort transitions cannot proceed without them passing on the cohort's eval set. v3.1 left this implicit; v3.2 makes it a hard gate.
+
+---
+
+### 12.6.5 Phase 6.5 — Staged Rollout (operationalizes the Appendix D eval gate)
+
+> **Why this section exists.** Appendix D specifies a ≥ 0.90 composite eval score as the production-ready threshold. v3.1 specified the threshold but not the procedure for getting from "engine works" to "students using it." Without a staged rollout, the eval gate is a number with no enforcement mechanism. v3.2 makes the gate operational.
+
+#### Cohort progression
+
+```
+COHORT A — Internal alpha (~10 testers: team + designated NYU faculty contacts)
+  Eval set:    50 hand-curated cases covering CAS/CS, CAS/Econ, CAS/Math
+  Gate:        Appendix D composite ≥ 0.90, sustained 1 week
+  Logging:     Every conversation reviewed by hand
+  Failure:     Block transition; investigate; fix; re-run
+
+COHORT B — Closed beta (~50 students, recruited from CAS volunteers)
+  Eval set:    Cohort A's 50 + 30 new from cohort B's actual queries
+  Gate:        ≥ 0.90 sustained 1 week + zero "validation_blocked/grounding" events
+  Logging:     Daily review of fallback_log.jsonl
+  Failure:     Pause new sign-ups; fix; re-run cohort B
+
+COHORT C — Invite-only (~500 students, expanded across CAS + Tandon + Stern)
+  Eval set:    Cohort B's 80 + 60 new spanning new schools + multi-program cases
+  Gate:        ≥ 0.90 sustained 2 weeks
+  Logging:     Weekly review
+  Failure:     Pause invites; fix
+
+COHORT D — Public launch (NYU undergrads at large)
+  Eval set:    Cohort C's 140 + ongoing additions (target: 200 by public launch)
+  Gate:        ≥ 0.90 sustained 2 weeks
+  Logging:     Weekly cadence per Appendix D §D.5
+  Failure:     "Limited availability" mode — fallback templates only,
+               no full agent loop, until score recovers
+```
+
+#### Per-cohort responsibilities
+
+| Cohort | Eval set composition | Recovery if gate fails |
+|---|---|---|
+| A | Internal team + faculty cases | Fix in place — no users affected |
+| B | A's set + 30 real beta queries | Pause beta sign-ups; investigate logs; ship fix; re-test |
+| C | B's set + 60 cross-school queries | Pause invites; same recovery loop |
+| D | C's set + ongoing additions (≥200 cases) | "Limited availability" mode (template-only fallback); engineering page tracks fix ETA |
+
+#### Gating mechanism (code-level)
+
+A per-cohort feature flag `nyupath.cohort` ∈ `{alpha, beta, invite, public, limited}` controls behavior:
+
+```typescript
+// packages/engine/src/cohort/gate.ts
+export function userInCohort(userId: string): Cohort {
+  // Server-side cohort assignment from rollout config
+}
+
+// Agent orchestrator entry point
+const cohort = userInCohort(req.userId);
+const cohortConfig = COHORT_CONFIGS[cohort];
+if (cohortConfig.evalGateFailing) {
+  // Recovery mode — agent loop disabled, only template matcher serves
+  return runTemplateMatcherOnly(message, profile);
+}
+return runAgentLoop(message, profile, cohortConfig);
+```
+
+Cohort transitions are manual, not automatic. A weekly review meeting reads the eval dashboard, confirms the gate is met, and updates the rollout config. Automatic transitions are explicitly avoided — the gate is a forcing function for human review, not a tripwire.
+
+#### Eval set discipline
+
+- Eval cases are **frozen** when added to a cohort's set. They are not edited or removed.
+- New cases are added to the next cohort's set, not retroactively.
+- Eval cases include **expected response components** — required tool calls, required caveats, forbidden claims — not just the expected text.
+- Failures are root-caused before re-test. "Re-run and hope" is forbidden.
+
+#### Why staged rollout, even if eval looks great in alpha
+
+Hand-curated eval cases under-represent the long tail of real student queries (typos, multi-intent, follow-ups about edge programs). Each cohort produces real queries that get added to the next cohort's eval set. By cohort D, the eval set reflects production query distribution, not the team's intuition. Skipping cohorts and going straight to public means the first month of production *is* the eval set discovery — and any failures during that month are visible to real students with real GPAs.
 
 ---
 

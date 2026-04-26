@@ -24,3 +24,41 @@ export {
     generateTermCode,
     getRecentTermOptions,
 } from "./api/nyuClassSearch.js";
+
+// Phase 0: Provenance schema
+export {
+    metaSchema,
+    validateMeta,
+    isStale,
+    STALENESS_DAYS,
+    type Meta,
+} from "./provenance/schema.js";
+
+// Phase 0: Catalog-year pinning loader
+export {
+    resolveProgramFile,
+    applicableCatalogYear,
+    type ResolveResult,
+} from "./data/catalogYearLoader.js";
+
+// Phase 0: Departments stub (reserved precedence slot)
+export {
+    loadDepartmentConfig,
+    type DepartmentConfig,
+} from "./data/departmentLoader.js";
+
+// Phase 0: Tool registry + first tool
+export {
+    buildTool,
+    getTool,
+    listTools,
+    registerTool,
+    searchAvailability,
+    type SearchAvailabilityInput,
+    type SearchAvailabilityOutput,
+    type SectionView,
+    type Tool,
+    type ToolContext,
+    type ToolDef,
+    type ValidationResult,
+} from "./tools/index.js";
