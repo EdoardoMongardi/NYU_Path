@@ -125,6 +125,10 @@ export class PrereqGraph {
     /**
      * Count how many future courses are transitively blocked if this course
      * is not yet taken. Higher = more critical to take soon.
+     *
+     * Note: this is the static graph count — it ignores what the student
+     * has already completed. Use `countMarginallyBlocked` when the question
+     * is "how much would adding this specific course UNLOCK for THIS student".
      */
     countTransitivelyBlocked(courseId: string): number {
         const blocked = new Set<string>();
@@ -144,6 +148,69 @@ export class PrereqGraph {
         }
 
         return blocked.size;
+    }
+
+    /**
+     * Marginal unlock count: how many downstream courses are NOT YET unlocked
+     * for the student under `completedCourses`, but WOULD be unlocked once
+     * `courseId` is added to that set.
+     *
+     * This is the right measure for the planner's "blocked" priority signal.
+     * `countTransitivelyBlocked` over-counts when an alternative course
+     * (e.g., CSCI-UA 101 vs. 110, which are an OR-prereq for many CSCI-UA
+     * courses) has already been completed — both 101 and 110 list 18+
+     * dependents in the static graph, but once 101 is done, 110 unlocks
+     * nothing additional.
+     */
+    countMarginallyBlocked(
+        courseId: string,
+        completedCourses: Set<string>,
+    ): number {
+        if (completedCourses.has(courseId)) return 0;
+
+        // Iterative fixed-point expansion. Keep adding courses to the
+        // "would-be-completed" frontier until nothing new unlocks.
+        const wouldBeComplete = new Set(completedCourses);
+        wouldBeComplete.add(courseId);
+
+        // Newly unlocked courses (not previously unlocked but now are)
+        const newlyUnlocked = new Set<string>();
+
+        // Restrict the BFS to the transitive-dependents subgraph rooted at
+        // `courseId` — anything outside it can't be affected.
+        const reachable = new Set<string>();
+        const queue = [courseId];
+        while (queue.length > 0) {
+            const current = queue.pop()!;
+            const deps = this.reverseMap.get(current);
+            if (!deps) continue;
+            for (const dep of deps) {
+                if (!reachable.has(dep)) {
+                    reachable.add(dep);
+                    queue.push(dep);
+                }
+            }
+        }
+
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const candidate of reachable) {
+                if (newlyUnlocked.has(candidate)) continue;
+                if (completedCourses.has(candidate)) continue;
+                // Was it already unlocked WITHOUT `courseId`? If yes, doesn't count.
+                const alreadyUnlocked = this.hasPrerequisitesMet(candidate, completedCourses);
+                if (alreadyUnlocked) continue;
+                // Is it unlocked NOW (with `courseId` and prior unlocks added)?
+                if (this.hasPrerequisitesMet(candidate, wouldBeComplete)) {
+                    newlyUnlocked.add(candidate);
+                    wouldBeComplete.add(candidate);
+                    changed = true;
+                }
+            }
+        }
+
+        return newlyUnlocked.size;
     }
 
     private isGroupSatisfied(

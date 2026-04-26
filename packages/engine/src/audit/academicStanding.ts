@@ -12,7 +12,31 @@
 // source documents an alternative.
 // ============================================================
 
-import type { CourseTaken, SchoolConfig } from "@nyupath/shared";
+import type { CourseTaken, SchoolConfig, GpaTierRow } from "@nyupath/shared";
+
+/**
+ * Look up the active GPA tier for `semestersCompleted`. Returns the
+ * largest finite row whose `semestersCompleted <= count`, or the
+ * open-ended (`null`) row if any rows have `semestersCompleted > count`
+ * but an open-ended floor exists.
+ */
+function resolveTieredGpaMin(
+    table: GpaTierRow[] | undefined,
+    count: number,
+): number | undefined {
+    if (!table || table.length === 0) return undefined;
+    const finiteRows = table
+        .filter((r) => typeof r.semestersCompleted === "number")
+        .sort((a, b) => (a.semestersCompleted as number) - (b.semestersCompleted as number));
+    let active: GpaTierRow | undefined;
+    for (const r of finiteRows) {
+        if ((r.semestersCompleted as number) <= count) active = r;
+    }
+    if (active) return active.minCumGpa;
+    // Past the highest finite tier — fall through to the open-ended row if any
+    const openEnded = table.find((r) => r.semestersCompleted === null);
+    return openEnded?.minCumGpa;
+}
 
 // ---- CAS defaults (Phase 1 Step A: extracted, not yet config-driven) ----
 const CAS_DEFAULTS = {
@@ -30,6 +54,7 @@ export type StandingLevel =
     | "continued_concern"
     | "required_leave"
     | "pre_dismissal"
+    | "final_probation"
     | "dismissed";
 
 export interface StandingResult {
@@ -157,7 +182,12 @@ export function calculateStanding(
     // about (overallGpaMin, goodStandingReturnThreshold). The CAS-specific
     // completion-rate structure (50% dismissal / "after 2nd semester") is
     // not expressed in SchoolConfig today, so we keep CAS defaults for it.
-    const gpaMin = schoolConfig?.overallGpaMin ?? CAS_DEFAULTS.overallGpaMin;
+    // Gap B (Phase 3): when SchoolConfig publishes a per-semester tiered
+    // GPA table (e.g., Tandon L287-300), the active tier supersedes the
+    // flat `overallGpaMin`. Tier lookup: largest row whose semestersCompleted
+    // is ≤ the student's semestersCompleted; null = open-ended ">N" tier.
+    const flatGpaMin = schoolConfig?.overallGpaMin ?? CAS_DEFAULTS.overallGpaMin;
+    const gpaMin = resolveTieredGpaMin(schoolConfig?.gpaTierTable, semestersCompleted) ?? flatGpaMin;
     const dismissalThreshold = CAS_DEFAULTS.completionRate.dismissalThreshold;
     const dismissalAfter = CAS_DEFAULTS.completionRate.dismissalAfterSemesters;
     const goodStandingThreshold =
@@ -172,14 +202,33 @@ export function calculateStanding(
         level = "academic_concern";
         message = `Academic concern: cumulative GPA is ${cumulativeGPA.toFixed(3)} (below ${gpaMin.toFixed(1)} minimum).`;
         warnings.push(`Cumulative GPA is below the ${gpaMin.toFixed(1)} minimum required for good academic standing.`);
+    }
 
-        // Check dismissal risk — source: "after 2nd semester, may be dismissed if < 50% attempted credits completed"
-        if (semestersCompleted >= dismissalAfter && completionRate < dismissalThreshold) {
-            level = "dismissed";
-            const pct = Math.round(dismissalThreshold * 100);
-            message = `Academic dismissal risk: only ${(completionRate * 100).toFixed(0)}% of attempted credits completed after ${semestersCompleted} semesters.`;
-            warnings.push(`Completion rate ${(completionRate * 100).toFixed(0)}% is below ${pct}% after ${semestersCompleted} semesters — may result in dismissal.`);
-        }
+    // Gap A (Phase 3): the dismissal-completion-rate review per CAS bulletin
+    // L494 is INDEPENDENT of GPA. Lift out of the !inGoodStanding gate.
+    if (semestersCompleted >= dismissalAfter && completionRate < dismissalThreshold) {
+        level = "dismissed";
+        const pct = Math.round(dismissalThreshold * 100);
+        message = `Academic dismissal risk: only ${(completionRate * 100).toFixed(0)}% of attempted credits completed after ${semestersCompleted} semesters.`;
+        warnings.push(`Completion rate ${(completionRate * 100).toFixed(0)}% is below ${pct}% after ${semestersCompleted} semesters — may result in dismissal.`);
+    }
+
+    // Phase 3 follow-up: Tandon bulletin L303 final-probation footnote —
+    // "Any time a student's cumulative GPA falls below 1.5 they are placed
+    // on Final Probation regardless of how many credits they have completed."
+    // This is a stronger designation than academic_concern but distinct
+    // from dismissal. It does not override an already-emitted "dismissed".
+    const finalProbationFloor = schoolConfig?.finalProbationGpaFloor;
+    if (
+        typeof finalProbationFloor === "number"
+        && cumulativeGPA < finalProbationFloor
+        && level !== "dismissed"
+    ) {
+        level = "final_probation";
+        message = `Final Probation: cumulative GPA ${cumulativeGPA.toFixed(3)} is below the ${finalProbationFloor.toFixed(1)} floor.`;
+        warnings.push(
+            `Cumulative GPA below ${finalProbationFloor.toFixed(1)} triggers Final Probation regardless of credits completed (${schoolConfig?.name ?? "school"} policy).`,
+        );
     }
 
     // Additional warning for completion rate below the good-standing threshold

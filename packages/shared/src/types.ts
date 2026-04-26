@@ -279,6 +279,25 @@ export interface GradeThresholds {
     nonNursing?: string;
 }
 
+/**
+ * One row in a per-semester minimum-cumulative-GPA table. Used by schools
+ * that publish a tiered floor (e.g., Tandon — see Tandon bulletin L287-300).
+ *
+ * Semantic: a student is in good standing as long as
+ *   semestersCompleted >= row.semestersCompleted ⇒ cumulativeGPA >= row.minCumGpa
+ * for the LARGEST row whose `semestersCompleted` <= the student's count.
+ *
+ * `semestersCompleted: null` represents the open-ended ">N" tier (e.g.,
+ * Tandon's ">8" row). At most one row should carry `null`; it acts as the
+ * floor for any student beyond the highest finite tier.
+ */
+export interface GpaTierRow {
+    semestersCompleted: number | null;
+    minCumGpa: number;
+    minCreditsEarned?: number;
+    note?: string;
+}
+
 export interface OverloadRequirement {
     /** "default", "firstYear", "continuing", "probation", etc. */
     condition: string;
@@ -343,6 +362,24 @@ export interface SchoolConfig {
     acceptsTransferCredit: boolean;
     maxCreditsPerSemester?: number;
     overloadRequirements?: OverloadRequirement[];
+    /**
+     * Per-semester minimum-cumulative-GPA tiers. When present, supersedes
+     * `overallGpaMin` for academic-standing checks: the engine looks up
+     * the active tier for the student's `semestersCompleted` and uses that
+     * tier's `minCumGpa` instead of the flat `overallGpaMin`.
+     * Source: schools that publish a tiered floor — e.g., Tandon §
+     * "Minimum Credits and Minimum GPA Required by Semester of Full-Time
+     * Study" (engineering academic-policies bulletin L287-300).
+     */
+    gpaTierTable?: GpaTierRow[];
+    /**
+     * Cumulative-GPA floor below which the student is placed on a special
+     * Final-Probation track regardless of credit count. Source: Tandon
+     * bulletin L303 footnote: "Any time a student's cumulative GPA falls
+     * below 1.5 they are placed on Final Probation regardless of how many
+     * credits they have completed."
+     */
+    finalProbationGpaFloor?: number;
     /**
      * Completion-rate floor required to *return* to good academic standing
      * after a notice of academic concern. Distinct from federal SAP (which

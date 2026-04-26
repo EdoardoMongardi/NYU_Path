@@ -178,6 +178,13 @@ export const schoolConfigBodySchema = z.object({
     acceptsTransferCredit: z.boolean(),
     maxCreditsPerSemester: z.number().optional(),
     overloadRequirements: z.array(overloadRequirementSchema).optional(),
+    gpaTierTable: z.array(z.object({
+        semestersCompleted: z.number().nullable(),
+        minCumGpa: z.number(),
+        minCreditsEarned: z.number().optional(),
+        note: z.string().optional(),
+    }).passthrough()).optional(),
+    finalProbationGpaFloor: z.number().optional(),
     goodStandingReturnThreshold: z.number().optional(),
     maxCourseRepeats: z.number().optional(),
     sharedPrograms: z.array(z.string()).optional(),

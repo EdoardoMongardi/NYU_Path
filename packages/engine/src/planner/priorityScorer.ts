@@ -63,8 +63,13 @@ export function scoreCourses(
             const course = courseCatalog.get(courseId);
             if (!course) return null;
 
-            // 1. Blocked score — how many future courses depend on this one
-            const blockedCount = prereqGraph.countTransitivelyBlocked(courseId);
+            // 1. Blocked score — how many future courses this course
+            // MARGINALLY unlocks for THIS student. The marginal count
+            // excludes downstream courses already unlocked via courses
+            // the student has completed (e.g., CSCI-UA 110 unlocks
+            // nothing additional when CSCI-UA 101 is already taken,
+            // because both are OR-prereqs for the same dependents).
+            const blockedCount = prereqGraph.countMarginallyBlocked(courseId, completedCourses);
             const blockedScore = blockedCount * WEIGHTS.BLOCKED;
 
             // 2. Requirement score — how many unmet rules does this course satisfy

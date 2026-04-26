@@ -60,10 +60,23 @@ export function transcriptToProfileDraft(
         for (const c of term.courses) {
             // Skip in-progress courses for coursesTaken — surfaced separately
             if (c.grade === "***") continue;
-            // Use EHRS for graded letter rows; for W/I/NR (ehrs=0) fall back
-            // to qhrs or 4 — the absent transcript-level "credits attempted"
-            // is reconstructed downstream by academicStanding's I/NR/W rule.
-            const credits = c.ehrs > 0 ? c.ehrs : (c.qhrs > 0 ? c.qhrs : 4);
+            // Credit attribution per row, in priority order:
+            //   1. EHRS — earned hours (always trustworthy when > 0)
+            //   2. QHRS — quality hours (the row participated in GPA, e.g. F)
+            //   3. For W/I/NR rows where both ehrs=0 and qhrs=0, fall back to
+            //      the catalog's "attempted" assumption of 4 credits (CAS
+            //      academic-policies bulletin says these still count as
+            //      attempted; the transcript itself doesn't print AHRS at
+            //      the row level).
+            //   4. For P rows that legitimately print 0 credits (workshop
+            //      attendance, IBEX seminars, IMNY-UT 99-style 0-credit
+            //      rows): keep 0 — DO NOT invent 4. Inflating these
+            //      corrupts attemptedCredits in the confirmation summary.
+            const credits =
+                c.ehrs > 0 ? c.ehrs
+                    : c.qhrs > 0 ? c.qhrs
+                        : c.grade === "P" ? 0
+                            : 4;
             coursesTaken.push({
                 courseId: c.courseId,
                 grade: c.grade,
@@ -155,12 +168,21 @@ function inferHomeSchool(
         if (counts.size > 0) {
             const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]!;
             const school = SUFFIX_TO_SCHOOL[dominant[0]] ?? "unknown";
+            // Distinguish completed-coursework inference from in-progress
+            // enrollment inference. A term whose every row is "***" hasn't
+            // produced grades yet; the wording should reflect that the
+            // engine is reasoning from current enrollment, not history.
+            const isInProgress = term.courses.length > 0
+                && term.courses.every((c) => c.grade === "***");
+            const enrollmentQualifier = isInProgress
+                ? " (currently in-progress enrollment)"
+                : "";
             if (school === "unknown") {
                 notes.push(`Could not map suffix ${dominant[0]} to a known NYU school — will need confirmation.`);
                 needsConfirmation.push("homeSchool");
             } else {
                 notes.push(
-                    `homeSchool: ${school} (inferred from ${dominant[0]} dominance in ${term.semester}).`,
+                    `homeSchool: ${school} (inferred from ${dominant[0]} dominance in ${term.semester}${enrollmentQualifier}).`,
                 );
             }
             return school;
