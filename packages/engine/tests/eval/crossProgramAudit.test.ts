@@ -136,7 +136,13 @@ describe("crossProgramAudit — multi-program audit (CS BA + Math minor)", () =>
         expect(sharedMath).toHaveLength(2);
     });
 
-    it("senior_almost_done shares 4 math courses with the minor and exceeds the major↔minor limit of 2", () => {
+    it("senior_almost_done shares exactly 2 math courses (must_take 120 + 121) — at the major↔minor limit, no overflow", () => {
+        // Phase 3 Gap C: the Math minor's choose_n (n=2) electives rule
+        // matches MATH-UA 122 + 140 from the senior's coursework, but those
+        // courses are NOT in CS BA's rule set, so they don't appear in the
+        // cross-program shared list. Only the must_take 120 + 121 are shared.
+        // (Pre-Gap-C, choose_n over-populated `coursesSatisfying` and this
+        // test asserted a buggy 4-shared state. Now corrected.)
         const profile = loadProfile("senior_almost_done");
         const student: StudentProfile = {
             ...profile,
@@ -146,9 +152,9 @@ describe("crossProgramAudit — multi-program audit (CS BA + Math minor)", () =>
             ],
         };
         const result = crossProgramAudit(student, programs, courses, csConfig);
+        expect(result.sharedCourses.map(s => s.courseId).sort()).toEqual(["MATH-UA 120", "MATH-UA 121"]);
         const overflow = result.warnings.filter(w => w.kind === "exceeds_pair_limit");
-        // 4 shared - 2 limit = 2 overflow warnings (one per excess course)
-        expect(overflow).toHaveLength(2);
+        expect(overflow).toEqual([]);
     });
 
     it("Tightening doubleCounting.defaultMajorToMinor to 1 produces an exceeds_pair_limit warning", () => {

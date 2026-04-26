@@ -146,8 +146,17 @@ function evaluateChooseN(
         }
     }
 
-    const needed = Math.max(0, rule.n - satisfying.length);
-    const status = getStatus(needed === 0, satisfying.length > 0);
+    // Gap C (Phase 3): a `choose_n` rule with n=1 means "pick ONE of these
+    // courses" — listing every taken course from the pool inflates
+    // crossProgramAudit.sharedCourses and can produce spurious double-count
+    // overflow warnings. Cap `coursesSatisfying` at `rule.n` (preserving
+    // the original order so deterministic test fixtures remain stable).
+    const cappedSatisfying = satisfying.length > rule.n
+        ? satisfying.slice(0, rule.n)
+        : satisfying;
+
+    const needed = Math.max(0, rule.n - cappedSatisfying.length);
+    const status = getStatus(needed === 0, cappedSatisfying.length > 0);
 
     // coursesRemaining contract: list pool members the student still needs.
     // When status === "satisfied", there are by definition zero outstanding
@@ -164,7 +173,7 @@ function evaluateChooseN(
         ruleId: rule.ruleId,
         label: rule.label,
         status,
-        coursesSatisfying: satisfying,
+        coursesSatisfying: cappedSatisfying,
         remaining: needed,
         coursesRemaining,
     };
