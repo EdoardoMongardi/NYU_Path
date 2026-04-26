@@ -328,6 +328,32 @@ export function validateTransferRequirementsBody(
     };
 }
 
+// ---- PolicyTemplate body schema (Phase 4 §5.5) ----
+
+export const policyTemplateBodySchema = z.object({
+    id: z.string().min(1),
+    school: z.string().min(1),
+    source: z.string().min(1),
+    lastVerified: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    triggerQueries: z.array(z.string().min(1)).min(1),
+    body: z.string().min(1),
+    applicability: z.object({
+        excludeIfPrograms: z.array(z.string()).optional(),
+        requiresNoTransferIntent: z.boolean().optional(),
+    }).passthrough().optional(),
+}).passthrough();
+
+export function validatePolicyTemplateBody(
+    input: unknown,
+): ValidateBodyResult<z.infer<typeof policyTemplateBodySchema>> {
+    const r = policyTemplateBodySchema.safeParse(input);
+    if (r.success) return { ok: true, body: r.data };
+    return {
+        ok: false,
+        errors: r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+    };
+}
+
 export function validateNyuTransferPolicyBody(
     input: unknown,
 ): ValidateBodyResult<z.infer<typeof nyuInternalTransferPolicyBodySchema>> {
