@@ -18,6 +18,7 @@ import {
     type Meta,
     validateFileWithMeta,
 } from "../provenance/schema.js";
+import { validateSchoolConfigBody } from "../provenance/configSchema.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,6 +31,7 @@ export type SchoolConfigLoadResult =
     | { ok: true; config: SchoolConfig; meta: Meta; path: string }
     | { ok: false; reason: "not_found"; schoolId: string; path: string }
     | { ok: false; reason: "invalid_meta"; schoolId: string; path: string; errors: string[] }
+    | { ok: false; reason: "invalid_body"; schoolId: string; path: string; errors: string[] }
     | { ok: false; reason: "parse_error"; schoolId: string; path: string; error: string };
 
 /**
@@ -87,13 +89,26 @@ export function loadSchoolConfigStrict(
         };
     }
 
-    // Strip _meta from the body before returning the SchoolConfig.
-    // The body shape is enforced by the SchoolConfig TypeScript type at
-    // call sites — we don't validate it here at v1.0.
-    const { _meta: _meta, ...body } = parsed as { _meta: unknown } & Record<string, unknown>;
+    // Strip _meta + _provenance + _notes before validating the body.
+    const { _meta: _meta, _provenance: _prov, _notes: _notes, ...body } =
+        parsed as { _meta: unknown; _provenance?: unknown; _notes?: unknown } & Record<string, unknown>;
+
+    // Phase 2: Zod-validate the body. Catches field-name typos and shape
+    // drift that previously slipped through the `as unknown as` cast.
+    const bodyResult = validateSchoolConfigBody(body);
+    if (!bodyResult.ok) {
+        return {
+            ok: false,
+            reason: "invalid_body",
+            schoolId,
+            path,
+            errors: bodyResult.errors,
+        };
+    }
+
     return {
         ok: true,
-        config: body as unknown as SchoolConfig,
+        config: bodyResult.body as unknown as SchoolConfig,
         meta: metaResult.meta,
         path,
     };
@@ -122,6 +137,7 @@ export function loadSchoolConfig(
             schoolId,
             reason: result.reason,
             ...(result.reason === "invalid_meta" ? { errors: result.errors } : {}),
+            ...(result.reason === "invalid_body" ? { errors: result.errors } : {}),
             ...(result.reason === "parse_error" ? { error: result.error } : {}),
         }),
     );

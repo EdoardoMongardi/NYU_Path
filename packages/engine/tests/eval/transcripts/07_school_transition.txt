@@ -1,0 +1,26 @@
+Anonymous Student
+N55555555
+
+Term: Fall 2023
+COURSE       TITLE                      GRADE EHRS  QHRS  QPTS
+IMNY-UT 101  Intro to IMA               A     4.00  4.00  16.00
+CORE-UA 400  Cultures and Contexts      A-    4.00  4.00  14.668
+Term Totals: AHRS 8.00 EHRS 8.00 QHRS 8.00 QPTS 30.668 GPA 3.834
+
+Term: Spring 2024
+COURSE       TITLE                      GRADE EHRS  QHRS  QPTS
+IMNY-UT 102  Creative Computing         B+    4.00  4.00  13.332
+EXPOS-UA 1   Writing the Essay          A     4.00  4.00  16.00
+Term Totals: AHRS 8.00 EHRS 8.00 QHRS 8.00 QPTS 29.332 GPA 3.667
+
+Term: Fall 2024
+COURSE       TITLE                      GRADE EHRS  QHRS  QPTS
+CSCI-UA 101  Intro to Computer Science  A     4.00  4.00  16.00
+MATH-UA 121  Calculus I                 A-    4.00  4.00  14.668
+Term Totals: AHRS 8.00 EHRS 8.00 QHRS 8.00 QPTS 30.668 GPA 3.834
+
+AHRS  24.00
+EHRS  24.00
+QHRS  24.00
+QPTS  90.668
+GPA   3.778

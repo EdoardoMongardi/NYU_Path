@@ -102,8 +102,22 @@ export function calculateStanding(
         const grade = ct.grade.toUpperCase();
         const credits = ct.credits ?? 4;
 
-        // Skip non-academic grades (TR, W, etc.)
-        if (grade === "TR" || grade === "W" || grade === "I") continue;
+        // TR (transfer): not attempted at NYU and not in NYU GPA — skip entirely.
+        // Source: CAS bulletin (line 127): "Grades of courses for which transfer
+        // credit is given are omitted in computing a student's cumulative or
+        // current semester GPAs."
+        if (grade === "TR") continue;
+
+        // G32-G34: W (withdrawal), I (incomplete), NR (no record) all count
+        // as ATTEMPTED but not earned and not in GPA.
+        // Source: CAS bulletin line 394 (NR): "Courses with NR grades will not
+        // count toward earned credit and will not factor into the GPA, but will
+        // count as credits attempted." ARCHITECTURE.md §1785: "I/NR/W grades
+        // ≠ earned; include in attempted."
+        if (grade === "W" || grade === "I" || grade === "NR") {
+            totalAttemptedCredits += credits;
+            continue;
+        }
 
         totalAttemptedCredits += credits;
 
@@ -195,7 +209,9 @@ export function computeSemesterGPA(coursesTaken: CourseTaken[], semester: string
     for (const ct of coursesTaken) {
         if (ct.semester !== semester) continue;
         const grade = ct.grade.toUpperCase();
-        if (grade === "P" || grade === "TR" || grade === "W" || grade === "I") continue;
+        // P, TR, W, I, NR are excluded from GPA computation (per CAS bulletin
+        // line 344 "Only grades of A through F... are computed in the average").
+        if (grade === "P" || grade === "TR" || grade === "W" || grade === "I" || grade === "NR") continue;
         const gpa = GRADE_POINTS[grade];
         if (gpa === undefined) continue;
         const credits = ct.credits ?? 4;

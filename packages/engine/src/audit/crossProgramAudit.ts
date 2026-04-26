@@ -147,12 +147,34 @@ export function crossProgramAudit(
         return null;
     }
 
-    function pairLimit(a: ProgramType, b: ProgramType): number | null {
+    function pairLimit(a: ProgramType, b: ProgramType, programA?: string, programB?: string): number | null {
         if (!dc) return null;
         const key = pairKindOf(a, b);
         if (!key) return null;
-        const v = dc[key];
-        return typeof v === "number" ? v : null;
+        const defaultV = dc[key];
+        let limit = typeof defaultV === "number" ? defaultV : null;
+
+        // Phase 2: per-program override. doubleCounting.overrideByProgram may
+        // be a map keyed by programId pointing at per-pair overrides:
+        //   { "stern_business_core": { majorToMinor: 0 } }
+        // The MORE RESTRICTIVE limit (smaller number) wins — this matches the
+        // bulletin convention "more restrictive rule wins" (Steinhardt example).
+        if (typeof dc.overrideByProgram === "object" && dc.overrideByProgram !== null) {
+            const map = dc.overrideByProgram as Record<string, { majorToMajor?: number; majorToMinor?: number }>;
+            const overrideKey =
+                key === "defaultMajorToMajor" ? "majorToMajor"
+                    : key === "defaultMajorToMinor" ? "majorToMinor"
+                        : null;
+            if (overrideKey) {
+                const candidates: number[] = [];
+                if (programA && map[programA]?.[overrideKey] !== undefined) candidates.push(map[programA]![overrideKey]!);
+                if (programB && map[programB]?.[overrideKey] !== undefined) candidates.push(map[programB]![overrideKey]!);
+                for (const c of candidates) {
+                    if (limit === null || c < limit) limit = c;
+                }
+            }
+        }
+        return limit;
     }
 
     for (const sc of sharedCourses) {
@@ -178,7 +200,7 @@ export function crossProgramAudit(
         const [a, b] = pairKey.split("||");
         const ta = declTypeById.get(a!)!;
         const tb = declTypeById.get(b!)!;
-        const limit = pairLimit(ta, tb);
+        const limit = pairLimit(ta, tb, a, b);
         if (limit === null) continue; // no limit configured at school level
         if (bucket.courses.length > limit) {
             // Flag every course beyond the limit

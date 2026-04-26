@@ -149,11 +149,16 @@ function evaluateChooseN(
     const needed = Math.max(0, rule.n - satisfying.length);
     const status = getStatus(needed === 0, satisfying.length > 0);
 
-    // For coursesRemaining, list pool courses not yet taken (up to needed)
-    // Always include wildcards as hints.
-    const availableRemaining = rule.fromPool.filter(
-        (pattern) => pattern.includes("*") || !equivalence.isInSet(pattern, completedCourses)
-    );
+    // coursesRemaining contract: list pool members the student still needs.
+    // When status === "satisfied", there are by definition zero outstanding
+    // requirements — returning a non-empty list here would mislead a UI
+    // into telling a satisfied student they "still need" a course.
+    const coursesRemaining =
+        status === "satisfied"
+            ? []
+            : rule.fromPool.filter(
+                (pattern) => pattern.includes("*") || !equivalence.isInSet(pattern, completedCourses),
+            );
 
     return {
         ruleId: rule.ruleId,
@@ -161,7 +166,7 @@ function evaluateChooseN(
         status,
         coursesSatisfying: satisfying,
         remaining: needed,
-        coursesRemaining: availableRemaining,
+        coursesRemaining,
     };
 }
 
@@ -195,9 +200,9 @@ function evaluateMinCredits(
         status,
         coursesSatisfying: satisfying,
         remaining: creditsRemaining,
-        coursesRemaining: rule.fromPool.filter(
-            (id) => !equivalence.isInSet(id, completedCourses)
-        ),
+        coursesRemaining: status === "satisfied"
+            ? []
+            : rule.fromPool.filter((id) => !equivalence.isInSet(id, completedCourses)),
     };
 }
 
@@ -227,9 +232,9 @@ function evaluateMinLevel(
         status,
         coursesSatisfying: satisfying,
         remaining: needed,
-        coursesRemaining: rule.fromPool.filter(
-            (id) => !equivalence.isInSet(id, completedCourses)
-        ),
+        coursesRemaining: status === "satisfied"
+            ? []
+            : rule.fromPool.filter((id) => !equivalence.isInSet(id, completedCourses)),
     };
 }
 

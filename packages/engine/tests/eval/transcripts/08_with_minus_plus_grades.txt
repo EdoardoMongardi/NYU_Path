@@ -1,0 +1,16 @@
+Anonymous Student
+N66666666
+
+Term: Fall 2024
+COURSE       TITLE                      GRADE EHRS  QHRS  QPTS
+CSCI-UA 101  Intro to Computer Science  C+    4.00  4.00   9.332
+MATH-UA 121  Calculus I                 D+    4.00  4.00   5.332
+EXPOS-UA 1   Writing the Essay          B-    4.00  4.00  10.668
+CORE-UA 400  Cultures and Contexts      A-    4.00  4.00  14.668
+Term Totals: AHRS 16.00 EHRS 16.00 QHRS 16.00 QPTS 40.00 GPA 2.500
+
+AHRS  16.00
+EHRS  16.00
+QHRS  16.00
+QPTS  40.00
+GPA   2.500
