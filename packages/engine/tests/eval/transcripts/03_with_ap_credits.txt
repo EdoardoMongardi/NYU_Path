@@ -1,0 +1,17 @@
+Anonymous Student
+N11111111
+
+Term: Fall 2024
+COURSE       TITLE                      GRADE EHRS  QHRS  QPTS
+CSCI-UA 102  Data Structures            A     4.00  4.00  16.00
+EXPOS-UA 1   Writing the Essay          A-    4.00  4.00  14.668
+Term Totals: AHRS 8.00 EHRS 8.00 QHRS 8.00 QPTS 30.668 GPA 3.834
+
+AHRS   8.00
+EHRS   8.00
+QHRS   8.00
+QPTS  30.668
+GPA   3.834
+
+AP Calculus BC  Score 5  → MATH-UA 121 (4 cr)
+AP Computer Science A  Score 5  → CSCI-UA 101 (4 cr)

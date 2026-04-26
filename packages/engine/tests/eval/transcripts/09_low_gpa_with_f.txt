@@ -1,0 +1,15 @@
+Anonymous Student
+N77777777
+
+Term: Fall 2024
+COURSE       TITLE                      GRADE EHRS  QHRS  QPTS
+CSCI-UA 101  Intro to Computer Science  D     4.00  4.00   4.00
+MATH-UA 121  Calculus I                 F     0.00  4.00   0.00
+EXPOS-UA 1   Writing the Essay          C     4.00  4.00   8.00
+Term Totals: AHRS 12.00 EHRS 8.00 QHRS 12.00 QPTS 12.00 GPA 1.000
+
+AHRS  12.00
+EHRS   8.00
+QHRS  12.00
+QPTS  12.00
+GPA   1.000

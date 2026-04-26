@@ -1,0 +1,15 @@
+Anonymous Student
+N33333333
+
+Term: Fall 2024
+COURSE       TITLE                      GRADE EHRS  QHRS  QPTS
+CSCI-UA 101  Intro to Computer Science  A     4.00  4.00  16.00
+IMNY-UT 99-1 IMA Workshop               P     2.00  0.00   0.00
+EXPOS-UA 1   Writing the Essay          A-    4.00  4.00  14.668
+Term Totals: AHRS 10.00 EHRS 10.00 QHRS 8.00 QPTS 30.668 GPA 3.834
+
+AHRS  10.00
+EHRS  10.00
+QHRS   8.00
+QPTS  30.668
+GPA   3.834
