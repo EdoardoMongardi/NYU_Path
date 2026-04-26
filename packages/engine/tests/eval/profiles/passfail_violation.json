@@ -1,8 +1,12 @@
 {
     "id": "passfail_violation",
     "catalogYear": "2023",
+    "homeSchool": "cas",
     "declaredPrograms": [
-        "cs_major_ba"
+        {
+            "programId": "cs_major_ba",
+            "programType": "major"
+        }
     ],
     "coursesTaken": [
         {

@@ -176,6 +176,7 @@ export function termToSemester(term: string): string {
 export function transcriptToProfile(parsed: ParsedTranscript, options?: {
     visaStatus?: "f1" | "domestic" | "other";
     programId?: string;
+    homeSchool?: string;
 }) {
     const coursesTaken = parsed.semesters.flatMap(sem =>
         sem.courses.map(c => ({
@@ -194,12 +195,21 @@ export function transcriptToProfile(parsed: ParsedTranscript, options?: {
 
     const totalTestCredits = parsed.testCredits.reduce((sum, tc) => sum + tc.credits, 0);
 
+    // Phase 1 §11.2: emit ProgramDeclaration[] + homeSchool. Default homeSchool
+    // to "cas" while only the CS BA program is supported by the parser; once
+    // additional schools are wired up, the caller should pass an explicit value.
     return {
         id: parsed.studentId,
         catalogYear: parsed.semesters[0]
             ? parsed.semesters[0].term.match(/\d{4}/)?.[0] ?? "2024"
             : "2024",
-        declaredPrograms: [options?.programId ?? "cs_major_ba"],
+        homeSchool: options?.homeSchool ?? "cas",
+        declaredPrograms: [
+            {
+                programId: options?.programId ?? "cs_major_ba",
+                programType: "major" as const,
+            },
+        ],
         coursesTaken,
         transferCourses,
         genericTransferCredits: totalTestCredits,

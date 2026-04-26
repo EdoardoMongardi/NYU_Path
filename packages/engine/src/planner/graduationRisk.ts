@@ -1,14 +1,35 @@
 // ============================================================
 // Graduation Risk Detector
 // ============================================================
+//
+// Phase 1 Step A: Per-semester credit thresholds + course-load thresholds
+// moved into CAS_DEFAULTS.
+// Phase 1 Step D: maxCreditsPerSemester now reads from SchoolConfig when
+// supplied; "critical" / "medium" thresholds and the >5-courses count
+// remain CAS-only because no SchoolConfig field documents per-school
+// values for them. Wire when a non-CAS source surfaces.
+// ============================================================
 import type {
     Course,
     Program,
     GraduationRisk,
     RuleAuditResult,
     StudentProfile,
+    SchoolConfig,
 } from "@nyupath/shared";
 import { PrereqGraph } from "../graph/prereqGraph.js";
+
+// ---- CAS defaults (Phase 1 Step A: extracted, not yet config-driven) ----
+const CAS_DEFAULTS = {
+    creditLoadThresholds: {
+        criticalPerSemester: 20, // beyond typical 18-credit max
+        highPerSemester: 18,
+        mediumPerSemester: 16,
+    },
+    courseCountThresholds: {
+        highPerSemester: 5,
+    },
+} as const;
 
 /**
  * Detect graduation risks based on remaining requirements,
@@ -22,27 +43,34 @@ export function detectGraduationRisks(
     totalCreditsCompleted: number,
     prereqGraph: PrereqGraph,
     courseCatalog: Map<string, Course>,
-    remainingSemesters: number
+    remainingSemesters: number,
+    schoolConfig: SchoolConfig | null = null,
 ): GraduationRisk[] {
     const risks: GraduationRisk[] = [];
 
-    // 1. Credit deficit risk
+    // 1. Credit deficit risk. SchoolConfig.maxCreditsPerSemester is the
+    // school-published per-semester ceiling (CAS: 18). When present, treat
+    // it as the "high" threshold and derive the others from CAS defaults.
     const creditsRemaining = program.totalCreditsRequired - totalCreditsCompleted;
+    const cfgHigh = schoolConfig?.maxCreditsPerSemester;
+    const highPerSemester = cfgHigh ?? CAS_DEFAULTS.creditLoadThresholds.highPerSemester;
+    const criticalPerSemester = CAS_DEFAULTS.creditLoadThresholds.criticalPerSemester;
+    const mediumPerSemester = CAS_DEFAULTS.creditLoadThresholds.mediumPerSemester;
     if (creditsRemaining > 0) {
         const creditsPerSemester = creditsRemaining / remainingSemesters;
-        if (creditsPerSemester > 20) {
+        if (creditsPerSemester > criticalPerSemester) {
             risks.push({
                 level: "critical",
-                message: `Need ${creditsRemaining} more credits in ${remainingSemesters} semester(s) — requires ${Math.ceil(creditsPerSemester)} credits/semester, exceeding typical max of 18.`,
+                message: `Need ${creditsRemaining} more credits in ${remainingSemesters} semester(s) — requires ${Math.ceil(creditsPerSemester)} credits/semester, exceeding typical max of ${highPerSemester}.`,
                 courses: [],
             });
-        } else if (creditsPerSemester > 18) {
+        } else if (creditsPerSemester > highPerSemester) {
             risks.push({
                 level: "high",
                 message: `Need ${creditsRemaining} more credits in ${remainingSemesters} semester(s) — heavy load of ${Math.ceil(creditsPerSemester)} credits/semester required.`,
                 courses: [],
             });
-        } else if (creditsPerSemester > 16) {
+        } else if (creditsPerSemester > mediumPerSemester) {
             risks.push({
                 level: "medium",
                 message: `Need ${creditsRemaining} more credits in ${remainingSemesters} semester(s) — above-average load of ${Math.ceil(creditsPerSemester)} credits/semester.`,
@@ -103,7 +131,7 @@ export function detectGraduationRisks(
     // 4. Remaining requirement count risk
     const totalRemaining = unmetRules.reduce((sum, r) => sum + r.remaining, 0);
     const coursesPerSemester = totalRemaining / remainingSemesters;
-    if (coursesPerSemester > 5) {
+    if (coursesPerSemester > CAS_DEFAULTS.courseCountThresholds.highPerSemester) {
         risks.push({
             level: "high",
             message: `${totalRemaining} required courses remain across ${remainingSemesters} semester(s) — averaging ${coursesPerSemester.toFixed(1)} requirement courses/semester.`,

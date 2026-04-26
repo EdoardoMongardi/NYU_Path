@@ -302,7 +302,8 @@ describe("ESL Pathway — FL Exemption", () => {
         const student: StudentProfile = {
             id: "esl_test",
             catalogYear: "2023",
-            declaredPrograms: ["cs_major_ba"],
+            homeSchool: "cas",
+            declaredPrograms: [{ programId: "cs_major_ba", programType: "major" }],
             coursesTaken: [],
             flags: ["eslPathway"],
             visaStatus: "f1",

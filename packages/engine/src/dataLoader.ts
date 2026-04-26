@@ -57,4 +57,84 @@ export {
     type ResolveResult,
     type ResolveLogger,
 } from "./data/catalogYearLoader.js";
+export {
+    loadProgramFromDataDir,
+    type ProgramFromDataDirResult,
+} from "./data/programLoader.js";
 export { loadDepartmentConfig, type DepartmentConfig } from "./data/departmentLoader.js";
+
+// ---- Phase 1 §11.0.2: precedence-rule resolver ----
+//
+// `resolveFact` is the canonical entry-point for any code that needs to
+// answer "what is value X for this student?" when multiple data layers
+// could disagree. The precedence order (highest authority first) is:
+//
+//   1. school config         data/schools/<school>.json
+//   2. program config        data/programs/<school>/<program>.json
+//   3. department config     data/departments/<school>/<dept>.json
+//   4. course catalog        data/courses/*.json
+//
+// At v1.0 the function is a thin reducer: callers hand it the candidate
+// values from each layer (already loaded) and it returns the
+// highest-authority defined value plus a tie-record. The function does
+// NOT do the loading — that stays in the per-layer loaders.
+
+export type PrecedenceLayer = "school" | "program" | "department" | "course_catalog";
+
+export interface FactCandidate<T> {
+    layer: PrecedenceLayer;
+    /** The value from this layer; undefined means "this layer doesn't define it" */
+    value: T | undefined;
+    /** Optional source path for log/audit reporting */
+    source?: string;
+    /** Optional ISO date when this layer was last verified (used for tie-breaking) */
+    lastVerified?: string;
+}
+
+export interface ResolvedFact<T> {
+    /** The winning value (undefined if no layer defined it) */
+    value: T | undefined;
+    /** Layer that won, or undefined when nothing defined it */
+    winner?: PrecedenceLayer;
+    /** Source path of the winning layer, if provided */
+    source?: string;
+    /** Other layers that ALSO defined a value, in precedence order */
+    overridden: Array<{ layer: PrecedenceLayer; value: T; source?: string }>;
+}
+
+const LAYER_ORDER: PrecedenceLayer[] = ["school", "program", "department", "course_catalog"];
+
+/**
+ * Apply the §11.0.2 precedence rule to a set of candidate values.
+ *
+ * v1 behavior:
+ *   - The first layer (in LAYER_ORDER) with a defined value wins.
+ *   - Other defined layers are returned in `overridden` for audit logging.
+ *   - Same-layer ties (e.g., two program files claiming authority over the
+ *     same fact) are NOT handled here at v1 — callers feed at most one
+ *     candidate per layer. §11.0.2 specifies a `lastVerified`-based
+ *     tie-break that will be added when a real same-layer conflict surfaces.
+ */
+export function resolveFact<T>(candidates: FactCandidate<T>[]): ResolvedFact<T> {
+    const byLayer = new Map<PrecedenceLayer, FactCandidate<T>>();
+    for (const c of candidates) byLayer.set(c.layer, c);
+
+    let winner: PrecedenceLayer | undefined;
+    let value: T | undefined;
+    let winnerSource: string | undefined;
+    const overridden: Array<{ layer: PrecedenceLayer; value: T; source?: string }> = [];
+
+    for (const layer of LAYER_ORDER) {
+        const cand = byLayer.get(layer);
+        if (!cand || cand.value === undefined) continue;
+        if (winner === undefined) {
+            winner = layer;
+            value = cand.value;
+            winnerSource = cand.source;
+        } else {
+            overridden.push({ layer, value: cand.value, source: cand.source });
+        }
+    }
+
+    return { value, winner, source: winnerSource, overridden };
+}

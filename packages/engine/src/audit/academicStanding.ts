@@ -3,9 +3,26 @@
 // ============================================================
 // Source: SKILL.md §A3.8 — all rules from:
 //         Original rules/General CAS academic rules.md → Academic Standing
+//
+// Phase 1 Step A: GPA / completion thresholds moved into CAS_DEFAULTS.
+// Phase 1 Step D: overallGpaMin and goodStandingReturnThreshold now read from the
+// runtime SchoolConfig when supplied; the dismissal-rate structure
+// (50% / 2-semester) is intentionally still CAS-only — see L139-141
+// for rationale. Add school-specific dismissal config when a non-CAS
+// source documents an alternative.
 // ============================================================
 
-import type { CourseTaken } from "@nyupath/shared";
+import type { CourseTaken, SchoolConfig } from "@nyupath/shared";
+
+// ---- CAS defaults (Phase 1 Step A: extracted, not yet config-driven) ----
+const CAS_DEFAULTS = {
+    overallGpaMin: 2.0,
+    completionRate: {
+        goodStandingThreshold: 0.75,
+        dismissalThreshold: 0.50,
+        dismissalAfterSemesters: 2,
+    },
+} as const;
 
 export type StandingLevel =
     | "good_standing"
@@ -70,7 +87,8 @@ const GPA_GRADES = new Set(Object.keys(GRADE_POINTS));
  */
 export function calculateStanding(
     coursesTaken: CourseTaken[],
-    semestersCompleted: number = 0
+    semestersCompleted: number = 0,
+    schoolConfig: SchoolConfig | null = null,
 ): StandingResult {
     const warnings: string[] = [];
 
@@ -121,27 +139,39 @@ export function calculateStanding(
         ? totalCompletedCredits / totalAttemptedCredits
         : 1;
 
-    // Determine standing
-    const inGoodStanding = cumulativeGPA >= 2.0;
+    // Determine standing — SchoolConfig overrides for the values it knows
+    // about (overallGpaMin, goodStandingReturnThreshold). The CAS-specific
+    // completion-rate structure (50% dismissal / "after 2nd semester") is
+    // not expressed in SchoolConfig today, so we keep CAS defaults for it.
+    const gpaMin = schoolConfig?.overallGpaMin ?? CAS_DEFAULTS.overallGpaMin;
+    const dismissalThreshold = CAS_DEFAULTS.completionRate.dismissalThreshold;
+    const dismissalAfter = CAS_DEFAULTS.completionRate.dismissalAfterSemesters;
+    const goodStandingThreshold =
+        schoolConfig?.goodStandingReturnThreshold
+        ?? CAS_DEFAULTS.completionRate.goodStandingThreshold;
+
+    const inGoodStanding = cumulativeGPA >= gpaMin;
     let level: StandingLevel = "good_standing";
     let message = "In good academic standing.";
 
     if (!inGoodStanding) {
         level = "academic_concern";
-        message = `Academic concern: cumulative GPA is ${cumulativeGPA.toFixed(3)} (below 2.0 minimum).`;
-        warnings.push("Cumulative GPA is below the 2.0 minimum required for good academic standing.");
+        message = `Academic concern: cumulative GPA is ${cumulativeGPA.toFixed(3)} (below ${gpaMin.toFixed(1)} minimum).`;
+        warnings.push(`Cumulative GPA is below the ${gpaMin.toFixed(1)} minimum required for good academic standing.`);
 
         // Check dismissal risk — source: "after 2nd semester, may be dismissed if < 50% attempted credits completed"
-        if (semestersCompleted >= 2 && completionRate < 0.50) {
+        if (semestersCompleted >= dismissalAfter && completionRate < dismissalThreshold) {
             level = "dismissed";
+            const pct = Math.round(dismissalThreshold * 100);
             message = `Academic dismissal risk: only ${(completionRate * 100).toFixed(0)}% of attempted credits completed after ${semestersCompleted} semesters.`;
-            warnings.push(`Completion rate ${(completionRate * 100).toFixed(0)}% is below 50% after ${semestersCompleted} semesters — may result in dismissal.`);
+            warnings.push(`Completion rate ${(completionRate * 100).toFixed(0)}% is below ${pct}% after ${semestersCompleted} semesters — may result in dismissal.`);
         }
     }
 
-    // Additional warning for completion rate below 75%
-    if (completionRate < 0.75 && level !== "dismissed") {
-        warnings.push(`Credit completion rate is ${(completionRate * 100).toFixed(0)}% — below the 75% threshold required to return to good standing.`);
+    // Additional warning for completion rate below the good-standing threshold
+    if (completionRate < goodStandingThreshold && level !== "dismissed") {
+        const pct = Math.round(goodStandingThreshold * 100);
+        warnings.push(`Credit completion rate is ${(completionRate * 100).toFixed(0)}% — below the ${pct}% threshold required to return to good standing.`);
     }
 
     return {

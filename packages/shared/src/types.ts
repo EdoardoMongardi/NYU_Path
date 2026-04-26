@@ -102,6 +102,267 @@ export interface Program {
     rules: Rule[];
 }
 
+// ---- Program Declaration (Phase 1 §11.2) ----
+//
+// A student declares zero or more programs (majors, minors, concentrations).
+// Replaces the legacy `declaredPrograms: string[]` shape so the engine can
+// reason about program kind for cross-program audits and double-count rules.
+
+export type ProgramType = "major" | "minor" | "concentration";
+
+export interface ProgramDeclaration {
+    /** Program identifier matching a Program.programId, e.g. "cs_major_ba" */
+    programId: string;
+    /** Kind of declaration — major, minor, or concentration (Stern) */
+    programType: ProgramType;
+    /** When the student declared this program (free-form, e.g. "2024-fall") */
+    declaredAt?: string;
+    /** Catalog year the student declared this program under */
+    declaredUnderCatalogYear?: string;
+}
+
+// ---- School Config (Phase 1 §11.2) ----
+//
+// One config per NYU school. Generic engine modules read these instead of
+// hardcoding CAS/CS values. Optional fields cover the variation across
+// schools (e.g., Tandon has no creditCaps[], Gallatin uses advising_only).
+
+export type ResidencyType = "suffix_based" | "total_nyu_credits";
+
+export interface ResidencyConfig {
+    type: ResidencyType;
+    /** Course-id suffix that counts toward residency, e.g. "-UA" for CAS */
+    suffix?: string;
+    /** Minimum residency credits — null when school has no fixed limit */
+    minCredits: number | null;
+    /** Final-N-credits-in-residence rule (e.g., last 32 credits at NYU) */
+    finalCreditsInResidence?: number | null;
+    /** Percentage of major/minor that must be in residence */
+    majorMinorResidencyPercent?: number;
+    note?: string;
+}
+
+export type CreditCapType =
+    | "non_home_school"
+    | "online"
+    | "transfer"
+    | "advanced_standing"
+    | "independent_study"
+    | "internship"
+    | "specific_school";
+
+export interface CreditCap {
+    type: CreditCapType;
+    /** Credit ceiling */
+    maxCredits?: number;
+    /** Course-count ceiling (alternative to credits) */
+    maxCourses?: number;
+    /** Per-department sub-cap (e.g., independent study max 8/dept) */
+    maxPerDepartment?: number;
+    /** For "specific_school" caps — the school being capped */
+    schoolId?: string;
+    /** Sub-classification, e.g., "transfer_back" for Stern non_home_school */
+    subtype?: string;
+    /** Human-readable label */
+    label?: string;
+    /** Categories excluded from this cap */
+    excludes?: string[];
+    /** Whether internship credits also count against this cap */
+    includesInternship?: boolean;
+    /** Minimum GPA gate (e.g., Tandon internship requires 2.5) */
+    gpaMinimum?: number;
+    /** Free-form additional rule descriptors */
+    additionalRules?: string[];
+}
+
+export type CareerLimitType = "credits" | "courses" | "percent_of_program";
+export type PerTermUnit = "semester" | "academic_year";
+
+export interface PassFailConfig {
+    /** Whether the career limit is denominated in credits, courses, or % */
+    careerLimitType: CareerLimitType;
+    /** Career limit value — null when school has no explicit limit */
+    careerLimit: number | null;
+    /** For percent-of-program, whether scope is total, plan, or both */
+    careerLimitScope?: string;
+    /** Per-term limit — null when school has no explicit limit */
+    perTermLimit?: number | null;
+    /** Whether perTermLimit applies per semester or per academic year */
+    perTermUnit?: PerTermUnit;
+    /** Whether P/F courses count toward the major */
+    countsForMajor?: boolean;
+    /** Whether P/F courses count toward minors */
+    countsForMinor?: boolean;
+    /** Whether P/F courses count toward general education / Core */
+    countsForGenEd?: boolean;
+    /** Restriction on what P credit may count for, e.g. "elective_only" */
+    creditType?: string;
+    /** Whether students may elect P/F at all (Tandon: false) */
+    canElect: boolean;
+    /** Course categories auto-excluded from the P/F limit */
+    autoExcludedFromLimit?: string[];
+    /** Course categories blocked from P/F (e.g., nursing prereqs) */
+    excludedCourseTypes?: string[];
+    /** Letter-grade equivalent of "P", e.g. "D" */
+    gradePassEquivalent?: string;
+    /** Whether F under P/F is computed in GPA */
+    failCountsInGpa?: boolean;
+    /** Free-form exception strings */
+    exceptions?: string[];
+    /** Free-form warning strings displayed to students */
+    warnings?: string[];
+    note?: string;
+}
+
+export interface SpsPolicy {
+    /** Master switch — false = total ban (Stern, Tandon) */
+    allowed: boolean;
+    /** Course-id prefixes that may be taken when allowed=true */
+    allowedPrefixes?: string[];
+    /** What SPS credit may count for, e.g. "elective_only" */
+    creditType?: string;
+    /** Whether SPS credit counts toward residency */
+    countsTowardResidency?: boolean;
+    /** Whether SPS credit counts against the non-home-school cap */
+    countsAgainstNonHomeSchoolCap?: boolean;
+    /** Categories that are excluded even when SPS is generally allowed */
+    excludedCourseTypes?: string[];
+}
+
+export interface DoubleCountingConfig {
+    /** Default max courses double-counted between two majors */
+    defaultMajorToMajor: number | null;
+    /** Default max courses double-counted between major and minor */
+    defaultMajorToMinor: number | null;
+    /** Default max courses double-counted between two minors */
+    defaultMinorToMinor?: number | null;
+    /** Default max courses double-counted between two concentrations */
+    defaultConcentrationToConcentration?: number | null;
+    /** Default max courses double-counted between a major and a concentration */
+    defaultMajorToConcentration?: number | null;
+    /** Default max courses double-counted between a minor and a concentration */
+    defaultMinorToConcentration?: number | null;
+    /** Whether triple-counting is forbidden across all programs */
+    noTripleCounting: boolean;
+    /** Whether department approval is required for double-counting */
+    requiresDepartmentApproval: boolean;
+    /**
+     * Per-program overrides. May be `true` (overrides allowed program-by-program)
+     * or a map of programId → per-pair override values.
+     */
+    overrideByProgram?:
+        | boolean
+        | Record<string, { majorToMajor?: number; majorToMinor?: number }>;
+    exceptions?: string[];
+    note?: string;
+}
+
+export interface TransferCreditLimits {
+    firstYearMaxTotal?: number;
+    transferStudentMaxTotal?: number;
+    /** Spring-admit students' post-secondary cap (CAS-specific) */
+    springAdmitPostSecondaryMax?: number;
+}
+
+export interface GradeThresholds {
+    /** Minimum letter grade for Core / general-education courses */
+    core?: string;
+    /** Minimum letter grade for major courses */
+    major?: string;
+    /** Minimum letter grade for minor courses */
+    minor?: string;
+    /** Minimum letter grade for concentration courses (Stern) */
+    concentration?: string;
+    /** Nursing-prerequisite-specific minimum (Meyers) */
+    nursingPrerequisite?: string;
+    /** Non-nursing course minimum (Meyers) */
+    nonNursing?: string;
+}
+
+export interface OverloadRequirement {
+    /** "default", "firstYear", "continuing", "probation", etc. */
+    condition: string;
+    minGpa?: number | null;
+    /** Minimum semesters completed before this rule applies */
+    minSemesters?: number;
+    /** Minimum credits completed before this rule applies */
+    minCreditsCompleted?: number;
+    /** Hard credit ceiling under this condition */
+    maxCredits?: number;
+    note?: string;
+}
+
+export interface DeansListThreshold {
+    minGpa: number;
+    minCredits?: number;
+    per?: "term" | "year";
+    note?: string;
+}
+
+export interface AdvisingContact {
+    name: string;
+    email?: string;
+    url?: string;
+}
+
+export interface LifecycleConfig {
+    /** "forced_exit" for Liberal Studies; future kinds for other lifecycles */
+    type: string;
+    expectedTransitionSemesters?: number;
+    maxSemesters?: number;
+    transitionTarget?: string;
+    transitionRequires?: string[];
+    warningThreshold?: number;
+    warningMessage?: string;
+    dismissalTrigger?: string;
+    /** Whether the engine should run a dual-audit against the target school */
+    dualAuditMode?: boolean;
+}
+
+export interface SchoolConfig {
+    /** Stable identifier, e.g. "cas", "stern", "tandon" */
+    schoolId: string;
+    name: string;
+    /** Primary degree type, e.g. "BA", "BS", or null for advising-only schools */
+    degreeType: string | null;
+    /** Course-id suffixes belonging to this school, e.g. ["-UA"] */
+    courseSuffix: string[];
+    /** Degree credit total — null when not fixed (e.g., Liberal Studies) */
+    totalCreditsRequired: number | null;
+    overallGpaMin: number;
+    /** "advising_only" disables hard rule enforcement (Gallatin) */
+    auditMode?: "full" | "advising_only";
+    residency: ResidencyConfig;
+    creditCaps?: CreditCap[];
+    gradeThresholds?: GradeThresholds;
+    passFail?: PassFailConfig;
+    spsPolicy?: SpsPolicy;
+    doubleCounting?: DoubleCountingConfig;
+    transferCreditLimits?: TransferCreditLimits;
+    /** Whether this school accepts inbound transfer credit */
+    acceptsTransferCredit: boolean;
+    maxCreditsPerSemester?: number;
+    overloadRequirements?: OverloadRequirement[];
+    /**
+     * Completion-rate floor required to *return* to good academic standing
+     * after a notice of academic concern. Distinct from federal SAP (which
+     * is a financial-aid metric, typically 0.67). For CAS this is 0.75
+     * per the bulletin: "complete 75% of attempted credits."
+     */
+    goodStandingReturnThreshold?: number;
+    maxCourseRepeats?: number;
+    /** School-level shared programs (e.g., CAS Core) */
+    sharedPrograms?: string[];
+    timeLimitYears?: number | null;
+    programExclusions?: unknown[];
+    deansListThreshold?: DeansListThreshold;
+    /** Program kinds this school supports (e.g., Stern adds "concentration") */
+    supportedProgramTypes?: ProgramType[];
+    lifecycle?: LifecycleConfig;
+    advisingContact?: AdvisingContact;
+    milestones?: unknown[];
+}
+
 // ---- Student Profile ----
 
 export interface CourseTaken {
@@ -130,7 +391,17 @@ export interface TransferCredit {
 export interface StudentProfile {
     id: string; // anonymized
     catalogYear: string;
-    declaredPrograms: string[]; // program IDs
+    /**
+     * Phase 1 §11.2: REQUIRED — the student's home school identifier
+     * (e.g. "cas", "stern", "tandon"). Drives SchoolConfig lookup.
+     */
+    homeSchool: string;
+    /**
+     * Phase 1 §11.2: structured program declarations replacing the legacy
+     * `string[]` shape. Each entry carries programType so cross-program
+     * audits can distinguish majors vs minors vs concentrations.
+     */
+    declaredPrograms: ProgramDeclaration[];
     coursesTaken: CourseTaken[];
     /** AP/IB/A-Level/transfer credits that map to specific NYU courses */
     transferCourses?: TransferCredit[];

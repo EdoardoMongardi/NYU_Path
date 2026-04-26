@@ -4,9 +4,40 @@
 // Sources: SKILL.md §A3.2 (Residency), §A3.3 (Caps), §A3.5 (P/F), §A1.4 (CSCI-UA)
 // All rules from: Original rules/General CAS academic rules.md
 //                 Original rules/Major rules CS BA major
+//
+// Phase 1 Step A: Constants moved out of function bodies into CAS_DEFAULTS.
+// Phase 1 Step D: each check function takes an optional SchoolConfig and
+// reads from it when present, falling back to CAS_DEFAULTS when null.
 // ============================================================
 
-import type { StudentProfile, Course } from "@nyupath/shared";
+import type { StudentProfile, Course, SchoolConfig, CreditCap, CreditCapType } from "@nyupath/shared";
+
+// ---- CAS defaults (Phase 1 Step A: extracted, not yet config-driven) ----
+//
+// IMPORTANT: do not introduce non-CAS values here. This constant exists ONLY
+// to localize the existing CS/CAS hardcoding in one place. The runtime
+// SchoolConfig threads through each check; these values are the fallback
+// when no config is provided.
+const CAS_DEFAULTS = {
+    residency: {
+        suffix: "-UA",
+        minCredits: 64,
+    },
+    creditCaps: {
+        nonHomeSchoolMax: 16,
+        onlineMax: 24,
+        transferMax: 64,
+        advancedStandingMax: 32,
+    },
+    passFail: {
+        careerLimit: 32,
+    },
+    csMajor: {
+        csciMinCredits: 32,
+        csciDept: "CSCI-UA",
+        passingGrades: ["A", "A-", "B+", "B", "B-", "C+", "C"] as const,
+    },
+} as const;
 
 export interface CreditCapWarning {
     /** Which cap was checked */
@@ -37,43 +68,36 @@ export interface CreditCapWarning {
 export function validateCreditCaps(
     student: StudentProfile,
     courses: Course[],
-    options?: { isCSMajor?: boolean }
+    options?: { isCSMajor?: boolean; schoolConfig?: SchoolConfig | null }
 ): CreditCapWarning[] {
     const warnings: CreditCapWarning[] = [];
+    const cfg = options?.schoolConfig ?? null;
 
-    // §A3.2 — 64 UA-suffix residency minimum
-    // Source: General CAS academic rules.md → Residency Requirements
-    // "64 credits minimum must have the -UA suffix (CAS courses)"
-    const uaCheck = checkResidencyCredits(student);
+    // §A3.2 — UA-suffix residency minimum
+    const uaCheck = checkResidencyCredits(student, cfg);
     if (uaCheck) warnings.push(uaCheck);
 
-    // §A3.3 — 16 non-CAS NYU credits max
-    // Source: General CAS academic rules.md → Courses at Other Schools
-    const nonCASCheck = checkNonCASCredits(student);
+    // §A3.3 — non-CAS NYU credits max
+    const nonCASCheck = checkNonCASCredits(student, cfg);
     if (nonCASCheck) warnings.push(nonCASCheck);
 
-    // §A3.3 — 24 online credits max
-    // Source: General CAS academic rules.md → Credit for Online Courses (raised from 16 in Fall 2024)
-    const onlineCheck = checkOnlineCredits(student);
+    // §A3.3 — online credits max
+    const onlineCheck = checkOnlineCredits(student, cfg);
     if (onlineCheck) warnings.push(onlineCheck);
 
-    // §A3.3 — 64 transfer credits max
-    // Source: General CAS academic rules.md → Credit for Transfer Students
-    const transferCheck = checkTransferCredits(student);
+    // §A3.3 — transfer credits max
+    const transferCheck = checkTransferCredits(student, cfg);
     if (transferCheck) warnings.push(transferCheck);
 
-    // §A3.3 — 32 advanced standing credits max (AP + exams + prior college for first-years)
-    // Source: General CAS academic rules.md → Dual Enrollment
-    const advancedCheck = checkAdvancedStandingCredits(student);
+    // §A3.3 — advanced standing credits max
+    const advancedCheck = checkAdvancedStandingCredits(student, cfg);
     if (advancedCheck) warnings.push(advancedCheck);
 
-    // §A3.5 — 32 P/F credits max career
-    // Source: General CAS academic rules.md → Pass/Fail Option
-    const pfCheck = checkPassFailCredits(student);
+    // §A3.5 — P/F credits max career
+    const pfCheck = checkPassFailCredits(student, cfg);
     if (pfCheck) warnings.push(pfCheck);
 
-    // §A1.4 — 32 CSCI-UA credits minimum (CS major only)
-    // Source: Major rules CS BA major → "minimum of 32 credits with the CSCI-UA designation"
+    // §A1.4 — CSCI-UA credits minimum (CS major only)
     if (options?.isCSMajor) {
         const csciCheck = checkCSCICredits(student, courses);
         if (csciCheck) warnings.push(csciCheck);
@@ -82,123 +106,179 @@ export function validateCreditCaps(
     return warnings;
 }
 
+// ---- SchoolConfig-aware lookups (CAS fallback when cfg is null) ----
+
+function residencyMin(cfg: SchoolConfig | null): number {
+    return cfg?.residency.minCredits ?? CAS_DEFAULTS.residency.minCredits;
+}
+
+function findCreditCapMax(cfg: SchoolConfig | null, type: CreditCapType): number | null {
+    if (!cfg?.creditCaps) return null;
+    const cap = cfg.creditCaps.find((c: CreditCap) => c.type === type);
+    return cap?.maxCredits ?? null;
+}
+
+function nonHomeSchoolMax(cfg: SchoolConfig | null): number {
+    return findCreditCapMax(cfg, "non_home_school") ?? CAS_DEFAULTS.creditCaps.nonHomeSchoolMax;
+}
+function onlineMax(cfg: SchoolConfig | null): number {
+    return findCreditCapMax(cfg, "online") ?? CAS_DEFAULTS.creditCaps.onlineMax;
+}
+function transferMax(cfg: SchoolConfig | null): number {
+    return findCreditCapMax(cfg, "transfer") ?? CAS_DEFAULTS.creditCaps.transferMax;
+}
+function advancedStandingMax(cfg: SchoolConfig | null): number {
+    return findCreditCapMax(cfg, "advanced_standing") ?? CAS_DEFAULTS.creditCaps.advancedStandingMax;
+}
+function passfailCareerLimit(cfg: SchoolConfig | null): number {
+    const limit = cfg?.passFail?.careerLimit;
+    if (typeof limit === "number") return limit;
+    return CAS_DEFAULTS.passFail.careerLimit;
+}
+
 // ---- Individual Validators ----
 
 /**
- * §A3.2: At least 64 credits must have the -UA suffix.
- * Source: "64 credits minimum must have the -UA suffix (CAS courses)"
+ * §A3.2: At least N credits must have the residency suffix.
+ * CAS source: "64 credits minimum must have the -UA suffix (CAS courses)"
  */
-export function checkResidencyCredits(student: StudentProfile): CreditCapWarning | null {
+export function checkResidencyCredits(
+    student: StudentProfile,
+    cfg: SchoolConfig | null = null,
+): CreditCapWarning | null {
     const ua = student.uaSuffixCredits;
     if (ua === undefined) return null; // Not tracked yet
-    if (ua < 64) {
+    const limit = residencyMin(cfg);
+    if (ua < limit) {
+        const suffix = cfg?.residency?.suffix ?? CAS_DEFAULTS.residency.suffix;
+        const schoolLabel = cfg?.name ?? "home-school";
         return {
             type: "residency_ua",
             current: ua,
-            limit: 64,
+            limit,
             direction: "below_minimum",
-            message: `Residency requirement: ${ua}/64 UA-suffix credits completed. Need ${64 - ua} more CAS courses.`,
+            message: `Residency requirement: ${ua}/${limit} ${suffix} credits completed. Need ${limit - ua} more ${schoolLabel} courses.`,
         };
     }
     return null;
 }
 
 /**
- * §A3.3: Maximum 16 credits from non-CAS NYU schools.
- * Source: "Courses at Other Schools and Divisions of New York University"
+ * §A3.3: Maximum N credits from non-CAS NYU schools.
+ * CAS source: "Courses at Other Schools and Divisions of New York University"
  */
-export function checkNonCASCredits(student: StudentProfile): CreditCapWarning | null {
+export function checkNonCASCredits(
+    student: StudentProfile,
+    cfg: SchoolConfig | null = null,
+): CreditCapWarning | null {
     const nonCAS = student.nonCASNYUCredits;
     if (nonCAS === undefined) return null;
-    if (nonCAS > 16) {
+    const limit = nonHomeSchoolMax(cfg);
+    if (nonCAS > limit) {
         return {
             type: "non_cas_max",
             current: nonCAS,
-            limit: 16,
+            limit,
             direction: "above_maximum",
-            message: `Non-CAS NYU credit limit exceeded: ${nonCAS}/16 credits. Only 16 credits from other NYU schools count toward degree.`,
+            message: `Non-CAS NYU credit limit exceeded: ${nonCAS}/${limit} credits. Only ${limit} credits from other NYU schools count toward degree.`,
         };
     }
     return null;
 }
 
 /**
- * §A3.3: Maximum 24 online credits toward degree.
- * Source: "Credit for Online Courses" — raised from 16 in Fall 2024
+ * §A3.3: Maximum N online credits toward degree.
+ * CAS source: "Credit for Online Courses" — raised from 16 in Fall 2024
  */
-export function checkOnlineCredits(student: StudentProfile): CreditCapWarning | null {
+export function checkOnlineCredits(
+    student: StudentProfile,
+    cfg: SchoolConfig | null = null,
+): CreditCapWarning | null {
     const online = student.onlineCredits;
     if (online === undefined) return null;
-    if (online > 24) {
+    const limit = onlineMax(cfg);
+    if (online > limit) {
         return {
             type: "online_max",
             current: online,
-            limit: 24,
+            limit,
             direction: "above_maximum",
-            message: `Online credit limit exceeded: ${online}/24 credits. Maximum 24 online credits count toward degree.`,
+            message: `Online credit limit exceeded: ${online}/${limit} credits. Maximum ${limit} online credits count toward degree.`,
         };
     }
     return null;
 }
 
 /**
- * §A3.3: Maximum 64 transfer credits.
- * Source: "Credit for Transfer Students" — max 64 credits transferred
+ * §A3.3: Maximum N transfer credits.
+ * CAS source: "Credit for Transfer Students" — max 64 credits transferred
  */
-export function checkTransferCredits(student: StudentProfile): CreditCapWarning | null {
+export function checkTransferCredits(
+    student: StudentProfile,
+    cfg: SchoolConfig | null = null,
+): CreditCapWarning | null {
     const totalTransfer = computeTransferCredits(student);
-    if (totalTransfer > 64) {
+    const limit = transferMax(cfg);
+    if (totalTransfer > limit) {
         return {
             type: "transfer_max",
             current: totalTransfer,
-            limit: 64,
+            limit,
             direction: "above_maximum",
-            message: `Transfer credit limit exceeded: ${totalTransfer}/64 credits. Maximum 64 transfer credits allowed.`,
+            message: `Transfer credit limit exceeded: ${totalTransfer}/${limit} credits. Maximum ${limit} transfer credits allowed.`,
         };
     }
     return null;
 }
 
 /**
- * §A3.3 / §A5.5: Maximum 32 advanced standing credits (AP/IB/A-Level + prior college for first-years).
- * Source: "no more than 32 advanced standing credits; this limit includes both credits from
- *          Advanced Placement and similar examinations and previous college credits"
+ * §A3.3 / §A5.5: Maximum N advanced standing credits (AP/IB/A-Level + prior college for first-years).
+ * CAS source: "no more than 32 advanced standing credits; this limit includes both credits from
+ *              Advanced Placement and similar examinations and previous college credits"
  */
-export function checkAdvancedStandingCredits(student: StudentProfile): CreditCapWarning | null {
+export function checkAdvancedStandingCredits(
+    student: StudentProfile,
+    cfg: SchoolConfig | null = null,
+): CreditCapWarning | null {
     const totalTransfer = computeTransferCredits(student);
-    if (totalTransfer > 32) {
+    const limit = advancedStandingMax(cfg);
+    if (totalTransfer > limit) {
         return {
             type: "advanced_standing_max",
             current: totalTransfer,
-            limit: 32,
+            limit,
             direction: "above_maximum",
-            message: `Advanced standing limit exceeded: ${totalTransfer}/32 credits from AP/IB/A-Level/prior college. Maximum 32 for first-year matriculants.`,
+            message: `Advanced standing limit exceeded: ${totalTransfer}/${limit} credits from AP/IB/A-Level/prior college. Maximum ${limit} for first-year matriculants.`,
         };
     }
     return null;
 }
 
 /**
- * §A3.5: Maximum 32 P/F credits total career.
- * Source: "no more than 32 credits are graded on a pass/fail basis"
+ * §A3.5: Maximum N P/F credits total career.
+ * CAS source: "no more than 32 credits are graded on a pass/fail basis"
  */
-export function checkPassFailCredits(student: StudentProfile): CreditCapWarning | null {
+export function checkPassFailCredits(
+    student: StudentProfile,
+    cfg: SchoolConfig | null = null,
+): CreditCapWarning | null {
     const pf = student.passfailCredits;
     if (pf === undefined) return null;
-    if (pf > 32) {
+    const limit = passfailCareerLimit(cfg);
+    if (pf > limit) {
         return {
             type: "passfail_max",
             current: pf,
-            limit: 32,
+            limit,
             direction: "above_maximum",
-            message: `Pass/Fail credit limit exceeded: ${pf}/32 credits. Maximum 32 P/F credits allowed across entire career.`,
+            message: `Pass/Fail credit limit exceeded: ${pf}/${limit} credits. Maximum ${limit} P/F credits allowed across entire career.`,
         };
     }
     return null;
 }
 
 /**
- * §A1.4: CS BA major requires minimum 32 CSCI-UA credits.
+ * §A1.4: CS BA major requires minimum N CSCI-UA credits.
  * Source: "minimum of 32 credits with the CSCI-UA designation"
  *
  * Counts CSCI-UA credits from courses with grade C or higher (per CS major policy).
@@ -207,28 +287,30 @@ export function checkCSCICredits(
     student: StudentProfile,
     courses: Course[]
 ): CreditCapWarning | null {
-    const MAJOR_GRADES = new Set(["A", "A-", "B+", "B", "B-", "C+", "C"]);
+    const passingGrades: ReadonlySet<string> = new Set(CAS_DEFAULTS.csMajor.passingGrades);
+    const csciDept = CAS_DEFAULTS.csMajor.csciDept;
+    const limit = CAS_DEFAULTS.csMajor.csciMinCredits;
     const courseCatalog = new Map(courses.map((c) => [c.id, c]));
 
     let csciCredits = 0;
     for (const ct of student.coursesTaken) {
-        if (!MAJOR_GRADES.has(ct.grade.toUpperCase())) continue;
+        if (!passingGrades.has(ct.grade.toUpperCase())) continue;
         const course = courseCatalog.get(ct.courseId);
         const isCSCI = course
-            ? course.departments.includes("CSCI-UA")
-            : ct.courseId.startsWith("CSCI-UA");
+            ? course.departments.includes(csciDept)
+            : ct.courseId.startsWith(csciDept);
         if (isCSCI) {
             csciCredits += course?.credits ?? ct.credits ?? 4;
         }
     }
 
-    if (csciCredits < 32) {
+    if (csciCredits < limit) {
         return {
             type: "csci_minimum",
             current: csciCredits,
-            limit: 32,
+            limit,
             direction: "below_minimum",
-            message: `CS major residency: ${csciCredits}/32 CSCI-UA credits completed. Need ${32 - csciCredits} more CSCI-UA credits.`,
+            message: `CS major residency: ${csciCredits}/${limit} CSCI-UA credits completed. Need ${limit - csciCredits} more CSCI-UA credits.`,
         };
     }
     return null;

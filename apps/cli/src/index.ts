@@ -22,7 +22,8 @@ function main() {
 
         const student = loadStudent(studentPath);
         const courses = loadCourses();
-        const targetProgramId = programId ?? student.declaredPrograms[0];
+        // Phase 1 §11.2: declaredPrograms is now ProgramDeclaration[] — read .programId
+        const targetProgramId = programId ?? student.declaredPrograms[0]?.programId;
 
         if (!targetProgramId) {
             console.error("Error: No program specified and student has no declared programs.");
@@ -55,7 +56,8 @@ function main() {
         const student = loadStudent(studentPath);
         const courses = loadCourses();
         const prereqs = loadPrereqs();
-        const targetProgramId = programId ?? student.declaredPrograms[0];
+        // Phase 1 §11.2: declaredPrograms is now ProgramDeclaration[] — read .programId
+        const targetProgramId = programId ?? student.declaredPrograms[0]?.programId;
 
         if (!targetProgramId) {
             console.error("Error: No program specified and student has no declared programs.");

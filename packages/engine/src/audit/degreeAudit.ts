@@ -1,26 +1,65 @@
 // ============================================================
 // Degree Audit — Main audit function
 // ============================================================
+//
+// Phase 1 Step A: CAS/CS-specific constants moved into CAS_DEFAULTS.
+// Phase 1 Step D: degreeAudit takes an optional SchoolConfig and resolves
+// MAJOR_GRADES / CORE_GRADES via gradesAtOrAbove() against
+// schoolConfig.gradeThresholds when present, falling back to CAS sets.
+// ============================================================
 import type {
     StudentProfile,
     Program,
     AuditResult,
     RuleStatus,
     Course,
+    SchoolConfig,
 } from "@nyupath/shared";
+import { gradesAtOrAbove } from "@nyupath/shared";
 import { evaluateRule } from "./ruleEvaluator.js";
 import { EquivalenceResolver } from "../equivalence/equivalenceResolver.js";
 import { validateCreditCaps } from "./creditCapValidator.js";
 
-// Grades that satisfy CS major requirements and prerequisites (C or better per NYU CS policy).
-const MAJOR_GRADES = new Set(["A", "A-", "B+", "B", "B-", "C+", "C"]);
+// ---- CAS defaults (Phase 1 Step A: extracted, not yet config-driven) ----
+//
+// Grade-threshold sets and CS-specific identifiers used by the CAS audit.
+// resolveGradeThresholds() below pulls major/core grade sets from
+// SchoolConfig.gradeThresholds when supplied; these are the CAS fallback.
+const CAS_DEFAULTS = {
+    // Grades that satisfy CS major requirements and prerequisites (C or better per NYU CS policy).
+    majorGrades: ["A", "A-", "B+", "B", "B-", "C+", "C"] as const,
+    // Grades that satisfy CAS Core requirements (D or better per General CAS academic rules §Core).
+    // P/F grades do NOT count for Core, except FL below Intermediate II (handled separately).
+    coreGrades: ["A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D"] as const,
+    // Grades that earn graduation credits (anything except F and W — C- earns credits but not major credit).
+    creditGrades: ["A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "P"] as const,
+    // CS major program identifiers
+    coreProgramId: "cas_core",
+    csciDept: "CSCI-UA",
+} as const;
 
-// Grades that satisfy CAS Core requirements (D or better per General CAS academic rules §Core).
-// P/F grades do NOT count for Core, except FL below Intermediate II (handled separately).
-const CORE_GRADES = new Set(["A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D"]);
+const MAJOR_GRADES_DEFAULT: ReadonlySet<string> = new Set(CAS_DEFAULTS.majorGrades);
+const CORE_GRADES_DEFAULT: ReadonlySet<string> = new Set(CAS_DEFAULTS.coreGrades);
+const CREDIT_GRADES: ReadonlySet<string> = new Set(CAS_DEFAULTS.creditGrades);
 
-// Grades that earn graduation credits (anything except F and W — C- earns credits but not major credit).
-const CREDIT_GRADES = new Set(["A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "P"]);
+/**
+ * Resolve the grade thresholds for a given audit run.
+ * Reads SchoolConfig.gradeThresholds when present (Phase 1 Step D); falls
+ * back to CAS defaults otherwise. The CREDIT_GRADES set (graduation credit
+ * floor) is intentionally NOT config-driven at v1.0 — every NYU school
+ * we've modeled grants graduation credit at the same letter floor (D).
+ */
+function resolveGradeThresholds(cfg: SchoolConfig | null): {
+    majorGrades: ReadonlySet<string>;
+    coreGrades: ReadonlySet<string>;
+} {
+    const majorThreshold = cfg?.gradeThresholds?.major;
+    const coreThreshold = cfg?.gradeThresholds?.core;
+    return {
+        majorGrades: majorThreshold ? gradesAtOrAbove(majorThreshold) : MAJOR_GRADES_DEFAULT,
+        coreGrades: coreThreshold ? gradesAtOrAbove(coreThreshold) : CORE_GRADES_DEFAULT,
+    };
+}
 
 /**
  * Run a full degree audit for a student against a specific program.
@@ -31,16 +70,19 @@ const CREDIT_GRADES = new Set(["A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+"
 export function degreeAudit(
     student: StudentProfile,
     program: Program,
-    courses: Course[]
+    courses: Course[],
+    schoolConfig: SchoolConfig | null = null,
 ): AuditResult {
     const equivalence = new EquivalenceResolver(courses);
     const courseCatalog = new Map(courses.map((c) => [c.id, c]));
+    const { majorGrades: MAJOR_GRADES, coreGrades: CORE_GRADES } =
+        resolveGradeThresholds(schoolConfig);
 
-    // Courses that satisfy CS major requirements AND prerequisites (C or better)
+    // Courses that satisfy major requirements AND prerequisites
     const passedCourses = student.coursesTaken
         .filter((ct) => MAJOR_GRADES.has(ct.grade.toUpperCase()));
 
-    // Courses that satisfy Core requirements (D or better, no P/F)
+    // Courses that satisfy Core requirements (no P/F)
     const coreCourses = student.coursesTaken
         .filter((ct) => CORE_GRADES.has(ct.grade.toUpperCase()));
 
@@ -80,7 +122,7 @@ export function degreeAudit(
     // Pick the right completion set based on program type:
     // - Major programs (cs_major_ba, etc.) use C-or-better (normalizedMajor)
     // - Core program (cas_core) uses D-or-better (normalizedCore)
-    const isCoreProgram = program.programId === "cas_core";
+    const isCoreProgram = program.programId === CAS_DEFAULTS.coreProgramId;
     const normalized = isCoreProgram ? normalizedCore : normalizedMajor;
 
     // Normalize creditCourses too so cross-listed courses aren't double-counted in graduation credits
@@ -111,7 +153,7 @@ export function degreeAudit(
         if (!ct) continue;
         const canonicalId = equivalence.getCanonical(courseId);
         const course = courseCatalog.get(canonicalId);
-        const isCSCI = course ? course.departments.includes("CSCI-UA") : courseId.startsWith("CSCI-UA");
+        const isCSCI = course ? course.departments.includes(CAS_DEFAULTS.csciDept) : courseId.startsWith(CAS_DEFAULTS.csciDept);
         if (isCSCI) {
             const credits = course?.credits ?? ct.credits ?? 4;
             csciCreditsCompleted += credits;
@@ -133,8 +175,11 @@ export function degreeAudit(
     const doubleCountedOnce = new Set<string>();
 
     // Evaluate each rule
+    // Phase 1 §11.2: declaredPrograms is now ProgramDeclaration[]; pass programIds
+    // to evaluateRule so its existing string-based exemption logic stays unchanged.
+    const declaredProgramIds = student.declaredPrograms.map((d) => d.programId);
     const ruleResults = program.rules.map((rule) => {
-        const result = evaluateRule(rule, normalized, courseCatalog, equivalence, student.declaredPrograms, student.flags ?? []);
+        const result = evaluateRule(rule, normalized, courseCatalog, equivalence, declaredProgramIds, student.flags ?? []);
 
         // Apply double-count policy
         if (rule.doubleCountPolicy === "disallow") {
@@ -234,11 +279,21 @@ export function degreeAudit(
     };
 
     // Run credit cap validators (residency, online, P/F, CSCI, etc.)
-    const isCSProgram = program.rules.some(r => {
-        const pool = "courses" in r ? (r as any).courses : "fromPool" in r ? (r as any).fromPool : [];
-        return pool.some((c: string) => c.startsWith("CSCI-UA"));
+    const isCSProgram = program.rules.some((r) => {
+        const pool: string[] =
+            r.type === "must_take"
+                ? r.courses
+                : r.type === "choose_n"
+                    ? [...r.fromPool, ...(r.mathSubstitutionPool ?? [])]
+                    : r.type === "min_credits" || r.type === "min_level"
+                        ? r.fromPool
+                        : [];
+        return pool.some((c) => c.startsWith(CAS_DEFAULTS.csciDept));
     });
-    const capWarnings = validateCreditCaps(student, courses, { isCSMajor: isCSProgram });
+    const capWarnings = validateCreditCaps(student, courses, {
+        isCSMajor: isCSProgram,
+        schoolConfig,
+    });
     for (const cw of capWarnings) {
         result.warnings.push(cw.message);
         // If a minimum isn't met, downgrade overall status
