@@ -1,0 +1,24 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_withdrawal",
+    "school": "cas",
+    "source": "CAS Academic Policies §Withdrawing from and Dropping Courses (line 514)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "drop course",
+        "drop a class",
+        "withdraw course",
+        "withdraw from class",
+        "withdrawal deadline",
+        "w grade",
+        "after the 14th week"
+    ],
+    "body": "**CAS withdrawal windows depend on when you drop:**\n\n- **First two weeks of the term:** the course is dropped and does NOT appear on your transcript. The CAS bulletin says: *\"Courses dropped during the first two weeks of the term will not appear on the transcript.\"*\n- **Beginning of the third week through the 14th week:** the course is recorded with a grade of **W**. *\"Those dropped from the beginning of the third week through the 14th week of the term will be recorded with a grade of W. (This grade is not calculated in the GPA and indicates a student withdrew in good academic standing.)\"*\n- **After the 14th week:** *\"After the 14th week, no student may withdraw from a course unless there are extenuating circumstances\"* and a petition is approved by the College's Committee on Academic Standards (25 West 4th Street, 6th floor; 212-998-8140).\n\nIf you're ill or have a serious personal issue, contact the College Advising Center first (25 West 4th Street, 5th floor; 212-998-8130) to discuss a late-withdrawal petition.\n\nF-1 students: dropping below 12 credits/semester may jeopardize visa status. Always check with the Office of Global Services BEFORE you submit a withdrawal."
+}

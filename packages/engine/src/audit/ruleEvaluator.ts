@@ -86,6 +86,20 @@ function matchesPool(courseId: string, pool: string[], equivalence: EquivalenceR
     });
 }
 
+/** Phase 7-A P-2: like matchesPool but also honors an `excludeFromPool`
+ *  list. A course passes only when it matches the include pool AND
+ *  does NOT match any exclude pattern. */
+function matchesPoolWithExclusion(
+    courseId: string,
+    include: string[],
+    exclude: string[] | undefined,
+    equivalence: EquivalenceResolver,
+): boolean {
+    if (!matchesPool(courseId, include, equivalence)) return false;
+    if (!exclude || exclude.length === 0) return true;
+    return !matchesPool(courseId, exclude, equivalence);
+}
+
 function evaluateMustTake(
     rule: MustTakeRule,
     completedCourses: Set<string>,
@@ -124,7 +138,7 @@ function evaluateChooseN(
     const mathSubstitutionsUsed: string[] = [];
 
     for (const courseId of completedCourses) {
-        if (matchesPool(courseId, rule.fromPool, equivalence)) {
+        if (matchesPoolWithExclusion(courseId, rule.fromPool, rule.excludeFromPool, equivalence)) {
             // If minLevel specified, check course level
             if (rule.minLevel) {
                 const course = courseCatalog.get(courseId);
@@ -189,7 +203,7 @@ function evaluateMinCredits(
     let creditsEarned = 0;
 
     for (const courseId of completedCourses) {
-        if (matchesPool(courseId, rule.fromPool, equivalence)) {
+        if (matchesPoolWithExclusion(courseId, rule.fromPool, rule.excludeFromPool, equivalence)) {
             satisfying.push(courseId);
             const course = courseCatalog.get(courseId);
             if (course) {
@@ -224,7 +238,7 @@ function evaluateMinLevel(
     const satisfying: string[] = [];
 
     for (const courseId of completedCourses) {
-        if (matchesPool(courseId, rule.fromPool, equivalence)) {
+        if (matchesPoolWithExclusion(courseId, rule.fromPool, rule.excludeFromPool, equivalence)) {
             const level = extractCourseLevel(courseId);
             if (level >= rule.minLevel) {
                 satisfying.push(courseId);

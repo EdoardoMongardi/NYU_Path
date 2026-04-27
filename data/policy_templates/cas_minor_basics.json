@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_minor_basics",
+    "school": "cas",
+    "source": "CAS Academic Policies §The Minor (line 128-132)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "cas minor requirements",
+        "minor gpa minimum",
+        "minor outside cas",
+        "non-cas minor",
+        "declare minor cas"
+    ],
+    "body": "**CAS minor basics: minimum GPA 2.0; declare at the sponsoring department; at most one minor outside CAS.**\n\nFrom the CAS bulletin (§The Minor):\n\n*\"The minor requirements are found in the departmental sections of the Bulletin. The (optional) minor must be completed with a minimum grade point average of 2.0.\"*\n\n*\"The minor is declared at the office of the sponsoring department or program. No more than one minor can be completed outside of the College in the other divisions of NYU, as the limit on non-CAS credits is set at 16 credits.\"*\n\nKey takeaways:\n- Maintain a 2.0+ GPA in your minor courses.\n- Only **one** of your minors may live outside CAS (in another NYU school).\n- The non-CAS credit cap is 16 credits — verify with your CAS adviser if a non-CAS minor pushes you near that limit.\n- Department-specific minor requirements live in each department's bulletin section."
+}

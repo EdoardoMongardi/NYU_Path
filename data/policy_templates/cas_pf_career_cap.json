@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_pf_career_cap",
+    "school": "cas",
+    "source": "CAS Academic Policies §Pass/Fail Option (line 408-410)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "p/f career cap",
+        "pass fail career limit",
+        "how many p/f total career",
+        "32 credits p/f cap",
+        "p/f election deadline"
+    ],
+    "body": "**CAS Pass/Fail rules (verbatim from the bulletin, line 408-410):**\n\n- **One P/F election per term, 32 credits total.** The CAS bulletin says: *\"Students may elect one Pass/Fail option each term, including the summer sessions, for a total of not more than 32 credits during their college career. The Pass/Fail option is not acceptable for courses completed at other institutions.\"*\n- **Deadline:** *\"The choice must be made before the completion of the 14th week of the term (fifth week of a six-week summer session); after that time, the decision cannot be initiated or changed.\"*\n- **Grade rule:** *\"P includes the grades of A, B, C, and D and is not counted in the average. F is counted in the average.\"*\n- **NOT acceptable** for courses in the major, the minor, or the College Core Curriculum.\n\nIf you're considering P/F for a course in your area of study or required preprofessional courses, consult your adviser about the effect on admission to graduate and professional schools. If you change majors, courses taken under P/F may not be usable to satisfy the new major's requirements."
+}

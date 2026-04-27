@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.stern.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:60c1dab15f72d3c3ae9b9e0edff21d8bb20fbe6b7e8f97ce90b9f2b5aa3de80e",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "stern_double_count_strict",
+    "school": "stern",
+    "source": "Stern Academic Policies §Double-Counting of Stern Coursework (line 201-204)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "stern double count",
+        "stern shared course",
+        "stern concentration overlap",
+        "stern requirement double",
+        "stern course count twice"
+    ],
+    "body": "**Stern's double-counting rule is STRICT — Stern coursework generally cannot satisfy more than one requirement.**\n\nFrom the Stern bulletin (§Double-Counting of Stern Coursework):\n\n*\"Stern students are generally not permitted to count Stern coursework toward more than one requirement.\"*\n\n*\"In some situations, certain Stern courses taken as substitutes for specific curricular requirements may be used to satisfy both the requirement in question and an upper-level elective toward the completion of a given concentration. Students are encouraged to meet with an academic adviser to determine if this may apply to their situation and, more generally, if they have any questions about how this policy might impact their planned academic progress.\"*\n\nWhat this means:\n- The default is **no double-counting** for Stern courses.\n- The narrow exception is courses taken as **substitutes** that fill BOTH the substituted requirement AND an upper-level concentration elective. This is adviser-approved on a case-by-case basis.\n- A second major in CAS is allowed (declare via the CAS major declaration form), but follow CAS's separate double-count rule (max 2 shared courses, with department approvals) for those.\n- Always meet with a Stern adviser before assuming a course can satisfy two requirements."
+}

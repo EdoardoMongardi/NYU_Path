@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.nyu.edu/undergraduate/business/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:2a39c05c3e3714e63e8c08375826be17156eba596898d9d66de34443e51d6fd8",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "stern_pf_major",
+    "school": "stern",
+    "source": "Stern Academic Policies §Pass/Fail Option (lines 398, 401)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "p/f major",
+        "pass fail major",
+        "pass/fail my major",
+        "pass-fail in my major",
+        "p/f for major"
+    ],
+    "body": "**Yes, Stern allows Pass/Fail for major and concentration courses — but with strict limits.**\n\nFrom the Stern bulletin (line 401): *\"A course designated as pass/fail may be used to fulfill degree requirements (including BS in Business concentrations, BPE and BTE requirements).\"*\n\nThe limits (line 398-399):\n- Maximum **4 courses** P/F over your entire Stern career.\n- No more than **1 course** P/F per academic year (fall through summer).\n- IBEX and CLP P/F courses do NOT count against the 4-course limit.\n- Stern graduate courses and BFA Film & TV required coursework cannot be P/F'd.\n\nWarnings:\n- A P/F grade may impact your eligibility for Dean's List, Valedictorian, graduation honors, and Beta Gamma Sigma.\n- A P/F grade may impact your ability to enroll in upper-level CAS math/CS courses."
+}

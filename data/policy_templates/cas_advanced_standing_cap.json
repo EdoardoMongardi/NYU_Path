@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_advanced_standing_cap",
+    "school": "cas",
+    "source": "CAS Academic Policies §College Credits Taken in Secondary School (line 320-326)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "advanced standing cap cas",
+        "ap credit limit cas",
+        "dual enrollment cap",
+        "32 advanced standing",
+        "ib credit limit"
+    ],
+    "body": "**CAS first-year matriculants get at most 32 advanced standing credits combined.**\n\nFrom the CAS bulletin (§College Credits Taken in Secondary School):\n\n*\"Note also that students who enter CAS as first years may be awarded no more than 32 advanced standing credits; this limit includes both credits from Advanced Placement and similar examinations and previous college credits.\"*\n\nWhat counts toward the 32-credit cap:\n- Advanced Placement (AP) examinations\n- International Baccalaureate (IB) and A-Level / similar accepted exams\n- College credits earned via dual enrollment (community college or 4-year university)\n\nCarve-outs:\n- *\"Note that students who matriculate as first years will not receive any transfer credit for post-secondary expository writing courses, whether or not they were taken as dual enrollment. The exact same policy applies to any mathematics courses below the level of precalculus.\"*\n- AP/exam credits in social sciences and humanities **cannot** apply toward Foundations of Contemporary Culture (Core Curriculum) requirements.\n\nIf you're at or near 32 credits and considering more, talk to your CAS adviser — additional credits won't apply, even if they appear on your transfer-credit roll-up."
+}

@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://engineering.nyu.edu/academics/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:18ab7fa2f2955c945af6fff46b9605f44e7700d061f390a58a306209a064f66c",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "tandon_double_major",
+    "school": "tandon",
+    "source": "Tandon Academic Policies §Important Double Major Requirements (line 89-101)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "tandon double major",
+        "tandon non primary major",
+        "tandon second major",
+        "double major engineering",
+        "tandon major declaration deadline"
+    ],
+    "body": "**Tandon double-major rules — declare AFTER first year, BEFORE 80 credits, with deadlines.**\n\nFrom the Tandon bulletin (§Important Double Major Requirements):\n\n*\"Students may declare a non-primary major after completing their first year of enrollment at NYU and before completing or earning 80 credits towards their primary degree.\"*\n\n*\"You must declare a non-primary major in a field of study different from your primary major.\"*\n\n*\"Tandon students may not declare a second major at another NYU School if a similar major, in name and content, is offered at Tandon.\"*\n\nDeadlines (verbatim from the bulletin):\n- *\"must be completed, signed, and submitted to UGA by March 1st for the following fall start and October 1st for the following spring start.\"* Both the Non-primary (Double) Major Declaration form AND the Double Major Completion form must be submitted by these deadlines.\n\nKey procedural notes:\n- Both forms must be signed by **both** academic departments + the Office of Undergraduate Academics.\n- Some courses may be double-counted toward both majors **at the discretion of both academic departments**.\n- Declaring a second major **likely increases time to degree completion** and **can impact financial aid** — talk to your adviser about both before declaring."
+}

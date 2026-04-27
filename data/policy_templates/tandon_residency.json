@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://engineering.nyu.edu/academics/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:18ab7fa2f2955c945af6fff46b9605f44e7700d061f390a58a306209a064f66c",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "tandon_residency",
+    "school": "tandon",
+    "source": "Tandon Academic Policies §Residency Requirement (line 109-113)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "tandon residency",
+        "tandon half credits",
+        "tandon final semester",
+        "tandon study abroad final semester",
+        "tandon minor residency"
+    ],
+    "body": "**Tandon residency: at least half of required credits in Tandon coursework; final semester at NYU.**\n\nFrom the Tandon bulletin (§Residency Requirement):\n\n*\"To satisfy the residency requirement for the BS degree, NYU Tandon School of Engineering students must complete a minimum of at least half of the required credits at Tandon in approved Tandon coursework.\"*\n\n*\"In addition, students must complete their final semester's worth of credits at the University, unless approved for a special term abroad\"* — approval requires both the academic department AND the Office of Undergraduate Academics via the Final Semester, Study Abroad Permission form.\n\nFor minors:\n- *\"In regards to Tandon minors, one-half of the coursework must be completed at the NYU Tandon School of Engineering.\"*\n- *\"All transfer credits are subject to the NYU Tandon School of Engineering's transfer credit policies and processes.\"*\n\nWhat \"half of the required credits\" means in practice:\n- For 128-credit BS programs: at least 64 credits at Tandon.\n- For 131-credit Mechanical Engineering: at least 66.\n- For 134-credit ECE: at least 67.\n- The exact number is `ceil(program.totalCreditsRequired / 2)` — confirm with your adviser if unsure."
+}

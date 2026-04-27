@@ -67,6 +67,12 @@ export interface ChooseNRule extends BaseRule {
     type: "choose_n";
     n: number;
     fromPool: string[]; // course IDs or patterns like "CSCI-UA 4*"
+    /** Phase 7-A P-2: course IDs (or patterns) the rule explicitly
+     *  EXCLUDES from the pool, even when they would otherwise match
+     *  a wildcard. Used by e.g. cas_philosophy_ba's elective rule
+     *  which says "two additional PHIL-UA courses, except introductory
+     *  courses (numbered 1 through 8)". */
+    excludeFromPool?: string[];
     minLevel?: number;
     mathSubstitutionPool?: string[];
     maxMathSubstitutions?: number;
@@ -77,6 +83,8 @@ export interface MinCreditsRule extends BaseRule {
     type: "min_credits";
     minCredits: number;
     fromPool: string[];
+    /** P7-A P-2: pool exclusions (see ChooseNRule.excludeFromPool). */
+    excludeFromPool?: string[];
 }
 
 /** Student must take at least N courses at or above a level */
@@ -85,6 +93,8 @@ export interface MinLevelRule extends BaseRule {
     minLevel: number;
     minCount: number;
     fromPool: string[];
+    /** P7-A P-2: pool exclusions. */
+    excludeFromPool?: string[];
 }
 
 export type Rule = MustTakeRule | ChooseNRule | MinCreditsRule | MinLevelRule;

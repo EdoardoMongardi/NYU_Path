@@ -1,10 +1,11 @@
 // ============================================================
-// Default ToolRegistry — wires the 9 NYU Path tools (§7.2 + Phase 6 WS7b)
+// Default ToolRegistry — wires the 12 NYU Path tools (§7.1 complete)
 // ============================================================
-// Tools (9 of §7.1's 12; remainder scheduled for Phase 7):
+// All §7.1 tools shipped:
 //   run_full_audit, plan_semester, check_transfer_eligibility,
 //   what_if_audit, search_policy, update_profile, confirm_profile_update,
-//   get_credit_caps, search_availability
+//   get_credit_caps, search_availability, get_academic_standing,
+//   check_overlap, search_courses
 // ============================================================
 import { ToolRegistry, type Tool } from "./tool.js";
 import { runFullAuditTool } from "./tools/runFullAudit.js";
@@ -15,6 +16,9 @@ import { searchPolicyTool } from "./tools/searchPolicy.js";
 import { updateProfileTool, confirmProfileUpdateTool } from "./tools/updateProfile.js";
 import { getCreditCapsTool } from "./tools/getCreditCaps.js";
 import { searchAvailabilityTool } from "./tools/searchAvailability.js";
+import { getAcademicStandingTool } from "./tools/getAcademicStanding.js";
+import { checkOverlapTool } from "./tools/checkOverlap.js";
+import { searchCoursesTool } from "./tools/searchCourses.js";
 import type { ZodTypeAny } from "zod";
 
 export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
@@ -27,6 +31,9 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     confirmProfileUpdateTool as unknown as Tool<ZodTypeAny, unknown>,
     getCreditCapsTool as unknown as Tool<ZodTypeAny, unknown>,
     searchAvailabilityTool as unknown as Tool<ZodTypeAny, unknown>,
+    getAcademicStandingTool as unknown as Tool<ZodTypeAny, unknown>,
+    checkOverlapTool as unknown as Tool<ZodTypeAny, unknown>,
+    searchCoursesTool as unknown as Tool<ZodTypeAny, unknown>,
 ];
 
 /**
@@ -47,4 +54,7 @@ export {
     confirmProfileUpdateTool,
     getCreditCapsTool,
     searchAvailabilityTool,
+    getAcademicStandingTool,
+    checkOverlapTool,
+    searchCoursesTool,
 };
