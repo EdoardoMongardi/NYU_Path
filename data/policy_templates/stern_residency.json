@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.stern.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:60c1dab15f72d3c3ae9b9e0edff21d8bb20fbe6b7e8f97ce90b9f2b5aa3de80e",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "stern_residency",
+    "school": "stern",
+    "source": "Stern Academic Policies §Residency Requirements (line 286-294)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "stern residency",
+        "stern 64 credits",
+        "ub credit minimum",
+        "stern transfer credit cap",
+        "stern five years"
+    ],
+    "body": "**Stern residency: 64 credits of -UB coursework in residence; non-transfer students cap at 32 advanced standing; complete within 5 calendar years.**\n\nFrom the Stern bulletin (§Residency Requirements):\n\n- *\"Students must complete a minimum of 64 credits of business coursework (-UB or equivalent) in residence at the Undergraduate College of the Stern School of Business.\"*\n- *\"Non-transfer students are allowed to transfer in a maximum of 32 credits from the following: Advanced Placement Examinations, the International Baccalaureate Program, the results of certain foreign certificate examinations, and college credit earned prior or during matriculation at NYU\"* (see Stern's Non-NYU coursework policies).\n- *\"The full-time program should be completed in four years and must be completed within five consecutive calendar years or 10 academic semesters; this includes semesters taken at previous institutions. Failure to do so may result in academic dismissal.\"*\n\nIf you're considering a leave of absence, transfer credit, or extending your timeline:\n- Verify with a Stern adviser that you'll still hit 64 -UB credits.\n- Track your timeline against the 5-year / 10-semester ceiling — semesters at prior institutions count.\n- AP / IB / international-exam credit is capped at 32 combined for non-transfers."
+}

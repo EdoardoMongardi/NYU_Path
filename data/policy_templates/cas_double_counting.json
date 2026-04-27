@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_double_counting",
+    "school": "cas",
+    "source": "CAS Academic Policies §Double Majors and Policy on Double Counting (line 122-126); §Double Counting of Credit (line 228-230)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "double count cas",
+        "double counting courses",
+        "share course between majors",
+        "double major shared course",
+        "triple count"
+    ],
+    "body": "**CAS double-counting rule: at most 2 shared courses between any pair (major-major, major-minor, or minor-minor). Triple-counting is never allowed.**\n\nVerbatim from the CAS bulletin:\n\n*\"In some cases, courses may be applicable to both majors if the academic departments consider this appropriate. Students must then obtain written approval for the shared course(s) from the directors of undergraduate studies of both departments.\"*\n\n*\"No student may double count more than two courses between two majors (or between a major and a minor, or between two minors); some departments have set more restrictive sharing rules (a limit of one shared course, or none at all) as indicated in their sections of this Bulletin.\"*\n\n*\"No course may ever be triple-counted among any combination of three majors and/or minors.\"*\n\nProcess:\n- Get written approval from BOTH departments' directors of undergraduate studies.\n- Check each department's section for tighter limits (some allow only 1 shared course, some 0).\n- Run `check_overlap` (or ask your adviser) to verify your specific course list."
+}

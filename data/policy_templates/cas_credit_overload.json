@@ -1,0 +1,23 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_credit_overload",
+    "school": "cas",
+    "source": "CAS Academic Policies §Academic Program (line 500 — full-time status + credit-limit paragraph)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "more than 18 credits",
+        "18 credits per term",
+        "credit overload approval",
+        "register more than 18",
+        "credit overload adviser",
+        "exceed 18 credits"
+    ],
+    "body": "**Yes, with adviser approval. CAS allows registering for more than 18 credits per term ONLY with the approval and clearance of your academic adviser.**\n\nFrom the CAS bulletin (line 500): *\"Students may register for more than 18 credits per term with the approval and clearance of their academic adviser.\"*\n\nA full-time schedule is 16 credits/term (32/year, 128 over four years). Minimum full-time is 12 credits/term — falling below 24/year jeopardizes full-time status; falling below 32/year may affect financial aid.\n\nTo request an overload, contact the College Advising Center (25 West 4th Street, 5th floor; 212-998-8130)."
+}

@@ -509,6 +509,20 @@ describe("Template-body drift guard — quoted bulletin text in template bodies 
         "cas_withdrawal.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
         "cas_pf_career_cap.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
         "cas_to_stern_transfer.json": "data/bulletin-raw/undergraduate/business/admissions/_index.md",
+        // Phase 7-A P-5 additions (CAS academic policies)
+        "cas_residency_64_credits.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
+        "cas_double_counting.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
+        "cas_summer_at_nyu.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
+        "cas_minor_basics.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
+        "cas_grad_courses_for_undergrad.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
+        "cas_advanced_standing_cap.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
+        "cas_grade_points.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
+        // Phase 7-A P-5 additions (Stern)
+        "stern_residency.json": "data/bulletin-raw/undergraduate/business/academic-policies/_index.md",
+        "stern_double_count_strict.json": "data/bulletin-raw/undergraduate/business/academic-policies/_index.md",
+        // Phase 7-A reviewer-P3 follow-up (Tandon)
+        "tandon_double_major.json": "data/bulletin-raw/undergraduate/engineering/academic-policies/_index.md",
+        "tandon_residency.json": "data/bulletin-raw/undergraduate/engineering/academic-policies/_index.md",
     };
 
     const templates = loadPolicyTemplates();

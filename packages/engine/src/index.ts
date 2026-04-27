@@ -145,3 +145,17 @@ export type {
     CohortAssignment,
     TemplateOnlyResult,
 } from "./cohort/gate.js";
+
+// Phase 7-A P-9: §7.3 session-summary persistence (rolling window of 5)
+export {
+    InMemorySessionStore,
+    FileBackedSessionStore,
+    defaultSessionStore,
+    summariesAsPriorMessage,
+    MAX_SESSION_SUMMARIES,
+} from "./persistence/sessionStore.js";
+export type {
+    SessionStore,
+    SessionSummary,
+    StudentSessionRecord,
+} from "./persistence/sessionStore.js";

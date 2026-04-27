@@ -74,16 +74,19 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 9 NYU Path tools (Phase 5's 7 + Phase 6 WS7b's 2)", () => {
+    it("buildDefaultRegistry exposes the 12 NYU Path tools (§7.1 complete after Phase 7-A P-3)", () => {
         const reg = buildDefaultRegistry();
         const names = reg.list().map((t) => t.name).sort();
         expect(names).toEqual([
+            "check_overlap",
             "check_transfer_eligibility",
             "confirm_profile_update",
+            "get_academic_standing",
             "get_credit_caps",
             "plan_semester",
             "run_full_audit",
             "search_availability",
+            "search_courses",
             "search_policy",
             "update_profile",
             "what_if_audit",

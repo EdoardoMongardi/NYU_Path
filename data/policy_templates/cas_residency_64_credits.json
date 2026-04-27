@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_residency_64_credits",
+    "school": "cas",
+    "source": "CAS Academic Policies §Residency Requirements (line 98-104)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "residency requirement cas",
+        "64 credits cas",
+        "64 credit minimum",
+        "ua suffix credit minimum",
+        "residency cas suffix"
+    ],
+    "body": "**CAS residency: at least 64 credits in -UA coursework.**\n\nFrom the CAS bulletin (§Residency Requirements):\n\n*\"All students must complete a minimum of 64 credits in College of Arts and Science coursework (-UA suffix).\"*\n\nKey rules from the same section:\n- *\"Courses taken in other NYU schools (i.e., without a -UA suffix) do not count toward the 64-credit minimum.\"*\n- NYU Abu Dhabi (-AD/UH) and NYU Shanghai (-SHU) courses do **not** count toward the 64-credit minimum either. **However, -UA study-away courses DO count.**\n- *\"Students must complete their last 32 credits while registered in the College.\"*\n- One-half of the courses used to complete a major (or optional minor) must be taken in the College. Transfer credits cannot satisfy more than half of any departmental requirement.\n\nIf you're nearing transfer or considering a study-away program, confirm with your CAS adviser that your specific course mix satisfies the 64-credit floor."
+}

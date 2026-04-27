@@ -1,0 +1,23 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.stern.nyu.edu/undergraduate/admissions/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:60c1dab15f72d3c3ae9b9e0edff21d8bb20fbe6b7e8f97ce90b9f2b5aa3de80e",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_to_stern_transfer",
+    "school": "cas",
+    "source": "Stern Admissions §Internal Transfer Applicants (line 121-123). GPA caveat per ARCHITECTURE.md §1604.",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "internal transfer stern",
+        "transfer into stern application",
+        "switch majors stern transfer",
+        "stern internal transfer deadline",
+        "stern transfer requirements",
+        "stern transfer prerequisites"
+    ],
+    "body": "**Internal transfer from CAS to Stern, verbatim from the Stern bulletin (Admissions §Internal Transfer Applicants):**\n\n- **Application deadline:** *\"by the March 1 application deadline\"*. *\"Stern accepts transfers in the fall only.\"*\n- **Minimum credits:** *\"Students must complete (or be in the process of completing) one full year (32 credits) of academic study in their original school of enrollment to be eligible for internal transfer.\"*\n- **Disqualifier:** *\"The Leonard N. Stern School of Business does not consider applicants who previously externally transferred to another school or college at NYU.\"*\n\n**Required prerequisites by entry year:**\n- **Sophomore entry:** 1 semester of calculus or higher; 1 semester of writing/composition (two semesters preferred).\n- **Junior entry:** all of the sophomore requirements PLUS — 1 additional semester of calculus or higher; 1 semester of writing/composition; 1 semester of statistics; 1 semester of financial accounting; 1 semester of microeconomics.\n\n**Important caveat: GPA thresholds are not published.** The Stern bulletin does not specify a numeric minimum GPA for internal transfer. Strong applicants typically present competitive grades, but no public floor exists. **Confirm any GPA expectations directly with Stern Admissions before applying.**\n\nFor course equivalencies (which CAS courses count for Stern prerequisites), see Stern's Course Equivalencies for Internal Transfers page."
+}

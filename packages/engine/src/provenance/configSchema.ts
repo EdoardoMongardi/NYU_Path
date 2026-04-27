@@ -219,6 +219,8 @@ const chooseNRuleSchema = baseRuleSchema.extend({
     type: z.literal("choose_n"),
     n: z.number(),
     fromPool: z.array(z.string()),
+    /** P7-A P-2: pool exclusions. */
+    excludeFromPool: z.array(z.string()).optional(),
     minLevel: z.number().optional(),
     mathSubstitutionPool: z.array(z.string()).optional(),
     maxMathSubstitutions: z.number().optional(),
@@ -228,6 +230,8 @@ const minCreditsRuleSchema = baseRuleSchema.extend({
     type: z.literal("min_credits"),
     minCredits: z.number(),
     fromPool: z.array(z.string()),
+    /** P7-A P-2: pool exclusions. */
+    excludeFromPool: z.array(z.string()).optional(),
 });
 
 const minLevelRuleSchema = baseRuleSchema.extend({
@@ -235,6 +239,8 @@ const minLevelRuleSchema = baseRuleSchema.extend({
     minLevel: z.number(),
     minCount: z.number(),
     fromPool: z.array(z.string()),
+    /** P7-A P-2: pool exclusions. */
+    excludeFromPool: z.array(z.string()).optional(),
 });
 
 const ruleSchema = z.union([

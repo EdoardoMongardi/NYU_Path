@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_pf_major",
+    "school": "cas",
+    "source": "CAS Academic Policies §Pass/Fail Option (heading line 408; career-cap line 410); §Major / Minor Restrictions (line 138)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "p/f major",
+        "pass fail major",
+        "pass/fail my major",
+        "pass-fail in my major",
+        "p/f for major"
+    ],
+    "body": "**No, Pass/Fail is not allowed for major or minor courses in CAS.**\n\nThe CAS bulletin (Academic Policies, line 138) is explicit: *\"No course to be counted toward the major or minor may be taken on a Pass/Fail basis.\"* This applies to every CAS major.\n\nIf you take a course P/F and later try to apply it to your major or minor, you will need to retake it for a letter grade. Students who change majors may also lose credit for previously P/F-graded courses if those courses become required for the new major.\n\nA few related notes:\n- P/F also doesn't count toward CAS Core Curriculum requirements (line 94), with one exception: foreign-language sequence courses BELOW the Intermediate II level may be taken P/F.\n- The career P/F cap is 32 credits, and you may elect at most one P/F per term (line 410)."
+}

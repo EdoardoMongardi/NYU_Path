@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_summer_at_nyu",
+    "school": "cas",
+    "source": "CAS Academic Policies §Summer Credits (line 250)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "summer course non-nyu",
+        "summer at nyu",
+        "summer course elsewhere",
+        "summer credits transfer cas",
+        "non-nyu summer"
+    ],
+    "body": "**CAS rule: take summer courses AT NYU. Exceptions are rare and require a petition.**\n\nFrom the CAS bulletin (§Summer Credits):\n\n*\"Once admitted to the College, students must take all courses here, including those they need or wish to take during the summer. Exceptions are granted only rarely and only for good academic reasons.\"*\n\n*\"Requests for a waiver should be made by submitting a petition to the Committee on Undergraduate Academic Standards\"* in the Office of the Associate Dean for Students.\n\nIf you're considering a summer course at another institution:\n1. Submit a petition to the Committee on Undergraduate Academic Standards before enrolling.\n2. The petition must cite *good academic reasons* (a course not offered at NYU, a specific scheduling conflict, etc.).\n3. Approval is NOT guaranteed. Plan for the possibility that credit will not transfer back to CAS.\n\nNYU summer offerings are published the preceding fall and spring terms; check those listings before assuming you need a non-NYU course."
+}

@@ -21,6 +21,9 @@ export {
     confirmProfileUpdateTool,
     getCreditCapsTool,
     searchAvailabilityTool,
+    getAcademicStandingTool,
+    checkOverlapTool,
+    searchCoursesTool,
 } from "./registry.js";
 
 export type {

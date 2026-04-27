@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_grade_points",
+    "school": "cas",
+    "source": "CAS Academic Policies §Grades (line 340+)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "gpa weights",
+        "grade points cas",
+        "what grade points",
+        "a minus gpa",
+        "grade scale nyu"
+    ],
+    "body": "**CAS GPA weights (effective Fall 2018+ per University Senate vote, March 29, 2018):**\n\nFrom the CAS bulletin (§Grades):\n\n*\"By vote of the University Senate on March 29, 2018, the weights assigned in computing the grade point average are as follows, effective fall 2018 and thereafter.\"*\n\n| Grade | Grade Points |\n|---|---|\n| A | 4.000 |\n| A- | 3.667 |\n| B+ | 3.333 |\n| B | 3.000 |\n| B- | 2.667 |\n| C+ | 2.333 |\n| C | 2.000 |\n| C- | 1.667 |\n| D+ | 1.333 |\n| D | 1.000 |\n| F | 0.000 |\n\n*\"Only grades of A through F (including all plus and minus grades, such as B+ and B-) earned in any New York University course are computed in the average.\"*\n\nNon-GPA grades:\n- **P** (Pass under P/F): not computed in the average — see the cas_pf_career_cap template for P/F rules.\n- **W** (withdrew in good standing): not computed in the average — see cas_withdrawal.\n- **NR / R**: administrative grades, not computed.\n- **I** (incomplete): not computed until resolved.\n\nGrades earned BEFORE Fall 2018 use the pre-2018 scale; consult an archived CAS bulletin if you need that mapping."
+}

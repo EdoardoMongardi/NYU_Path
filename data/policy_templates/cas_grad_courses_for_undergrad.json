@@ -1,0 +1,22 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "cas_grad_courses_for_undergrad",
+    "school": "cas",
+    "source": "CAS Academic Policies §Courses at Other Schools and Divisions of New York University (line 232-238)",
+    "lastVerified": "2026-04-26",
+    "triggerQueries": [
+        "graduate course undergrad cas",
+        "1000 level grad course",
+        "2000 level grad course",
+        "take grad course as undergrad",
+        "gsas course cas"
+    ],
+    "body": "**CAS undergrads can take some GSAS graduate courses; 1000-level requires departmental rules, 2000-level requires written instructor approval.**\n\nFrom the CAS bulletin (§Courses at Other Schools and Divisions of NYU):\n\n*\"Courses may be taken in the New York University Graduate School of Arts and Science. 1000-level graduate courses may be taken as described in the departmental sections of this Bulletin, and 2000-level graduate courses may be taken with written approval of the instructor.\"*\n\n*\"If graduate courses are applied toward the completion of requirements for the baccalaureate degree, no advanced credit is allowed for them in the Graduate School of Arts and Science.\"*\n\nKey rules:\n- **1000-level GSAS courses**: see your department's bulletin for prerequisites and approval rules.\n- **2000-level GSAS courses**: get *written* approval from the instructor before enrolling.\n- **Important caveat**: if you use a graduate course toward your bachelor's degree, you lose the ability to apply it toward an eventual GSAS master's. Check with both your CAS adviser and the relevant graduate program before committing."
+}

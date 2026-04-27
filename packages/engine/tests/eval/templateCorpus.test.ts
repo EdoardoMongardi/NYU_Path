@@ -19,7 +19,10 @@ describe("template corpus (Phase 6 WS7c)", () => {
 
     it("loads every template without _meta/body validation errors", () => {
         expect(r.skipped).toEqual([]);
-        expect(r.templates.length).toBeGreaterThanOrEqual(6);
+        // Phase 7-A reviewer-P3 follow-up: corpus expanded 15 → 17
+        // (target: 20-30 per §5.5; remaining gap is content-authoring
+        // against real cohort A queries).
+        expect(r.templates.length).toBeGreaterThanOrEqual(17);
     });
 
     it("includes the Phase 5 + Phase 6 templates by id", () => {

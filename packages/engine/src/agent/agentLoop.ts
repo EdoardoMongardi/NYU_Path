@@ -288,25 +288,87 @@ async function executeTool(
         }
     }
 
+    // §6.4 error recovery cascade (Phase 7-A P-4).
+    //   1. Transient errors (network/timeout) → retry once.
+    //   2. Tool-unsupported errors → return a structured "not in
+    //      system" message the model can route to a contact.
+    //   3. Other errors → graceful "encountered an unexpected
+    //      issue" wrapper that includes the tool name.
     const startedAt = Date.now();
-    try {
-        const out = await tool.call(parsed.data, ctx);
-        const summary = tool.summarizeResult(out);
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+        if (ctx.signal.aborted) {
+            return {
+                toolName: tc.name,
+                args: tc.args,
+                error: { message: `Tool "${tc.name}" aborted by signal.` },
+                callMs: Date.now() - startedAt,
+            };
+        }
+        try {
+            const out = await tool.call(parsed.data, ctx);
+            const summary = tool.summarizeResult(out);
+            return {
+                toolName: tc.name,
+                args: tc.args,
+                summary,
+                callMs: Date.now() - startedAt,
+            };
+        } catch (e) {
+            lastError = e instanceof Error ? e : new Error(String(e));
+            // Only retry transient errors (network / timeout / 5xx).
+            // Validation errors (the model passing bad args) and
+            // tool_unsupported errors (deterministic refusals) should
+            // surface immediately so the model can adapt.
+            if (attempt === 0 && isTransient(lastError)) {
+                // Brief backoff before the second attempt.
+                await new Promise((r) => setTimeout(r, 100));
+                continue;
+            }
+            break;
+        }
+    }
+    const message = lastError?.message ?? "(unknown)";
+    if (/\bunsupported\b|not in system|no data for/i.test(message)) {
+        // Surface as a structured tool_unsupported response per §6.4.
         return {
             toolName: tc.name,
             args: tc.args,
-            summary,
-            callMs: Date.now() - startedAt,
-        };
-    } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        return {
-            toolName: tc.name,
-            args: tc.args,
-            error: { message: `Tool "${tc.name}" threw: ${message}` },
+            error: {
+                message:
+                    `tool_unsupported: ${message}. ` +
+                    `Tell the student you don't have data for this yet ` +
+                    `and provide the appropriate NYU contact.`,
+            },
             callMs: Date.now() - startedAt,
         };
     }
+    return {
+        toolName: tc.name,
+        args: tc.args,
+        error: {
+            message:
+                `Tool "${tc.name}" encountered an unexpected issue: ${message}. ` +
+                `If retrying, suggest the student try again in a moment.`,
+        },
+        callMs: Date.now() - startedAt,
+    };
+}
+
+/** Heuristic: errors that are worth retrying once. */
+function isTransient(err: Error): boolean {
+    const m = err.message.toLowerCase();
+    return (
+        m.includes("etimedout")
+        || m.includes("econnreset")
+        || m.includes("network")
+        || m.includes("timeout")
+        || m.includes("temporarily unavailable")
+        || m.includes("503")
+        || m.includes("502")
+        || m.includes("504")
+        || m.includes("rate limit")
+    );
 }
 
 async function callWithFallback(
