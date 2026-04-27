@@ -59,6 +59,10 @@ export interface ToolSession {
         embedder: import("../rag/embedder.js").Embedder;
         reranker: import("../rag/reranker.js").Reranker;
         templates: import("../rag/policyTemplate.js").PolicyTemplate[];
+        /** Phase 7-B Step 13: confidence-band thresholds calibrated for
+         *  the active reranker. Optional — defaults to the lexical
+         *  reranker bands when unset. */
+        confidenceBands?: import("../rag/policySearch.js").ConfidenceBandThresholds;
     };
     /**
      * Optional persistence hook. When present, `confirm_profile_update`

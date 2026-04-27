@@ -26,9 +26,26 @@ import type { PolicyTemplate, TemplateMatchResult } from "./policyTemplate.js";
 
 export type ConfidenceBand = "high" | "medium" | "low";
 
-/** §5 confidence gating thresholds. */
+/** §5 confidence gating thresholds — calibrated for LocalLexicalReranker.
+ *  CohereReranker uses different bands (see COHERE_CONFIDENCE_BANDS).
+ *  Production overrides via `PolicySearchOptions.confidenceBands`. */
 export const CONFIDENCE_HIGH = 0.6;
 export const CONFIDENCE_MEDIUM = 0.3;
+
+/** Phase 7-B Step 13 — Cohere Rerank v3.5 distribution.
+ *  Cohere docs guidance: >=0.7 highly relevant, 0.3-0.7 somewhat
+ *  relevant, <0.3 not relevant. Re-tuning candidate after we measure
+ *  on the cohort A composite — Step 25 sets the final calibrated
+ *  numbers; these are the published-default starting point. */
+export const COHERE_CONFIDENCE_BANDS = {
+    high: 0.7,
+    medium: 0.3,
+} as const;
+
+export interface ConfidenceBandThresholds {
+    high: number;
+    medium: number;
+}
 
 export interface PolicySearchResult {
     /** "template" — direct curated answer; no vector search ran */
@@ -58,6 +75,10 @@ export interface PolicySearchOptions extends ScopeOptions {
     topKRerank?: number;
     /** Curated templates checked BEFORE vector search */
     templates?: PolicyTemplate[];
+    /** Confidence band thresholds. Defaults to the lexical-reranker bands.
+     *  Set to `COHERE_CONFIDENCE_BANDS` (or a re-tuned variant) when the
+     *  reranker is `CohereReranker`. */
+    confidenceBands?: ConfidenceBandThresholds;
 }
 
 export interface PolicySearchDeps {
@@ -137,12 +158,13 @@ export async function policySearch(
     const topScore = top[0]?.rerankScore ?? 0;
 
     // 5. Confidence gate
+    const bands = options.confidenceBands ?? { high: CONFIDENCE_HIGH, medium: CONFIDENCE_MEDIUM };
     let confidence: ConfidenceBand;
     let kind: "rag" | "escalate";
-    if (topScore >= CONFIDENCE_HIGH) {
+    if (topScore >= bands.high) {
         confidence = "high";
         kind = "rag";
-    } else if (topScore >= CONFIDENCE_MEDIUM) {
+    } else if (topScore >= bands.medium) {
         confidence = "medium";
         kind = "rag";
         notes.push(

@@ -10,8 +10,15 @@ export type { Embedder } from "./embedder.js";
 export { VectorStore } from "./vectorStore.js";
 export type { VectorSearchHit, IndexedChunk } from "./vectorStore.js";
 
-export { LocalLexicalReranker } from "./reranker.js";
-export type { Reranker, RerankedHit } from "./reranker.js";
+export { loadPolicyCorpusFromCache } from "./policyCorpusCache.js";
+export type {
+    PolicyCorpusCacheMeta,
+    LoadPolicyCorpusOptions,
+    LoadPolicyCorpusResult,
+} from "./policyCorpusCache.js";
+
+export { LocalLexicalReranker, CohereReranker } from "./reranker.js";
+export type { Reranker, RerankedHit, CohereRerankerOptions } from "./reranker.js";
 
 export {
     computeScope,
@@ -35,12 +42,14 @@ export {
     policySearch,
     CONFIDENCE_HIGH,
     CONFIDENCE_MEDIUM,
+    COHERE_CONFIDENCE_BANDS,
 } from "./policySearch.js";
 export type {
     PolicySearchResult,
     PolicySearchOptions,
     PolicySearchDeps,
     ConfidenceBand,
+    ConfidenceBandThresholds,
 } from "./policySearch.js";
 
 export {

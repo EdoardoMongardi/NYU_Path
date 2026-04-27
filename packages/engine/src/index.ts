@@ -135,6 +135,39 @@ export type { PolicyTemplate } from "./rag/policyTemplate.js";
 // a CourseSearchFn into the agent session).
 export { LocalHashEmbedder, OpenAIEmbedder, cosineSim } from "./rag/embedder.js";
 export type { Embedder } from "./rag/embedder.js";
+
+// Phase 4 + Phase 7-B Step 12-13: vector store, reranker, policy
+// search, and the disk-cache loader the v2 route uses to hydrate
+// the policy corpus without re-embedding on cold start.
+export { VectorStore } from "./rag/vectorStore.js";
+export type { VectorSearchHit, IndexedChunk } from "./rag/vectorStore.js";
+export { LocalLexicalReranker, CohereReranker } from "./rag/reranker.js";
+export type { Reranker, RerankedHit, CohereRerankerOptions } from "./rag/reranker.js";
+export {
+    policySearch,
+    CONFIDENCE_HIGH,
+    CONFIDENCE_MEDIUM,
+    COHERE_CONFIDENCE_BANDS,
+    matchTemplate,
+    buildCorpus,
+    DEFAULT_ENTRIES,
+    loadPolicyCorpusFromCache,
+} from "./rag/index.js";
+export type {
+    PolicySearchResult,
+    PolicySearchOptions,
+    PolicySearchDeps,
+    ConfidenceBand,
+    ConfidenceBandThresholds,
+    PolicyChunk,
+    ChunkMeta,
+    ChunkOptions,
+    BuildCorpusOptions,
+    BuildCorpusResult,
+    PolicyCorpusCacheMeta,
+    LoadPolicyCorpusOptions,
+    LoadPolicyCorpusResult,
+} from "./rag/index.js";
 export {
     searchCoursesTool,
     createSemanticCourseSearchFn,

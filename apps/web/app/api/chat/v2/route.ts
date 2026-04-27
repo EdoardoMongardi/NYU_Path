@@ -41,6 +41,7 @@ import { buildStudentProfileV2, type TranscriptData } from "../../../../lib/buil
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
 import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
 import { getStores } from "../../../../lib/db/store";
+import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -98,9 +99,11 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const student = buildStudentProfileV2(body.parsedData, body.visaStatus);
     const searchCoursesFn = getCourseSearchFn();
+    const ragBundle = getPolicyRagBundle();
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
+        ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
