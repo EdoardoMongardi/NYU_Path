@@ -60,6 +60,14 @@ export interface ToolSession {
         reranker: import("../rag/reranker.js").Reranker;
         templates: import("../rag/policyTemplate.js").PolicyTemplate[];
     };
+    /**
+     * Optional persistence hook. When present, `confirm_profile_update`
+     * (Phase 7-B Step 10) writes the post-mutation profile + an audit
+     * row through this store on apply. When absent, the tool is purely
+     * in-memory (the historical Phase 5 behavior). Persistence failures
+     * are swallowed — the live session remains the source of truth.
+     */
+    profileStore?: import("../persistence/profileStore.js").ProfileStore;
 }
 
 export type ValidationResult =
