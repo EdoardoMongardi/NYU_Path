@@ -4,7 +4,7 @@
 export { chunkMarkdown } from "./chunker.js";
 export type { PolicyChunk, ChunkMeta, ChunkOptions } from "./chunker.js";
 
-export { LocalHashEmbedder, cosineSim } from "./embedder.js";
+export { LocalHashEmbedder, OpenAIEmbedder, cosineSim } from "./embedder.js";
 export type { Embedder } from "./embedder.js";
 
 export { VectorStore } from "./vectorStore.js";

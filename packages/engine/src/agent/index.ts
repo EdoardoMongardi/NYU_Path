@@ -26,6 +26,13 @@ export {
     searchCoursesTool,
 } from "./registry.js";
 
+export { createSemanticCourseSearchFn } from "./tools/semanticCourseSearch.js";
+export type {
+    SemanticCourseSearchOptions,
+    CourseCatalogEntry,
+} from "./tools/semanticCourseSearch.js";
+export type { CourseSearchFn } from "./tools/searchCourses.js";
+
 export type {
     LLMClient,
     LLMCompletion,

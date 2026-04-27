@@ -39,6 +39,7 @@ import {
 import { loadPolicyTemplates } from "@nyupath/engine";
 import { buildStudentProfileV2, type TranscriptData } from "../../../../lib/buildSession";
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
+import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -92,7 +93,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     const fallback = createFallbackClient(); // null is OK — the loop tolerates a missing fallback.
 
     const student = buildStudentProfileV2(body.parsedData, body.visaStatus);
-    const session: ToolSession = { student };
+    const searchCoursesFn = getCourseSearchFn();
+    const session: ToolSession = searchCoursesFn
+        ? ({ student, searchCoursesFn } as ToolSession & { searchCoursesFn: typeof searchCoursesFn })
+        : { student };
     const systemPrompt = buildSystemPrompt({ student });
     const templates = getTemplates();
 

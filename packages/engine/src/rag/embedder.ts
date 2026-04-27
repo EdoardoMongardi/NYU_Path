@@ -70,6 +70,75 @@ export class LocalHashEmbedder implements Embedder {
     }
 }
 
+/**
+ * OpenAI Embeddings adapter (Phase 7-B Step 3 / locked decision #3).
+ * Used for both course-description embeddings AND policy chunks once
+ * step 12 swaps in for `LocalHashEmbedder` as the production default.
+ *
+ * Cost: text-embedding-3-small is $0.02 / 1M input tokens — embedding
+ * the full course corpus (17,122 × ~80 tokens) costs ~$0.03.
+ *
+ * Concurrency: the OpenAI embeddings API accepts up to 2048 inputs
+ * per request. We batch at 100/request to keep latency predictable.
+ *
+ * Test mode: the constructor accepts `apiKey: ''` only when an
+ * `injectedClient` is also passed; production callers should always
+ * pass a real key.
+ */
+export class OpenAIEmbedder implements Embedder {
+    public readonly dim: number;
+    public readonly modelId: string;
+    private readonly apiKey: string;
+    private readonly model: string;
+    private readonly injectedClient?: { embeddings: { create(args: { model: string; input: string[] }): Promise<{ data: Array<{ embedding: number[] }> }> } };
+
+    constructor(opts: {
+        apiKey: string;
+        model?: string;
+        injectedClient?: OpenAIEmbedder["injectedClient"];
+    }) {
+        this.apiKey = opts.apiKey;
+        this.model = opts.model ?? "text-embedding-3-small";
+        // text-embedding-3-small is 1536-dim; 3-large is 3072.
+        this.dim = this.model === "text-embedding-3-large" ? 3072 : 1536;
+        this.modelId = `openai:${this.model}`;
+        this.injectedClient = opts.injectedClient;
+    }
+
+    async embed(text: string): Promise<Float32Array> {
+        const [v] = await this.embedBatch([text]);
+        return v!;
+    }
+
+    async embedBatch(texts: string[]): Promise<Float32Array[]> {
+        if (texts.length === 0) return [];
+        const client = this.injectedClient ?? (await this.lazyOpenAIClient());
+        const out: Float32Array[] = [];
+        const BATCH = 100;
+        for (let i = 0; i < texts.length; i += BATCH) {
+            const slice = texts.slice(i, i + BATCH);
+            const response = await client.embeddings.create({
+                model: this.model,
+                input: slice,
+            });
+            for (const row of response.data) {
+                const arr = new Float32Array(row.embedding);
+                out.push(l2Normalize(arr));
+            }
+        }
+        return out;
+    }
+
+    private async lazyOpenAIClient(): Promise<NonNullable<OpenAIEmbedder["injectedClient"]>> {
+        // Lazy import so the engine doesn't pull `openai` into the
+        // bundle when callers stay on `LocalHashEmbedder`.
+        const mod = await import("openai");
+        const OpenAI = mod.default ?? mod;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return new (OpenAI as any)({ apiKey: this.apiKey });
+    }
+}
+
 /** Compute cosine similarity between two unit-length vectors. */
 export function cosineSim(a: Float32Array, b: Float32Array): number {
     if (a.length !== b.length) {
