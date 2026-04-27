@@ -56,9 +56,23 @@ function getTemplates() {
     return TEMPLATES;
 }
 
+/** Phase 7-E onboarding shape: discriminated union. The DPR variant
+ *  is the post-pivot canonical artifact; the transcript variant stays
+ *  as the cohort-A fallback for students whose DPR isn't accessible.
+ *
+ *  IMPORTANT: the `dpr` discriminator is recognized but not yet
+ *  consumed at this route until Workstream 3 lands the
+ *  `session.degreeProgressReport` injection + tool refactor. Until
+ *  then we reject DPR-shaped requests early so the failure mode is
+ *  loud, never silent profile-corruption. */
+type ParsedDataPayload =
+    | (TranscriptData & { kind?: undefined })
+    | { kind: "transcript"; transcript: TranscriptData }
+    | { kind: "dpr"; report: unknown };
+
 interface V2RequestBody {
     message: string;
-    parsedData?: TranscriptData;
+    parsedData?: ParsedDataPayload;
     visaStatus?: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     correlationId?: string;
@@ -84,6 +98,30 @@ export async function POST(req: NextRequest): Promise<Response> {
             { status: 400 },
         );
     }
+    // Phase 7-E W2 P0 guard: until Workstream 3 lands DPR injection
+    // into ToolSession + the tool refactor, refuse DPR-shaped requests
+    // explicitly rather than silently running them through the legacy
+    // transcript-only StudentProfile builder (which would produce a
+    // CS-BA stub with empty courses — silent corruption).
+    const pd = body.parsedData;
+    if (pd && typeof pd === "object" && "kind" in pd && pd.kind === "dpr") {
+        return NextResponse.json(
+            {
+                error:
+                    "DPR-driven chat sessions are not yet wired (Phase 7-E Workstream 3 in progress). " +
+                    "Onboarding accepts the DPR upload, but the chat route can't consume it until W3 ships. " +
+                    "For now, please upload your unofficial transcript via the fallback link in onboarding.",
+            },
+            { status: 501 },
+        );
+    }
+    // Unwrap the transcript-shaped discriminator so the legacy builder
+    // sees the same flat shape it expected pre-W2. Pre-W2 callers
+    // (no `kind`) continue to work unchanged.
+    const transcriptPayload: TranscriptData =
+        pd && typeof pd === "object" && "kind" in pd && pd.kind === "transcript"
+            ? pd.transcript
+            : (pd as TranscriptData);
 
     const primary = createPrimaryClient();
     if (!primary) {
@@ -97,7 +135,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const userId = body.userId ?? "anonymous";
     const stores = getStores();
 
-    const student = buildStudentProfileV2(body.parsedData, body.visaStatus);
+    const student = buildStudentProfileV2(transcriptPayload, body.visaStatus);
     const searchCoursesFn = getCourseSearchFn();
     const ragBundle = getPolicyRagBundle();
     const session: ToolSession = {
