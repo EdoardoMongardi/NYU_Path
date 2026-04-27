@@ -25,9 +25,9 @@ describe("CohereReranker (Phase 7-B Step 13)", () => {
                 async rerank() {
                     return {
                         results: [
-                            { index: 0, relevance_score: 0.95 },
-                            { index: 1, relevance_score: 1.5 }, // out-of-range, must clamp
-                            { index: 2, relevance_score: -0.2 }, // out-of-range
+                            { index: 0, relevanceScore: 0.95 },
+                            { index: 1, relevanceScore: 1.5 }, // out-of-range, must clamp
+                            { index: 2, relevanceScore: -0.2 }, // out-of-range
                         ],
                     };
                 },
@@ -53,7 +53,7 @@ describe("CohereReranker (Phase 7-B Step 13)", () => {
             injectedClient: {
                 async rerank(args) {
                     capturedDocs = args.documents;
-                    return { results: args.documents.map((_, i) => ({ index: i, relevance_score: 0.5 })) };
+                    return { results: args.documents.map((_, i) => ({ index: i, relevanceScore: 0.5 })) };
                 },
             },
         });
@@ -83,7 +83,7 @@ describe("CohereReranker (Phase 7-B Step 13)", () => {
             apiKey: "test",
             injectedClient: {
                 async rerank(args) {
-                    return { results: args.documents.map((_, i) => ({ index: i, relevance_score: 0.55 })) };
+                    return { results: args.documents.map((_, i) => ({ index: i, relevanceScore: 0.55 })) };
                 },
             },
         });

@@ -93,6 +93,15 @@ function tokenize(text: string): string[] {
 // Option") that the local lexical reranker boosts via headingFrac.
 // ============================================================
 
+interface CohereRerankResultRow {
+    index: number;
+    /** Cohere v2 SDK uses camelCase; older v1 returns snake_case. We
+     *  read whichever is present so test injections + live calls both
+     *  work without forcing a normalizer at every call site. */
+    relevanceScore?: number;
+    relevance_score?: number;
+}
+
 export interface CohereRerankerOptions {
     apiKey: string;
     model?: string;
@@ -104,7 +113,7 @@ export interface CohereRerankerOptions {
             documents: string[];
             top_n?: number;
         }): Promise<{
-            results: Array<{ index: number; relevance_score: number }>;
+            results: CohereRerankResultRow[];
         }>;
     };
 }
@@ -141,7 +150,10 @@ export class CohereReranker implements Reranker {
         const out: RerankedHit[] = hits.map((h) => ({ ...h, rerankScore: 0 }));
         for (const r of response.results) {
             const dst = out[r.index];
-            if (dst) dst.rerankScore = Math.max(0, Math.min(1, r.relevance_score));
+            if (!dst) continue;
+            const raw = r.relevanceScore ?? r.relevance_score;
+            if (typeof raw !== "number" || Number.isNaN(raw)) continue;
+            dst.rerankScore = Math.max(0, Math.min(1, raw));
         }
         out.sort((a, b) => {
             if (b.rerankScore !== a.rerankScore) return b.rerankScore - a.rerankScore;
