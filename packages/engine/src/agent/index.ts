@@ -19,6 +19,8 @@ export {
     searchPolicyTool,
     updateProfileTool,
     confirmProfileUpdateTool,
+    getCreditCapsTool,
+    searchAvailabilityTool,
 } from "./registry.js";
 
 export type {
@@ -54,3 +56,16 @@ export type {
 } from "./responseValidator.js";
 
 export { RecordingLLMClient } from "./recordingClient.js";
+
+export { OpenAIEngineClient, toOpenAIMessage } from "./clients/openaiClient.js";
+export type { OpenAIClientOptions } from "./clients/openaiClient.js";
+export { AnthropicEngineClient, toAnthropicMessage } from "./clients/anthropicClient.js";
+export type { AnthropicClientOptions } from "./clients/anthropicClient.js";
+export {
+    createPrimaryClient,
+    createFallbackClient,
+    DEFAULT_PRIMARY_PROVIDER,
+    DEFAULT_PRIMARY_MODEL,
+    DEFAULT_FALLBACK_PROVIDER,
+    DEFAULT_FALLBACK_MODEL,
+} from "./clients/index.js";

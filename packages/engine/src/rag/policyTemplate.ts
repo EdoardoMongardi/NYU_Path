@@ -52,6 +52,49 @@ export const TEMPLATE_FRESHNESS_DAYS = 365;
  *  because the referent is ambiguous. */
 const CONTEXT_PRONOUN_RE = /^\s*(?:can\s+i\s+do|is\s+it|are\s+(?:those|these|they)|what\s+about\s+(?:that|those|these|it|them))\b/i;
 
+/** Token-overlap match threshold per Phase 6 WS6. Wave5 finding #2:
+ *  the original contiguous-substring matcher missed common phrasings
+ *  like "Can I take a major course P/F?" against the trigger "p/f major"
+ *  because the tokens are non-contiguous. The token-overlap path
+ *  requires this fraction of trigger tokens to appear (anywhere) in
+ *  the query, after stop-word filtering. */
+const TOKEN_OVERLAP_THRESHOLD = 0.66;
+
+/** Stop words stripped before token-overlap scoring. Kept tiny on
+ *  purpose — the goal is to filter out function words, not domain
+ *  terms. Adding nouns or verbs here weakens the matcher. */
+const STOP_WORDS = new Set([
+    "a", "an", "the",
+    "i", "you", "we", "they", "he", "she", "it",
+    "is", "are", "was", "were", "be", "been", "being",
+    "do", "does", "did",
+    "to", "of", "for", "in", "on", "at", "by",
+    "and", "or", "but",
+    "if", "then", "than",
+    "can", "could", "may", "might", "should", "would", "will",
+    "this", "that", "these", "those",
+    "my", "your", "our", "their", "his", "her",
+    "me", "us",
+    "what", "how", "when", "where", "which", "who", "why",
+    "have", "has", "had",
+    "not", "no",
+    "any", "some", "all",
+]);
+
+/** Split text into lowercase tokens, preserving alphanumeric runs and
+ *  punctuation-glued tokens (e.g., "p/f"). */
+function tokenize(text: string): string[] {
+    return text
+        .toLowerCase()
+        .split(/\s+/)
+        .map((tok) => tok.replace(/^[^a-z0-9/+#-]+|[^a-z0-9/+#-]+$/g, ""))
+        .filter((tok) => tok.length > 0);
+}
+
+function nonStopTokens(text: string): string[] {
+    return tokenize(text).filter((t) => !STOP_WORDS.has(t));
+}
+
 export interface TemplateMatchResult {
     template: PolicyTemplate;
     /** Substring that matched */
@@ -119,10 +162,29 @@ export function matchTemplate(
         const ageMs = now.getTime() - verified.getTime();
         const ageDays = ageMs / (1000 * 60 * 60 * 24);
         if (ageDays > freshnessDays) continue;
-        // Find the first trigger that appears in the query
-        const matched = t.triggerQueries.find((trig) => q.includes(trig.toLowerCase()));
-        if (matched) {
-            return { template: t, matchedTrigger: matched };
+        // §5.5 step 1 — keyword match. Two passes:
+        //   (a) contiguous-substring (fast, handles short canonical
+        //       triggers like "p/f major" against "...p/f major...").
+        //   (b) token-overlap (Wave5 WS6): each trigger's non-stop
+        //       tokens must appear in the query at ≥0.66 fraction.
+        //       Catches non-contiguous phrasings like "Can I take a
+        //       major course P/F?" against trigger "p/f major".
+        const matchedSubstring = t.triggerQueries.find((trig) => q.includes(trig.toLowerCase()));
+        if (matchedSubstring) {
+            return { template: t, matchedTrigger: matchedSubstring };
+        }
+        const queryTokens = new Set(nonStopTokens(q));
+        for (const trig of t.triggerQueries) {
+            const trigTokens = nonStopTokens(trig);
+            if (trigTokens.length === 0) continue;
+            // Require at least one trigger token to be present (guards
+            // against vacuous matches when stop-word filtering empties
+            // the trigger).
+            const overlap = trigTokens.filter((tok) => queryTokens.has(tok)).length;
+            if (overlap === 0) continue;
+            if (overlap / trigTokens.length >= TOKEN_OVERLAP_THRESHOLD) {
+                return { template: t, matchedTrigger: trig };
+            }
         }
     }
     return null;

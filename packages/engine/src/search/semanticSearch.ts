@@ -1,6 +1,17 @@
 // ============================================================
 // Semantic Search — Cosine similarity search over course embeddings
 // ============================================================
+//
+// @deprecated Phase 6 WS3 (scheduled for removal after WS2 lands).
+// Phase 4's RAG pipeline (`packages/engine/src/rag/policySearch.ts`)
+// replaces this for policy queries; for course-availability lookups
+// the Phase 6 `search_availability` tool is the canonical surface.
+// Remaining callers:
+//   - `packages/engine/src/chat/chatOrchestrator.ts` (legacy)
+//   - `scripts/test-search.ts` (developer utility, not on the user path)
+// Do NOT add new callers — use `policySearch` or `search_availability`
+// instead.
+// ============================================================
 
 /** A single course embedding entry from the pre-computed index */
 export interface CourseEmbedding {

@@ -62,3 +62,17 @@ export {
     type ToolDef,
     type ValidationResult,
 } from "./tools/index.js";
+
+// Phase 6 WS4: observability
+export {
+    InMemoryFallbackSink,
+    JsonlFileSink,
+    NULL_SINK,
+    defaultProductionSink,
+    emitFallback,
+} from "./observability/fallbackLog.js";
+export type {
+    FallbackEvent,
+    FallbackEventKind,
+    FallbackSink,
+} from "./observability/fallbackLog.js";

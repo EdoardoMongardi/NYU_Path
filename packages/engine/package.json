@@ -7,6 +7,8 @@
     "types": "./src/index.ts",
     "dependencies": {
         "@nyupath/shared": "workspace:*",
+        "@anthropic-ai/sdk": "^0.91.1",
+        "openai": "^6.25.0",
         "zod": "^4.3.6"
     },
     "scripts": {

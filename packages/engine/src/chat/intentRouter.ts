@@ -1,6 +1,14 @@
 // ============================================================
 // Intent Router — Classify student messages into action intents
 // ============================================================
+//
+// @deprecated Phase 6 WS3 (scheduled for removal after WS2 lands).
+// The agent loop replaces explicit intent classification: the model
+// chooses tools directly via the §7.2 registry. `quickClassify` is
+// still used by `apps/web/app/api/chat/route.ts` (legacy path) for
+// the `grade_adjustment` and `course_info` branches that haven't
+// been converted to tools yet (Option B per the Phase 6 plan).
+// ============================================================
 
 import type { LLMClient, Message } from "./llmClient.js";
 

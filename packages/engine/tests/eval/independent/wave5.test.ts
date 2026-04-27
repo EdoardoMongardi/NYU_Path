@@ -395,13 +395,10 @@ describe("Wave 5 — Scenario 3: check_transfer_eligibility succeeded, reply dro
 // =============================================================================
 
 describe("Wave 5 — Scenario 4: cas_pf_major template fast-path", () => {
-    // FINDING #2 (wave5_run_report.md): the cas_pf_major triggers are
-    // canonical short phrases; "Can I take a major course P/F?" does
-    // not contiguous-substring-match, so the matcher returns
-    // fallthrough. Token-overlap or alias rewriting is post-Phase 5
-    // matcher work — see Phase 6 carried items in
-    // memory/nyupath_phase5_status.md.
-    it.skip("preLoopDispatch returns kind=template for a CAS P/F-major question (matcher narrow — see report)", async () => {
+    // FINDING #2 (wave5_run_report.md) — RESOLVED in Phase 6 WS6.
+    // Token-overlap path now fires on "Can I take a major course P/F?"
+    // against the cas_pf_major trigger "p/f major".
+    it("preLoopDispatch returns kind=template for a CAS P/F-major question", async () => {
         const r = await callPreLoop({
             userMessage: "Can I take a major course P/F?",
             profile: CAS_SOPHOMORE,
@@ -443,11 +440,8 @@ describe("Wave 5 — Scenario 5: cross-school P/F query falls through (does NOT 
         expect(maybeId).not.toBe("cas_pf_major");
     });
 
-    // FINDING #2 (wave5_run_report.md): same as Scenario 4 — the
-    // canonical-substring trigger does not match "Can I P/F a major
-    // course?" either. Whole-template token overlap is post-Phase-5
-    // matcher work.
-    it.skip("control: the matcher CAN still fire on a clean CAS P/F-major query (matcher narrow — see report)", async () => {
+    // FINDING #2 (wave5_run_report.md) — RESOLVED in Phase 6 WS6.
+    it("control: the matcher CAN still fire on a clean CAS P/F-major query", async () => {
         const r = await callPreLoop({
             userMessage: "Can I P/F a major course?",
             profile: CAS_SOPHOMORE,
@@ -466,18 +460,10 @@ describe("Wave 5 — Scenario 5: cross-school P/F query falls through (does NOT 
 describe("Wave 5 — Scenario 6: search_policy({ query: '' }) is rejected and the model recovers", () => {
     const client = new RecordingLLMClient({
         id: "scenario-6",
+        // Order matters: RecordingLLMClient takes the FIRST matching
+        // record. Put the more-specific (turn-2) match first so the
+        // broader user-message match doesn't fire on every turn.
         recordings: [
-            // Turn 1 — model issues an empty-query search_policy call
-            {
-                match: { userMessageContains: "policy" },
-                completion: {
-                    text: "",
-                    toolCalls: [
-                        { id: "call-1", name: "search_policy", args: { query: "" } },
-                    ],
-                    latencyMs: 0,
-                },
-            },
             // Turn 2 — model recovers after seeing "validation failed" in the tool result
             {
                 match: { latestToolResultContains: "validation failed" },
@@ -489,15 +475,25 @@ describe("Wave 5 — Scenario 6: search_policy({ query: '' }) is rejected and th
                     latencyMs: 0,
                 },
             },
+            // Turn 1 — model issues an empty-query search_policy call
+            {
+                match: { userMessageContains: "policy" },
+                completion: {
+                    text: "",
+                    toolCalls: [
+                        { id: "call-1", name: "search_policy", args: { query: "" } },
+                    ],
+                    latencyMs: 0,
+                },
+            },
         ],
     });
 
-    // FINDING #3 (wave5_run_report.md): the validation-error literal
-    // surfaced to the LLM is "Query too short. …" (the searchPolicy
-    // tool's validateInput message), not the wrapper "validation
-    // failed" the brief predicted. Aligning the wrapper format is
-    // tracked in Phase 6 carried items.
-    it.skip("first-turn invocation surfaces a 'validation failed' error and the model recovers (literal mismatch — see report)", async () => {
+    // FINDING #3 (wave5_run_report.md) — RESOLVED in Phase 6 WS6.
+    // agentLoop now wraps validateInput rejections as
+    // "Validation failed: <userMessage>" so the model + recording
+    // matcher can recognize the rejection class.
+    it("first-turn invocation surfaces a 'validation failed' error and the model recovers", async () => {
         const turn = await runTurn({
             client,
             profile: CAS_JUNIOR,

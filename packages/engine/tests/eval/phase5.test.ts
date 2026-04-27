@@ -74,14 +74,16 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 7 NYU Path tools (incl. two-step profile update)", () => {
+    it("buildDefaultRegistry exposes the 9 NYU Path tools (Phase 5's 7 + Phase 6 WS7b's 2)", () => {
         const reg = buildDefaultRegistry();
         const names = reg.list().map((t) => t.name).sort();
         expect(names).toEqual([
             "check_transfer_eligibility",
             "confirm_profile_update",
+            "get_credit_caps",
             "plan_semester",
             "run_full_audit",
+            "search_availability",
             "search_policy",
             "update_profile",
             "what_if_audit",
@@ -532,6 +534,43 @@ describe("runAgentTurn — recorded conversation", () => {
         const errInv = result.invocations.find((i) => i.toolName === "totally_nonexistent_tool");
         expect(errInv).toBeDefined();
         expect(errInv?.error?.message).toMatch(/not found in registry/i);
+    });
+
+    it("wraps validateInput rejections with 'validation failed:' prefix in error.message (Phase 6 WS6)", async () => {
+        // search_policy.validateInput rejects when session has no rag.
+        // The agent-loop wrapper should fail this with `error.message`
+        // starting "validation failed:" so observability + downstream
+        // matchers can recognize the rejection class.
+        const sessionNoRag: ToolSession = {
+            student: session.student,
+        };
+        const client = makeClient([
+            // Turn 2 — model recovers after seeing the wrapped error.
+            {
+                match: { latestToolResultContains: "validation failed" },
+                completion: { text: "ok, I'll ask differently", toolCalls: [] },
+            },
+            // Turn 1 — issues a search_policy with valid args (so Zod
+            // passes); validateInput then rejects on missing rag.
+            {
+                match: { userMessageContains: "policy" },
+                completion: {
+                    text: "",
+                    toolCalls: [
+                        { id: "tc1", name: "search_policy", args: { query: "any policy question" } },
+                    ],
+                },
+            },
+        ]);
+        const result = await runAgentTurn(client, buildDefaultRegistry(), sessionNoRag, "policy question", {
+            systemPrompt: "test",
+        });
+        expect(result.kind).toBe("ok");
+        if (result.kind !== "ok") return;
+        const errInv = result.invocations.find((i) => i.toolName === "search_policy");
+        expect(errInv?.error?.message).toMatch(/^validation failed:/i);
+        // The structured `rejected.userMessage` keeps the clean original.
+        expect(errInv?.rejected?.userMessage).not.toMatch(/^validation failed:/i);
     });
 
     it("returns 'model_error_no_fallback' when BOTH primary and fallback throw", async () => {

@@ -1,6 +1,13 @@
 // ============================================================
 // Explanation Generator — Natural language from engine output
 // ============================================================
+//
+// @deprecated Phase 6 WS3 (scheduled for removal after WS2 lands).
+// The agent loop's system prompt + tool-result summaries replace
+// these hand-rolled explainers. `explainAudit`, `explainPlan`,
+// `formatSearchResults`, `generateGreeting`, `answerGeneral` are
+// all subsumed by `runAgentTurn(...)` + the response validator.
+// ============================================================
 
 import type { LLMClient, Message } from "./llmClient.js";
 import { ACADEMIC_RULES } from "../data/academicRules.js";
