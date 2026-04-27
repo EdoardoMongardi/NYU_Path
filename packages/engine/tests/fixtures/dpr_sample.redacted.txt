@@ -1,0 +1,525 @@
+===== PAGE 1 =====
+Degree Progress Report
+For Sample Student prepared on 04/27/2026
+Requested by 
+Program Requirement Term Requirement Status
+Undergraduate Career Fall 2023 Not Satisfied
+UA-Coll of Arts & Sci Program Fall 2024 Not Satisfied
+Computer Science/Math Major Approved Fall 2024 Not Satisfied
+Advisor Notations
+1. Request id 0000013777 Test Credit. Permission to apply 32 credits from AP Exam. A. Adviser  09/17/2024
+ 
+Courses Taken Outside of the Undergraduate Career (RG5000)
+Courses Taken Outside of the Undergraduate Career
+ 
+ 
+Courses Taken Outside of the Undergraduate Career (R1659/10)
+These courses were taken outside of your undergraduate career and do not count toward your degree.
+ 
+Notes/Restrictions/Limitations (RG5394)
+1. The information contained in this analysis should be used to guide you.
+2. It should not take the place of consultation with an academic counselor in the Silver Center, Room 905. 
+3. You are responsible for checking the Bulletin and with your advisor to make sure you are following all school policies.
+4. Should there be any errors in this report, please discuss them with your advisor during your next advising appointment.
+5. See appropriate department for evaluation of transfer credit that may be applicable to your major/minor.
+Please expand the areas below to view limits on the Pass/Fail option, credit from outside CAS, possible course 
+exclusions, and the time allowed to complete your degree.
+ 
+ 
+Pass/Fail Option (R1680/10)
+A. No more than 32 units may be taken with the pass/fail grade option.
+B. Pass/fail grade option may not be selected for major, minor, or courses taken to satisfy the College Core Curriculum.
+C. Students may elect one pass/fail option each term.
+ 
+· Units: 4.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2025 Spr MATH-UA  233 Theory of Probability P 4.00 EN
+ 
+Maximum Credit from Other Schools (R1680/30)
+Satisfied: No more than 16 units may be taken outside of CAS (including transfer work).
+ 
+· Units: 14.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2025 Fall ACCT-UB    1 Prin of Financial Acctg A 4.00 EN
+2025 Fall MKTG-UB    1 Intro to Marketing A 4.00 EN
+2025 Fall MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) A 2.00 EN
+2026 Spr MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) 4.00 IP
+ 
+Time Limit (R1680/60)
+All requirements must be met within a period of 8 years from the date of matriculation.
+ 
+Graduation Requirements (RG5001)
+Satisfied: Complete the minimum requirements for graduation. In addition to the requirements below, students must 
+complete their last 32 units while enrolled at CAS.
+
+===== PAGE 2 =====
+ 
+ 
+Minimum Credits for Graduation (R1001/10)
+Satisfied: Complete a minimum of 128 credits.
+ 
+· Units: 128.00 required, 138.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2023 Fall CSCI-UA  102 Data Structures B 4.00 EN
+2023 Fall EXPOS-UA    5 Writing the Essay: Art in the B+ 4.00 EN
+2023 Fall IMNY-UT   99 IMA Cohort: Community is a Pra P 0.00 EN
+2023 Fall IMNY-UT  101 Creative Computing A 4.00 EN
+2023 Fall IMNY-UT  102 Communications Lab A 4.00 EN
+2024 Spr ASPP-UT    2 The World Through Art Writing B 4.00 EN
+2024 Spr CSCI-UA  201 Computer Systems Org B+ 4.00 EN
+2024 Spr MATH-UA  120 Discrete Mathematics B+ 4.00 EN
+2024 Spr SPAN-UA    1 Spanish for Beginners- Level I A- 4.00 EN
+2024 Fall CSCI-UA  101 Intro to Computer Sci TE 4.00 TE
+2024 Fall EAST-UA  204 Intermediate Chinese II TE 4.00 TE
+2024 Fall ECON-UA    2 Introduction to Microeconomics TE 4.00 TE
+2024 Fall ELECTIVE     CREDIT Elective Credit UGRD TE 4.00 TE
+2024 Fall MATH-UA  121 Calculus I TE 4.00 TE
+2024 Fall MATH-UA  122 Calculus II TE 4.00 TE
+2024 Fall PHYS-UA   11 General Physics I TE 4.00 TE
+2024 Fall PHYS-UA   12 General Physics II TE 4.00 TE
+2024 Fall CSCI-UA  202 Operating Systems A 4.00 EN
+2024 Fall ECON-UA    1 Introduction to Macroeconomics B 4.00 EN
+2024 Fall MATH-UA  123 Calculus III A- 4.00 EN
+2024 Fall MATH-UA  140 Linear Algebra A- 4.00 EN
+2025 Spr CORE-UA  500 Cultures & Contexts: Topics
+(Wine and Feasting in the Anci)
+C 4.00 EN
+2025 Spr CSCI-UA  310 Basic Algorithms B+ 4.00 EN
+2025 Spr MATH-UA  325 Analysis C+ 4.00 EN
+2025 Fall ACCT-UB    1 Prin of Financial Acctg A 4.00 EN
+2025 Fall CSCI-UA  472 Artificial Intelligence A 4.00 EN
+2025 Fall MATH-UA  333 Theory of Probability B- 4.00 EN
+2025 Fall MKTG-UB    1 Intro to Marketing A 4.00 EN
+2025 Fall MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) A 2.00 EN
+2026 Spr CSCI-UA    4 Introduction to Web Design and 4.00 IP
+2026 Spr CSCI-UA  473 Fundamentals of Machine Learn 4.00 IP
+2026 Spr MATH-UA  334 Mathematical Statistics 4.00 IP
+2026 Spr MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) 4.00 IP
+2026 Fall CORE-UA  700 Expressive Culture: Topics
+(Global Hip Hop)
+4.00 IP
+2026 Fall MATH-UA  251 Introduction to Math Modeling 4.00 IP
+2026 Fall MATH-UA  343 Algebra 4.00 IP
+ 
+Minimum Grade Point Average (R1001/20)
+Satisfied: Complete all coursework with a minimum overall GPA of 2.00.
+ 
+· GPA: 2.000 required, 3.402 completed
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2023 Fall CSCI-UA  102 Data Structures B 4.00 EN
+2023 Fall EXPOS-UA    5 Writing the Essay: Art in the B+ 4.00 EN
+2023 Fall IMNY-UT  101 Creative Computing A 4.00 EN
+2023 Fall IMNY-UT  102 Communications Lab A 4.00 EN
+2024 Spr ASPP-UT    2 The World Through Art Writing B 4.00 EN
+2024 Spr CSCI-UA  201 Computer Systems Org B+ 4.00 EN
+2024 Spr MATH-UA  120 Discrete Mathematics B+ 4.00 EN
+2024 Spr SPAN-UA    1 Spanish for Beginners- Level I A- 4.00 EN
+
+===== PAGE 3 =====
+Term Subject Catalog Nbr Course Title Grade Units Type
+2024 Fall CSCI-UA  202 Operating Systems A 4.00 EN
+2024 Fall ECON-UA    1 Introduction to Macroeconomics B 4.00 EN
+2024 Fall MATH-UA  123 Calculus III A- 4.00 EN
+2024 Fall MATH-UA  140 Linear Algebra A- 4.00 EN
+2025 Spr CORE-UA  500 Cultures & Contexts: Topics
+(Wine and Feasting in the Anci)
+C 4.00 EN
+2025 Spr CSCI-UA  310 Basic Algorithms B+ 4.00 EN
+2025 Spr MATH-UA  325 Analysis C+ 4.00 EN
+2025 Fall ACCT-UB    1 Prin of Financial Acctg A 4.00 EN
+2025 Fall CSCI-UA  472 Artificial Intelligence A 4.00 EN
+2025 Fall MATH-UA  333 Theory of Probability B- 4.00 EN
+2025 Fall MKTG-UB    1 Intro to Marketing A 4.00 EN
+2025 Fall MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) A 2.00 EN
+2026 Spr CSCI-UA    4 Introduction to Web Design and 4.00 IP
+2026 Spr CSCI-UA  473 Fundamentals of Machine Learn 4.00 IP
+2026 Spr MATH-UA  334 Mathematical Statistics 4.00 IP
+2026 Spr MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) 4.00 IP
+2026 Fall CORE-UA  700 Expressive Culture: Topics
+(Global Hip Hop)
+4.00 IP
+2026 Fall MATH-UA  251 Introduction to Math Modeling 4.00 IP
+2026 Fall MATH-UA  343 Algebra 4.00 IP
+ 
+CAS Residency: 64 Credits (R1001/35)
+Satisfied: Complete a minimum of 64 credits in CAS coursework.
+ 
+· Units: 64.00 required, 80.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2023 Fall CSCI-UA  102 Data Structures B 4.00 EN
+2023 Fall EXPOS-UA    5 Writing the Essay: Art in the B+ 4.00 EN
+2024 Spr CSCI-UA  201 Computer Systems Org B+ 4.00 EN
+2024 Spr MATH-UA  120 Discrete Mathematics B+ 4.00 EN
+2024 Spr SPAN-UA    1 Spanish for Beginners- Level I A- 4.00 EN
+2024 Fall CSCI-UA  202 Operating Systems A 4.00 EN
+2024 Fall ECON-UA    1 Introduction to Macroeconomics B 4.00 EN
+2024 Fall MATH-UA  123 Calculus III A- 4.00 EN
+2024 Fall MATH-UA  140 Linear Algebra A- 4.00 EN
+2025 Spr CORE-UA  500 Cultures & Contexts: Topics
+(Wine and Feasting in the Anci)
+C 4.00 EN
+2025 Spr CSCI-UA  310 Basic Algorithms B+ 4.00 EN
+2025 Spr MATH-UA  325 Analysis C+ 4.00 EN
+2025 Fall CSCI-UA  472 Artificial Intelligence A 4.00 EN
+2025 Fall MATH-UA  333 Theory of Probability B- 4.00 EN
+2026 Spr CSCI-UA    4 Introduction to Web Design and 4.00 IP
+2026 Spr CSCI-UA  473 Fundamentals of Machine Learn 4.00 IP
+2026 Spr MATH-UA  334 Mathematical Statistics 4.00 IP
+2026 Fall CORE-UA  700 Expressive Culture: Topics
+(Global Hip Hop)
+4.00 IP
+2026 Fall MATH-UA  251 Introduction to Math Modeling 4.00 IP
+2026 Fall MATH-UA  343 Algebra 4.00 IP
+ 
+First-Year Seminar (RG33308)
+Satisfied: Complete one First-Year Seminar (FYSEM-UA).
+ 
+ 
+First-Year Seminar (R20488/15)
+Satisfied: First­-Year Seminar (FYSEM-UA) not required for transfer students.
+Satisfied: Student Group Equal CAS UG Transfer Students
+ 
+Foreign Language (RG5002)
+Satisfied: You must complete 1 foreign language course.
+ 
+ 
+
+===== PAGE 4 =====
+Foreign Language (R1005/10)
+Satisfied: Must demonstrate proficiency at the 2nd semester intermediate level through coursework or exam. Select 
+from languages offered by the College of Arts and Science or English as a Second Language.
+ 
+· Courses: 1.00 required, 1.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2024 Fall EAST-UA  204 Intermediate Chinese II TE 4.00 TE
+ 
+Expository Writing (RG5005)
+Satisfied: Complete the appropriate set of courses:
+-EXPOS-UA 1
+-EXPOS-UA 4 and 9 (International students only)
+-WRI-UF 101 and WRII-UF 102 (HEOP and C-STEP students only)
+ 
+ 
+Expository Writing (R1002/10)
+Satisfied: Complete EXPOS-UA 1.
+ 
+· Courses: 1.00 required, 1.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2023 Fall EXPOS-UA    5 Writing the Essay: Art in the B+ 4.00 EN
+ 
+CORE Foundations of Contemporary Culture (RG5004)
+Overall Requirement Not Satisfied: Complete the 4 areas below, courses may not be taken with the pass/fail grade 
+option. For a list of approved courses, refer to the <a href="https://cas.nyu.edu/core.html" target="_blank">College Core 
+Curriculum</a>.
+ 
+Texts & Ideas (R1004)
+Overall Requirement Not Satisfied: Complete one course from CORE-UA 400-499.
+ 
+Texts & Ideas (R1004/10)
+Not Satisfied: Complete 1 course from CORE-UA 400-499.
+ 
+· Courses: 1.00 required, 0.00 used, 1.00 needed
+ 
+Cultures & Contexts (R1006)
+Satisfied: Complete one course from CORE-UA 500-599.
+ 
+Cultures & Contexts (R1006/10)
+Satisfied: Complete 1 course from CORE-UA 500-599.
+ 
+· Courses: 1.00 required, 1.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2025 Spr CORE-UA  500 Cultures & Contexts: Topics
+(Wine and Feasting in the Anci)
+C 4.00 EN
+ 
+Societies & Social Sciences (R1007)
+Satisfied: Complete an approved departmental course or an <a href="https://cas.nyu.edu/core/about-the-
+program/exemptions-substitutions-and-proficiency-exams.html#societies-and-the-social-sciences" target="_blank"
+>approved major/minor</a> in the social sciences.
+ 
+Societies & Social Sciences (R1007/10)
+Satisfied: Complete one course from CORE-UA 600-699.
+ 
+· Courses: 1.00 required, 1.00 used
+ 
+
+===== PAGE 5 =====
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2024 Fall ECON-UA    1 Introduction to Macroeconomics B 4.00 EN
+ 
+Expressive Culture (R1008)
+Satisfied: Complete one course from CORE-UA 700-799, an approved departmental course, or an <a href="https://cas.
+nyu.edu/core/about-the-program/exemptions-substitutions-and-proficiency-exams.html#expressive-culture" target="
+_blank">approved major/minor</a> in the humanities.
+ 
+Expressive Culture (R1008/10)
+Satisfied: Complete 1 course from CORE-UA 700-799.
+ 
+· Courses: 1.00 required, 1.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2026 Fall CORE-UA  700 Expressive Culture: Topics
+(Global Hip Hop)
+4.00 IP
+ 
+CORE Foundations of Scientific Inquiry - Quantitative Reasoning (RG5007)
+Satisfied: Satisfy the requirement as specified below.
+ 
+ 
+Quantitative Reasoning (R1009/10)
+Satisfied: Complete 1 course from CORE-UA 100-199, MATH-UA 12, 17-899, or an approved departmental course. 
+Refer to the College Core Curriculum website.
+ 
+· Courses: 1.00 required, 1.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2024 Spr MATH-UA  120 Discrete Mathematics B+ 4.00 EN
+ 
+CORE Foundations of Scientific Inquiry - Physical and Life Science (RG5393)
+Satisfied: Complete Physical Science and Life Science.
+ 
+· Courses: 2.00 required, 2.00 used
+ 
+Physical & Life Science Sequence (R1014)
+Complete a year long sequence in one area.
+A. Biology: BIOL-UA 11, 12 (transfer credit or test credit only)
+B. Chemistry: CHEM-UA 101, 102, 103 & 104 or CHEM-UA 125 & 126.
+C. Physics: PHYS-UA 11, 12.
+D. Physics for majors: 
+Physics I - complete: PHYS-UA 91 and 71.
+Physics II - complete: PHYS-UA 93 and 72.
+ 
+Physical and Life Science Sequence (Physics) (R1014/50)
+Satisfied: Complete 2 courses:
+PHYS-UA 11, 12.
+ 
+· Courses: 2.00 required, 2.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2024 Fall PHYS-UA   11 General Physics I TE 4.00 TE
+2024 Fall PHYS-UA   12 General Physics II TE 4.00 TE
+ 
+Writing Proficiency (RG31394)
+
+===== PAGE 6 =====
+Satisfied: Complete the required Expository Writing courses with a "C" or higher or take the Writing Proficiency Exam. 
+Students who do not pass the exam are required to complete EXPOS-UA 13 - Writing Tutorial.
+ 
+ 
+Writing Proficiency (R20152/10)
+Satisfied:  
+ 
+· Courses: 1.00 required, 2.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2023 Fall EXPOS-UA    5 Writing the Essay: Art in the B+ 4.00 EN
+2024 Spr ASPP-UT    2 The World Through Art Writing B 4.00 EN
+ 
+General Electives (RG31395)
+Courses not used anywhere else will display here.
+ 
+ 
+General Electives (R4000/10)
+&#160;
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2023 Fall IMNY-UT   99 IMA Cohort: Community is a Pra P 0.00 EN
+2023 Fall IMNY-UT  101 Creative Computing A 4.00 EN
+2023 Fall IMNY-UT  102 Communications Lab A 4.00 EN
+2024 Spr ASPP-UT    2 The World Through Art Writing B 4.00 EN
+2024 Spr SPAN-UA    1 Spanish for Beginners- Level I A- 4.00 EN
+2024 Fall ECON-UA    2 Introduction to Microeconomics TE 4.00 TE
+2024 Fall ELECTIVE     CREDIT Elective Credit UGRD TE 4.00 TE
+2025 Fall ACCT-UB    1 Prin of Financial Acctg A 4.00 EN
+2025 Fall MKTG-UB    1 Intro to Marketing A 4.00 EN
+2025 Fall MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) A 2.00 EN
+2026 Spr CSCI-UA    4 Introduction to Web Design and 4.00 IP
+2026 Spr MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) 4.00 IP
+ 
+Computer Science/Math Joint Major (RG5076)
+Not Satisfied: Complete the requirements outlined below. Courses with grades below "C" will not count for the major.  
+Pass/Fail grade option may not be used for the major.
+ 
+· Courses: 18.00 required, 17.00 used, 1.00 needed
+ 
+ 
+Computer Science: Required Courses (R1142/20)
+Not Satisfied: Complete the following courses: 
+CSCI-UA 101 - Introduction to Computer Science I
+CSCI-UA 102 - Introduction to Computer Science II
+CSCI-UA 201 - Computer Systems Org I
+CSCI-UA 202 - Computer Systems Org II
+CSCI-UA 310 - Basic Algorithms
+CSCI-UA 421 - Numerical Computing
+ 
+· Courses: 6.00 required, 5.00 used, 1.00 needed
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2023 Fall CSCI-UA  102 Data Structures B 4.00 EN
+2024 Spr CSCI-UA  201 Computer Systems Org B+ 4.00 EN
+2024 Fall CSCI-UA  101 Intro to Computer Sci TE 4.00 TE
+2024 Fall CSCI-UA  202 Operating Systems A 4.00 EN
+2025 Spr CSCI-UA  310 Basic Algorithms B+ 4.00 EN
+ 
+
+===== PAGE 7 =====
+Computer Science: Elective Courses (R1142/30)
+Satisfied: Complete 2 courses from: CSCI-UA 400-499
+May replace 400 level courses with graduate courses, with permission of the department. Independent Study cannot be
+used for the elective area.
+ 
+· Courses: 2.00 required, 2.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2025 Fall CSCI-UA  472 Artificial Intelligence A 4.00 EN
+2026 Spr CSCI-UA  473 Fundamentals of Machine Learn 4.00 IP
+ 
+Mathematics: Required Courses (R1142/40)
+Satisfied: Complete the following courses:
+MATH-UA 120 - Discrete Mathematics
+MATH-UA 121 - Calculus I OR MATH-UA 131 Mathematics for Economics I
+MATH-UA 325 - Advanced Calculus I OR MATH-UA 328 Honors Analysis I
+MATH-UA 343 - Algebra I OR MATH-UA 348 Honors Algebra I
+ 
+· Courses: 4.00 required, 4.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2024 Spr MATH-UA  120 Discrete Mathematics B+ 4.00 EN
+2024 Fall MATH-UA  121 Calculus I TE 4.00 TE
+2025 Spr MATH-UA  325 Analysis C+ 4.00 EN
+2026 Fall MATH-UA  343 Algebra 4.00 IP
+ 
+Mathematics: Calculus Courses (R1142/55)
+Satisfied: Complete the following courses:
+MATH-UA 122 - Calculus II OR MATH-UA 132 Mathematics for Economics II
+MATH-UA 123 - Calculus III OR MATH-UA 133 Mathematics for Economics III
+MATH-UA 140 Linear Algebra <B>OR</B> MATH-UA 148 Honors Linear Algebra
+ 
+· Courses: 3.00 required, 3.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2024 Fall MATH-UA  122 Calculus II TE 4.00 TE
+2024 Fall MATH-UA  123 Calculus III A- 4.00 EN
+2024 Fall MATH-UA  140 Linear Algebra A- 4.00 EN
+ 
+Mathematics: Advanced Courses (R1142/60)
+Satisfied: Complete two advanced Math courses; please see list on the <a href="https://www.math.nyu.
+edu/dynamic/undergrad/ba-cas/majors-minors/major-minor-requirements/#mathcsmajor" target="_blank">department 
+website</a>.
+ 
+· Courses: 2.00 required, 2.00 used
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2025 Fall MATH-UA  333 Theory of Probability B- 4.00 EN
+2026 Spr MATH-UA  334 Mathematical Statistics 4.00 IP
+ 
+Mathematics: Elective Courses (R1142/70)
+Satisfied: Complete one course by advisement.
+ 
+· Courses: 1.00 required, 1.00 used
+ 
+
+===== PAGE 8 =====
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2026 Fall MATH-UA  251 Introduction to Math Modeling 4.00 IP
+ 
+Computer Science/Math Joint Major: GPA (R1142/75)
+Satisfied: Need a minimum GPA of 2.00.  This includes all courses approved for use in the major, regardless of grade.
+ 
+· GPA: 2.000 required, 3.333 completed
+ 
+Courses Used
+Term Subject Catalog Nbr Course Title Grade Units Type
+2023 Fall CSCI-UA  102 Data Structures B 4.00 EN
+2024 Spr CSCI-UA  201 Computer Systems Org B+ 4.00 EN
+2024 Spr MATH-UA  120 Discrete Mathematics B+ 4.00 EN
+2024 Fall CSCI-UA  202 Operating Systems A 4.00 EN
+2024 Fall MATH-UA  123 Calculus III A- 4.00 EN
+2024 Fall MATH-UA  140 Linear Algebra A- 4.00 EN
+2025 Spr CSCI-UA  310 Basic Algorithms B+ 4.00 EN
+2025 Spr MATH-UA  325 Analysis C+ 4.00 EN
+2025 Fall CSCI-UA  472 Artificial Intelligence A 4.00 EN
+2025 Fall MATH-UA  333 Theory of Probability B- 4.00 EN
+2026 Spr CSCI-UA  473 Fundamentals of Machine Learn 4.00 IP
+2026 Spr MATH-UA  334 Mathematical Statistics 4.00 IP
+2026 Fall MATH-UA  251 Introduction to Math Modeling 4.00 IP
+2026 Fall MATH-UA  343 Algebra 4.00 IP
+ 
+Computer Science/Math Joint Major: Residency (R1142/80)
+Satisfied: At least 1/2 of the major units (36) must be CAS courses completed while enrolled at NYU.
+ 
+· Units: 36.00 required, 56.00 used
+Course History
+Term Subject Catalog Nbr Title Grade Units Type
+2023 Fall CSCI-UA  102 Data Structures B 4.00 EN
+2023 Fall EXPOS-UA    5 Writing the Essay: Art in the B+ 4.00 EN
+2023 Fall IMNY-UT   99 IMA Cohort: Community is a Pra P 0.00 EN
+2023 Fall IMNY-UT  101 Creative Computing A 4.00 EN
+2023 Fall IMNY-UT  102 Communications Lab A 4.00 EN
+2024 Spr ASPP-UT    2 The World Through Art Writing B 4.00 EN
+2024 Spr CSCI-UA  201 Computer Systems Org B+ 4.00 EN
+2024 Spr MATH-UA  120 Discrete Mathematics B+ 4.00 EN
+2024 Spr SPAN-UA    1 Spanish for Beginners- Level I A- 4.00 EN
+2024 Fall CSCI-UA  101 Intro to Computer Sci TE 4.00 TE
+2024 Fall EAST-UA  204 Intermediate Chinese II TE 4.00 TE
+2024 Fall ECON-UA    2 Introduction to Microeconomics TE 4.00 TE
+2024 Fall ELECTIVE     CREDIT Elective Credit UGRD TE 4.00 TE
+2024 Fall MATH-UA  121 Calculus I TE 4.00 TE
+2024 Fall MATH-UA  122 Calculus II TE 4.00 TE
+2024 Fall PHYS-UA   11 General Physics I TE 4.00 TE
+2024 Fall PHYS-UA   12 General Physics II TE 4.00 TE
+2024 Fall CSCI-UA  202 Operating Systems A 4.00 EN
+2024 Fall ECON-UA    1 Introduction to Macroeconomics B 4.00 EN
+2024 Fall MATH-UA  123 Calculus III A- 4.00 EN
+2024 Fall MATH-UA  140 Linear Algebra A- 4.00 EN
+2025 Spr CORE-UA  500 Cultures & Contexts: Topics C 4.00 EN
+     Course Topic: 24 - Wine and Feasting in the Anci
+2025 Spr CSCI-UA  310 Basic Algorithms B+ 4.00 EN
+2025 Spr MATH-UA  233 Theory of Probability P 4.00 EN
+     Repeat Code: RI - Repeat (Incl GPA Excl Hrs)
+2025 Spr MATH-UA  325 Analysis C+ 4.00 EN
+2025 Fall ACCT-UB    1 Prin of Financial Acctg A 4.00 EN
+
+===== PAGE 9 =====
+2025 Fall CSCI-UA  472 Artificial Intelligence A 4.00 EN
+2025 Fall MATH-UA  333 Theory of Probability B- 4.00 EN
+     Repeat Code: R - Repeated course
+2025 Fall MKTG-UB    1 Intro to Marketing A 4.00 EN
+2025 Fall MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) A 2.00 EN
+2026 Spr CSCI-UA    4 Introduction to Web Design and 4.00 IP
+2026 Spr CSCI-UA  473 Fundamentals of Machine Learn 4.00 IP
+2026 Spr MATH-UA  334 Mathematical Statistics 4.00 IP
+2026 Spr MPAJZ-UE   71 Pop/Jazz Piano (Prvt Lessons) 4.00 IP
+2026 Fall CORE-UA  700 Expressive Culture: Topics 4.00 IP
+     Course Topic: 9 - Global Hip Hop
+2026 Fall MATH-UA  251 Introduction to Math Modeling 4.00 IP
+2026 Fall MATH-UA  343 Algebra 4.00 IP
+

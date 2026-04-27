@@ -1,0 +1,1993 @@
+{
+  "_meta": {
+    "parserVersion": "1.0.0",
+    "sourceFingerprint": "sha256:6f569109e7d8843541091c1c8f11647518028845227af309a1c7fb39bca126bc",
+    "sourcePdfPageCount": 9,
+    "warnings": [
+      "Section RG5000 (Courses Taken Outside of the Undergraduate Career) has no status line; defaulting to satisfied.",
+      "Section R1659/10 (Courses Taken Outside of the Undergraduate Career) has no status line; defaulting to satisfied.",
+      "Section RG5394 (Notes/Restrictions/Limitations) has no status line; defaulting to satisfied.",
+      "Section R1680/10 (Pass/Fail Option) has no status line; defaulting to satisfied.",
+      "Section R1680/60 (Time Limit) has no status line; defaulting to satisfied.",
+      "Section R1014 (Physical & Life Science Sequence) has no status line; defaulting to satisfied.",
+      "Section RG31395 (General Electives) has no status line; defaulting to satisfied.",
+      "Section R4000/10 (General Electives) has no status line; defaulting to satisfied."
+    ]
+  },
+  "header": {
+    "studentName": "Sample Student",
+    "preparedDate": "04/27/2026"
+  },
+  "programs": [
+    {
+      "programType": "Program",
+      "label": "Undergraduate Career",
+      "requirementTerm": "Fall 2023",
+      "requirementStatus": "not_satisfied"
+    },
+    {
+      "programType": "Program",
+      "label": "UA-Coll of Arts & Sci",
+      "requirementTerm": "Fall 2024",
+      "requirementStatus": "not_satisfied"
+    },
+    {
+      "programType": "Major Approved",
+      "label": "Computer Science/Math",
+      "requirementTerm": "Fall 2024",
+      "requirementStatus": "not_satisfied"
+    }
+  ],
+  "advisorNotations": [
+    {
+      "requestId": "0000013777",
+      "note": "Request id 0000013777 Test Credit. Permission to apply 32 credits from AP Exam. A. Adviser  09/17/2024",
+      "advisor": "A. Adviser",
+      "date": "09/17/2024"
+    }
+  ],
+  "cumulative": {
+    "creditsRequired": 128,
+    "creditsUsed": 138,
+    "cumulativeGpa": 3.402,
+    "cumulativeGpaRequired": 2,
+    "residencyRequired": 64,
+    "residencyUsed": 80,
+    "passFailUsedUnits": 4,
+    "passFailCapUnits": 32,
+    "outsideHomeUsedUnits": 14,
+    "outsideHomeCapUnits": 16,
+    "timeLimitYears": 8
+  },
+  "requirementGroups": [
+    {
+      "rgId": "RG5000",
+      "title": "Courses Taken Outside of the Undergraduate Career",
+      "status": "satisfied",
+      "statusText": "(no status line found)",
+      "description": "Courses Taken Outside of the Undergraduate Career",
+      "children": [
+        {
+          "rId": "R1659/10",
+          "title": "Courses Taken Outside of the Undergraduate Career",
+          "status": "satisfied",
+          "statusText": "(no status line found)",
+          "description": "These courses were taken outside of your undergraduate career and do not count toward your degree.",
+          "coursesUsed": []
+        }
+      ]
+    },
+    {
+      "rgId": "RG5394",
+      "title": "Notes/Restrictions/Limitations",
+      "status": "satisfied",
+      "statusText": "(no status line found)",
+      "description": "1. The information contained in this analysis should be used to guide you. 2. It should not take the place of consultation with an academic counselor in the Silver Center, Room 905. 3. You are responsible for checking the Bulletin and with your advisor to make sure you are following all school policies. 4. Should there be any errors in this report, please discuss them with your advisor during your next advising appointment. 5. See appropriate department for evaluation of transfer credit that may be applicable to your major/minor. Please expand the areas below to view limits on the Pass/Fail option, credit from outside CAS, possible course exclusions, and the time allowed to complete your degree.",
+      "children": [
+        {
+          "rId": "R1680/10",
+          "title": "Pass/Fail Option",
+          "status": "satisfied",
+          "statusText": "(no status line found)",
+          "description": "A. No more than 32 units may be taken with the pass/fail grade option. B. Pass/fail grade option may not be selected for major, minor, or courses taken to satisfy the College Core Curriculum. C. Students may elect one pass/fail option each term.",
+          "counter": {
+            "kind": "units",
+            "required": 0,
+            "used": 4
+          },
+          "coursesUsed": [
+            {
+              "term": "2025 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "233",
+              "courseTitle": "Theory of Probability",
+              "grade": "P",
+              "units": 4,
+              "type": "EN"
+            }
+          ]
+        },
+        {
+          "rId": "R1680/30",
+          "title": "Maximum Credit from Other Schools",
+          "status": "satisfied",
+          "statusText": "Satisfied: No more than 16 units may be taken outside of CAS (including transfer work).",
+          "counter": {
+            "kind": "units",
+            "required": 0,
+            "used": 14
+          },
+          "coursesUsed": [
+            {
+              "term": "2025 Fall",
+              "subject": "ACCT-UB",
+              "catalogNbr": "1",
+              "courseTitle": "Prin of Financial Acctg",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "MKTG-UB",
+              "catalogNbr": "1",
+              "courseTitle": "Intro to Marketing",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "MPAJZ-UE",
+              "catalogNbr": "71",
+              "courseTitle": "Pop/Jazz Piano (Prvt Lessons)",
+              "grade": "A",
+              "units": 2,
+              "type": "EN"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "MPAJZ-UE",
+              "catalogNbr": "71",
+              "courseTitle": "Pop/Jazz Piano (Prvt Lessons)",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        },
+        {
+          "rId": "R1680/60",
+          "title": "Time Limit",
+          "status": "satisfied",
+          "statusText": "(no status line found)",
+          "description": "All requirements must be met within a period of 8 years from the date of matriculation.",
+          "coursesUsed": []
+        }
+      ]
+    },
+    {
+      "rgId": "RG5001",
+      "title": "Graduation Requirements",
+      "status": "satisfied",
+      "statusText": "Satisfied: Complete the minimum requirements for graduation. In addition to the requirements below, students must",
+      "description": "complete their last 32 units while enrolled at CAS.",
+      "children": [
+        {
+          "rId": "R1001/10",
+          "title": "Minimum Credits for Graduation",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete a minimum of 128 credits.",
+          "counter": {
+            "kind": "units",
+            "required": 128,
+            "used": 138
+          },
+          "coursesUsed": [
+            {
+              "term": "2023 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "102",
+              "courseTitle": "Data Structures",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "EXPOS-UA",
+              "catalogNbr": "5",
+              "courseTitle": "Writing the Essay: Art in the",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "IMNY-UT",
+              "catalogNbr": "99",
+              "courseTitle": "IMA Cohort: Community is a Pra",
+              "grade": "P",
+              "units": 0,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "IMNY-UT",
+              "catalogNbr": "101",
+              "courseTitle": "Creative Computing",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "IMNY-UT",
+              "catalogNbr": "102",
+              "courseTitle": "Communications Lab",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "ASPP-UT",
+              "catalogNbr": "2",
+              "courseTitle": "The World Through Art Writing",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "201",
+              "courseTitle": "Computer Systems Org",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "120",
+              "courseTitle": "Discrete Mathematics",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "SPAN-UA",
+              "catalogNbr": "1",
+              "courseTitle": "Spanish for Beginners- Level I",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "101",
+              "courseTitle": "Intro to Computer Sci",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "EAST-UA",
+              "catalogNbr": "204",
+              "courseTitle": "Intermediate Chinese II",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "ECON-UA",
+              "catalogNbr": "2",
+              "courseTitle": "Introduction to Microeconomics",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "ELECTIVE",
+              "catalogNbr": "CREDIT",
+              "courseTitle": "Elective Credit UGRD",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "121",
+              "courseTitle": "Calculus I",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "122",
+              "courseTitle": "Calculus II",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "PHYS-UA",
+              "catalogNbr": "11",
+              "courseTitle": "General Physics I",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "PHYS-UA",
+              "catalogNbr": "12",
+              "courseTitle": "General Physics II",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "202",
+              "courseTitle": "Operating Systems",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "ECON-UA",
+              "catalogNbr": "1",
+              "courseTitle": "Introduction to Macroeconomics",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "123",
+              "courseTitle": "Calculus III",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "140",
+              "courseTitle": "Linear Algebra",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "CORE-UA",
+              "catalogNbr": "500",
+              "courseTitle": "Cultures & Contexts: Topics (Wine and Feasting in the Anci)",
+              "grade": "C",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "310",
+              "courseTitle": "Basic Algorithms",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "325",
+              "courseTitle": "Analysis",
+              "grade": "C+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "ACCT-UB",
+              "catalogNbr": "1",
+              "courseTitle": "Prin of Financial Acctg",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "472",
+              "courseTitle": "Artificial Intelligence",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "333",
+              "courseTitle": "Theory of Probability",
+              "grade": "B-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "MKTG-UB",
+              "catalogNbr": "1",
+              "courseTitle": "Intro to Marketing",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "MPAJZ-UE",
+              "catalogNbr": "71",
+              "courseTitle": "Pop/Jazz Piano (Prvt Lessons)",
+              "grade": "A",
+              "units": 2,
+              "type": "EN"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "4",
+              "courseTitle": "Introduction to Web Design and",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "473",
+              "courseTitle": "Fundamentals of Machine Learn",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "334",
+              "courseTitle": "Mathematical Statistics",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "MPAJZ-UE",
+              "catalogNbr": "71",
+              "courseTitle": "Pop/Jazz Piano (Prvt Lessons)",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Fall",
+              "subject": "CORE-UA",
+              "catalogNbr": "700",
+              "courseTitle": "Expressive Culture: Topics (Global Hip Hop)",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "251",
+              "courseTitle": "Introduction to Math Modeling",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "343",
+              "courseTitle": "Algebra",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        },
+        {
+          "rId": "R1001/20",
+          "title": "Minimum Grade Point Average",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete all coursework with a minimum overall GPA of 2.00.",
+          "counter": {
+            "kind": "gpa",
+            "required": 2,
+            "completed": 3.402
+          },
+          "coursesUsed": [
+            {
+              "term": "2023 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "102",
+              "courseTitle": "Data Structures",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "EXPOS-UA",
+              "catalogNbr": "5",
+              "courseTitle": "Writing the Essay: Art in the",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "IMNY-UT",
+              "catalogNbr": "101",
+              "courseTitle": "Creative Computing",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "IMNY-UT",
+              "catalogNbr": "102",
+              "courseTitle": "Communications Lab",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "ASPP-UT",
+              "catalogNbr": "2",
+              "courseTitle": "The World Through Art Writing",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "201",
+              "courseTitle": "Computer Systems Org",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "120",
+              "courseTitle": "Discrete Mathematics",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "SPAN-UA",
+              "catalogNbr": "1",
+              "courseTitle": "Spanish for Beginners- Level I",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            }
+          ]
+        },
+        {
+          "rId": "R1001/35",
+          "title": "CAS Residency: 64 Credits",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete a minimum of 64 credits in CAS coursework.",
+          "counter": {
+            "kind": "units",
+            "required": 64,
+            "used": 80
+          },
+          "coursesUsed": [
+            {
+              "term": "2023 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "102",
+              "courseTitle": "Data Structures",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "EXPOS-UA",
+              "catalogNbr": "5",
+              "courseTitle": "Writing the Essay: Art in the",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "201",
+              "courseTitle": "Computer Systems Org",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "120",
+              "courseTitle": "Discrete Mathematics",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "SPAN-UA",
+              "catalogNbr": "1",
+              "courseTitle": "Spanish for Beginners- Level I",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "202",
+              "courseTitle": "Operating Systems",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "ECON-UA",
+              "catalogNbr": "1",
+              "courseTitle": "Introduction to Macroeconomics",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "123",
+              "courseTitle": "Calculus III",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "140",
+              "courseTitle": "Linear Algebra",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "CORE-UA",
+              "catalogNbr": "500",
+              "courseTitle": "Cultures & Contexts: Topics (Wine and Feasting in the Anci)",
+              "grade": "C",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "310",
+              "courseTitle": "Basic Algorithms",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "325",
+              "courseTitle": "Analysis",
+              "grade": "C+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "472",
+              "courseTitle": "Artificial Intelligence",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "333",
+              "courseTitle": "Theory of Probability",
+              "grade": "B-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "4",
+              "courseTitle": "Introduction to Web Design and",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "473",
+              "courseTitle": "Fundamentals of Machine Learn",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "334",
+              "courseTitle": "Mathematical Statistics",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Fall",
+              "subject": "CORE-UA",
+              "catalogNbr": "700",
+              "courseTitle": "Expressive Culture: Topics (Global Hip Hop)",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "251",
+              "courseTitle": "Introduction to Math Modeling",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "343",
+              "courseTitle": "Algebra",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rgId": "RG33308",
+      "title": "First-Year Seminar",
+      "status": "satisfied",
+      "statusText": "Satisfied: Complete one First-Year Seminar (FYSEM-UA).",
+      "children": [
+        {
+          "rId": "R20488/15",
+          "title": "First-Year Seminar",
+          "status": "satisfied",
+          "statusText": "Satisfied: First-Year Seminar (FYSEM-UA) not required for transfer students.",
+          "coursesUsed": []
+        }
+      ]
+    },
+    {
+      "rgId": "RG5002",
+      "title": "Foreign Language",
+      "status": "satisfied",
+      "statusText": "Satisfied: You must complete 1 foreign language course.",
+      "children": [
+        {
+          "rId": "R1005/10",
+          "title": "Foreign Language",
+          "status": "satisfied",
+          "statusText": "Satisfied: Must demonstrate proficiency at the 2nd semester intermediate level through coursework or exam. Select",
+          "description": "from languages offered by the College of Arts and Science or English as a Second Language.",
+          "counter": {
+            "kind": "courses",
+            "required": 1,
+            "used": 1
+          },
+          "coursesUsed": [
+            {
+              "term": "2024 Fall",
+              "subject": "EAST-UA",
+              "catalogNbr": "204",
+              "courseTitle": "Intermediate Chinese II",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rgId": "RG5005",
+      "title": "Expository Writing",
+      "status": "satisfied",
+      "statusText": "Satisfied: Complete the appropriate set of courses:",
+      "description": "-EXPOS-UA 1 -EXPOS-UA 4 and 9 (International students only) -WRI-UF 101 and WRII-UF 102 (HEOP and C-STEP students only)",
+      "children": [
+        {
+          "rId": "R1002/10",
+          "title": "Expository Writing",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete EXPOS-UA 1.",
+          "counter": {
+            "kind": "courses",
+            "required": 1,
+            "used": 1
+          },
+          "coursesUsed": [
+            {
+              "term": "2023 Fall",
+              "subject": "EXPOS-UA",
+              "catalogNbr": "5",
+              "courseTitle": "Writing the Essay: Art in the",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rgId": "RG5004",
+      "title": "CORE Foundations of Contemporary Culture",
+      "status": "overall_not_satisfied",
+      "statusText": "Overall Requirement Not Satisfied: Complete the 4 areas below, courses may not be taken with the pass/fail grade",
+      "description": "option. For a list of approved courses, refer to the College Core Curriculum.",
+      "children": [
+        {
+          "rId": "R1004",
+          "title": "Texts & Ideas",
+          "status": "overall_not_satisfied",
+          "statusText": "Overall Requirement Not Satisfied: Complete one course from CORE-UA 400-499.",
+          "coursesUsed": []
+        },
+        {
+          "rId": "R1004/10",
+          "title": "Texts & Ideas",
+          "status": "not_satisfied",
+          "statusText": "Not Satisfied: Complete 1 course from CORE-UA 400-499.",
+          "counter": {
+            "kind": "courses",
+            "required": 1,
+            "used": 0,
+            "needed": 1
+          },
+          "coursesUsed": []
+        },
+        {
+          "rId": "R1006",
+          "title": "Cultures & Contexts",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete one course from CORE-UA 500-599.",
+          "coursesUsed": []
+        },
+        {
+          "rId": "R1006/10",
+          "title": "Cultures & Contexts",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete 1 course from CORE-UA 500-599.",
+          "counter": {
+            "kind": "courses",
+            "required": 1,
+            "used": 1
+          },
+          "coursesUsed": [
+            {
+              "term": "2025 Spr",
+              "subject": "CORE-UA",
+              "catalogNbr": "500",
+              "courseTitle": "Cultures & Contexts: Topics (Wine and Feasting in the Anci)",
+              "grade": "C",
+              "units": 4,
+              "type": "EN"
+            }
+          ]
+        },
+        {
+          "rId": "R1007",
+          "title": "Societies & Social Sciences",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete an approved departmental course or an approved major/minor in the social sciences.",
+          "coursesUsed": []
+        },
+        {
+          "rId": "R1007/10",
+          "title": "Societies & Social Sciences",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete one course from CORE-UA 600-699.",
+          "counter": {
+            "kind": "courses",
+            "required": 1,
+            "used": 1
+          },
+          "coursesUsed": [
+            {
+              "term": "2024 Fall",
+              "subject": "ECON-UA",
+              "catalogNbr": "1",
+              "courseTitle": "Introduction to Macroeconomics",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            }
+          ]
+        },
+        {
+          "rId": "R1008",
+          "title": "Expressive Culture",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete one course from CORE-UA 700-799, an approved departmental course, or an approved major/minor in the humanities.",
+          "coursesUsed": []
+        },
+        {
+          "rId": "R1008/10",
+          "title": "Expressive Culture",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete 1 course from CORE-UA 700-799.",
+          "counter": {
+            "kind": "courses",
+            "required": 1,
+            "used": 1
+          },
+          "coursesUsed": [
+            {
+              "term": "2026 Fall",
+              "subject": "CORE-UA",
+              "catalogNbr": "700",
+              "courseTitle": "Expressive Culture: Topics (Global Hip Hop)",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rgId": "RG5007",
+      "title": "CORE Foundations of Scientific Inquiry - Quantitative Reasoning",
+      "status": "satisfied",
+      "statusText": "Satisfied: Satisfy the requirement as specified below.",
+      "children": [
+        {
+          "rId": "R1009/10",
+          "title": "Quantitative Reasoning",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete 1 course from CORE-UA 100-199, MATH-UA 12, 17-899, or an approved departmental course.",
+          "description": "Refer to the College Core Curriculum website.",
+          "counter": {
+            "kind": "courses",
+            "required": 1,
+            "used": 1
+          },
+          "coursesUsed": [
+            {
+              "term": "2024 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "120",
+              "courseTitle": "Discrete Mathematics",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rgId": "RG5393",
+      "title": "CORE Foundations of Scientific Inquiry - Physical and Life Science",
+      "status": "satisfied",
+      "statusText": "Satisfied: Complete Physical Science and Life Science.",
+      "children": [
+        {
+          "rId": "RG5393/_summary",
+          "title": "CORE Foundations of Scientific Inquiry - Physical and Life Science (summary)",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete Physical Science and Life Science.",
+          "counter": {
+            "kind": "courses",
+            "required": 2,
+            "used": 2
+          },
+          "coursesUsed": []
+        },
+        {
+          "rId": "R1014",
+          "title": "Physical & Life Science Sequence",
+          "status": "satisfied",
+          "statusText": "(no status line found)",
+          "description": "Complete a year long sequence in one area. A. Biology: BIOL-UA 11, 12 (transfer credit or test credit only) B. Chemistry: CHEM-UA 101, 102, 103 & 104 or CHEM-UA 125 & 126. C. Physics: PHYS-UA 11, 12. D. Physics for majors: Physics I - complete: PHYS-UA 91 and 71. Physics II - complete: PHYS-UA 93 and 72.",
+          "coursesUsed": []
+        },
+        {
+          "rId": "R1014/50",
+          "title": "Physical and Life Science Sequence (Physics)",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete 2 courses:",
+          "description": "PHYS-UA 11, 12.",
+          "counter": {
+            "kind": "courses",
+            "required": 2,
+            "used": 2
+          },
+          "coursesUsed": [
+            {
+              "term": "2024 Fall",
+              "subject": "PHYS-UA",
+              "catalogNbr": "11",
+              "courseTitle": "General Physics I",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "PHYS-UA",
+              "catalogNbr": "12",
+              "courseTitle": "General Physics II",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rgId": "RG31394",
+      "title": "Writing Proficiency",
+      "status": "satisfied",
+      "statusText": "Satisfied: Complete the required Expository Writing courses with a \"C\" or higher or take the Writing Proficiency Exam.",
+      "description": "Students who do not pass the exam are required to complete EXPOS-UA 13 - Writing Tutorial.",
+      "children": [
+        {
+          "rId": "R20152/10",
+          "title": "Writing Proficiency",
+          "status": "satisfied",
+          "statusText": "Satisfied:",
+          "counter": {
+            "kind": "courses",
+            "required": 1,
+            "used": 2
+          },
+          "coursesUsed": [
+            {
+              "term": "2023 Fall",
+              "subject": "EXPOS-UA",
+              "catalogNbr": "5",
+              "courseTitle": "Writing the Essay: Art in the",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "ASPP-UT",
+              "catalogNbr": "2",
+              "courseTitle": "The World Through Art Writing",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rgId": "RG31395",
+      "title": "General Electives",
+      "status": "satisfied",
+      "statusText": "(no status line found)",
+      "description": "Courses not used anywhere else will display here.",
+      "children": [
+        {
+          "rId": "R4000/10",
+          "title": "General Electives",
+          "status": "satisfied",
+          "statusText": "(no status line found)",
+          "coursesUsed": [
+            {
+              "term": "2023 Fall",
+              "subject": "IMNY-UT",
+              "catalogNbr": "99",
+              "courseTitle": "IMA Cohort: Community is a Pra",
+              "grade": "P",
+              "units": 0,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "IMNY-UT",
+              "catalogNbr": "101",
+              "courseTitle": "Creative Computing",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2023 Fall",
+              "subject": "IMNY-UT",
+              "catalogNbr": "102",
+              "courseTitle": "Communications Lab",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "ASPP-UT",
+              "catalogNbr": "2",
+              "courseTitle": "The World Through Art Writing",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "SPAN-UA",
+              "catalogNbr": "1",
+              "courseTitle": "Spanish for Beginners- Level I",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "ECON-UA",
+              "catalogNbr": "2",
+              "courseTitle": "Introduction to Microeconomics",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "ELECTIVE",
+              "catalogNbr": "CREDIT",
+              "courseTitle": "Elective Credit UGRD",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "ACCT-UB",
+              "catalogNbr": "1",
+              "courseTitle": "Prin of Financial Acctg",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "MKTG-UB",
+              "catalogNbr": "1",
+              "courseTitle": "Intro to Marketing",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "MPAJZ-UE",
+              "catalogNbr": "71",
+              "courseTitle": "Pop/Jazz Piano (Prvt Lessons)",
+              "grade": "A",
+              "units": 2,
+              "type": "EN"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "4",
+              "courseTitle": "Introduction to Web Design and",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "MPAJZ-UE",
+              "catalogNbr": "71",
+              "courseTitle": "Pop/Jazz Piano (Prvt Lessons)",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rgId": "RG5076",
+      "title": "Computer Science/Math Joint Major",
+      "status": "not_satisfied",
+      "statusText": "Not Satisfied: Complete the requirements outlined below. Courses with grades below \"C\" will not count for the major.",
+      "description": "Pass/Fail grade option may not be used for the major.",
+      "children": [
+        {
+          "rId": "RG5076/_summary",
+          "title": "Computer Science/Math Joint Major (summary)",
+          "status": "not_satisfied",
+          "statusText": "Not Satisfied: Complete the requirements outlined below. Courses with grades below \"C\" will not count for the major.",
+          "description": "Pass/Fail grade option may not be used for the major.",
+          "counter": {
+            "kind": "courses",
+            "required": 18,
+            "used": 17,
+            "needed": 1
+          },
+          "coursesUsed": []
+        },
+        {
+          "rId": "R1142/20",
+          "title": "Computer Science: Required Courses",
+          "status": "not_satisfied",
+          "statusText": "Not Satisfied: Complete the following courses:",
+          "description": "CSCI-UA 101 - Introduction to Computer Science I CSCI-UA 102 - Introduction to Computer Science II CSCI-UA 201 - Computer Systems Org I CSCI-UA 202 - Computer Systems Org II CSCI-UA 310 - Basic Algorithms CSCI-UA 421 - Numerical Computing",
+          "counter": {
+            "kind": "courses",
+            "required": 6,
+            "used": 5,
+            "needed": 1
+          },
+          "coursesUsed": [
+            {
+              "term": "2023 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "102",
+              "courseTitle": "Data Structures",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "201",
+              "courseTitle": "Computer Systems Org",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "101",
+              "courseTitle": "Intro to Computer Sci",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "202",
+              "courseTitle": "Operating Systems",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "310",
+              "courseTitle": "Basic Algorithms",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            }
+          ]
+        },
+        {
+          "rId": "R1142/30",
+          "title": "Computer Science: Elective Courses",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete 2 courses from: CSCI-UA 400-499",
+          "description": "May replace 400 level courses with graduate courses, with permission of the department. Independent Study cannot be used for the elective area.",
+          "counter": {
+            "kind": "courses",
+            "required": 2,
+            "used": 2
+          },
+          "coursesUsed": [
+            {
+              "term": "2025 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "472",
+              "courseTitle": "Artificial Intelligence",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "473",
+              "courseTitle": "Fundamentals of Machine Learn",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        },
+        {
+          "rId": "R1142/40",
+          "title": "Mathematics: Required Courses",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete the following courses:",
+          "description": "MATH-UA 120 - Discrete Mathematics MATH-UA 121 - Calculus I OR MATH-UA 131 Mathematics for Economics I MATH-UA 325 - Advanced Calculus I OR MATH-UA 328 Honors Analysis I MATH-UA 343 - Algebra I OR MATH-UA 348 Honors Algebra I",
+          "counter": {
+            "kind": "courses",
+            "required": 4,
+            "used": 4
+          },
+          "coursesUsed": [
+            {
+              "term": "2024 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "120",
+              "courseTitle": "Discrete Mathematics",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "121",
+              "courseTitle": "Calculus I",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "325",
+              "courseTitle": "Analysis",
+              "grade": "C+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2026 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "343",
+              "courseTitle": "Algebra",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        },
+        {
+          "rId": "R1142/55",
+          "title": "Mathematics: Calculus Courses",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete the following courses:",
+          "description": "MATH-UA 122 - Calculus II OR MATH-UA 132 Mathematics for Economics II MATH-UA 123 - Calculus III OR MATH-UA 133 Mathematics for Economics III MATH-UA 140 Linear Algebra <B>OR</B> MATH-UA 148 Honors Linear Algebra",
+          "counter": {
+            "kind": "courses",
+            "required": 3,
+            "used": 3
+          },
+          "coursesUsed": [
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "122",
+              "courseTitle": "Calculus II",
+              "grade": "TE",
+              "units": 4,
+              "type": "TE"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "123",
+              "courseTitle": "Calculus III",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "140",
+              "courseTitle": "Linear Algebra",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            }
+          ]
+        },
+        {
+          "rId": "R1142/60",
+          "title": "Mathematics: Advanced Courses",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete two advanced Math courses; please see list on the department",
+          "description": "website.",
+          "counter": {
+            "kind": "courses",
+            "required": 2,
+            "used": 2
+          },
+          "coursesUsed": [
+            {
+              "term": "2025 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "333",
+              "courseTitle": "Theory of Probability",
+              "grade": "B-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "334",
+              "courseTitle": "Mathematical Statistics",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        },
+        {
+          "rId": "R1142/70",
+          "title": "Mathematics: Elective Courses",
+          "status": "satisfied",
+          "statusText": "Satisfied: Complete one course by advisement.",
+          "counter": {
+            "kind": "courses",
+            "required": 1,
+            "used": 1
+          },
+          "coursesUsed": [
+            {
+              "term": "2026 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "251",
+              "courseTitle": "Introduction to Math Modeling",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        },
+        {
+          "rId": "R1142/75",
+          "title": "Computer Science/Math Joint Major: GPA",
+          "status": "satisfied",
+          "statusText": "Satisfied: Need a minimum GPA of 2.00.  This includes all courses approved for use in the major, regardless of grade.",
+          "counter": {
+            "kind": "gpa",
+            "required": 2,
+            "completed": 3.333
+          },
+          "coursesUsed": [
+            {
+              "term": "2023 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "102",
+              "courseTitle": "Data Structures",
+              "grade": "B",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "201",
+              "courseTitle": "Computer Systems Org",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "120",
+              "courseTitle": "Discrete Mathematics",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "202",
+              "courseTitle": "Operating Systems",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "123",
+              "courseTitle": "Calculus III",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2024 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "140",
+              "courseTitle": "Linear Algebra",
+              "grade": "A-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "310",
+              "courseTitle": "Basic Algorithms",
+              "grade": "B+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "325",
+              "courseTitle": "Analysis",
+              "grade": "C+",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "CSCI-UA",
+              "catalogNbr": "472",
+              "courseTitle": "Artificial Intelligence",
+              "grade": "A",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2025 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "333",
+              "courseTitle": "Theory of Probability",
+              "grade": "B-",
+              "units": 4,
+              "type": "EN"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "CSCI-UA",
+              "catalogNbr": "473",
+              "courseTitle": "Fundamentals of Machine Learn",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Spr",
+              "subject": "MATH-UA",
+              "catalogNbr": "334",
+              "courseTitle": "Mathematical Statistics",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "251",
+              "courseTitle": "Introduction to Math Modeling",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            },
+            {
+              "term": "2026 Fall",
+              "subject": "MATH-UA",
+              "catalogNbr": "343",
+              "courseTitle": "Algebra",
+              "grade": null,
+              "units": 4,
+              "type": "IP"
+            }
+          ]
+        },
+        {
+          "rId": "R1142/80",
+          "title": "Computer Science/Math Joint Major: Residency",
+          "status": "satisfied",
+          "statusText": "Satisfied: At least 1/2 of the major units (36) must be CAS courses completed while enrolled at NYU.",
+          "counter": {
+            "kind": "units",
+            "required": 36,
+            "used": 56
+          },
+          "coursesUsed": []
+        }
+      ]
+    }
+  ],
+  "courseHistory": [
+    {
+      "term": "2023 Fall",
+      "subject": "CSCI-UA",
+      "catalogNbr": "102",
+      "courseTitle": "Data Structures",
+      "grade": "B",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2023 Fall",
+      "subject": "EXPOS-UA",
+      "catalogNbr": "5",
+      "courseTitle": "Writing the Essay: Art in the",
+      "grade": "B+",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2023 Fall",
+      "subject": "IMNY-UT",
+      "catalogNbr": "99",
+      "courseTitle": "IMA Cohort: Community is a Pra",
+      "grade": "P",
+      "units": 0,
+      "type": "EN"
+    },
+    {
+      "term": "2023 Fall",
+      "subject": "IMNY-UT",
+      "catalogNbr": "101",
+      "courseTitle": "Creative Computing",
+      "grade": "A",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2023 Fall",
+      "subject": "IMNY-UT",
+      "catalogNbr": "102",
+      "courseTitle": "Communications Lab",
+      "grade": "A",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2024 Spr",
+      "subject": "ASPP-UT",
+      "catalogNbr": "2",
+      "courseTitle": "The World Through Art Writing",
+      "grade": "B",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2024 Spr",
+      "subject": "CSCI-UA",
+      "catalogNbr": "201",
+      "courseTitle": "Computer Systems Org",
+      "grade": "B+",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2024 Spr",
+      "subject": "MATH-UA",
+      "catalogNbr": "120",
+      "courseTitle": "Discrete Mathematics",
+      "grade": "B+",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2024 Spr",
+      "subject": "SPAN-UA",
+      "catalogNbr": "1",
+      "courseTitle": "Spanish for Beginners- Level I",
+      "grade": "A-",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "CSCI-UA",
+      "catalogNbr": "101",
+      "courseTitle": "Intro to Computer Sci",
+      "grade": "TE",
+      "units": 4,
+      "type": "TE"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "EAST-UA",
+      "catalogNbr": "204",
+      "courseTitle": "Intermediate Chinese II",
+      "grade": "TE",
+      "units": 4,
+      "type": "TE"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "ECON-UA",
+      "catalogNbr": "2",
+      "courseTitle": "Introduction to Microeconomics",
+      "grade": "TE",
+      "units": 4,
+      "type": "TE"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "ELECTIVE",
+      "catalogNbr": "CREDIT",
+      "courseTitle": "Elective Credit UGRD",
+      "grade": "TE",
+      "units": 4,
+      "type": "TE"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "MATH-UA",
+      "catalogNbr": "121",
+      "courseTitle": "Calculus I",
+      "grade": "TE",
+      "units": 4,
+      "type": "TE"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "MATH-UA",
+      "catalogNbr": "122",
+      "courseTitle": "Calculus II",
+      "grade": "TE",
+      "units": 4,
+      "type": "TE"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "PHYS-UA",
+      "catalogNbr": "11",
+      "courseTitle": "General Physics I",
+      "grade": "TE",
+      "units": 4,
+      "type": "TE"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "PHYS-UA",
+      "catalogNbr": "12",
+      "courseTitle": "General Physics II",
+      "grade": "TE",
+      "units": 4,
+      "type": "TE"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "CSCI-UA",
+      "catalogNbr": "202",
+      "courseTitle": "Operating Systems",
+      "grade": "A",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "ECON-UA",
+      "catalogNbr": "1",
+      "courseTitle": "Introduction to Macroeconomics",
+      "grade": "B",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "MATH-UA",
+      "catalogNbr": "123",
+      "courseTitle": "Calculus III",
+      "grade": "A-",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2024 Fall",
+      "subject": "MATH-UA",
+      "catalogNbr": "140",
+      "courseTitle": "Linear Algebra",
+      "grade": "A-",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2025 Spr",
+      "subject": "CORE-UA",
+      "catalogNbr": "500",
+      "courseTitle": "Cultures & Contexts: Topics",
+      "grade": "C",
+      "units": 4,
+      "type": "EN",
+      "courseTopic": "24 - Wine and Feasting in the Anci"
+    },
+    {
+      "term": "2025 Spr",
+      "subject": "CSCI-UA",
+      "catalogNbr": "310",
+      "courseTitle": "Basic Algorithms",
+      "grade": "B+",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2025 Spr",
+      "subject": "MATH-UA",
+      "catalogNbr": "233",
+      "courseTitle": "Theory of Probability",
+      "grade": "P",
+      "units": 4,
+      "type": "EN",
+      "repeatCode": "RI - Repeat (Incl GPA Excl Hrs)"
+    },
+    {
+      "term": "2025 Spr",
+      "subject": "MATH-UA",
+      "catalogNbr": "325",
+      "courseTitle": "Analysis",
+      "grade": "C+",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2025 Fall",
+      "subject": "ACCT-UB",
+      "catalogNbr": "1",
+      "courseTitle": "Prin of Financial Acctg",
+      "grade": "A",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2025 Fall",
+      "subject": "CSCI-UA",
+      "catalogNbr": "472",
+      "courseTitle": "Artificial Intelligence",
+      "grade": "A",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2025 Fall",
+      "subject": "MATH-UA",
+      "catalogNbr": "333",
+      "courseTitle": "Theory of Probability",
+      "grade": "B-",
+      "units": 4,
+      "type": "EN",
+      "repeatCode": "R - Repeated course"
+    },
+    {
+      "term": "2025 Fall",
+      "subject": "MKTG-UB",
+      "catalogNbr": "1",
+      "courseTitle": "Intro to Marketing",
+      "grade": "A",
+      "units": 4,
+      "type": "EN"
+    },
+    {
+      "term": "2025 Fall",
+      "subject": "MPAJZ-UE",
+      "catalogNbr": "71",
+      "courseTitle": "Pop/Jazz Piano (Prvt Lessons)",
+      "grade": "A",
+      "units": 2,
+      "type": "EN"
+    },
+    {
+      "term": "2026 Spr",
+      "subject": "CSCI-UA",
+      "catalogNbr": "4",
+      "courseTitle": "Introduction to Web Design and",
+      "grade": null,
+      "units": 4,
+      "type": "IP"
+    },
+    {
+      "term": "2026 Spr",
+      "subject": "CSCI-UA",
+      "catalogNbr": "473",
+      "courseTitle": "Fundamentals of Machine Learn",
+      "grade": null,
+      "units": 4,
+      "type": "IP"
+    },
+    {
+      "term": "2026 Spr",
+      "subject": "MATH-UA",
+      "catalogNbr": "334",
+      "courseTitle": "Mathematical Statistics",
+      "grade": null,
+      "units": 4,
+      "type": "IP"
+    },
+    {
+      "term": "2026 Spr",
+      "subject": "MPAJZ-UE",
+      "catalogNbr": "71",
+      "courseTitle": "Pop/Jazz Piano (Prvt Lessons)",
+      "grade": null,
+      "units": 4,
+      "type": "IP"
+    },
+    {
+      "term": "2026 Fall",
+      "subject": "CORE-UA",
+      "catalogNbr": "700",
+      "courseTitle": "Expressive Culture: Topics",
+      "grade": null,
+      "units": 4,
+      "type": "IP",
+      "courseTopic": "9 - Global Hip Hop"
+    },
+    {
+      "term": "2026 Fall",
+      "subject": "MATH-UA",
+      "catalogNbr": "251",
+      "courseTitle": "Introduction to Math Modeling",
+      "grade": null,
+      "units": 4,
+      "type": "IP"
+    },
+    {
+      "term": "2026 Fall",
+      "subject": "MATH-UA",
+      "catalogNbr": "343",
+      "courseTitle": "Algebra",
+      "grade": null,
+      "units": 4,
+      "type": "IP"
+    }
+  ]
+}
