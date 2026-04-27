@@ -49,6 +49,26 @@ export type {
     AgentStreamEvent,
 } from "./agentLoop.js";
 
+export {
+    createLoopState,
+    recordTransition,
+    enforceToolResultBudget,
+    measureContextPressure,
+    estimateTokens,
+    MAX_TOOL_RESULT_BUDGET,
+    TOOL_RESULT_KEEP_RECENT,
+    DEFAULT_MODEL_WINDOW_TOKENS,
+    TIER2_TRIP_FRACTION,
+    TIER3_TRIP_FRACTION,
+} from "./loopState.js";
+export type {
+    LoopState,
+    LoopStateOptions,
+    TransitionReason,
+    TransitionRecord,
+    ContextPressure,
+} from "./loopState.js";
+
 export type { LLMStreamEvent } from "./llmClient.js";
 
 export { buildSystemPrompt } from "./systemPrompt.js";

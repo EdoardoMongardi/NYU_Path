@@ -28,6 +28,9 @@ export const getCreditCapsTool = buildTool({
     inputSchema: z.object({}),
     isReadOnly: true,
     maxResultChars: 1500,
+    // Phase 7-B Step 15 — semi_hardened: the per-semester ceiling and
+    // F-1 floor are deterministic numbers the validator must guard.
+    outputMode: "semi_hardened",
     async validateInput(_input, { session }) {
         if (!session.student) return { ok: false, userMessage: "No student profile loaded." };
         if (!session.schoolConfig) return { ok: false, userMessage: "School config not loaded." };
@@ -87,5 +90,23 @@ export const getCreditCapsTool = buildTool({
         }
         lines.push(`Overall GPA min: ${out.overallGpaMin}`);
         return lines.join("\n");
+    },
+    // Phase 7-B Step 15 — verbatim text the LLM must include
+    // unchanged when it answers a credit-load question. We pin the
+    // single most-load-bearing sentence (the ceiling); reasonable
+    // synthesis around it is still allowed.
+    extractVerbatim(out) {
+        const fragments: string[] = [];
+        if (out.perSemesterCeiling !== null) {
+            fragments.push(
+                `${out.schoolName} per-semester ceiling: ${out.perSemesterCeiling} credits.`,
+            );
+        }
+        if (out.f1FullTimeFloor !== null) {
+            fragments.push(
+                `F-1 full-time floor: ${out.f1FullTimeFloor} credits per semester.`,
+            );
+        }
+        return fragments.length > 0 ? fragments.join(" ") : null;
     },
 });

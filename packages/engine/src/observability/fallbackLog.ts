@@ -26,7 +26,21 @@ export type FallbackEventKind =
     | "validator_block"
     | "tool_unsupported"
     | "low_confidence_rag"
-    | "data_conflict_unresolved";
+    | "data_conflict_unresolved"
+    /** Phase 7-B Step 14 — agent-loop iteration transition. */
+    | "transition"
+    /** Phase 7-B Step 16 — older tool results compacted under MAX_TOOL_RESULT_BUDGET. */
+    | "tool_results_compacted"
+    /** Phase 7-B Step 17 — Tier-2 conversation auto-compaction fired. */
+    | "session_compacted"
+    /** Phase 7-B Step 18 — Tier-3 graceful termination fired. */
+    | "context_limit_terminate"
+    /** Phase 7-B Step 19 — response validator triggered a re-prompt. */
+    | "validator_replay"
+    /** Phase 7-B Step 20 — `finish_reason: "length"` recovery loop fired. */
+    | "output_truncation_recovery"
+    /** Phase 7-B Step 20 — context_length_exceeded reactive compact fired. */
+    | "reactive_compact";
 
 export interface FallbackEvent {
     kind: FallbackEventKind;

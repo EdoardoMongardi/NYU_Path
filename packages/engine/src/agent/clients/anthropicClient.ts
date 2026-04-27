@@ -112,6 +112,7 @@ export class AnthropicEngineClient implements LLMClient {
                 completionTokens: response.usage?.output_tokens,
             },
             modelEcho: response.model,
+            finishReason: mapAnthropicStopReason(response.stop_reason),
         };
     }
 
@@ -271,4 +272,21 @@ export function toAnthropicMessage(m: LLMMessage): Anthropic.MessageParam {
         return { role: m.role, content: m.content };
     }
     throw new Error(`Unsupported LLMMessage role: ${(m as { role: string }).role}`);
+}
+
+function mapAnthropicStopReason(raw: string | null | undefined): import("../llmClient.js").LLMCompletion["finishReason"] {
+    switch (raw) {
+        case "end_turn":
+        case "stop_sequence":
+            return "stop";
+        case "max_tokens":
+            return "length";
+        case "tool_use":
+            return "tool_calls";
+        case null:
+        case undefined:
+            return undefined;
+        default:
+            return "other";
+    }
 }

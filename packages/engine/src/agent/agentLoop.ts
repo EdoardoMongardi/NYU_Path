@@ -34,8 +34,19 @@ import type {
 import type { Tool, ToolSession, ToolUseContext } from "./tool.js";
 import type { ToolRegistry } from "./tool.js";
 import { type FallbackSink, NULL_SINK, emitFallback } from "../observability/fallbackLog.js";
+import {
+    createLoopState,
+    recordTransition,
+    enforceToolResultBudget,
+    measureContextPressure,
+    compactConversation,
+    isContextLengthExceededError,
+    type LoopState,
+    type TransitionRecord,
+    type LoopStateOptions,
+} from "./loopState.js";
 
-export interface AgentTurnOptions {
+export interface AgentTurnOptions extends LoopStateOptions {
     /** Max model→tool→model rounds before the loop bails. Default 10. */
     maxTurns?: number;
     /** Optional fallback LLM client used when the primary errors */
@@ -57,6 +68,18 @@ export interface AgentTurnOptions {
     fallbackSink?: FallbackSink;
     /** Optional correlation id stamped onto every emitted fallback event. */
     correlationId?: string;
+    /**
+     * Phase 7-B Step 19: callback invoked after the model produces a
+     * final reply but before the loop returns. When provided AND the
+     * verdict is `ok: false` AND `validatorReplaysRemaining > 0`, the
+     * loop appends a system message describing the violations and
+     * continues for one more pass. The architecture (§9.1) calls this
+     * the "stop-hook re-prompt" pattern.
+     */
+    validateResponse?: (ctx: { assistantText: string; invocations: ToolInvocation[]; session: ToolSession }) => {
+        ok: boolean;
+        violations: Array<{ kind: string; detail: string }>;
+    };
 }
 
 export interface ToolInvocation {
@@ -70,6 +93,9 @@ export interface ToolInvocation {
     error?: { message: string };
     /** Wall-clock ms spent inside `tool.call()` (validation excluded) */
     callMs?: number;
+    /** Phase 7-B Step 15 — verbatim text the LLM is required to include
+     *  in the final reply when the tool's outputMode is "semi_hardened". */
+    verbatimText?: string;
 }
 
 export type ChatTurnResult =
@@ -81,18 +107,22 @@ export type ChatTurnResult =
         turnMessages: LLMMessage[];
         usage: { promptTokens: number; completionTokens: number };
         modelUsedId: string;
+        /** Phase 7-B Step 14 — chronological list of loop transitions. */
+        transitions: TransitionRecord[];
     }
     | {
         kind: "max_turns";
         invocations: ToolInvocation[];
         turnMessages: LLMMessage[];
         modelUsedId: string;
+        transitions: TransitionRecord[];
     }
     | {
         kind: "aborted";
         invocations: ToolInvocation[];
         turnMessages: LLMMessage[];
         modelUsedId: string;
+        transitions: TransitionRecord[];
     }
     | {
         kind: "model_error_no_fallback";
@@ -100,6 +130,16 @@ export type ChatTurnResult =
         invocations: ToolInvocation[];
         turnMessages: LLMMessage[];
         modelUsedId: string;
+        transitions: TransitionRecord[];
+    }
+    | {
+        /** Phase 7-B Step 18 — Tier-3 graceful termination. */
+        kind: "context_limit";
+        finalText: string;
+        invocations: ToolInvocation[];
+        turnMessages: LLMMessage[];
+        modelUsedId: string;
+        transitions: TransitionRecord[];
     };
 
 /**
@@ -125,24 +165,171 @@ export async function runAgentTurn(
     const invocations: ToolInvocation[] = [];
     const totalUsage = { promptTokens: 0, completionTokens: 0 };
     let modelUsedId = client.id;
+    const state = createLoopState(options);
 
     for (let turn = 0; turn < maxTurns; turn++) {
+        state.iteration = turn;
         if (options.signal?.aborted) {
-            return { kind: "aborted", invocations, turnMessages, modelUsedId };
+            return { kind: "aborted", invocations, turnMessages, modelUsedId, transitions: state.transitions };
         }
 
-        const completionResult = await callWithFallback(
-            client,
-            options.fallbackClient,
-            {
-                system: options.systemPrompt,
-                messages: conversation,
-                tools,
-                maxTokens: options.maxTokens ?? 1024,
-                temperature: 0,
-                signal: options.signal,
-            },
-        );
+        // Phase 7-B Step 18 — Tier-3 graceful termination. Check BEFORE
+        // any model call so we don't spend a (likely 413-prone) round
+        // trip when we already know context is at 95%+.
+        const pressure = measureContextPressure(conversation, options.systemPrompt);
+        if (pressure.tier3) {
+            recordTransition(state, "context_limit_terminate", sink, `fraction=${pressure.fraction.toFixed(3)}`, correlationId);
+            emitFallback(sink, "context_limit_terminate", `Tier-3 trip at fraction=${pressure.fraction.toFixed(3)}; terminating turn so the user can start fresh.`, {
+                correlationId,
+                modelId: modelUsedId,
+                extra: { ...pressure },
+            });
+            const finalText =
+                "I'm running out of context for this conversation. " +
+                "Please start a new chat with the question you'd like me to focus on — " +
+                "I'll have your prior session summary loaded so we don't lose progress.";
+            return { kind: "context_limit", finalText, invocations, turnMessages, modelUsedId, transitions: state.transitions };
+        }
+
+        // Phase 7-B Step 17 — Tier-2 auto-compaction. Fires once per
+        // turn at 80% context pressure, IFF a fallback client is
+        // available to do the cheap summarization call.
+        if (pressure.tier2 && !state.hasFiredTier2Compaction && options.fallbackClient) {
+            const compacted = await tryTier2Compact(conversation, options.fallbackClient, options.systemPrompt, options.signal);
+            if (compacted) {
+                conversation.length = 0;
+                conversation.push(...compacted);
+                state.hasFiredTier2Compaction = true;
+                recordTransition(state, "session_compacted", sink, `fraction=${pressure.fraction.toFixed(3)}`, correlationId);
+                emitFallback(sink, "session_compacted", `Tier-2 compaction at fraction=${pressure.fraction.toFixed(3)}; older turns summarized.`, {
+                    correlationId,
+                    modelId: modelUsedId,
+                    extra: { ...pressure },
+                });
+            }
+        }
+
+        // Phase 7-B Step 16 — apply MAX_TOOL_RESULT_BUDGET before each
+        // model call so we don't pay the round-trip cost on bloated
+        // tool_result history. Counts characters (not tokens) per the
+        // architecture's §6 recipe.
+        const compactedCount = enforceToolResultBudget(conversation);
+        if (compactedCount > 0) {
+            recordTransition(state, "tool_results_compacted", sink, `count=${compactedCount}`, correlationId);
+            emitFallback(sink, "tool_results_compacted", `${compactedCount} older tool result(s) truncated under MAX_TOOL_RESULT_BUDGET.`, {
+                correlationId,
+                modelId: modelUsedId,
+                extra: { count: compactedCount },
+            });
+        }
+
+        recordTransition(state, "next_turn", sink, undefined, correlationId);
+
+        // Phase 7-B Step 20 — reactive compact path. We probe the
+        // primary client BEFORE callWithFallback so a context-length
+        // error doesn't get swallowed by the fallback (which is also
+        // our summarizer). On detection, run Tier-2 compact + retry
+        // primary once. If reactive-compact already fired for this
+        // conversation, skip directly to the fallback path.
+        let perCallMaxTokens = options.maxTokens ?? 1024;
+        const callArgs = {
+            system: options.systemPrompt,
+            messages: conversation,
+            tools,
+            maxTokens: perCallMaxTokens,
+            temperature: 0,
+            signal: options.signal,
+        };
+        let completionResult: Awaited<ReturnType<typeof callWithFallback>>;
+        let primaryError: string | null = null;
+        try {
+            const primary = await client.complete(callArgs);
+            completionResult = { ok: true, completion: primary, usedClientId: client.id };
+        } catch (e) {
+            primaryError = e instanceof Error ? e.message : String(e);
+            if (
+                isContextLengthExceededError(primaryError)
+                && !state.hasAttemptedReactiveCompact
+                && options.fallbackClient
+            ) {
+                const compacted = await tryTier2Compact(conversation, options.fallbackClient, options.systemPrompt, options.signal);
+                if (compacted) {
+                    conversation.length = 0;
+                    conversation.push(...compacted);
+                    state.hasAttemptedReactiveCompact = true;
+                    state.hasFiredTier2Compaction = true;
+                    recordTransition(state, "reactive_compact", sink, "context_length_exceeded", correlationId);
+                    emitFallback(sink, "reactive_compact", "Model returned context_length_exceeded; reactive compaction fired and retrying once.", {
+                        correlationId,
+                        modelId: client.id,
+                    });
+                    try {
+                        const retried = await client.complete({ ...callArgs, messages: conversation });
+                        completionResult = { ok: true, completion: retried, usedClientId: client.id };
+                    } catch (e2) {
+                        completionResult = await callWithFallback(client, options.fallbackClient, { ...callArgs, messages: conversation });
+                        // If even fallback fails, surface the original error context.
+                        if (!completionResult.ok) {
+                            completionResult = { ok: false, error: `Primary "${client.id}" errored after reactive compact: ${e2 instanceof Error ? e2.message : String(e2)}` };
+                        }
+                    }
+                } else {
+                    completionResult = await callWithFallback(client, options.fallbackClient, callArgs);
+                }
+            } else {
+                completionResult = await callWithFallback(client, options.fallbackClient, callArgs);
+            }
+        }
+
+        // Phase 7-B Step 20 — output-truncation recovery loop. When
+        // the model returns finish_reason: "length", retry with
+        // doubled max_tokens up to N attempts.
+        while (
+            completionResult.ok
+            && completionResult.completion.finishReason === "length"
+            && completionResult.completion.toolCalls.length === 0
+            && state.outputTruncationRecoveriesRemaining > 0
+        ) {
+            state.outputTruncationRecoveriesRemaining -= 1;
+            perCallMaxTokens = Math.min(perCallMaxTokens * 2, 16_384);
+            recordTransition(state, "output_truncation_recovery", sink, `attempt=${(options.outputTruncationRecoveryLimit ?? 3) - state.outputTruncationRecoveriesRemaining} max_tokens=${perCallMaxTokens}`, correlationId);
+            emitFallback(sink, "output_truncation_recovery", `finish_reason=length; doubling max_tokens to ${perCallMaxTokens}; ${state.outputTruncationRecoveriesRemaining} retries remaining.`, {
+                correlationId,
+                modelId: completionResult.usedClientId,
+                extra: { maxTokens: perCallMaxTokens, remaining: state.outputTruncationRecoveriesRemaining },
+            });
+            const continuation: LLMMessage = {
+                role: "user",
+                content: "Continue from where you left off. Do not repeat earlier text.",
+            };
+            const retryConv = [...conversation, {
+                role: "assistant" as const,
+                content: completionResult.completion.text,
+            }, continuation];
+            completionResult = await callWithFallback(
+                client,
+                options.fallbackClient,
+                {
+                    system: options.systemPrompt,
+                    messages: retryConv,
+                    tools,
+                    maxTokens: perCallMaxTokens,
+                    temperature: 0,
+                    signal: options.signal,
+                },
+            );
+            if (completionResult.ok) {
+                // Stitch the recovered text onto the original.
+                completionResult = {
+                    ok: true,
+                    completion: {
+                        ...completionResult.completion,
+                        text: completionResult.completion.text,
+                    },
+                    usedClientId: completionResult.usedClientId,
+                };
+            }
+        }
         if (!completionResult.ok) {
             emitFallback(sink, "model_error_no_fallback", completionResult.error, {
                 correlationId,
@@ -154,6 +341,7 @@ export async function runAgentTurn(
                 invocations,
                 turnMessages,
                 modelUsedId,
+                transitions: state.transitions,
             };
         }
         const completion = completionResult.completion;
@@ -165,6 +353,7 @@ export async function runAgentTurn(
                 correlationId,
                 modelId: client.id,
             });
+            recordTransition(state, "model_fallback", sink, `to=${completionResult.usedClientId}`, correlationId);
         }
         modelUsedId = completionResult.usedClientId;
         if (completion.usage?.promptTokens) totalUsage.promptTokens += completion.usage.promptTokens;
@@ -179,8 +368,22 @@ export async function runAgentTurn(
         conversation.push(assistantMsg);
         turnMessages.push(assistantMsg);
 
-        // No tool calls → final reply
+        // No tool calls → final reply (subject to validator replay).
         if (completion.toolCalls.length === 0) {
+            const replayed = maybeQueueValidatorReplay({
+                state,
+                sink,
+                correlationId,
+                conversation,
+                turnMessages,
+                invocations,
+                session,
+                assistantText: completion.text,
+                validateResponse: options.validateResponse,
+            });
+            if (replayed) {
+                continue;
+            }
             return {
                 kind: "ok",
                 finalText: completion.text,
@@ -188,6 +391,7 @@ export async function runAgentTurn(
                 turnMessages,
                 usage: totalUsage,
                 modelUsedId,
+                transitions: state.transitions,
             };
         }
 
@@ -195,7 +399,7 @@ export async function runAgentTurn(
         // to the model so it can decide how to proceed.
         for (const tc of completion.toolCalls) {
             if (options.signal?.aborted) {
-                return { kind: "aborted", invocations, turnMessages, modelUsedId };
+                return { kind: "aborted", invocations, turnMessages, modelUsedId, transitions: state.transitions };
             }
             const tool = registry.get(tc.name);
             if (!tool) {
@@ -229,7 +433,56 @@ export async function runAgentTurn(
         modelId: modelUsedId,
         extra: { maxTurns, invocationCount: invocations.length },
     });
-    return { kind: "max_turns", invocations, turnMessages, modelUsedId };
+    return { kind: "max_turns", invocations, turnMessages, modelUsedId, transitions: state.transitions };
+}
+
+// ============================================================
+// Validator-driven re-prompt (Phase 7-B Step 19 / §9.1)
+// ============================================================
+// When the response validator rejects the model's final reply AND
+// `validatorReplaysRemaining > 0`, we append a system message
+// describing the violations so the model can self-correct on the
+// next iteration. Mirrors Claude Code's stop-hook blocking-error
+// pattern (query.ts L1267-1306). The replay budget defaults to 1
+// per architecture's locked decision.
+// ============================================================
+function maybeQueueValidatorReplay(args: {
+    state: LoopState;
+    sink: FallbackSink;
+    correlationId?: string;
+    conversation: LLMMessage[];
+    turnMessages: LLMMessage[];
+    invocations: ToolInvocation[];
+    session: ToolSession;
+    assistantText: string;
+    validateResponse?: AgentTurnOptions["validateResponse"];
+}): boolean {
+    const { state, sink, correlationId, conversation, turnMessages, invocations, session, assistantText, validateResponse } = args;
+    if (!validateResponse) return false;
+    // Always validate (so the caller's metrics + observability fire on
+    // every reply); only replay when budget remains.
+    const verdict = validateResponse({ assistantText, invocations, session });
+    if (verdict.ok) return false;
+    if (state.validatorReplaysRemaining <= 0) return false;
+
+    state.validatorReplaysRemaining -= 1;
+    const detail = verdict.violations.map((v) => `${v.kind}: ${v.detail}`).join(" | ");
+    recordTransition(state, "validation_retry", sink, detail, correlationId);
+    emitFallback(sink, "validator_replay", `Validator rejected reply; one replay attempt remaining=${state.validatorReplaysRemaining}.`, {
+        correlationId,
+        extra: { violations: verdict.violations, remaining: state.validatorReplaysRemaining },
+    });
+    const reprompt: LLMMessage = {
+        role: "system",
+        content:
+            "Your previous reply was REJECTED by the response validator with the following violations:\n" +
+            verdict.violations.map((v) => `- [${v.kind}] ${v.detail}`).join("\n") +
+            "\n\nReturn a CORRECTED reply. Ground every numerical claim in a tool result this turn, " +
+            "do not synthesize numbers, and add any required caveats.",
+    };
+    conversation.push(reprompt);
+    turnMessages.push(reprompt);
+    return true;
 }
 
 // ============================================================
@@ -308,11 +561,15 @@ async function executeTool(
         try {
             const out = await tool.call(parsed.data, ctx);
             const summary = tool.summarizeResult(out);
+            const verbatim = tool.outputMode === "semi_hardened" && tool.extractVerbatim
+                ? tool.extractVerbatim(out)
+                : null;
             return {
                 toolName: tc.name,
                 args: tc.args,
                 summary,
                 callMs: Date.now() - startedAt,
+                ...(verbatim ? { verbatimText: verbatim } : {}),
             };
         } catch (e) {
             lastError = e instanceof Error ? e : new Error(String(e));
@@ -353,6 +610,43 @@ async function executeTool(
         },
         callMs: Date.now() - startedAt,
     };
+}
+
+/**
+ * Phase 7-B Step 17 — runs the cheap LLM call that summarizes the
+ * conversation prefix. Returns the new conversation array on success
+ * or `null` when the summarizer itself fails (we never want a busted
+ * summary call to break the live turn).
+ */
+async function tryTier2Compact(
+    conversation: LLMMessage[],
+    summarizer: LLMClient,
+    _systemPrompt: string,
+    signal?: AbortSignal,
+): Promise<LLMMessage[] | null> {
+    try {
+        return await compactConversation(conversation, {
+            keepTrailing: 6,
+            summarize: async (head) => {
+                const condensed = head
+                    .map((m) => `[${m.role}]: ${m.content.slice(0, 800)}`)
+                    .join("\n\n");
+                const result = await summarizer.complete({
+                    system:
+                        "Summarize the following advising conversation segment in 6-12 bullets, " +
+                        "preserving every fact the student or assistant established about courses, " +
+                        "GPA, declared programs, deadlines, and visa status. Do not invent details.",
+                    messages: [{ role: "user", content: condensed }],
+                    maxTokens: 800,
+                    temperature: 0,
+                    signal,
+                });
+                return result.text;
+            },
+        });
+    } catch {
+        return null;
+    }
 }
 
 /** Heuristic: errors that are worth retrying once. */
@@ -501,13 +795,63 @@ export async function* runAgentTurnStreaming(
     const invocations: ToolInvocation[] = [];
     const totalUsage = { promptTokens: 0, completionTokens: 0 };
     let modelUsedId = client.id;
+    const state = createLoopState(options);
 
     for (let turn = 0; turn < maxTurns; turn++) {
+        state.iteration = turn;
         if (options.signal?.aborted) {
-            const result: ChatTurnResult = { kind: "aborted", invocations, turnMessages, modelUsedId };
+            const result: ChatTurnResult = { kind: "aborted", invocations, turnMessages, modelUsedId, transitions: state.transitions };
             yield { type: "done", result };
             return;
         }
+
+        // Phase 7-B Step 18 — Tier-3 graceful termination.
+        const pressure = measureContextPressure(conversation, options.systemPrompt);
+        if (pressure.tier3) {
+            recordTransition(state, "context_limit_terminate", sink, `fraction=${pressure.fraction.toFixed(3)}`, correlationId);
+            emitFallback(sink, "context_limit_terminate", `Tier-3 trip at fraction=${pressure.fraction.toFixed(3)}; terminating turn.`, {
+                correlationId,
+                modelId: modelUsedId,
+                extra: { ...pressure },
+            });
+            const finalText =
+                "I'm running out of context for this conversation. " +
+                "Please start a new chat with the question you'd like me to focus on — " +
+                "I'll have your prior session summary loaded so we don't lose progress.";
+            yield { type: "text_delta", text: finalText };
+            const result: ChatTurnResult = { kind: "context_limit", finalText, invocations, turnMessages, modelUsedId, transitions: state.transitions };
+            yield { type: "done", result };
+            return;
+        }
+
+        // Phase 7-B Step 17 — Tier-2 auto-compaction (streaming variant).
+        if (pressure.tier2 && !state.hasFiredTier2Compaction && options.fallbackClient) {
+            const compacted = await tryTier2Compact(conversation, options.fallbackClient, options.systemPrompt, options.signal);
+            if (compacted) {
+                conversation.length = 0;
+                conversation.push(...compacted);
+                state.hasFiredTier2Compaction = true;
+                recordTransition(state, "session_compacted", sink, `fraction=${pressure.fraction.toFixed(3)}`, correlationId);
+                emitFallback(sink, "session_compacted", `Tier-2 compaction at fraction=${pressure.fraction.toFixed(3)}; older turns summarized.`, {
+                    correlationId,
+                    modelId: modelUsedId,
+                    extra: { ...pressure },
+                });
+            }
+        }
+
+        // Phase 7-B Step 16 — MAX_TOOL_RESULT_BUDGET enforcement.
+        const compactedCount = enforceToolResultBudget(conversation);
+        if (compactedCount > 0) {
+            recordTransition(state, "tool_results_compacted", sink, `count=${compactedCount}`, correlationId);
+            emitFallback(sink, "tool_results_compacted", `${compactedCount} older tool result(s) truncated under MAX_TOOL_RESULT_BUDGET.`, {
+                correlationId,
+                modelId: modelUsedId,
+                extra: { count: compactedCount },
+            });
+        }
+
+        recordTransition(state, "next_turn", sink, undefined, correlationId);
 
         // Stream the turn directly (text deltas pass through); tool
         // calls land in the final completion. If streamComplete isn't
@@ -556,6 +900,7 @@ export async function* runAgentTurnStreaming(
                 invocations,
                 turnMessages,
                 modelUsedId,
+                transitions: state.transitions,
             };
             yield { type: "done", result };
             return;
@@ -566,6 +911,7 @@ export async function* runAgentTurnStreaming(
                 correlationId,
                 modelId: client.id,
             });
+            recordTransition(state, "model_fallback", sink, `to=${runResult.usedClientId}`, correlationId);
         }
         modelUsedId = runResult.usedClientId;
         const c = runResult.completion;
@@ -582,6 +928,21 @@ export async function* runAgentTurnStreaming(
 
         // Final reply (no tool calls): emit text deltas to the consumer.
         if (c.toolCalls.length === 0) {
+            const replayed = maybeQueueValidatorReplay({
+                state,
+                sink,
+                correlationId,
+                conversation,
+                turnMessages,
+                invocations,
+                session,
+                assistantText: c.text,
+                validateResponse: options.validateResponse,
+            });
+            if (replayed) {
+                // Drop the deltas; we'll regenerate on the next turn.
+                continue;
+            }
             // Flush any deltas the streaming client emitted.
             for (const d of bufferedDeltas) yield { type: "text_delta", text: d };
             // If the client had no streamComplete (synthetic path),
@@ -597,6 +958,7 @@ export async function* runAgentTurnStreaming(
                 turnMessages,
                 usage: totalUsage,
                 modelUsedId,
+                transitions: state.transitions,
             };
             yield { type: "done", result };
             return;
@@ -609,7 +971,7 @@ export async function* runAgentTurnStreaming(
         // Tool-call turn: execute every tool sequentially.
         for (const tc of c.toolCalls) {
             if (options.signal?.aborted) {
-                const result: ChatTurnResult = { kind: "aborted", invocations, turnMessages, modelUsedId };
+                const result: ChatTurnResult = { kind: "aborted", invocations, turnMessages, modelUsedId, transitions: state.transitions };
                 yield { type: "done", result };
                 return;
             }
@@ -637,7 +999,7 @@ export async function* runAgentTurnStreaming(
         modelId: modelUsedId,
         extra: { maxTurns, invocationCount: invocations.length },
     });
-    const result: ChatTurnResult = { kind: "max_turns", invocations, turnMessages, modelUsedId };
+    const result: ChatTurnResult = { kind: "max_turns", invocations, turnMessages, modelUsedId, transitions: state.transitions };
     yield { type: "done", result };
 }
 

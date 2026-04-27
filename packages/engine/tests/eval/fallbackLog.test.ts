@@ -177,7 +177,7 @@ describe("agentLoop emits fallback events at terminal states", () => {
         expect(evs[0]!.toolName).toBe("totally_unknown_tool");
     });
 
-    it("emits NOTHING on a normal happy-path turn", async () => {
+    it("emits no operational events on a normal happy-path turn (transitions don't count)", async () => {
         const sink = new InMemoryFallbackSink();
         const client = makeClient([
             { match: {}, completion: { text: "hello", toolCalls: [] } },
@@ -187,6 +187,11 @@ describe("agentLoop emits fallback events at terminal states", () => {
             fallbackSink: sink,
         });
         expect(result.kind).toBe("ok");
-        expect(sink.events).toEqual([]);
+        // Phase 7-B Step 14: every loop iteration emits a `transition`
+        // event. These are observability-only and not operational
+        // signals, so the original assertion ("emits NOTHING") was
+        // tightened to ignore the transition stream specifically.
+        const operational = sink.events.filter((e) => e.kind !== "transition");
+        expect(operational).toEqual([]);
     });
 });
