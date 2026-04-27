@@ -76,3 +76,53 @@ export type {
     FallbackEventKind,
     FallbackSink,
 } from "./observability/fallbackLog.js";
+
+// Phase 5 + Phase 6: agent loop, registry, tools, validators, clients
+export {
+    runAgentTurn,
+    buildDefaultRegistry,
+    buildSystemPrompt,
+    preLoopDispatch,
+    validateResponse,
+    extractClaimNumbers,
+    RecordingLLMClient,
+    RecorderLLMClient,
+    OpenAIEngineClient,
+    AnthropicEngineClient,
+    createPrimaryClient,
+    createFallbackClient,
+    DEFAULT_PRIMARY_MODEL,
+    DEFAULT_FALLBACK_MODEL,
+    runFullAuditTool,
+    planSemesterTool,
+    checkTransferEligibilityTool,
+    whatIfAuditTool,
+    searchPolicyTool,
+    updateProfileTool,
+    confirmProfileUpdateTool,
+    getCreditCapsTool,
+    searchAvailabilityTool,
+} from "./agent/index.js";
+export type {
+    AgentTurnOptions,
+    ChatTurnResult,
+    ToolInvocation,
+    ToolSession,
+    LLMClient,
+    LLMCompletion,
+    LLMMessage,
+    LLMToolCall,
+    LLMToolDef,
+    Violation,
+    ViolationKind,
+    ValidatorVerdict,
+    ValidatorContext,
+    PreLoopResult,
+    PreLoopOptions,
+    SystemPromptOptions,
+} from "./agent/index.js";
+
+// Phase 4: RAG entry points (used by the agent's search_policy tool
+// + by the v2 web route to load the curated template corpus).
+export { loadPolicyTemplates } from "./rag/index.js";
+export type { PolicyTemplate } from "./rag/policyTemplate.js";
