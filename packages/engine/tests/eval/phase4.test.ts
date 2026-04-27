@@ -525,6 +525,9 @@ describe("Template-body drift guard — quoted bulletin text in template bodies 
         "tandon_residency.json": "data/bulletin-raw/undergraduate/engineering/academic-policies/_index.md",
         // Phase 7-B Step 1 (OGS — scraped via Playwright through AWS WAF)
         "f1_credit_floor.json": "data/bulletin-raw/ogs/student-information-and-resources/student-visa-and-immigration/current-students/visa-and-academic-changes/register-part-time/_index.md",
+        // Phase 7-B Step 2 (internal-transfer equivalencies — Playwright through WAF)
+        "cas_to_stern_transfer.json": "data/bulletin-raw/internal-transfer-equivalencies/undergraduate-admissions/how-to-apply/internal-transfers/internal-transfers-stern/_index.md",
+        "internal_transfer_additional_requirements.json": "data/bulletin-raw/internal-transfer-equivalencies/undergraduate-admissions/how-to-apply/internal-transfers/internal-transfer-additional-requirements/_index.md",
     };
 
     const templates = loadPolicyTemplates();
@@ -547,8 +550,16 @@ describe("Template-body drift guard — quoted bulletin text in template bodies 
             expect(quotes.length, `template ${file} has no verbatim italic-quoted bulletin sentences`).toBeGreaterThan(0);
             for (const q of quotes) {
                 // Allow for minor whitespace/quote variants by comparing
-                // a normalized form.
-                const normalize = (s: string) => s.replace(/\s+/g, " ").replace(/[’']/g, "'").trim();
+                // a normalized form. Folds curly + straight quotes
+                // (single AND double) so a template authored with ASCII
+                // quotes still matches a markdownify'd bulletin that
+                // emitted curly typographic quotes from NYU's HTML.
+                const normalize = (s: string) =>
+                    s
+                        .replace(/\s+/g, " ")
+                        .replace(/[’‘']/g, "'")
+                        .replace(/[“”"]/g, '"')
+                        .trim();
                 expect(
                     normalize(bulletin).includes(normalize(q)),
                     `template ${file} quotes "${q}" but the phrase is not present verbatim in ${bulletinRel}`,
