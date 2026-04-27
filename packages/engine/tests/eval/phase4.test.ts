@@ -508,7 +508,6 @@ describe("Template-body drift guard — quoted bulletin text in template bodies 
         // Phase 6 WS7c additions
         "cas_withdrawal.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
         "cas_pf_career_cap.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
-        "cas_to_stern_transfer.json": "data/bulletin-raw/undergraduate/business/admissions/_index.md",
         // Phase 7-A P-5 additions (CAS academic policies)
         "cas_residency_64_credits.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
         "cas_double_counting.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",

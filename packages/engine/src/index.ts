@@ -130,6 +130,21 @@ export type {
 export { loadPolicyTemplates } from "./rag/index.js";
 export type { PolicyTemplate } from "./rag/policyTemplate.js";
 
+// Phase 4 + Phase 7-B Step 3: embedder interface + OpenAI adapter
+// + semantic course-search wiring (used by the v2 web route to inject
+// a CourseSearchFn into the agent session).
+export { LocalHashEmbedder, OpenAIEmbedder, cosineSim } from "./rag/embedder.js";
+export type { Embedder } from "./rag/embedder.js";
+export {
+    searchCoursesTool,
+    createSemanticCourseSearchFn,
+} from "./agent/index.js";
+export type {
+    CourseSearchFn,
+    SemanticCourseSearchOptions,
+    CourseCatalogEntry,
+} from "./agent/index.js";
+
 // Phase 6.5 P-4: cohort gate + template-only recovery mode (§12.6.5)
 export {
     COHORT_CONFIGS,
