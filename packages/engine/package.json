@@ -18,11 +18,6 @@
     },
     "exports": {
         ".": "./src/index.ts",
-        "./chat/transcriptParser": "./src/chat/transcriptParser.ts",
-        "./chat/llmClient": "./src/chat/llmClient.ts",
-        "./chat/chatOrchestrator": "./src/chat/chatOrchestrator.ts",
-        "./chat/intentRouter": "./src/chat/intentRouter.ts",
-        "./chat/explanationGenerator": "./src/chat/explanationGenerator.ts",
         "./audit/degreeAudit": "./src/audit/degreeAudit.ts",
         "./planner/semesterPlanner": "./src/planner/semesterPlanner.ts",
         "./data/courses.json": "./src/data/courses.json",

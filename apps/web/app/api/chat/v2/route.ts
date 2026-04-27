@@ -21,15 +21,20 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import {
-    runAgentTurn,
+    runAgentTurnStreaming,
     buildDefaultRegistry,
     buildSystemPrompt,
     preLoopDispatch,
     validateResponse,
     createPrimaryClient,
     createFallbackClient,
+    userInCohort,
+    getCohortConfig,
+    runTemplateMatcherOnly,
     type ToolSession,
     type LLMMessage,
+    type ToolInvocation,
+    type Cohort,
 } from "@nyupath/engine";
 import { loadPolicyTemplates } from "@nyupath/engine";
 import { buildStudentProfileV2, type TranscriptData } from "../../../../lib/buildSession";
@@ -54,6 +59,10 @@ interface V2RequestBody {
     visaStatus?: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     correlationId?: string;
+    /** Phase 7-A: stable user id used for cohort lookup. When omitted,
+     *  the cohort gate falls through to the configured default
+     *  (`alpha` until ops sets otherwise). */
+    userId?: string;
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -87,6 +96,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     const systemPrompt = buildSystemPrompt({ student });
     const templates = getTemplates();
 
+    // Phase 7-A P-1: cohort gate. When the user's cohort is in
+    // `evalGateFailing` (e.g., cohort=`limited`), the agent loop is
+    // disabled and we serve via runTemplateMatcherOnly per §12.6.5.
+    const cohort: Cohort = userInCohort(body.userId ?? "anonymous");
+    const cohortConfig = getCohortConfig(cohort);
+
     const { stream, writer } = createSseStream();
 
     // Run the agent loop in the background; the SSE stream returns
@@ -100,6 +115,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         userMessage: body.message,
         history: body.history,
         correlationId: body.correlationId,
+        cohort,
+        cohortGateFailing: cohortConfig.evalGateFailing,
         writer,
     });
 
@@ -121,17 +138,39 @@ interface V2TurnArgs {
     userMessage: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     correlationId?: string;
+    cohort: Cohort;
+    cohortGateFailing: boolean;
     writer: SseWriter;
 }
 
 async function runV2Turn(args: V2TurnArgs): Promise<void> {
-    const { primary, fallback, session, systemPrompt, templates, userMessage, history, correlationId, writer } = args;
+    const { primary, fallback, session, systemPrompt, templates, userMessage, history, correlationId, cohort, cohortGateFailing, writer } = args;
     if (!primary) {
         writer.write({ kind: "error", message: "primary LLM client not configured" });
         writer.close();
         return;
     }
     try {
+        // Phase 7-A P-1 / §12.6.5 — recovery mode. When the user's
+        // cohort has `evalGateFailing: true` (e.g., the production
+        // composite has dropped below 0.90), the agent loop is
+        // disabled and we serve template-only answers. Falls back
+        // to a "limited availability" reply when no template matches.
+        if (cohortGateFailing) {
+            const recovery = runTemplateMatcherOnly(userMessage, session, templates);
+            if (recovery.kind === "template") {
+                const t = recovery.match!.template;
+                writer.write({ kind: "template_match", templateId: t.id, body: t.body, source: t.source });
+                writer.write({ kind: "token", text: t.body });
+                writer.write({ kind: "done", finalText: t.body, modelUsedId: `cohort:${cohort}:template-only` });
+            } else {
+                writer.write({ kind: "token", text: recovery.reply });
+                writer.write({ kind: "done", finalText: recovery.reply, modelUsedId: `cohort:${cohort}:limited` });
+            }
+            writer.close();
+            return;
+        }
+
         // §5.5 pre-loop dispatch — template fast-path first.
         const dispatch = preLoopDispatch(userMessage, session, { templates });
         if (dispatch.kind === "template") {
@@ -154,7 +193,15 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             content: h.content,
         }));
 
-        const result = await runAgentTurn(
+        // Phase 6.5 P-3: stream events through the agent generator.
+        // tool_invocation_start/done fire AS each tool starts/finishes,
+        // text_delta tokens stream the final reply character-by-
+        // character (when the underlying client supports streamComplete),
+        // and the terminal `done` event yields the full ChatTurnResult.
+        const invocationsSoFar: ToolInvocation[] = [];
+        let finalResult: import("@nyupath/engine").ChatTurnResult | null = null;
+
+        for await (const ev of runAgentTurnStreaming(
             primary,
             buildDefaultRegistry(),
             session,
@@ -166,29 +213,37 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 ...(correlationId ? { correlationId } : {}),
                 maxTurns: 8,
             },
-        );
-
-        // Surface tool invocations in arrival order. Block-emit:
-        // start + done back-to-back per tool. Real intra-tool
-        // progress is a Phase 7 follow-up.
-        for (const inv of result.invocations) {
-            writer.write({
-                kind: "tool_invocation_start",
-                toolName: inv.toolName,
-                args: inv.args,
-            });
-            writer.write({
-                kind: "tool_invocation_done",
-                toolName: inv.toolName,
-                ...(inv.summary !== undefined ? { summary: inv.summary } : {}),
-                ...(inv.error?.message !== undefined ? { error: inv.error.message } : {}),
-            });
+        )) {
+            switch (ev.type) {
+                case "tool_invocation_start":
+                    writer.write({
+                        kind: "tool_invocation_start",
+                        toolName: ev.toolName,
+                        args: ev.args,
+                    });
+                    break;
+                case "tool_invocation_done":
+                    invocationsSoFar.push(ev.invocation);
+                    writer.write({
+                        kind: "tool_invocation_done",
+                        toolName: ev.invocation.toolName,
+                        ...(ev.invocation.summary !== undefined ? { summary: ev.invocation.summary } : {}),
+                        ...(ev.invocation.error?.message !== undefined ? { error: ev.invocation.error.message } : {}),
+                    });
+                    break;
+                case "text_delta":
+                    writer.write({ kind: "token", text: ev.text });
+                    break;
+                case "done":
+                    finalResult = ev.result;
+                    break;
+            }
         }
 
-        if (result.kind !== "ok") {
+        if (!finalResult || finalResult.kind !== "ok") {
             writer.write({
                 kind: "error",
-                message: `Agent loop ended in non-ok state: ${result.kind}`,
+                message: finalResult ? `Agent loop ended in non-ok state: ${finalResult.kind}` : "Agent loop did not yield a final result.",
             });
             writer.close();
             return;
@@ -196,8 +251,8 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
 
         // Run the launch-blocking validators per §9.1 Part 9.
         const verdict = validateResponse({
-            assistantText: result.finalText,
-            invocations: result.invocations,
+            assistantText: finalResult.finalText,
+            invocations: finalResult.invocations,
             student: session.student,
         });
         if (!verdict.ok) {
@@ -216,11 +271,10 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             // an additional system-prompt rule per §9.1 Part 9.
         }
 
-        writer.write({ kind: "token", text: result.finalText });
         writer.write({
             kind: "done",
-            finalText: result.finalText,
-            modelUsedId: result.modelUsedId,
+            finalText: finalResult.finalText,
+            modelUsedId: finalResult.modelUsedId,
         });
     } catch (err) {
         writer.write({

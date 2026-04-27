@@ -31,12 +31,15 @@ export type {
     LLMToolDef,
 } from "./llmClient.js";
 
-export { runAgentTurn } from "./agentLoop.js";
+export { runAgentTurn, runAgentTurnStreaming } from "./agentLoop.js";
 export type {
     AgentTurnOptions,
     ChatTurnResult,
     ToolInvocation,
+    AgentStreamEvent,
 } from "./agentLoop.js";
+
+export type { LLMStreamEvent } from "./llmClient.js";
 
 export { buildSystemPrompt } from "./systemPrompt.js";
 export type { SystemPromptOptions } from "./systemPrompt.js";
