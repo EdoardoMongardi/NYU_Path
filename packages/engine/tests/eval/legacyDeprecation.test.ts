@@ -1,11 +1,15 @@
 // ============================================================
-// Phase 6 WS3 — legacy-deprecation regression guard
+// Phase 6 WS3 — legacy-deprecation regression guard (post-cutover)
 // ============================================================
-// Pins the set of callers that still import the deprecated modules
-// (`chat/*`, `data/academicRules.ts`, `search/semanticSearch.ts`).
-// New callers must be migrated to the agent loop instead — adding one
-// here without removing it from the grandfathered list will fail the
-// guard test.
+// Phase 6.5 P-2 deleted the deprecated modules (`chat/chatOrchestrator`,
+// `chat/intentRouter`, `chat/explanationGenerator`, `chat/llmClient`,
+// `chat/onboardingFlow`, `data/academicRules.ts`,
+// `search/semanticSearch.ts`) and their dependent eval helpers. This
+// test now guards against accidental REINTRODUCTION: any new caller
+// importing from those paths fails CI.
+//
+// `chat/transcriptParser.ts` STAYS — it parses PDFs for the
+// onboarding route and is unrelated to the agent loop.
 // ============================================================
 
 import { describe, expect, it } from "vitest";
@@ -14,24 +18,10 @@ import { join, relative } from "node:path";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..", "..");
 
-/** Files allowed to import the deprecated modules. Removing one of
- *  these grandfathered entries means the file has been migrated to
- *  the agent loop and the deprecation can advance. */
-const GRANDFATHERED_CALLERS = new Set([
-    // Production web route — migrates in Phase 6.1 WS2.
-    "apps/web/app/api/chat/route.ts",
-    // Eval helpers (not on the user-facing path).
-    "packages/engine/tests/eval/evaluation_script.ts",
-    "packages/engine/tests/eval/types.ts",
-    "packages/engine/tests/eval/types.d.ts",
-    "packages/engine/tests/eval/advisoryQuality.ts",
-    // Developer utility script.
-    "scripts/test-search.ts",
-    // Internal cross-references inside the deprecated tree itself
-    // (chat/* → chat/*, academicRules → chat/*).
-    "packages/engine/src/chat/chatOrchestrator.ts",
-    "packages/engine/src/chat/explanationGenerator.ts",
-]);
+/** Empty post-cutover. Any import that matches DEPRECATED_IMPORT
+ *  must be migrated to the agent loop — there are no legitimate
+ *  legacy callers anymore. */
+const GRANDFATHERED_CALLERS = new Set<string>();
 
 const DEPRECATED_IMPORT = /from\s+["'](?:@nyupath\/engine\/chat\/|[^"']*\/chat\/(?:chatOrchestrator|intentRouter|explanationGenerator|llmClient|onboardingFlow)|[^"']*\/data\/academicRules|[^"']*\/search\/semanticSearch)/;
 

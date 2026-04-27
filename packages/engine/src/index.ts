@@ -80,6 +80,7 @@ export type {
 // Phase 5 + Phase 6: agent loop, registry, tools, validators, clients
 export {
     runAgentTurn,
+    runAgentTurnStreaming,
     buildDefaultRegistry,
     buildSystemPrompt,
     preLoopDispatch,
@@ -105,12 +106,14 @@ export {
 } from "./agent/index.js";
 export type {
     AgentTurnOptions,
+    AgentStreamEvent,
     ChatTurnResult,
     ToolInvocation,
     ToolSession,
     LLMClient,
     LLMCompletion,
     LLMMessage,
+    LLMStreamEvent,
     LLMToolCall,
     LLMToolDef,
     Violation,
@@ -126,3 +129,19 @@ export type {
 // + by the v2 web route to load the curated template corpus).
 export { loadPolicyTemplates } from "./rag/index.js";
 export type { PolicyTemplate } from "./rag/policyTemplate.js";
+
+// Phase 6.5 P-4: cohort gate + template-only recovery mode (§12.6.5)
+export {
+    COHORT_CONFIGS,
+    setCohortAssignment,
+    getCohortAssignment,
+    userInCohort,
+    getCohortConfig,
+    runTemplateMatcherOnly,
+} from "./cohort/gate.js";
+export type {
+    Cohort,
+    CohortConfig,
+    CohortAssignment,
+    TemplateOnlyResult,
+} from "./cohort/gate.js";

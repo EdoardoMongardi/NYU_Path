@@ -23,7 +23,14 @@
 // ============================================================
 
 import type { z } from "zod";
-import type { LLMClient, LLMMessage, LLMToolCall, LLMToolDef } from "./llmClient.js";
+import type {
+    LLMClient,
+    LLMCompletion,
+    LLMMessage,
+    LLMStreamEvent,
+    LLMToolCall,
+    LLMToolDef,
+} from "./llmClient.js";
 import type { Tool, ToolSession, ToolUseContext } from "./tool.js";
 import type { ToolRegistry } from "./tool.js";
 import { type FallbackSink, NULL_SINK, emitFallback } from "../observability/fallbackLog.js";
@@ -386,4 +393,216 @@ function describeZodLeaf(v: unknown): Record<string, unknown> {
     if (t === "ZodArray") return { type: "array", items: describeZodLeaf((z._def as unknown as { type: unknown }).type) };
     if (t === "ZodEnum") return { type: "string" };
     return {};
+}
+
+// ============================================================
+// runAgentTurnStreaming (Phase 6.5 P-3)
+// ============================================================
+// Generator variant of `runAgentTurn` that yields lifecycle events
+// per turn — including `text_delta` events emitted character-by-
+// character on the FINAL model turn (after all tools have resolved
+// and the model is producing the user-facing reply).
+//
+// Event order across a typical turn:
+//   1. tool_invocation_start / _done × N (per tool the model calls)
+//   2. text_delta × M (final reply tokens)
+//   3. done (terminal — yields the full ChatTurnResult)
+//
+// For non-streaming clients (`client.streamComplete` undefined), the
+// loop falls back to `complete()` and emits a single `text_delta`
+// with the full text. Block-streaming v2 routes get the same wire
+// shape, just one big chunk instead of many small ones.
+// ============================================================
+
+export type AgentStreamEvent =
+    | { type: "tool_invocation_start"; toolName: string; args: Record<string, unknown> }
+    | { type: "tool_invocation_done"; invocation: ToolInvocation }
+    | { type: "text_delta"; text: string }
+    | { type: "done"; result: ChatTurnResult };
+
+export async function* runAgentTurnStreaming(
+    client: LLMClient,
+    registry: ToolRegistry,
+    session: ToolSession,
+    userMessage: string,
+    options: AgentTurnOptions,
+): AsyncGenerator<AgentStreamEvent, void, void> {
+    const maxTurns = options.maxTurns ?? 10;
+    const tools = toLLMToolDefs(registry, session);
+    const sink = options.fallbackSink ?? NULL_SINK;
+    const correlationId = options.correlationId;
+    const conversation: LLMMessage[] = [
+        ...(options.priorMessages ?? []),
+        { role: "user", content: userMessage },
+    ];
+    const turnMessages: LLMMessage[] = [{ role: "user", content: userMessage }];
+    const invocations: ToolInvocation[] = [];
+    const totalUsage = { promptTokens: 0, completionTokens: 0 };
+    let modelUsedId = client.id;
+
+    for (let turn = 0; turn < maxTurns; turn++) {
+        if (options.signal?.aborted) {
+            const result: ChatTurnResult = { kind: "aborted", invocations, turnMessages, modelUsedId };
+            yield { type: "done", result };
+            return;
+        }
+
+        // Stream the turn directly (text deltas pass through); tool
+        // calls land in the final completion. If streamComplete isn't
+        // implemented by the client, fall back to complete() which
+        // produces a single block of text we yield as one delta.
+        const args: Parameters<NonNullable<LLMClient["streamComplete"]>>[0] = {
+            system: options.systemPrompt,
+            messages: conversation,
+            tools,
+            maxTokens: options.maxTokens ?? 1024,
+            temperature: 0,
+            signal: options.signal,
+        };
+
+        const bufferedDeltas: string[] = [];
+        let runResult:
+            | { ok: true; completion: LLMCompletion; usedClientId: string; fallbackTriggered: boolean }
+            | { ok: false; error: string };
+        try {
+            const primaryEvents = await runOneTurn(client, args, bufferedDeltas);
+            if (primaryEvents.ok) {
+                runResult = { ok: true, completion: primaryEvents.completion, usedClientId: client.id, fallbackTriggered: false };
+            } else if (options.fallbackClient) {
+                bufferedDeltas.length = 0; // discard any partial primary deltas before fallback
+                const fbEvents = await runOneTurn(options.fallbackClient, args, bufferedDeltas);
+                if (fbEvents.ok) {
+                    runResult = { ok: true, completion: fbEvents.completion, usedClientId: options.fallbackClient.id, fallbackTriggered: true };
+                } else {
+                    runResult = { ok: false, error: `Primary "${client.id}" errored: ${primaryEvents.error}; fallback "${options.fallbackClient.id}" errored: ${fbEvents.error}` };
+                }
+            } else {
+                runResult = { ok: false, error: `Primary model "${client.id}" errored: ${primaryEvents.error}` };
+            }
+        } catch (e) {
+            runResult = { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+
+        if (!runResult.ok) {
+            emitFallback(sink, "model_error_no_fallback", runResult.error, {
+                correlationId,
+                modelId: client.id,
+            });
+            const result: ChatTurnResult = {
+                kind: "model_error_no_fallback",
+                error: runResult.error,
+                invocations,
+                turnMessages,
+                modelUsedId,
+            };
+            yield { type: "done", result };
+            return;
+        }
+
+        if (runResult.fallbackTriggered) {
+            emitFallback(sink, "model_fallback_triggered", `Primary "${client.id}" errored; recovered via fallback "${runResult.usedClientId}".`, {
+                correlationId,
+                modelId: client.id,
+            });
+        }
+        modelUsedId = runResult.usedClientId;
+        const c = runResult.completion;
+        if (c.usage?.promptTokens) totalUsage.promptTokens += c.usage.promptTokens;
+        if (c.usage?.completionTokens) totalUsage.completionTokens += c.usage.completionTokens;
+
+        const assistantMsg: LLMMessage = {
+            role: "assistant",
+            content: c.text,
+            toolCalls: c.toolCalls.length > 0 ? c.toolCalls : undefined,
+        };
+        conversation.push(assistantMsg);
+        turnMessages.push(assistantMsg);
+
+        // Final reply (no tool calls): emit text deltas to the consumer.
+        if (c.toolCalls.length === 0) {
+            // Flush any deltas the streaming client emitted.
+            for (const d of bufferedDeltas) yield { type: "text_delta", text: d };
+            // If the client had no streamComplete (synthetic path),
+            // bufferedDeltas is empty and we yield the full text as a
+            // single delta so v2-route consumers see one token event.
+            if (bufferedDeltas.length === 0 && c.text.length > 0) {
+                yield { type: "text_delta", text: c.text };
+            }
+            const result: ChatTurnResult = {
+                kind: "ok",
+                finalText: c.text,
+                invocations,
+                turnMessages,
+                usage: totalUsage,
+                modelUsedId,
+            };
+            yield { type: "done", result };
+            return;
+        }
+        // Tool-call turn: any incidental text the model produced
+        // alongside tool_calls is preserved on assistantMsg but NOT
+        // emitted as text_delta (the user gets the final reply on a
+        // later turn after tools resolve).
+
+        // Tool-call turn: execute every tool sequentially.
+        for (const tc of c.toolCalls) {
+            if (options.signal?.aborted) {
+                const result: ChatTurnResult = { kind: "aborted", invocations, turnMessages, modelUsedId };
+                yield { type: "done", result };
+                return;
+            }
+            yield { type: "tool_invocation_start", toolName: tc.name, args: tc.args };
+            const tool = registry.get(tc.name);
+            if (!tool) {
+                const msg = `Tool "${tc.name}" not found in registry. Available: ${registry.list().map((t) => t.name).join(", ")}`;
+                emitFallback(sink, "tool_unsupported", msg, { correlationId, toolName: tc.name });
+                pushToolMessage(conversation, turnMessages, tc.id, msg);
+                const inv: ToolInvocation = { toolName: tc.name, args: tc.args, error: { message: msg } };
+                invocations.push(inv);
+                yield { type: "tool_invocation_done", invocation: inv };
+                continue;
+            }
+            const inv = await executeTool(tool, tc, session, options.signal);
+            invocations.push(inv);
+            const summary = inv.summary ?? inv.error?.message ?? inv.rejected?.userMessage ?? "(no result)";
+            pushToolMessage(conversation, turnMessages, tc.id, summary);
+            yield { type: "tool_invocation_done", invocation: inv };
+        }
+    }
+
+    emitFallback(sink, "max_turns", `Agent loop exhausted ${maxTurns} turns without producing a final reply.`, {
+        correlationId,
+        modelId: modelUsedId,
+        extra: { maxTurns, invocationCount: invocations.length },
+    });
+    const result: ChatTurnResult = { kind: "max_turns", invocations, turnMessages, modelUsedId };
+    yield { type: "done", result };
+}
+
+/** Run one model turn against a single client, capturing any
+ *  text_delta events into `outDeltas` and returning the final
+ *  completion. */
+async function runOneTurn(
+    client: LLMClient,
+    args: Parameters<NonNullable<LLMClient["streamComplete"]>>[0],
+    outDeltas: string[],
+): Promise<
+    | { ok: true; completion: LLMCompletion }
+    | { ok: false; error: string }
+> {
+    try {
+        if (client.streamComplete) {
+            let final: LLMCompletion | null = null;
+            for await (const ev of client.streamComplete(args)) {
+                if (ev.type === "text_delta") outDeltas.push(ev.text);
+                else if (ev.type === "done") final = ev.completion;
+            }
+            if (!final) return { ok: false, error: "streamComplete returned without a done event" };
+            return { ok: true, completion: final };
+        }
+        const c = await client.complete(args);
+        return { ok: true, completion: c };
+    } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
 }
