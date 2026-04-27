@@ -20,6 +20,9 @@ export const runFullAuditTool = buildTool({
             .describe("Optional: limit the audit to a specific program id (e.g., 'cs_major_ba')."),
     }),
     maxResultChars: 3000,
+    // Phase 7-B Step 15 — semi_hardened: GPA + cumulative credits are
+    // deterministic verdicts the validator must guard against drift.
+    outputMode: "semi_hardened",
     async validateInput(_input, { session }) {
         if (!session.student) return { ok: false, userMessage: "I need your transcript / profile loaded before I can run an audit." };
         if (!session.courses || session.courses.length === 0) {
@@ -63,5 +66,13 @@ export const runFullAuditTool = buildTool({
         }
         lines.push(`STANDING: ${output.standing.level} (cumulative GPA ${output.standing.cumulativeGPA.toFixed(3)}, completion ${(output.standing.completionRate * 100).toFixed(0)}%)`);
         return lines.join("\n");
+    },
+    // Phase 7-B Step 15 — verbatim text the LLM must include
+    // unchanged. We pin the cumulative GPA verdict (the most common
+    // §2.1 violation pattern). Reasonable synthesis around it stays
+    // allowed; only this clause must appear unchanged.
+    extractVerbatim(output) {
+        const gpa = output.standing.cumulativeGPA.toFixed(3);
+        return `Cumulative GPA: ${gpa} (computed from your transcript).`;
     },
 });

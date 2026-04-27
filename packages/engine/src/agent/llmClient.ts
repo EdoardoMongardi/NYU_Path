@@ -35,6 +35,14 @@ export interface LLMCompletion {
     latencyMs: number;
     usage?: { promptTokens?: number; completionTokens?: number };
     modelEcho?: string;
+    /**
+     * Phase 7-B Step 20 — vendor-neutral finish reason. Populated when
+     * the underlying API surfaces one. The agent loop reads this to
+     * trigger output-truncation recovery (`length`) and reactive
+     * compaction (`context_length_exceeded` is signaled as an error,
+     * not a finish reason — see runAgentTurn for that path).
+     */
+    finishReason?: "stop" | "length" | "tool_calls" | "content_filter" | "other";
 }
 
 export interface LLMClient {

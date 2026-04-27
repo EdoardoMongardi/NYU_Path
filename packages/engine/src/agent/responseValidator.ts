@@ -29,7 +29,8 @@ import type { ToolInvocation } from "./agentLoop.js";
 export type ViolationKind =
     | "ungrounded_number"
     | "missing_invocation"
-    | "missing_caveat";
+    | "missing_caveat"
+    | "verbatim_drift";
 
 export interface Violation {
     kind: ViolationKind;
@@ -321,11 +322,43 @@ function checkCompleteness(ctx: ValidatorContext): Violation[] {
 // Top-level entry
 // ============================================================
 
+// ============================================================
+// 4. Verbatim-drift validator (Phase 7-B Step 15 / §3.2 lines 192-227)
+// ============================================================
+// When a tool result this turn carries `verbatimText` (set by
+// `outputMode: "semi_hardened"` tools — currently get_credit_caps
+// + run_full_audit), the assistant reply MUST include that text
+// verbatim. The validator does an exact substring match.
+//
+// Whitespace normalization: collapse runs of whitespace before
+// comparison so the model can reflow paragraphs without breaking
+// the gate, but no other transformations are allowed.
+function checkVerbatim(ctx: ValidatorContext): Violation[] {
+    const violations: Violation[] = [];
+    const replyNorm = ctx.assistantText.replace(/\s+/g, " ").trim();
+    for (const inv of ctx.invocations) {
+        const v = inv.verbatimText;
+        if (!v) continue;
+        const verbatimNorm = v.replace(/\s+/g, " ").trim();
+        if (!verbatimNorm) continue;
+        if (!replyNorm.includes(verbatimNorm)) {
+            violations.push({
+                kind: "verbatim_drift",
+                detail:
+                    `Tool "${inv.toolName}" returned verbatim text the reply must quote unchanged, ` +
+                    `but the reply does not contain it. Required text: ${verbatimNorm.slice(0, 200)}${verbatimNorm.length > 200 ? "…" : ""}`,
+            });
+        }
+    }
+    return violations;
+}
+
 export function validateResponse(ctx: ValidatorContext): ValidatorVerdict {
     const violations: Violation[] = [
         ...checkGrounding(ctx),
         ...checkInvocations(ctx),
         ...checkCompleteness(ctx),
+        ...checkVerbatim(ctx),
     ];
     return { ok: violations.length === 0, violations };
 }

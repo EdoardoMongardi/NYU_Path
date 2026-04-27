@@ -116,6 +116,7 @@ export class OpenAIEngineClient implements LLMClient {
                 completionTokens: response.usage?.completion_tokens,
             },
             modelEcho: response.model,
+            finishReason: mapOpenAIFinishReason(choice?.finish_reason ?? null),
         };
     }
 
@@ -158,10 +159,15 @@ export class OpenAIEngineClient implements LLMClient {
         let modelEcho: string | undefined;
         let promptTokens: number | undefined;
         let completionTokens: number | undefined;
+        let finishReason: LLMCompletion["finishReason"];
 
         for await (const chunk of stream) {
             if (chunk.model && !modelEcho) modelEcho = chunk.model;
-            const delta = chunk.choices?.[0]?.delta;
+            const choice0 = chunk.choices?.[0];
+            const delta = choice0?.delta;
+            if (choice0?.finish_reason && !finishReason) {
+                finishReason = mapOpenAIFinishReason(choice0.finish_reason);
+            }
             if (!delta) continue;
 
             if (typeof delta.content === "string" && delta.content.length > 0) {
@@ -207,8 +213,25 @@ export class OpenAIEngineClient implements LLMClient {
                 ? { usage: { promptTokens, completionTokens } }
                 : {}),
             ...(modelEcho ? { modelEcho } : {}),
+            ...(finishReason ? { finishReason } : {}),
         };
         yield { type: "done", completion };
+    }
+}
+
+function mapOpenAIFinishReason(raw: string | null | undefined): LLMCompletion["finishReason"] {
+    switch (raw) {
+        case "stop": return "stop";
+        case "length": return "length";
+        case "tool_calls":
+        case "function_call":
+            return "tool_calls";
+        case "content_filter": return "content_filter";
+        case null:
+        case undefined:
+            return undefined;
+        default:
+            return "other";
     }
 }
 

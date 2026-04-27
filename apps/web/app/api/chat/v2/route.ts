@@ -249,6 +249,26 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 ...(fallback ? { fallbackClient: fallback } : {}),
                 ...(correlationId ? { correlationId } : {}),
                 maxTurns: 8,
+                // Phase 7-B Step 19 — stop-hook re-prompt. The loop
+                // calls this when it has a final reply; if the verdict
+                // is not-ok AND there's replay budget, the loop appends
+                // a system message describing the violations and runs
+                // one more pass before returning. Defaults to limit=1.
+                validatorReplayLimit: 1,
+                validateResponse: ({ assistantText, invocations, session: s }) => {
+                    const verdict = validateResponse({
+                        assistantText,
+                        invocations,
+                        student: s.student,
+                    });
+                    return {
+                        ok: verdict.ok,
+                        violations: verdict.violations.map((v) => ({
+                            kind: v.kind,
+                            detail: v.detail,
+                        })),
+                    };
+                },
             },
         )) {
             switch (ev.type) {
@@ -275,6 +295,19 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                     finalResult = ev.result;
                     break;
             }
+        }
+
+        // Phase 7-B Step 18 — Tier-3 graceful termination. Surface a
+        // `done` event so the UI can render the polite "start a new
+        // session" reply instead of an error.
+        if (finalResult && finalResult.kind === "context_limit") {
+            writer.write({
+                kind: "done",
+                finalText: finalResult.finalText,
+                modelUsedId: `${finalResult.modelUsedId}:context_limit`,
+            });
+            writer.close();
+            return;
         }
 
         if (!finalResult || finalResult.kind !== "ok") {

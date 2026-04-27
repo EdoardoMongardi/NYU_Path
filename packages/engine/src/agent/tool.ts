@@ -78,6 +78,15 @@ export type ValidationResult =
     | { ok: true }
     | { ok: false; userMessage: string };
 
+/**
+ * Phase 7-B Step 15 — output composition mode (§3.2 lines 192-227).
+ *   - "template"      — bypass LLM (template fast-path uses preLoopDispatch).
+ *   - "semi_hardened" — tool surfaces a `verbatimText`; the validator
+ *                       requires it to appear unchanged in the reply.
+ *   - "synthesis"     — free LLM synthesis (default).
+ */
+export type OutputMode = "template" | "semi_hardened" | "synthesis";
+
 export interface Tool<InputSchema extends z.ZodTypeAny, Output> {
     /** Stable name the model addresses (e.g., "run_full_audit") */
     readonly name: string;
@@ -89,6 +98,8 @@ export interface Tool<InputSchema extends z.ZodTypeAny, Output> {
     readonly isReadOnly: boolean;
     /** Max characters for the tool's stringified result (truncated above) */
     readonly maxResultChars: number;
+    /** Phase 7-B Step 15 — composition mode. Defaults to "synthesis". */
+    readonly outputMode?: OutputMode;
     /** Optional pre-call validation (returns user-facing reason for rejection) */
     validateInput?(input: z.infer<InputSchema>, ctx: ToolUseContext): Promise<ValidationResult>;
     /** Long-form prompt to expose to the model (system-prompt time) */
@@ -97,6 +108,13 @@ export interface Tool<InputSchema extends z.ZodTypeAny, Output> {
     call(input: z.infer<InputSchema>, ctx: ToolUseContext): Promise<Output>;
     /** Render a model-readable summary of the output. Bounded by maxResultChars. */
     summarizeResult(output: Output): string;
+    /**
+     * Phase 7-B Step 15 — when `outputMode === "semi_hardened"` the tool
+     * MUST also surface the verbatim text the LLM is required to include
+     * unchanged. The validator string-matches this against the final reply.
+     * Returns null when no verbatim text is required for this output.
+     */
+    extractVerbatim?(output: Output): string | null;
 }
 
 /**
@@ -111,10 +129,12 @@ export function buildTool<InputSchema extends z.ZodTypeAny, Output>(
         inputSchema: InputSchema;
         isReadOnly?: boolean;
         maxResultChars?: number;
+        outputMode?: OutputMode;
         validateInput?: Tool<InputSchema, Output>["validateInput"];
         prompt: Tool<InputSchema, Output>["prompt"];
         call: Tool<InputSchema, Output>["call"];
         summarizeResult: Tool<InputSchema, Output>["summarizeResult"];
+        extractVerbatim?: Tool<InputSchema, Output>["extractVerbatim"];
     },
 ): Tool<InputSchema, Output> {
     return {
@@ -123,6 +143,7 @@ export function buildTool<InputSchema extends z.ZodTypeAny, Output>(
         inputSchema: def.inputSchema,
         isReadOnly: def.isReadOnly ?? true,
         maxResultChars: def.maxResultChars ?? 2000,
+        outputMode: def.outputMode ?? "synthesis",
         validateInput: def.validateInput,
         prompt: def.prompt,
         call: def.call,
@@ -131,6 +152,7 @@ export function buildTool<InputSchema extends z.ZodTypeAny, Output>(
             const cap = def.maxResultChars ?? 2000;
             return raw.length > cap ? raw.slice(0, cap) + "…" : raw;
         },
+        extractVerbatim: def.extractVerbatim,
     };
 }
 
