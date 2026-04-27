@@ -4,6 +4,19 @@
 // Routes messages to the right engine function and generates
 // natural language responses.
 // ============================================================
+//
+// @deprecated Phase 6 WS3 (scheduled for removal after WS2 lands).
+// This module is the pre-Phase-5 chat-layer; the replacement is the
+// agent loop in `packages/engine/src/agent/agentLoop.ts:runAgentTurn`
+// plus the §7.2 tool registry. Two callers remain:
+//   1. `apps/web/app/api/chat/route.ts` — production. Stays on the
+//      legacy path until Phase 6.1 stands up `/api/chat/v2` against
+//      `runAgentTurn` and migrates the `grade_adjustment` /
+//      `course_info` intents (Option B per the Phase 6 plan).
+//   2. `packages/engine/tests/eval/advisoryQuality.ts` — eval-only
+//      helper, not on the user-facing path.
+// Do NOT add new callers. Migrate to the agent loop instead.
+// ============================================================
 
 import type { LLMClient } from "./llmClient.js";
 import { classifyIntentHybrid, type ClassifiedIntent } from "./intentRouter.js";

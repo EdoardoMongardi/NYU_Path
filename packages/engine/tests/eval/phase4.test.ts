@@ -505,6 +505,10 @@ describe("Template-body drift guard — quoted bulletin text in template bodies 
         "cas_pf_major.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
         "cas_credit_overload.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
         "stern_pf_major.json": "data/bulletin-raw/undergraduate/business/academic-policies/_index.md",
+        // Phase 6 WS7c additions
+        "cas_withdrawal.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
+        "cas_pf_career_cap.json": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md",
+        "cas_to_stern_transfer.json": "data/bulletin-raw/undergraduate/business/admissions/_index.md",
     };
 
     const templates = loadPolicyTemplates();

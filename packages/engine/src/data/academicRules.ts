@@ -4,6 +4,16 @@
  * This string constant is injected into the LLM system prompt so it can
  * reason about CS BA major rules, CAS core curriculum, AP/IB/A-Level
  * transfer credits, FYSEM policies, and workload balancing.
+ *
+ * @deprecated Phase 6 WS3 (scheduled for removal after WS2 lands).
+ * The agent loop's system prompt + tool registry replaces this string
+ * dump. Tool-result evidence (run_full_audit, search_policy with the
+ * RAG corpus) provides per-rule grounding instead of a hand-curated
+ * narrative blob. Remaining callers:
+ *   - `packages/engine/src/chat/explanationGenerator.ts` (legacy chat layer)
+ *   - `packages/engine/tests/eval/advisoryQuality.ts` (eval helper)
+ * Do NOT add new callers — register the rule with the appropriate
+ * structured config (`data/programs/`, `data/schools/`) instead.
  */
 
 export const ACADEMIC_RULES = `

@@ -26,6 +26,7 @@ import type { z } from "zod";
 import type { LLMClient, LLMMessage, LLMToolCall, LLMToolDef } from "./llmClient.js";
 import type { Tool, ToolSession, ToolUseContext } from "./tool.js";
 import type { ToolRegistry } from "./tool.js";
+import { type FallbackSink, NULL_SINK, emitFallback } from "../observability/fallbackLog.js";
 
 export interface AgentTurnOptions {
     /** Max model→tool→model rounds before the loop bails. Default 10. */
@@ -40,6 +41,15 @@ export interface AgentTurnOptions {
     systemPrompt: string;
     /** Per-turn token cap. Default 1024. */
     maxTokens?: number;
+    /**
+     * Phase 6 WS4: structured-event sink for operational signals
+     * (model fallback fired, max_turns hit, tool unsupported, etc.).
+     * Default is a no-op sink so existing callers + unit tests are
+     * unaffected. Production wires `defaultProductionSink(process.env)`.
+     */
+    fallbackSink?: FallbackSink;
+    /** Optional correlation id stamped onto every emitted fallback event. */
+    correlationId?: string;
 }
 
 export interface ToolInvocation {
@@ -98,6 +108,8 @@ export async function runAgentTurn(
 ): Promise<ChatTurnResult> {
     const maxTurns = options.maxTurns ?? 10;
     const tools = toLLMToolDefs(registry, session);
+    const sink = options.fallbackSink ?? NULL_SINK;
+    const correlationId = options.correlationId;
     const conversation: LLMMessage[] = [
         ...(options.priorMessages ?? []),
         { role: "user", content: userMessage },
@@ -125,6 +137,10 @@ export async function runAgentTurn(
             },
         );
         if (!completionResult.ok) {
+            emitFallback(sink, "model_error_no_fallback", completionResult.error, {
+                correlationId,
+                modelId: client.id,
+            });
             return {
                 kind: "model_error_no_fallback",
                 error: completionResult.error,
@@ -134,6 +150,15 @@ export async function runAgentTurn(
             };
         }
         const completion = completionResult.completion;
+        // Phase 6 WS4: emit when the fallback was used (primary failed
+        // and the fallback succeeded). callWithFallback signals this
+        // by `usedClientId !== client.id`.
+        if (completionResult.usedClientId !== client.id) {
+            emitFallback(sink, "model_fallback_triggered", `Primary "${client.id}" errored; recovered via fallback "${completionResult.usedClientId}".`, {
+                correlationId,
+                modelId: client.id,
+            });
+        }
         modelUsedId = completionResult.usedClientId;
         if (completion.usage?.promptTokens) totalUsage.promptTokens += completion.usage.promptTokens;
         if (completion.usage?.completionTokens) totalUsage.completionTokens += completion.usage.completionTokens;
@@ -168,18 +193,35 @@ export async function runAgentTurn(
             const tool = registry.get(tc.name);
             if (!tool) {
                 const msg = `Tool "${tc.name}" not found in registry. Available: ${registry.list().map((t) => t.name).join(", ")}`;
+                emitFallback(sink, "tool_unsupported", msg, {
+                    correlationId,
+                    toolName: tc.name,
+                });
                 pushToolMessage(conversation, turnMessages, tc.id, msg);
                 invocations.push({ toolName: tc.name, args: tc.args, error: { message: msg } });
                 continue;
             }
             const invocation = await executeTool(tool, tc, session, options.signal);
             invocations.push(invocation);
-            const summary = invocation.summary ?? invocation.rejected?.userMessage
-                ?? invocation.error?.message ?? "(no result)";
+            // Phase 6 WS6 (wave5 finding #3): the model-facing summary
+            // for `validateInput` rejections includes "validation
+            // failed:" so the response validator + recording matchers
+            // can recognize the rejection class. Both `rejected.userMessage`
+            // (clean original) and `error.message` (wrapped) are
+            // populated by executeTool; we pick the wrapped form here.
+            const summary = invocation.summary
+                ?? invocation.error?.message
+                ?? invocation.rejected?.userMessage
+                ?? "(no result)";
             pushToolMessage(conversation, turnMessages, tc.id, summary);
         }
     }
 
+    emitFallback(sink, "max_turns", `Agent loop exhausted ${maxTurns} turns without producing a final reply.`, {
+        correlationId,
+        modelId: modelUsedId,
+        extra: { maxTurns, invocationCount: invocations.length },
+    });
     return { kind: "max_turns", invocations, turnMessages, modelUsedId };
 }
 
@@ -230,6 +272,11 @@ async function executeTool(
                 toolName: tc.name,
                 args: tc.args,
                 rejected: { userMessage: v.userMessage },
+                // Phase 6 WS6: also surface a wrapped `error.message`
+                // so observability + test consumers see a unified
+                // "validation failed:" prefix for both Zod and tool-
+                // specific rejections.
+                error: { message: `validation failed: ${v.userMessage}` },
             };
         }
     }

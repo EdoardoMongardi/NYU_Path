@@ -1,6 +1,13 @@
 // ============================================================
 // LLM Client — Abstraction over OpenAI GPT-4o-mini
 // ============================================================
+//
+// @deprecated Phase 6 WS3 (scheduled for removal after WS2 lands).
+// The agent-loop equivalent lives at
+// `packages/engine/src/agent/clients/openaiClient.ts:OpenAIEngineClient`,
+// which preserves tool-call IDs and supports tool messages — this
+// legacy client is text-only and cannot be used with `runAgentTurn`.
+// ============================================================
 
 import OpenAI from "openai";
 
