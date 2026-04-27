@@ -36,8 +36,16 @@ import {
     type ToolInvocation,
     type Cohort,
 } from "@nyupath/engine";
-import { loadPolicyTemplates } from "@nyupath/engine";
-import { buildStudentProfileV2, type TranscriptData } from "../../../../lib/buildSession";
+import {
+    loadPolicyTemplates,
+    degreeProgressReportSchema,
+    type DegreeProgressReport,
+} from "@nyupath/engine";
+import {
+    buildStudentProfileV2,
+    buildStudentProfileFromDpr,
+    type TranscriptData,
+} from "../../../../lib/buildSession";
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
 import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
 import { getStores } from "../../../../lib/db/store";
@@ -98,29 +106,45 @@ export async function POST(req: NextRequest): Promise<Response> {
             { status: 400 },
         );
     }
-    // Phase 7-E W2 P0 guard: until Workstream 3 lands DPR injection
-    // into ToolSession + the tool refactor, refuse DPR-shaped requests
-    // explicitly rather than silently running them through the legacy
-    // transcript-only StudentProfile builder (which would produce a
-    // CS-BA stub with empty courses — silent corruption).
+    // Phase 7-E W3.4 — discriminated parsedData. The DPR path is the
+    // post-pivot canonical onboarding artifact; the transcript path
+    // remains as the cohort-A fallback.
     const pd = body.parsedData;
-    if (pd && typeof pd === "object" && "kind" in pd && pd.kind === "dpr") {
-        return NextResponse.json(
-            {
-                error:
-                    "DPR-driven chat sessions are not yet wired (Phase 7-E Workstream 3 in progress). " +
-                    "Onboarding accepts the DPR upload, but the chat route can't consume it until W3 ships. " +
-                    "For now, please upload your unofficial transcript via the fallback link in onboarding.",
-            },
-            { status: 501 },
-        );
+    const isDprPayload = (
+        pd: ParsedDataPayload,
+    ): pd is { kind: "dpr"; report: DegreeProgressReport } =>
+        pd && typeof pd === "object" && "kind" in pd && pd.kind === "dpr";
+    const isTranscriptPayload = (
+        pd: ParsedDataPayload,
+    ): pd is { kind: "transcript"; transcript: TranscriptData } =>
+        pd && typeof pd === "object" && "kind" in pd && pd.kind === "transcript";
+
+    // Validate DPR payload shape lazily (the engine schema lives in the
+    // engine package; we re-validate here to fail loudly on a bad
+    // client rather than at the first tool call).
+    let parsedDpr: DegreeProgressReport | undefined;
+    if (isDprPayload(pd)) {
+        const v = degreeProgressReportSchema.safeParse(pd.report);
+        if (!v.success) {
+            return NextResponse.json(
+                {
+                    error:
+                        "DPR payload failed schema validation. Re-upload your DPR through onboarding " +
+                        `(${v.error.issues.map((i) => i.path.join(".")).slice(0, 3).join(", ")}).`,
+                },
+                { status: 400 },
+            );
+        }
+        parsedDpr = v.data;
     }
+
     // Unwrap the transcript-shaped discriminator so the legacy builder
     // sees the same flat shape it expected pre-W2. Pre-W2 callers
     // (no `kind`) continue to work unchanged.
-    const transcriptPayload: TranscriptData =
-        pd && typeof pd === "object" && "kind" in pd && pd.kind === "transcript"
-            ? pd.transcript
+    const transcriptPayload: TranscriptData = isTranscriptPayload(pd)
+        ? pd.transcript
+        : isDprPayload(pd)
+            ? ({} as TranscriptData) // DPR path doesn't use this; legacy builder gets a stub
             : (pd as TranscriptData);
 
     const primary = createPrimaryClient();
@@ -135,7 +159,16 @@ export async function POST(req: NextRequest): Promise<Response> {
     const userId = body.userId ?? "anonymous";
     const stores = getStores();
 
-    const student = buildStudentProfileV2(transcriptPayload, body.visaStatus);
+    // Build the student profile. DPR path takes precedence; transcript
+    // path is the fallback. When neither has a usable shape, we still
+    // build a stub via the transcript builder for the legacy tests.
+    const student = parsedDpr
+        ? buildStudentProfileFromDpr(parsedDpr, {
+            ...(body.visaStatus === "f1" || body.visaStatus === "domestic"
+                ? { visaStatus: body.visaStatus }
+                : {}),
+        })
+        : buildStudentProfileV2(transcriptPayload, body.visaStatus);
     const searchCoursesFn = getCourseSearchFn();
     const ragBundle = getPolicyRagBundle();
     const session: ToolSession = {
@@ -143,6 +176,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         profileStore: stores.profileStore,
         ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
+        ...(parsedDpr ? { degreeProgressReport: parsedDpr } : {}),
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
     };
