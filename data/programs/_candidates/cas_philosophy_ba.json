@@ -1,0 +1,189 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/programs/philosophy-ba/",
+        "lastVerified": "2026-04-26",
+        "sourceHash": "sha256:6411312846a43d01ed21206d40d727abda9c8ca63aed02e2481180d26ab652ed",
+        "extractedBy": "llm-assisted",
+        "verifiedBy": "spot-check",
+        "sourceRef": {
+            "anchor": "program-requirements",
+            "pdfPage": null
+        }
+    },
+    "_provenance": [
+        {
+            "path": "totalCreditsRequired",
+            "claim": "Total Credits 128 (degree total in the Major Requirements course list)",
+            "bulletinSection": "Program Requirements (course list 'Total Credits' row)",
+            "sourceLine": 157
+        },
+        {
+            "path": "<intra-major credit total>",
+            "claim": "The major in Philosophy requires ten 4-credit courses (40 credits) — the major-only credit count, not the degree total",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 99
+        },
+        {
+            "path": "rules[phil_intro]",
+            "claim": "Introductory Course Requirement: Select one, and only one, of the following introductory courses (PHIL-UA 1-8) — 4cr",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 117
+        },
+        {
+            "path": "rules[phil_logic]",
+            "claim": "Logic Requirement: PHIL-UA 70 Logic — 4cr",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 127
+        },
+        {
+            "path": "rules[phil_ancient]",
+            "claim": "Ancient Greek and Roman Requirement: PHIL-UA 20 — 4cr",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 129
+        },
+        {
+            "path": "rules[phil_early_modern]",
+            "claim": "Early Modern European Requirement: PHIL-UA 21 — 4cr",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 131
+        },
+        {
+            "path": "rules[phil_ethics]",
+            "claim": "Ethics, Nature of Values, or Political Philosophy Requirement: PHIL-UA 40, 41, or 45 — 4cr",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 133
+        },
+        {
+            "path": "rules[phil_epist]",
+            "claim": "Epistemology, Metaphysics, or Philosophy of Science Requirement: PHIL-UA 76, 78, or 90 — 4cr",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 138
+        },
+        {
+            "path": "rules[phil_mind_lang]",
+            "claim": "Philosophy of Mind or Philosophy of Language Requirement: PHIL-UA 80 or 85 — 4cr",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 143
+        },
+        {
+            "path": "rules[phil_topics]",
+            "claim": "Topics Requirement: PHIL-UA 101, 102, 103, or 104 — 4cr",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 147
+        },
+        {
+            "path": "rules[phil_electives]",
+            "claim": "Major Electives Requirement: Select two additional PHIL-UA courses, except introductory courses (which are numbered 1 through 8) — 8cr",
+            "bulletinSection": "Program Requirements",
+            "sourceLine": 153
+        },
+        {
+            "path": "<engine-side note: only one introductory course>",
+            "claim": "Students may take only one introductory course (numbered 1 through 8) in philosophy.",
+            "bulletinSection": "Program Requirements (Note)",
+            "sourceLine": 162
+        }
+    ],
+    "_notes": [
+        "T2 candidate authored manually from the bulletin (lines 97-162) under the Phase 6.1 WS8 pilot. extractedBy is 'llm-assisted' to mark this as a non-T1 program: the audit engine should surface a confirm-with-adviser caveat per §11.6.5.",
+        "The bulletin's 'Major Electives' rule says 'two additional PHIL-UA courses, except introductory courses (which are numbered 1 through 8)'. The fromPool encoding 'PHIL-UA *' covers all PHIL-UA courses; v1 does not yet exclude PHIL-UA 1-8 from the elective pool — flagged for Phase 7. Per the bulletin Note (line 162), students may only take ONE intro course anyway, so the practical impact is bounded.",
+        "Sample Plan of Study (lines 164-240) is informational only; not encoded as rules.",
+        "GenEd / CAS Core requirements (Foreign Language, Quant Reasoning, etc.) are NOT encoded here — those live in cas_core (§11.6.4 splits CAS-Core out of per-major files). This file encodes the major-only requirements."
+    ],
+    "programId": "cas_philosophy_ba",
+    "name": "Philosophy BA",
+    "catalogYear": "2025-2026",
+    "school": "CAS",
+    "department": "Philosophy",
+    "totalCreditsRequired": 128,
+    "rules": [
+        {
+            "ruleId": "phil_intro",
+            "label": "Introductory Course (one of PHIL-UA 1-8)",
+            "type": "choose_n",
+            "doubleCountPolicy": "disallow",
+            "catalogYearRange": ["2018", "2030"],
+            "n": 1,
+            "fromPool": [
+                "PHIL-UA 1",
+                "PHIL-UA 2",
+                "PHIL-UA 3",
+                "PHIL-UA 4",
+                "PHIL-UA 5",
+                "PHIL-UA 6",
+                "PHIL-UA 7",
+                "PHIL-UA 8"
+            ]
+        },
+        {
+            "ruleId": "phil_logic",
+            "label": "Logic (PHIL-UA 70)",
+            "type": "must_take",
+            "doubleCountPolicy": "disallow",
+            "catalogYearRange": ["2018", "2030"],
+            "courses": ["PHIL-UA 70"]
+        },
+        {
+            "ruleId": "phil_ancient",
+            "label": "Ancient Greek and Roman Philosophy (PHIL-UA 20)",
+            "type": "must_take",
+            "doubleCountPolicy": "disallow",
+            "catalogYearRange": ["2018", "2030"],
+            "courses": ["PHIL-UA 20"]
+        },
+        {
+            "ruleId": "phil_early_modern",
+            "label": "Early Modern European Philosophy (PHIL-UA 21)",
+            "type": "must_take",
+            "doubleCountPolicy": "disallow",
+            "catalogYearRange": ["2018", "2030"],
+            "courses": ["PHIL-UA 21"]
+        },
+        {
+            "ruleId": "phil_ethics",
+            "label": "Ethics, Nature of Values, or Political Philosophy (one of PHIL-UA 40/41/45)",
+            "type": "choose_n",
+            "doubleCountPolicy": "disallow",
+            "catalogYearRange": ["2018", "2030"],
+            "n": 1,
+            "fromPool": ["PHIL-UA 40", "PHIL-UA 41", "PHIL-UA 45"]
+        },
+        {
+            "ruleId": "phil_epist",
+            "label": "Epistemology, Metaphysics, or Philosophy of Science (one of PHIL-UA 76/78/90)",
+            "type": "choose_n",
+            "doubleCountPolicy": "disallow",
+            "catalogYearRange": ["2018", "2030"],
+            "n": 1,
+            "fromPool": ["PHIL-UA 76", "PHIL-UA 78", "PHIL-UA 90"]
+        },
+        {
+            "ruleId": "phil_mind_lang",
+            "label": "Philosophy of Mind or Philosophy of Language (one of PHIL-UA 80/85)",
+            "type": "choose_n",
+            "doubleCountPolicy": "disallow",
+            "catalogYearRange": ["2018", "2030"],
+            "n": 1,
+            "fromPool": ["PHIL-UA 80", "PHIL-UA 85"]
+        },
+        {
+            "ruleId": "phil_topics",
+            "label": "Topics (one of PHIL-UA 101/102/103/104)",
+            "type": "choose_n",
+            "doubleCountPolicy": "disallow",
+            "catalogYearRange": ["2018", "2030"],
+            "n": 1,
+            "fromPool": ["PHIL-UA 101", "PHIL-UA 102", "PHIL-UA 103", "PHIL-UA 104"]
+        },
+        {
+            "ruleId": "phil_electives",
+            "label": "Two PHIL-UA Major Electives (excluding introductory PHIL-UA 1-8)",
+            "type": "choose_n",
+            "doubleCountPolicy": "disallow",
+            "catalogYearRange": ["2018", "2030"],
+            "n": 2,
+            "fromPool": ["PHIL-UA *"]
+        }
+    ]
+}

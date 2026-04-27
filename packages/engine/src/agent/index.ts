@@ -56,6 +56,8 @@ export type {
 } from "./responseValidator.js";
 
 export { RecordingLLMClient } from "./recordingClient.js";
+export { RecorderLLMClient } from "./recorderClient.js";
+export type { RecorderOptions, RecorderMatchStrategy } from "./recorderClient.js";
 
 export { OpenAIEngineClient, toOpenAIMessage } from "./clients/openaiClient.js";
 export type { OpenAIClientOptions } from "./clients/openaiClient.js";

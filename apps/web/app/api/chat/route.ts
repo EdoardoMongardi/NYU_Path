@@ -140,7 +140,13 @@ function buildStudentProfile(
     return {
         id: "web-user",
         catalogYear,
-        declaredPrograms: ["cs_major_ba"],
+        // Phase 6.1 WS2/WS3: legacy route stays on the legacy field
+        // shape pending the v2 cutover. The canonical
+        // ProgramDeclaration[] shape is in apps/web/lib/buildSession.ts:
+        // buildStudentProfileV2. This cast is a deprecation band-aid;
+        // remove it when WS3 deletes the chat/ tree.
+        declaredPrograms: [{ programId: "cs_major_ba", programType: "major" }],
+        homeSchool: "cas",
         coursesTaken,
         genericTransferCredits,
         flags: [],
