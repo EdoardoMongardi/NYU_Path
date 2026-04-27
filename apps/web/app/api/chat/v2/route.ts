@@ -28,9 +28,9 @@ import {
     validateResponse,
     createPrimaryClient,
     createFallbackClient,
-    userInCohort,
     getCohortConfig,
     runTemplateMatcherOnly,
+    summariesAsPriorMessage,
     type ToolSession,
     type LLMMessage,
     type ToolInvocation,
@@ -40,6 +40,7 @@ import { loadPolicyTemplates } from "@nyupath/engine";
 import { buildStudentProfileV2, type TranscriptData } from "../../../../lib/buildSession";
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
 import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
+import { getStores } from "../../../../lib/db/store";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -92,19 +93,37 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
     const fallback = createFallbackClient(); // null is OK — the loop tolerates a missing fallback.
 
+    const userId = body.userId ?? "anonymous";
+    const stores = getStores();
+
     const student = buildStudentProfileV2(body.parsedData, body.visaStatus);
     const searchCoursesFn = getCourseSearchFn();
-    const session: ToolSession = searchCoursesFn
-        ? ({ student, searchCoursesFn } as ToolSession & { searchCoursesFn: typeof searchCoursesFn })
-        : { student };
+    const session: ToolSession = {
+        student,
+        profileStore: stores.profileStore,
+        ...(searchCoursesFn ? { searchCoursesFn } : {}),
+    } as ToolSession & {
+        searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
+    };
     const systemPrompt = buildSystemPrompt({ student });
     const templates = getTemplates();
 
-    // Phase 7-A P-1: cohort gate. When the user's cohort is in
-    // `evalGateFailing` (e.g., cohort=`limited`), the agent loop is
-    // disabled and we serve via runTemplateMatcherOnly per §12.6.5.
-    const cohort: Cohort = userInCohort(body.userId ?? "anonymous");
+    // Phase 7-A P-1 + Phase 7-B Step 8b: cohort gate. The store factory
+    // checks Postgres first (when DATABASE_URL is set) and falls back
+    // to the engine's in-memory `userInCohort()` otherwise.
+    const cohort: Cohort = await stores.cohortLookup(userId);
     const cohortConfig = getCohortConfig(cohort);
+
+    // Phase 7-B Step 9: read sessionSummaries and prepend as a system
+    // priorMessage so the agent has cross-session continuity.
+    let sessionSummaryContext: string | null = null;
+    try {
+        const record = await stores.sessionStore.get(userId);
+        sessionSummaryContext = summariesAsPriorMessage(record, 3);
+    } catch {
+        // Session-store read failures must NOT break the live turn.
+        sessionSummaryContext = null;
+    }
 
     const { stream, writer } = createSseStream();
 
@@ -121,6 +140,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         correlationId: body.correlationId,
         cohort,
         cohortGateFailing: cohortConfig.evalGateFailing,
+        sessionSummaryContext,
         writer,
     });
 
@@ -144,11 +164,13 @@ interface V2TurnArgs {
     correlationId?: string;
     cohort: Cohort;
     cohortGateFailing: boolean;
+    /** Phase 7-B Step 9 — formatted sessionSummaries prefix or null. */
+    sessionSummaryContext: string | null;
     writer: SseWriter;
 }
 
 async function runV2Turn(args: V2TurnArgs): Promise<void> {
-    const { primary, fallback, session, systemPrompt, templates, userMessage, history, correlationId, cohort, cohortGateFailing, writer } = args;
+    const { primary, fallback, session, systemPrompt, templates, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, writer } = args;
     if (!primary) {
         writer.write({ kind: "error", message: "primary LLM client not configured" });
         writer.close();
@@ -192,10 +214,18 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         }
 
         // Convert prior history (from the client) into LLMMessages.
-        const priorMessages: LLMMessage[] = (history ?? []).map((h) => ({
-            role: h.role,
-            content: h.content,
-        }));
+        // Phase 7-B Step 9: prepend the formatted sessionSummaries
+        // (when a record exists) as a leading system message so the
+        // agent has cross-session continuity per §7.3.
+        const priorMessages: LLMMessage[] = [
+            ...(sessionSummaryContext
+                ? [{ role: "system" as const, content: sessionSummaryContext }]
+                : []),
+            ...(history ?? []).map((h) => ({
+                role: h.role,
+                content: h.content,
+            })),
+        ];
 
         // Phase 6.5 P-3: stream events through the agent generator.
         // tool_invocation_start/done fire AS each tool starts/finishes,

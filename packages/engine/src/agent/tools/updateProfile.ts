@@ -217,6 +217,27 @@ export const confirmProfileUpdateTool = buildTool({
         // because the entry has been removed). This prevents accidental
         // double-application within one turn.
         session.pendingMutations!.delete(input.pendingMutationId);
+
+        // Phase 7-B Step 10: persist the post-mutation profile + an
+        // immutable audit row when a ProfileStore is wired into the
+        // session. Persistence failures must NOT throw — the in-memory
+        // mutation already landed and the live turn is the source of
+        // truth.
+        if (session.profileStore) {
+            try {
+                await session.profileStore.persistMutation(student, {
+                    pendingMutationId: input.pendingMutationId,
+                    field: mutation.field,
+                    before: mutation.before,
+                    after: mutation.after,
+                    confirmedAt: new Date().toISOString(),
+                });
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.warn(`[confirm_profile_update] persistMutation failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        }
+
         return {
             status: "applied" as const,
             mutation,

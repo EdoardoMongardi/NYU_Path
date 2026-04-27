@@ -174,3 +174,10 @@ export type {
     SessionSummary,
     StudentSessionRecord,
 } from "./persistence/sessionStore.js";
+
+// Phase 7-B Step 10: confirm_profile_update persistence hook
+export { InMemoryProfileStore } from "./persistence/profileStore.js";
+export type {
+    ProfileStore,
+    ProfileMutationAuditEntry,
+} from "./persistence/profileStore.js";
