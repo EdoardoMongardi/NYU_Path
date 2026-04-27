@@ -236,6 +236,26 @@
     display: none;
 }
 
+/* Phase 7-E W2.3 — fallback link beneath the upload area, only
+ * shown while we're awaiting a DPR. Lets the student switch to
+ * the legacy unofficial-transcript flow when their DPR isn't
+ * accessible (e.g., very recent program declaration). */
+.fallbackLink {
+    margin: 0.5rem auto 0;
+    background: transparent;
+    border: none;
+    color: var(--nyu-violet, #57068c);
+    font-size: 0.85rem;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    display: block;
+}
+
+.fallbackLink:hover {
+    color: var(--nyu-violet-light, #7b21b3);
+}
+
 /* ---- Drop Overlay ---- */
 .dragOver {
     position: relative;
