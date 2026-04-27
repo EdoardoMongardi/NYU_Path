@@ -15,6 +15,7 @@ import {
     type ToolSession,
 } from "../../packages/engine/src/agent/index.js";
 import type { StudentProfile } from "@nyupath/shared";
+import type { DegreeProgressReport } from "../../packages/engine/src/dpr/schema.js";
 import {
     scoreTurn,
     aggregateCohort,
@@ -26,6 +27,12 @@ export interface ConversationCase {
     id: string;
     description: string;
     student: StudentProfile;
+    /** Phase 7-E — optional pre-loaded DPR. When present, the runner
+     *  injects it into `session.degreeProgressReport` so the W3-refactored
+     *  tools take their DPR-primary path. When absent, the case
+     *  exercises the legacy authored-rules path (still fully supported
+     *  as a fallback). */
+    degreeProgressReport?: DegreeProgressReport;
     /** Sequence of turns. Each `userMessage` is sent through the
      *  agent loop with the prior assistant replies in `priorMessages`. */
     turns: ExpectedTurn[];
@@ -73,7 +80,10 @@ export async function runCohort(
     let allTurns: CompositeReport[] = [];
 
     for (const c of cases) {
-        const session: ToolSession = { student: c.student };
+        const session: ToolSession = {
+            student: c.student,
+            ...(c.degreeProgressReport ? { degreeProgressReport: c.degreeProgressReport } : {}),
+        };
         const systemPrompt = options.systemPromptForCase
             ? options.systemPromptForCase(c)
             : buildSystemPrompt({ student: c.student });

@@ -14,8 +14,13 @@ import { runCohort } from "../cohort/runner.js";
 import { RecordingLLMClient } from "../../packages/engine/src/agent/index.js";
 
 describe("Cohort A eval set (Phase 6.5 P-7 starter)", () => {
-    it("ships ≥ 10 cases (the starter target)", () => {
-        expect(COHORT_A_CASES.length).toBeGreaterThanOrEqual(10);
+    it("ships ≥ 50 cases (Phase 7-E W6 target — 10 legacy + 40 DPR-driven)", () => {
+        expect(COHORT_A_CASES.length).toBeGreaterThanOrEqual(50);
+    });
+
+    it("at least 40 cases carry a parsed Degree Progress Report (DPR-primary path)", () => {
+        const dprCases = COHORT_A_CASES.filter((c) => c.degreeProgressReport !== undefined);
+        expect(dprCases.length).toBeGreaterThanOrEqual(40);
     });
 
     it("every case has at least one turn", () => {
