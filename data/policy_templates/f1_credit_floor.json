@@ -1,0 +1,25 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://www.nyu.edu/students/student-information-and-resources/student-visa-and-immigration/current-students/visa-and-academic-changes/register-part-time.html",
+        "lastVerified": "2026-04-27",
+        "sourceHash": "sha256:6bb3e99bd67e4ec6505f1e854aac42d694c97559a125d1443c3f62b5d007323c",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "f1_credit_floor",
+    "school": "all",
+    "source": "NYU Office of Global Services — Register Part-Time: Reduced Course Load (line 9-13)",
+    "lastVerified": "2026-04-27",
+    "triggerQueries": [
+        "f-1 minimum credits",
+        "f1 full-time",
+        "international student full time",
+        "visa minimum credits",
+        "drop below 12 credits f1",
+        "f-1 part time",
+        "reduced course load",
+        "rcl ogs"
+    ],
+    "body": "**F-1 and J-1 international students MUST register full-time every semester unless OGS approves a Reduced Course Load (RCL).**\n\nVerbatim from the NYU Office of Global Services *Register Part-Time: Reduced Course Load* page:\n\n*\"All F-1 and J-1 international students must register full-time every semester or receive permission from OGS for a reduced course load (RCL), which is anything less than full-time registration.\"*\n\n*\"For undergraduate students a minimum of 12 credits is considered full-time enrollment; for graduate students, typically a minimum of 9 credits is considered full-time enrollment. However, you should confirm with your academic department as to what full-time enrollment is for your academic program.\"*\n\n**Critical consequence — verbatim:**\n\n*\"If you register or drop below full-time without OGS permission AND the support of your academic department, you will lose the benefits of F-1 and J-1 status and you will be unable to stay and study in the US, and this may impact your eligibility for F-1 CPT or OPT or J-1 Academic Training.\"*\n\n**Three RCL paths recognized by OGS:**\n\n1. **Final semester** — when you have fewer than full-time credits remaining to complete your degree, you may apply for an RCL covering your last term.\n2. **Medical RCL** — for a documented medical condition requiring leave of absence or a lighter load.\n3. **Other academic reasons** — initial English-language difficulty, unfamiliarity with US teaching methods, improper course level placement. Speak to an OGS advisor during their published advising hours.\n\n**Before any withdrawal that drops you below 12 credits:**\n- Contact your academic department FIRST to confirm you remain eligible to continue your program.\n- THEN contact OGS to begin the RCL request — do NOT drop first and apply after.\n- OGS cannot authorize a zero-credit RCL without department confirmation that you can continue post-leave.\n\nThis is the highest-stakes academic decision you can make as an F-1/J-1 student. Always confirm with your DSO at OGS before acting."
+}

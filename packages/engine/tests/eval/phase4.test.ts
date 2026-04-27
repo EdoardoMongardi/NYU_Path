@@ -523,6 +523,8 @@ describe("Template-body drift guard — quoted bulletin text in template bodies 
         // Phase 7-A reviewer-P3 follow-up (Tandon)
         "tandon_double_major.json": "data/bulletin-raw/undergraduate/engineering/academic-policies/_index.md",
         "tandon_residency.json": "data/bulletin-raw/undergraduate/engineering/academic-policies/_index.md",
+        // Phase 7-B Step 1 (OGS — scraped via Playwright through AWS WAF)
+        "f1_credit_floor.json": "data/bulletin-raw/ogs/student-information-and-resources/student-visa-and-immigration/current-students/visa-and-academic-changes/register-part-time/_index.md",
     };
 
     const templates = loadPolicyTemplates();

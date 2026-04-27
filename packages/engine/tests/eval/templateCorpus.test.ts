@@ -19,10 +19,10 @@ describe("template corpus (Phase 6 WS7c)", () => {
 
     it("loads every template without _meta/body validation errors", () => {
         expect(r.skipped).toEqual([]);
-        // Phase 7-A reviewer-P3 follow-up: corpus expanded 15 → 17
-        // (target: 20-30 per §5.5; remaining gap is content-authoring
-        // against real cohort A queries).
-        expect(r.templates.length).toBeGreaterThanOrEqual(17);
+        // Phase 7-B Step 1: corpus expanded 17 → 18 (added f1_credit_floor
+        // sourced from the OGS Register Part-Time page, scraped via the
+        // new Playwright tool for WAF-gated nyu.edu pages).
+        expect(r.templates.length).toBeGreaterThanOrEqual(18);
     });
 
     it("includes the Phase 5 + Phase 6 templates by id", () => {
