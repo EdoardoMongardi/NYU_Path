@@ -1,23 +1,26 @@
 {
     "_meta": {
         "catalogYear": "2025-2026",
-        "sourceUrl": "https://bulletin.stern.nyu.edu/undergraduate/admissions/",
-        "lastVerified": "2026-04-26",
-        "sourceHash": "sha256:60c1dab15f72d3c3ae9b9e0edff21d8bb20fbe6b7e8f97ce90b9f2b5aa3de80e",
+        "sourceUrl": "https://www.nyu.edu/admissions/undergraduate-admissions/how-to-apply/internal-transfers/internal-transfers-stern.html",
+        "lastVerified": "2026-04-27",
+        "sourceHash": "sha256:a799d17d60b885ac4036cbb01b615af21e379aca13e3b4643c3ec0f4e91b21fe",
         "extractedBy": "manual",
         "verifiedBy": "hand-review"
     },
     "id": "cas_to_stern_transfer",
     "school": "cas",
-    "source": "Stern Admissions §Internal Transfer Applicants (line 121-123). GPA caveat per ARCHITECTURE.md §1604.",
-    "lastVerified": "2026-04-26",
+    "source": "NYU Admissions — Course Equivalencies for Internal Transfers to Stern (lines 17-39 + Calculus / Regression / Microeconomics / Financial Accounting sections). GPA caveat per ARCHITECTURE.md §1604.",
+    "lastVerified": "2026-04-27",
     "triggerQueries": [
         "internal transfer stern",
         "transfer into stern application",
         "switch majors stern transfer",
         "stern internal transfer deadline",
         "stern transfer requirements",
-        "stern transfer prerequisites"
+        "stern transfer prerequisites",
+        "stern course equivalencies",
+        "what cas course satisfies stern calc",
+        "what cas course satisfies stern micro"
     ],
-    "body": "**Internal transfer from CAS to Stern, verbatim from the Stern bulletin (Admissions §Internal Transfer Applicants):**\n\n- **Application deadline:** *\"by the March 1 application deadline\"*. *\"Stern accepts transfers in the fall only.\"*\n- **Minimum credits:** *\"Students must complete (or be in the process of completing) one full year (32 credits) of academic study in their original school of enrollment to be eligible for internal transfer.\"*\n- **Disqualifier:** *\"The Leonard N. Stern School of Business does not consider applicants who previously externally transferred to another school or college at NYU.\"*\n\n**Required prerequisites by entry year:**\n- **Sophomore entry:** 1 semester of calculus or higher; 1 semester of writing/composition (two semesters preferred).\n- **Junior entry:** all of the sophomore requirements PLUS — 1 additional semester of calculus or higher; 1 semester of writing/composition; 1 semester of statistics; 1 semester of financial accounting; 1 semester of microeconomics.\n\n**Important caveat: GPA thresholds are not published.** The Stern bulletin does not specify a numeric minimum GPA for internal transfer. Strong applicants typically present competitive grades, but no public floor exists. **Confirm any GPA expectations directly with Stern Admissions before applying.**\n\nFor course equivalencies (which CAS courses count for Stern prerequisites), see Stern's Course Equivalencies for Internal Transfers page."
+    "body": "**Internal transfer prereqs by entry year — verbatim from NYU's Course Equivalencies for Internal Transfers to Stern page:**\n\n*\"If you wish to transfer into the sophomore year at Stern, you should have completed the following:\"* — Calculus I, II, or III + Writing/Composition (1-2 semesters).\n\n*\"If you wish to transfer into the junior year at Stern, you should have completed following:\"* — Calculus I, II, or III + Writing/Composition + Microeconomics + Regression + Financial Accounting.\n\n*\"Completion of these courses with letter grades (no pass/fail permitted) is required for the application. There is no guarantee that all previously taken coursework or advanced standing credit will count toward Stern degree requirements.\"*\n\n## Which CAS courses satisfy each prereq\n\n**Writing and Composition** — *\"Courses that fulfill “Writing and Composition” prerequisite are equivalent to your current NYU college’s writing requirement.\"* For CAS students, this is EXPOS-UA 1 (or equivalent).\n\n**Calculus I, II, or III** — any one of:\n- MATH-UA 121 Calculus I (MATH-UA 9121 if taken abroad)\n- MATH-UA 122 Calculus II (MATH-UA 9122 if taken abroad)\n- MATH-UA 123 Calculus III (MATH-UA 9123 if taken abroad)\n- MATH-UA 132 Math for Economics II or higher\n- MATH-UA 221 Honors Calculus I\n- AP Calculus AB score of 4 or 5\n\n**Regression** (junior-entry only) — for CAS students:\n- ECON-UA 380 Topics in Econometrics\n- ECON-UA 266 Introduction to Econometrics\n\n**Microeconomics** (junior-entry only) — for CAS students:\n- ECON-UA 2 Introduction to Microeconomics\n- ECON-UA 10 (or 9010) Intermediate Microeconomics\n- ECON-UA 11 Microeconomic Analysis\n\n**Financial Accounting** (junior-entry only) — Stern's ACCT-UB 1 / 9001 are accepted; no CAS equivalent is listed on the page, so a CAS student typically takes the Stern course directly (with permission) or completes it after admission. Confirm with Stern admissions.\n\n## Application logistics (sourced from the Stern bulletin §Internal Transfer Applicants — see also `stern_residency` template for verbatim quotes)\n\n- **Application deadline:** by the March 1 application deadline. Stern accepts transfers in the fall only.\n- **Minimum credits:** complete (or be in the process of completing) one full year (32 credits) of academic study in your original school of enrollment.\n- **Disqualifier:** Stern does not consider applicants who previously externally transferred to another school or college at NYU.\n- **Important caveat — GPA thresholds are not published.** The Stern bulletin does not specify a numeric minimum GPA for internal transfer. Strong applicants typically present competitive grades, but no public floor exists. **Confirm any GPA expectations directly with Stern Admissions before applying.**\n\n*Some of these courses may have prerequisites for enrollment.*"
 }

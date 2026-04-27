@@ -1,0 +1,25 @@
+{
+    "_meta": {
+        "catalogYear": "2025-2026",
+        "sourceUrl": "https://www.nyu.edu/admissions/undergraduate-admissions/how-to-apply/internal-transfers/internal-transfer-additional-requirements.html",
+        "lastVerified": "2026-04-27",
+        "sourceHash": "sha256:2933f6e07bfe99dc15c14ae258baf50da785857de62c7ee68efc79c9039f7396",
+        "extractedBy": "manual",
+        "verifiedBy": "hand-review"
+    },
+    "id": "internal_transfer_additional_requirements",
+    "school": "all",
+    "source": "NYU Admissions — Additional Program Requirements for Internal Transfers (covers CAS, Gallatin, Meyers, Steinhardt, Stern, Tandon, Tisch).",
+    "lastVerified": "2026-04-27",
+    "triggerQueries": [
+        "internal transfer requirements",
+        "additional requirements internal transfer",
+        "school specific transfer requirement",
+        "tandon to cas restriction",
+        "applied math tandon to cas",
+        "gallatin transfer cpw",
+        "concentration planning worksheet",
+        "tisch internal transfer audition"
+    ],
+    "body": "**Internal-transfer requirements vary by destination school. Verbatim school-by-school summary from NYU Admissions' *Additional Program Requirements for Internal Transfers* page:**\n\n*\"Several programs have special requirements for internal transfer students or restrictions on when you are able to apply. Please make sure you factor the considerations below into your application process.\"*\n\n### College of Arts & Science (CAS)\n\n- *\"Students interested in applying to internal transfer to CAS are permitted to do so for either the Fall & Spring Semester. If a student has been denied to internally transfer to CAS, they are welcome to reapply for the following semester.\"*\n- *\"Students must be in good academic standing in their current school/college.\"*\n- *\"We do not have prerequisites that are required for any of our programs in CAS, however, we may pay closer attention to courses that are relevant to the student's intended major.\"*\n- **Exception (verbatim):** *\"Current students in Applied Mathematics at the Tandon School of Engineering cannot apply to internally transfer to Mathematics, Computer Science and Mathematics, Data Science and Mathematics, or Economics and Mathematics in the College of Arts and Science.\"* If you have any questions, contact your academic advisor.\n- Students interested in the Data Science major should email cds-undergraduate@nyu.edu as early as possible for academic planning support.\n\n### Gallatin School of Individualized Study\n\n- The Concentration Planning Worksheet (CPW) is a brief essay + proposed course schedule reviewed by Gallatin faculty.\n- *\"64 credits is the maximum amount of credits that students are able to transfer into Gallatin. Students who have earned more than 64 credits can apply, but will need to forfeit additional credits once they matriculate to Gallatin.\"*\n- CPW required for: rising juniors (≥64 credits at start of next NYU semester, including AP/IB/dual-enrollment), students who have completed ≥48 units, students who have completed ≥3 college semesters at time of application, Liberal Studies Core students starting Spring/Fall.\n- **CPW Deadlines (verbatim):**\n  - *\"March 1 - for Summer or Fall admission\"*\n  - *\"November 1 - for Spring admission\"*\n  - *\"December 1 - for Summer or Fall admission (current LS Core Program students only)\"*\n\n### Rory Meyers College of Nursing\n\n- *\"Ideally, internal transfer students will begin planning for their transfer during the fall semester of their first-year.\"*\n- For Liberal Studies Core students: complete four full-time semesters in good academic standing before transitioning.\n- *\"Any of the six Nursing prerequisite classes taken prior to transition need to be completed with a “C” or better.\"* The six prerequisites are APSY-UE 1271, CHEM-UA 120, NURSE-UN 70, NURSE-UN 75, NURSE-UN 80, and NUTR-UE 119.\n\n### Stern School of Business\n\nSee the dedicated `cas_to_stern_transfer` template for the full CAS→Stern equivalencies + the March 1 / fall-only / 32-credits / no-prior-external-transfer rules.\n\n### Tandon, Tisch, Steinhardt\n\nThese schools have their own special-requirement sections on the page. Common patterns:\n- **Tisch** — most programs require auditions or creative-portfolio submissions; check the program-specific page.\n- **Steinhardt** — some programs (e.g., Music) require auditions; some (e.g., Educational Theatre) require interviews.\n- **Tandon** — students must be in good academic standing; specific majors may have additional requirements.\n\n**General application logistics shared across all schools:**\n- Internal transfers are current NYU students who want to transfer from one NYU school or college to another.\n- Apply via the standard internal-transfer application; check the destination school's application fee policy.\n- Admission decisions and registration planning depend on the destination school's calendar.\n\nIf in doubt, contact the destination school's admissions office directly — additional-requirement language can change between cycles."
+}

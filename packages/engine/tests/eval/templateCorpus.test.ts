@@ -19,10 +19,11 @@ describe("template corpus (Phase 6 WS7c)", () => {
 
     it("loads every template without _meta/body validation errors", () => {
         expect(r.skipped).toEqual([]);
-        // Phase 7-B Step 1: corpus expanded 17 → 18 (added f1_credit_floor
-        // sourced from the OGS Register Part-Time page, scraped via the
-        // new Playwright tool for WAF-gated nyu.edu pages).
-        expect(r.templates.length).toBeGreaterThanOrEqual(18);
+        // Phase 7-B Step 2: corpus expanded 18 → 19 (added
+        // internal_transfer_additional_requirements;
+        // cas_to_stern_transfer rewrote sourceUrl + body around the
+        // freshly-scraped equivalencies page).
+        expect(r.templates.length).toBeGreaterThanOrEqual(19);
     });
 
     it("includes the Phase 5 + Phase 6 templates by id", () => {
