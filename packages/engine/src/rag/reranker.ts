@@ -75,3 +75,95 @@ function tokenize(text: string): string[] {
         .split(/\s+/)
         .filter((t) => t.length >= 3);
 }
+
+// ============================================================
+// CohereReranker (Phase 7-B Step 13)
+// ============================================================
+// Production cross-encoder reranker. Uses Cohere Rerank v3.5 which
+// returns a `relevance_score` in [0, 1] per (query, document) pair.
+// Score distribution per Cohere guidance:
+//   - >= 0.7 → highly relevant (CONFIDENCE_HIGH)
+//   - 0.3 .. 0.7 → somewhat relevant (CONFIDENCE_MEDIUM)
+//   - < 0.3 → not relevant (CONFIDENCE_LOW)
+// These bands map directly to the policySearch.ts thresholds — see
+// the re-tuning note there.
+//
+// The chunk text passed to Cohere combines section heading + body so
+// the cross-encoder can read the heading signal (e.g., "Pass/Fail
+// Option") that the local lexical reranker boosts via headingFrac.
+// ============================================================
+
+export interface CohereRerankerOptions {
+    apiKey: string;
+    model?: string;
+    /** Optional client injection for tests (bypasses network). */
+    injectedClient?: {
+        rerank(args: {
+            model: string;
+            query: string;
+            documents: string[];
+            top_n?: number;
+        }): Promise<{
+            results: Array<{ index: number; relevance_score: number }>;
+        }>;
+    };
+}
+
+export class CohereReranker implements Reranker {
+    public readonly modelId: string;
+    private readonly apiKey: string;
+    private readonly model: string;
+    private readonly injectedClient?: CohereRerankerOptions["injectedClient"];
+
+    constructor(opts: CohereRerankerOptions) {
+        this.apiKey = opts.apiKey;
+        this.model = opts.model ?? "rerank-v3.5";
+        this.modelId = `cohere:${this.model}`;
+        this.injectedClient = opts.injectedClient;
+    }
+
+    async rerank(query: string, hits: VectorSearchHit[]): Promise<RerankedHit[]> {
+        if (hits.length === 0) return [];
+        const documents = hits.map((h) => {
+            const heading = h.chunk.meta.section?.trim();
+            const body = h.chunk.text;
+            return heading ? `${heading}\n\n${body}` : body;
+        });
+
+        const client = this.injectedClient ?? (await this.lazyCohereClient());
+        const response = await client.rerank({
+            model: this.model,
+            query,
+            documents,
+            top_n: hits.length,
+        });
+
+        const out: RerankedHit[] = hits.map((h) => ({ ...h, rerankScore: 0 }));
+        for (const r of response.results) {
+            const dst = out[r.index];
+            if (dst) dst.rerankScore = Math.max(0, Math.min(1, r.relevance_score));
+        }
+        out.sort((a, b) => {
+            if (b.rerankScore !== a.rerankScore) return b.rerankScore - a.rerankScore;
+            return a.chunk.meta.chunkId.localeCompare(b.chunk.meta.chunkId);
+        });
+        return out;
+    }
+
+    private async lazyCohereClient(): Promise<NonNullable<CohereRerankerOptions["injectedClient"]>> {
+        // Lazy import: callers who stay on `LocalLexicalReranker` never
+        // pull `cohere-ai` into their bundle.
+        const mod = await import("cohere-ai");
+        // The Cohere SDK exports `CohereClient` (v7 API) or `CohereClientV2`.
+        // We use v2 which is the current canonical export.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const SdkClient: any = (mod as any).CohereClientV2 ?? (mod as any).CohereClient;
+        if (!SdkClient) {
+            throw new Error("[CohereReranker] cohere-ai package missing CohereClientV2 / CohereClient export");
+        }
+        const client = new SdkClient({ token: this.apiKey });
+        return {
+            rerank: async (args) => client.rerank(args),
+        };
+    }
+}

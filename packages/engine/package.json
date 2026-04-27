@@ -6,8 +6,9 @@
     "main": "./src/index.ts",
     "types": "./src/index.ts",
     "dependencies": {
-        "@nyupath/shared": "workspace:*",
         "@anthropic-ai/sdk": "^0.91.1",
+        "@nyupath/shared": "workspace:*",
+        "cohere-ai": "^8.0.0",
         "openai": "^6.25.0",
         "zod": "^4.3.6"
     },

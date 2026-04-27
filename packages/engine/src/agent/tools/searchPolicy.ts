@@ -39,6 +39,7 @@ export const searchPolicyTool = buildTool({
                 catalogYear: session.student!.catalogYear,
                 allowExplicitOverride: true,
                 templates: rag.templates,
+                ...(rag.confidenceBands ? { confidenceBands: rag.confidenceBands } : {}),
             },
             {
                 store: rag.store,

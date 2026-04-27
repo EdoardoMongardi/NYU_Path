@@ -46,6 +46,25 @@ export class VectorStore {
     }
 
     /**
+     * Hydrate the store from a precomputed (chunk, embedding) list.
+     * Skips the `embedder.embedBatch()` round-trip — callers typically
+     * read this from a JSONL cache produced by `tools/policy-corpus-embed/`.
+     * The dim must match `this.embedder.dim` (otherwise the search-time
+     * cosine produces garbage); we assert at load time and throw early.
+     */
+    addPrecomputed(items: Array<{ chunk: PolicyChunk; embedding: Float32Array }>): void {
+        for (const it of items) {
+            if (it.embedding.length !== this.embedder.dim) {
+                throw new Error(
+                    `[VectorStore.addPrecomputed] embedding dim ${it.embedding.length} ` +
+                    `mismatches store embedder dim ${this.embedder.dim}.`,
+                );
+            }
+            this.items.push({ ...it.chunk, embedding: it.embedding });
+        }
+    }
+
+    /**
      * Search for top-K chunks by cosine similarity. If `predicate` is
      * supplied, candidates are filtered first (scope filter applied
      * before vector search per §5 flow).
