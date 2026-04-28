@@ -33,6 +33,23 @@ export const getCreditCapsTool = buildTool({
     outputMode: "semi_hardened",
     async validateInput(_input, { session }) {
         if (!session.student) return { ok: false, userMessage: "No student profile loaded." };
+        // Phase 7-E W10 reviewer P1-5 — mechanical enforcement of the
+        // system-prompt routing rule. When a DPR is loaded the agent
+        // must read residency / P-F / outside-home / current-credits
+        // numbers from `run_full_audit`'s `dprCumulative` output, not
+        // from this tool. The school-config-derived per-semester ceiling
+        // and F-1 floor are NOT in the DPR, but cohort-A ships without
+        // schoolConfig wired into the v2 route — until that lands, F-1
+        // floor questions get a deterministic refusal that points the
+        // student at OGS.
+        if (session.degreeProgressReport) {
+            return {
+                ok: false,
+                userMessage:
+                    "DPR is loaded — credit budgets (residency, P/F, outside-CAS, current credits) come from run_full_audit's dprCumulative output. " +
+                    "For F-1 minimum-credit-load or per-semester ceiling questions, refer the student to NYU's Office of Global Services or their academic adviser; the relevant school-config rules are not yet wired into cohort A.",
+            };
+        }
         if (!session.schoolConfig) return { ok: false, userMessage: "School config not loaded." };
         return { ok: true };
     },

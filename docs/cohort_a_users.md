@@ -34,7 +34,8 @@ Read [PRIVACY.md](../PRIVACY.md) for the full version. The 30-second summary:
 
 - **The PDF is processed in memory and discarded.** Never written to disk, never stored in any database.
 - **The parsed structured form lives in your browser only.** Closes when you close the tab.
-- **Conversation summaries (≤600 tokens, no full transcripts) are kept on the server** so the next chat has context. You can request deletion at any time by emailing the operator.
+- **No cross-session memory in cohort A.** Each chat starts fresh — we do not persist your conversations on the server. The engine has a session-summary mechanism but it isn't wired in until W12 (when real auth ships). If you want to share context across sessions, re-upload your DPR each time and re-state the question.
+- **A per-browser anonymous id** lives in your browser's localStorage at the key `nyupath:client-id`. It exists only to keep your daily 30-message rate-limit bucket separate from other students. You can clear it any time via DevTools.
 - **No third-party sharing of the raw PDF.** OpenAI / Anthropic / Cohere see only the chat content, not the DPR file.
 - **No NYU credentials handled.** You log into Albert in your own browser; we never touch your password.
 
@@ -83,7 +84,7 @@ For Tier 3 answers, NYU Path will include a non-removable disclaimer: *"This est
 
 - **Bugs / wrong answers** — screenshot the conversation and email Edoardo at edoardo.mongardi18@gmail.com. Include the question you asked + what the tool said + what you expected.
 - **Feature requests** — same channel. Cohort A is small enough that I can directly act on requests.
-- **Privacy concerns** — same channel. I can delete your server-side session summaries within 24 hours of your request.
+- **Privacy concerns** — same channel. The honest answer for cohort A is "no per-student data is held server-side" — but if anything in PRIVACY.md surprises you, please email and I'll explain what's actually happening end-to-end.
 
 ## Cohort A timeline
 

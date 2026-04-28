@@ -31,6 +31,17 @@ export const getAcademicStandingTool = buildTool({
     maxResultChars: 1500,
     async validateInput(_input, { session }) {
         if (!session.student) return { ok: false, userMessage: "No student profile loaded." };
+        // Phase 7-E W10 reviewer P1-5 — mechanical enforcement of the
+        // DPR-loaded routing rule. Without this, an LLM that ignores
+        // the system-prompt directive can call this tool and get a
+        // GPA-from-coursesTaken answer that contradicts the DPR.
+        if (session.degreeProgressReport) {
+            return {
+                ok: false,
+                userMessage:
+                    "DPR is loaded — academic standing, GPA, and credits come from run_full_audit's dprCumulative output (the DPR is NYU's pre-computed authoritative audit). Re-call run_full_audit instead.",
+            };
+        }
         return { ok: true };
     },
     prompt: () =>
