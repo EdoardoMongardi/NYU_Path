@@ -36,16 +36,33 @@ export interface SystemPromptOptions {
      */
     dprLoaded?: boolean;
     /**
-     * Phase 7-E temporal-context fix — when the student asks "what
-     * should I take next semester?", the agent shouldn't guess "Fall
-     * 2024" because the LLM has no calendar awareness. We pass these
-     * three terms (derived from the DPR's currently-enrolled rows +
-     * the student's stated graduation target) so the agent can answer
-     * with the correct semester labels.
+     * Phase 7-E + Phase 8 calendar fix — temporal context.
+     *
+     * `currentTerm` / `nextTerm`: derived from the system clock + NYU
+     *   academic calendar. Independent of the DPR. Tells the agent
+     *   "what term is in session right now per the wall clock".
+     *
+     * `enrolledNowTerm`: the IP-row term in the DPR that overlaps the
+     *   wall-clock currentTerm. Usually equal to currentTerm. Differs
+     *   when the student is mid-term and hasn't appeared in their
+     *   own DPR yet.
+     *
+     * `preRegisteredTerms`: future-term IP rows the student has
+     *   already registered for. When non-empty, "next semester" still
+     *   means nextTerm (clock-derived) — but the agent should know
+     *   the student has these already locked in.
+     *
+     * `graduationTerm`: free-form student-typed target normalized.
      */
-    currentTerm?: string;       // e.g., "Fall 2026"
-    nextTerm?: string;          // e.g., "Spring 2027"
-    graduationTerm?: string;    // e.g., "Spring 2027"
+    currentTerm?: string;            // e.g., "Spring 2026" (clock truth)
+    nextTerm?: string;               // e.g., "Fall 2026" (clock + 1)
+    enrolledNowTerm?: string;        // IP-row in session per the DPR
+    preRegisteredTerms?: string[];   // Future-term IP rows
+    graduationTerm?: string;         // e.g., "Spring 2027"
+    /** Today's ISO date (set by the route from new Date()). Lets the
+     *  agent answer "what's today's date?" without having to call a
+     *  tool. */
+    today?: string;
 }
 
 /**
@@ -165,17 +182,25 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             lines.push(`- coursesTaken: ${s.coursesTaken.length} courses on file`);
         }
     }
-    if (opts.currentTerm || opts.nextTerm || opts.graduationTerm) {
+    if (opts.today || opts.currentTerm || opts.nextTerm || opts.enrolledNowTerm || opts.graduationTerm) {
         lines.push(
             "",
             "## Temporal context (use these EXACT labels — do not invent semesters)",
         );
-        if (opts.currentTerm) lines.push(`- currentTerm: ${opts.currentTerm} (the student is enrolled NOW)`);
-        if (opts.nextTerm) lines.push(`- nextTerm: ${opts.nextTerm} (when the student says "next semester", they mean THIS term)`);
+        if (opts.today) lines.push(`- today: ${opts.today} (real wall-clock date)`);
+        if (opts.currentTerm) lines.push(`- currentTerm: ${opts.currentTerm} (the term in session right now per the calendar — clock truth, not DPR)`);
+        if (opts.nextTerm) lines.push(`- nextTerm: ${opts.nextTerm} (when the student says "next semester" / "this fall" / "this spring", they mean THIS term)`);
+        if (opts.enrolledNowTerm && opts.enrolledNowTerm !== opts.currentTerm) {
+            lines.push(`- enrolledNowTerm: ${opts.enrolledNowTerm} (DPR's currently-in-progress term — differs from calendar currentTerm; the DPR may be slightly stale)`);
+        }
+        if (opts.preRegisteredTerms && opts.preRegisteredTerms.length > 0) {
+            lines.push(`- preRegisteredTerms: ${opts.preRegisteredTerms.join(", ")} (the student has ALREADY registered for these future terms — visible in the DPR's IP rows)`);
+        }
         if (opts.graduationTerm) lines.push(`- graduationTerm: ${opts.graduationTerm} (the student's stated graduation target)`);
         lines.push(
-            "- When you build a semester plan, label it with `nextTerm`, NOT a year you guess from training data.",
+            "- When you build a semester plan, label it with `nextTerm` (clock-derived), NOT a year you guess from training data and NOT the latest IP-row term in the DPR.",
             "- When you reason about \"on track to graduate\", compare remaining requirements against the terms between `nextTerm` and `graduationTerm`.",
+            "- When the student asks \"am I currently enrolled in [X]?\" or \"what am I taking now?\", check `run_full_audit`'s `dprInProgressCourses` for the term that matches `currentTerm` (NOT `preRegisteredTerms` — those are future).",
         );
     }
     if (opts.transferIntent) {
