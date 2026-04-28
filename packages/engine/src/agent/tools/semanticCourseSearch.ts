@@ -209,6 +209,29 @@ export function createSemanticCourseSearchFn(opts: SemanticCourseSearchOptions):
         const deptPrefix = queryOpts?.departmentPrefix;
         const cat = ensureCatalog();
 
+        // Phase 8 A5 — exact-id fast path. When the query LOOKS like a
+        // canonical course code (e.g. "CSCI-UA 421", "MATH-UA 251"),
+        // try an exact lookup BEFORE semantic search. Without this
+        // pre-Phase-8 a query for "CSCI-UA 421" returned the nearest
+        // semantic neighbor (e.g. "CSCI-UA 479") and the agent
+        // claimed the course didn't exist (real bug from the 20-question
+        // sweep). The catalog itself has gaps, so an exact lookup miss
+        // is HONEST — better than silently returning a similar course.
+        const courseCodeRe = /^([A-Z]+(?:-[A-Z]+)?)\s+(\d+[A-Z]?)$/i;
+        const m = query.trim().match(courseCodeRe);
+        if (m) {
+            const canonical = `${m[1]!.toUpperCase()} ${m[2]!.toUpperCase()}`;
+            const exact = cat.filter((c) => c.courseId.trim().toUpperCase() === canonical);
+            if (exact.length > 0) {
+                // Found in catalog — return only the exact match (and
+                // up to limit-1 semantic neighbors below if any).
+                return exact.slice(0, limit).map(({ embedding: _e, ...rest }) => rest);
+            }
+            // Not found exact. Fall through to semantic so the agent
+            // sees the closest neighbors AND can detect the miss
+            // (none of the returned courseIds will match the query).
+        }
+
         let queryVec: Float32Array | null = null;
         try {
             queryVec = await embedder.embed(query);

@@ -130,13 +130,25 @@ export const searchCoursesTool = buildTool({
     description:
         "Searches the NYU course catalog by keyword. Matches against " +
         "course title and ID (case-insensitive substring). Optionally " +
-        "filters by department prefix (e.g., 'CSCI-UA' for CS courses). " +
-        "Returns up to 20 matches. Use for elective discovery or topic " +
-        "queries ('find courses about machine learning').",
+        "filters by department prefix (e.g., 'CSCI-UA' for CS courses).\n\n" +
+        "Use this for:\n" +
+        "  • \"Find courses about [topic]\" / \"what ML courses exist?\"\n" +
+        "  • \"Suggest a CS elective I haven't taken\" — pass `excludeCompleted: true`\n" +
+        "  • \"What 4000-level math courses are offered?\"\n" +
+        "  • Verifying a specific course exists in the catalog\n\n" +
+        "PASS `excludeCompleted: true` whenever the user asks for " +
+        "courses they HAVEN'T taken / could TAKE / NEW courses to consider. " +
+        "When set AND the student's DPR is loaded, courses they've already " +
+        "completed are filtered out of the result set.\n\n" +
+        "DO NOT call this for \"plan my next semester\" — that's `plan_semester`'s " +
+        "job. search_courses returns the broader catalog; plan_semester walks " +
+        "the student's specific not-yet-satisfied requirements.",
     inputSchema: z.object({
         query: z.string().min(2).describe("Keyword to search for in course titles + ids."),
         departmentPrefix: z.string().optional().describe("e.g., 'CSCI-UA' to limit to CS"),
         limit: z.number().int().min(1).max(50).optional(),
+        excludeCompleted: z.boolean().optional()
+            .describe("When true AND the student's DPR is loaded, drops courses they have already completed (DPR type=EN or TE)."),
     }),
     isReadOnly: true,
     maxResultChars: 2500,
@@ -173,22 +185,51 @@ export const searchCoursesTool = buildTool({
             }
         }
 
+        // Phase 8 A4 — when excludeCompleted is true AND the DPR is
+        // loaded, drop any course the student has already finished.
+        // Build a normalized completed-courseId set from the DPR's
+        // courseHistory (excluding IP rows; only EN / TE / similar
+        // count as "already taken").
+        let completedFiltered = raw;
+        let droppedAsCompleted = 0;
+        if (input.excludeCompleted && session.degreeProgressReport) {
+            const dpr = session.degreeProgressReport;
+            const completedIds = new Set<string>();
+            for (const c of dpr.courseHistory) {
+                if (c.type === "IP") continue; // in-progress doesn't count as completed
+                completedIds.add(`${c.subject} ${c.catalogNbr}`.trim().toUpperCase());
+            }
+            const before = completedFiltered.length;
+            completedFiltered = completedFiltered.filter(
+                (c) => !completedIds.has(c.courseId.trim().toUpperCase()),
+            );
+            droppedAsCompleted = before - completedFiltered.length;
+        }
+
         // Annotate every match with school + accessibility tier so the
         // agent surfaces "this is Tandon, you'd need cross-school
         // approval" instead of pretending it's freely available.
         const homeSchool = session.student?.homeSchool;
-        const matches = raw.map((c) => ({
+        const matches = completedFiltered.map((c) => ({
             ...c,
             ...classifyCourse(c.courseId, homeSchool),
         }));
         // Order: home → cross_school → global_site → graduate → unknown.
         const order: Record<Accessibility, number> = { home: 0, cross_school: 1, global_site: 2, graduate: 3, unknown: 4 };
         matches.sort((a, b) => order[a.accessibility] - order[b.accessibility]);
-        return { query: input.query, totalReturned: matches.length, matches, homeSchool: homeSchool ?? null };
+        return {
+            query: input.query,
+            totalReturned: matches.length,
+            matches,
+            homeSchool: homeSchool ?? null,
+            ...(input.excludeCompleted ? { excludedCompletedCount: droppedAsCompleted } : {}),
+        };
     },
     summarizeResult(out) {
         const lines: string[] = [];
-        lines.push(`COURSE SEARCH (query="${out.query}"; ${out.totalReturned} matches; home=${out.homeSchool ?? "?"})`);
+        const excl = (out as { excludedCompletedCount?: number }).excludedCompletedCount;
+        const exclNote = excl !== undefined && excl > 0 ? ` (${excl} hidden because already completed)` : "";
+        lines.push(`COURSE SEARCH (query="${out.query}"; ${out.totalReturned} matches${exclNote}; home=${out.homeSchool ?? "?"})`);
         if (out.matches.length === 0) {
             lines.push(`No courses matched. Try a broader keyword or remove department filter.`);
             return lines.join("\n");

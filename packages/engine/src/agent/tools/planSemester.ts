@@ -45,9 +45,20 @@ export const planSemesterTool = buildTool({
         "Recommends courses for a target semester. When the student's " +
         "Degree Progress Report (DPR) is loaded, walks NYU's pre-computed " +
         "not-satisfied requirements and surfaces the specific courses " +
-        "still needed. Otherwise runs the local planner against the audit " +
-        "+ prereq graph + grade history. Use for any 'what should I take " +
-        "next semester' question.",
+        "still needed.\n\n" +
+        "Use this for:\n" +
+        "  • \"What should I take next semester / this fall / spring 2027?\"\n" +
+        "  • \"Plan the rest of my degree\"\n" +
+        "  • \"How do I finish my major?\"\n" +
+        "BEFORE calling, pair with `run_full_audit` so you have current\n" +
+        "GPA + credits + remaining requirements. If the user asks for a\n" +
+        "SPECIFIC term, pass that as targetSemester (use the `nextTerm`\n" +
+        "from the temporal-context block when in doubt).\n\n" +
+        "DO NOT call this for elective discovery (\"suggest a CS elective " +
+        "I haven't taken\"). plan_semester only surfaces courses that " +
+        "satisfy not-yet-satisfied requirements; it doesn't enumerate " +
+        "the broader catalog. For elective discovery use `search_courses` " +
+        "with `excludeCompleted: true`.",
     inputSchema: z.object({
         targetSemester: z.string().describe("Semester to plan, e.g. '2025-fall'."),
         maxCourses: z.number().int().positive().optional(),
