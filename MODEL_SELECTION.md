@@ -1,6 +1,47 @@
 # NYU Path — Model Selection & Cohort A Composite Measurement
 
+> **Phase 8 B5 update — 2026-04-28:** Production primary swapped to **`anthropic:claude-haiku-4-5-20251001`** based on the Phase-8 25-question bake-off (post-architectural-cleanup). Fallback stays `openai:gpt-4.1-mini`. Full bake-off comparison at [tools/cohort-eval/results/bakeoff_phase8_summary.md](tools/cohort-eval/results/bakeoff_phase8_summary.md). See "Phase 8 bake-off" section below.
+
 > **Phase 7-E W8 update — 2026-04-28:** Cohort A surrogate composite **0.936**, §12.6.5 0.90 gate **PASSED** (surrogate, upper-bound). See "Phase 7-E W8" section below. The Phase-5-prep bakeoff content from 2026-04-26 is preserved for archival reference; W9 (re-validation against the 84-case bakeoff post-DPR-pivot) is pending.
+
+---
+
+## Phase 8 bake-off — claude-haiku-4-5 selected as primary
+
+Run: `tools/cohort-eval/runBakeoffPhase8.ts` against the operator's real DPR (`SAA_STD_DS.pdf`), 25 questions covering AUDIT/PLAN/WHATIF/POLICY + 5 EDGE cases. Architecture: post-Phase-8 (Workstream A landed — preLoopDispatch demoted, system prompt trimmed, tool descriptions enriched, run_full_audit IP courses, search_courses excludeCompleted, exact-id catalog fast path).
+
+| Model | Composite | Floor | Auto-pass | Median latency | 4-week pilot $ |
+|---|---:|---:|---:|---:|---:|
+| **claude-haiku-4-5** ✓ chosen | 4.42 | 2.25 | **92%** | 5.1s | $26 |
+| claude-sonnet-4-6 | **4.54** | 2.25 | 88% | 14.9s | $79 |
+| gpt-4.1-mini (prior primary) | 4.00 | 2.50 | 88% | **5.3s** | **$3** |
+| gpt-4.1 | 3.95 | 1.75 | 88% | 21.5s | $46 |
+| gpt-5 | 1.55 | 1.25 | 4% | 0.6s | $47 |
+
+**Selection rationale:**
+- claude-haiku-4-5 has the highest auto-pass rate (92% — every other model 88% or worse)
+- Composite 4.42 is essentially tied with sonnet's 4.54 (Δ=0.12 within judge noise) at one third of sonnet's cost
+- 5.1s median latency is essentially tied with the cheaper gpt-4.1-mini's 5.3s
+- Wins Q18 ("P/F per semester") with composite 5.0 — the only model that correctly extracted "one P/F election per term" from the bulletin via `search_policy`. Every other model claimed no per-semester limit exists (a real bug)
+- $26 for the 4-week pilot is comfortably affordable
+
+**Fallback:** kept as `openai:gpt-4.1-mini` (the prior primary). Cheap, fast, decent quality. Fires when the primary errors mid-turn.
+
+**gpt-5 deferred to Phase 9:** Catastrophic 1.55 composite + 4% auto-pass rate. Returns empty responses on most questions. Almost certainly a client-implementation issue — gpt-5 is a reasoning model that needs `reasoning_effort` parameter or the new Responses API; our `OpenAIEngineClient` sends standard chat completions. Not a model-quality verdict.
+
+**Per-question matrix:** See [tools/cohort-eval/results/bakeoff_phase8_summary.md](tools/cohort-eval/results/bakeoff_phase8_summary.md). Three system-level gaps remain (every model scored low):
+- Q14 (early graduation Fall 2026) — temporal reasoning still partial across all models
+- Q15 (CSCI-UA 421 in summer) — sonnet wins (4.25); other models fall below 3.0
+- Q18 (P/F per semester) — only haiku scored 5.0; should consider whether a dedicated `cas_pf_per_term` template is worth authoring
+
+**Bake-off cost:** ~$8 in OpenAI + Anthropic tokens (5 models × 25 questions × ~3-15 tool round-trips each + judge).
+
+**Reproduce:**
+```bash
+set -a && source .env.local && set +a
+npx tsx tools/cohort-eval/runBakeoffPhase8.ts \
+    [--models gpt-4.1-mini,gpt-4.1,gpt-5,claude-sonnet-4-6,claude-haiku-4-5-20251001]
+```
 
 ---
 

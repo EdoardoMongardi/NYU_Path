@@ -137,16 +137,19 @@ describe("createPrimaryClient / createFallbackClient", () => {
         expect(f).toBeNull();
     });
 
-    it("builds an OpenAI primary by default when OPENAI_API_KEY is set", () => {
-        const c = createPrimaryClient({ OPENAI_API_KEY: "sk-test-fake" });
+    // Phase 8 B5 — primary swap. Bake-off picked claude-haiku-4-5 as
+    // the default primary (post-Phase-8 architecture). Fallback is
+    // openai:gpt-4.1-mini (the prior primary).
+    it("builds an Anthropic primary by default when ANTHROPIC_API_KEY is set", () => {
+        const c = createPrimaryClient({ ANTHROPIC_API_KEY: "sk-ant-test-fake" });
         expect(c).not.toBeNull();
-        expect(c!.id).toBe(`openai:${DEFAULT_PRIMARY_MODEL}`);
+        expect(c!.id).toBe(`anthropic:${DEFAULT_PRIMARY_MODEL}`);
     });
 
-    it("builds an Anthropic fallback by default when ANTHROPIC_API_KEY is set", () => {
-        const c = createFallbackClient({ ANTHROPIC_API_KEY: "sk-ant-test-fake" });
+    it("builds an OpenAI fallback by default when OPENAI_API_KEY is set", () => {
+        const c = createFallbackClient({ OPENAI_API_KEY: "sk-test-fake" });
         expect(c).not.toBeNull();
-        expect(c!.id).toBe(`anthropic:${DEFAULT_FALLBACK_MODEL}`);
+        expect(c!.id).toBe(`openai:${DEFAULT_FALLBACK_MODEL}`);
     });
 
     it("honors NYUPATH_PRIMARY_PROVIDER / MODEL overrides", () => {
