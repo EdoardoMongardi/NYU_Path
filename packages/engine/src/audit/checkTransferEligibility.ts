@@ -65,18 +65,53 @@ export type TransferDecision =
  *
  * @param student      profile with homeSchool + coursesTaken populated
  * @param targetSchool e.g. "stern", "tandon"
- * @param opts         testing override for the data directory
+ * @param opts         testing override + optional creditsOverride for
+ *                     callers that have a DPR-derived credit total
+ *                     (the DPR-primary path doesn't populate
+ *                     student.coursesTaken, so without an override we
+ *                     would compute 0 credits for a senior with 138).
  */
 export function checkTransferEligibility(
     student: StudentProfile,
     targetSchool: string,
-    opts?: { transfersDir?: string },
+    opts?: { transfersDir?: string; creditsOverride?: number },
 ): TransferDecision {
     if (student.homeSchool === targetSchool) {
         return {
             status: "unsupported",
             reason: `Already in ${targetSchool}.`,
             contact: "NYU Office of Undergraduate Admissions",
+        };
+    }
+
+    // ---- NYU-wide upper-bound check (applies to ALL internal
+    //      transfers, regardless of whether the from→to pair is
+    //      authored in the data set). ----
+    // CAS Academic Policies → "Internal Transfer Students":
+    //   "the latest students can begin their study at a new NYU
+    //    school or portal campus is the first semester of their
+    //    junior year. Typically, applications to transfer between
+    //    NYU schools, colleges, or campuses are not accepted during
+    //    or after the junior year."
+    // Use 96 credits as the senior-floor (deep into junior year by
+    // any reasonable count). The check fires BEFORE the data-set
+    // lookup so a CAS senior asking about Tisch (which doesn't have
+    // an authored from→to file) still gets the bulletin-grounded
+    // "no" rather than a generic "I don't have data".
+    const SENIOR_FLOOR_CREDITS = 96;
+    const creditsCompletedEarly = opts?.creditsOverride ?? sumCreditsCompleted(student);
+    if (creditsCompletedEarly >= SENIOR_FLOOR_CREDITS) {
+        return {
+            status: "ineligible",
+            reason:
+                `Per the CAS bulletin §Internal Transfer Students, "the latest ` +
+                `students can begin their study at a new NYU school is the first ` +
+                `semester of their junior year. Typically, applications to transfer ` +
+                `between NYU schools, colleges, or campuses are not accepted during ` +
+                `or after the junior year." You have ${creditsCompletedEarly} credits ` +
+                `completed (junior+ year), so internal transfer is no longer an ` +
+                `available path. If you have an exceptional case, contact NYU ` +
+                `Undergraduate Admissions and your home-school adviser.`,
         };
     }
 
@@ -116,8 +151,11 @@ export function checkTransferEligibility(
         }
     }
 
-    // Credit-floor check
-    const creditsCompleted = sumCreditsCompleted(student);
+    // Credit total — already computed above as creditsCompletedEarly
+    // for the senior-floor short-circuit. Reuse it.
+    const creditsCompleted = creditsCompletedEarly;
+
+    // Credit-floor check (lower bound)
     if (creditsCompleted < reqs.minCreditsCompleted) {
         return {
             status: "ineligible",

@@ -55,15 +55,24 @@ describe("v2 route input validation (Phase 6.1 WS2)", () => {
         expect(json.error).toMatch(/parsedData.*required/i);
     });
 
-    it("returns 503 when OPENAI_API_KEY is not configured", async () => {
-        // Body is valid; the missing key is the failure mode.
+    it("returns 503 when the configured primary's API key is not configured", async () => {
+        // Phase 8 B5 — primary swapped to anthropic; the test deletes
+        // OPENAI_API_KEY (the prior primary) but the route now needs
+        // ANTHROPIC_API_KEY. We delete BOTH so the route's
+        // createPrimaryClient returns null and we get 503 regardless
+        // of which provider is the configured default.
+        delete process.env.OPENAI_API_KEY;
+        delete process.env.ANTHROPIC_API_KEY;
         const res = await POST(fakeRequest({
             message: "hi",
             parsedData: { semesters: [] },
         }) as never);
         expect(res.status).toBe(503);
         const json = await res.json();
-        expect(json.error).toMatch(/OPENAI_API_KEY/);
+        // The error names whichever provider's key the configured
+        // primary needs (ANTHROPIC by default after Phase 8 B5;
+        // OPENAI when the test sets NYUPATH_PRIMARY_PROVIDER=openai).
+        expect(json.error).toMatch(/(ANTHROPIC|OPENAI)_API_KEY/);
     });
 });
 
