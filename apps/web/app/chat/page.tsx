@@ -4,6 +4,27 @@ import { useState, useRef, useCallback } from "react";
 import styles from "./chat.module.css";
 import { streamChatV2, extractPendingMutationId, type ChatV2Event } from "../../lib/chatV2Client";
 
+// Phase 7-E W10 reviewer P1-2 — stable per-browser UUID so each
+// student gets their own rate-limit bucket (instead of every
+// cohort-A user sharing a single "anonymous" bucket). Stored in
+// localStorage; a fresh browser/incognito-session gets a new id.
+// Replaced by real auth-derived ids in W12.
+const USER_ID_LS_KEY = "nyupath:client-id";
+function getOrCreateClientId(): string {
+    if (typeof window === "undefined") return "anonymous";
+    try {
+        const cached = window.localStorage.getItem(USER_ID_LS_KEY);
+        if (cached) return cached;
+        const next = window.crypto?.randomUUID
+            ? window.crypto.randomUUID()
+            : `cohortA-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        window.localStorage.setItem(USER_ID_LS_KEY, next);
+        return next;
+    } catch {
+        return "anonymous";
+    }
+}
+
 interface ToolStatus {
     toolName: string;
     state: "running" | "done" | "error";
@@ -92,6 +113,7 @@ export default function ChatPage() {
             parsedData,
             visaStatus,
             history: recentHistory,
+            userId: getOrCreateClientId(),
         })) {
             applyEvent(ev, assistant.id, toolStatuses);
         }
