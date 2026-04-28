@@ -236,6 +236,28 @@
     display: none;
 }
 
+/* Phase 7-E W10.3 — persistent disclaimer banner directly under the
+ * header. Always visible; never dismissible. Subtle yellow tint
+ * differentiates it from chat content but doesn't dominate the UI.
+ * Required by §5 of PRIVACY.md. */
+.disclaimerBanner {
+    background: #fff8dc;
+    border-bottom: 1px solid #f0d878;
+    color: #5b4a00;
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    line-height: 1.4;
+}
+
+.disclaimerIcon {
+    color: #d4a000;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
 /* Phase 7-E W2.3 — fallback link beneath the upload area, only
  * shown while we're awaiting a DPR. Lets the student switch to
  * the legacy unofficial-transcript flow when their DPR isn't

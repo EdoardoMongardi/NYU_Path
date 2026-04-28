@@ -311,16 +311,22 @@ Each workstream lists: **goals**, **deliverables**, **acceptance gate**, **effor
 
 **Acceptance gate**: composite score recorded; if ≥0.90, cohort A is unblocked; if <0.90, per-case failures categorized + remediation triaged before cohort A.
 
-### W9 — Bakeoff (Step 22, 1.75 days, ~$10-15 in tokens)
+### W9 — Bakeoff (DEFERRED 2026-04-28, conditional re-evaluation)
 
-**Goal**: re-validate that `gpt-4.1-mini` is still the right `DEFAULT_PRIMARY_MODEL` after the DPR pivot.
+**Status**: deferred until cohort-A live data justifies it. Originally planned to re-validate `DEFAULT_PRIMARY_MODEL` post-pivot. After W8 returned cohort-A surrogate composite **0.936** (cleared the §12.6.5 0.90 gate) on `gpt-4.1-mini` with non-fabrication 1.000 and grounding 0.968, the case for swapping models pre-pilot is weak:
 
-**Deliverables**:
-- W9.1 — Author 84 bakeoff cases (32 TS-Tool + 32 TS-Synthesis + 20 TS-Decomp) — DPR-driven. Reuse `mkDpr()` helpers from W5.1.
-- W9.2 — Run against `gpt-4.1-mini`, `gpt-4o-mini`, `claude-haiku-4.5`, `claude-sonnet-4.6`. Cost: ~$10-15.
-- W9.3 — Aggregate per-model verdicts. If a different model wins, swap `DEFAULT_PRIMARY_MODEL` in [packages/engine/src/agent/clients/index.ts](packages/engine/src/agent/clients/index.ts) and document.
+- The model isn't the bottleneck. The 14 below-0.85 cases cluster around prompt phrasing + caveat surfacing, not model capability.
+- Switching has downside risk: cost (Sonnet 4.6 ~5× the price of `gpt-4.1-mini`), verbosity that could fail substring matchers in different ways, and tool-routing drift across model families (W8 already burned cycles on OpenAI-specific schema bugs that wouldn't catch in a different vendor's quirks).
+- Cohort A spend at 10 users × 30 msgs/day × ~3 LLM calls × $0.001 ≈ $0.90/day. Not a binding cost constraint.
 
-**Acceptance gate**: bakeoff results committed at `evals/bakeoff/results.md`; `DEFAULT_PRIMARY_MODEL` decision documented.
+**Re-evaluate triggers:**
+1. Cohort A live composite drops below 0.85 with the same model (model swap might help).
+2. Cost becomes binding at cohort B+ scale (downgrade-bakeoff vs `gpt-4o-mini` / `claude-haiku-4-5`).
+3. A materially better model ships (not on the horizon as of 2026-04).
+
+When triggered, the bakeoff design stays the same as the original plan: 84 cases (32 TS-Tool + 32 TS-Synth + 20 TS-Decomp), 4 models, ~1.5–2 days authoring + run + analysis, ~$10–15 in tokens.
+
+**Workstream 9 total: 0 days now (deferred); ~1.5–2 days when re-triggered.**
 
 ### W10 — Real-User Pilot Prep (3.25 days)
 
