@@ -21,7 +21,27 @@ import { emailOtps, students } from "../db/schema.js";
 
 const NYU_EMAIL_RE = /^[a-z0-9._%+-]+@nyu\.edu$/i;
 const OTP_TTL_MS = 10 * 60 * 1000;
-const FROM_ADDRESS = "NYU Path <noreply@nyupath.app>";
+
+/** Phase 7-E W12.2 — allow non-NYU addresses listed in AUTH_TEST_EMAILS
+ *  (comma-separated). Lets the operator self-test sign-up before the
+ *  cohort-A domain is verified. Production cohort A keeps the NYU-only
+ *  default by leaving this env var unset. */
+function isAllowedEmail(email: string, env: Record<string, string | undefined>): boolean {
+    if (NYU_EMAIL_RE.test(email)) return true;
+    const allow = (env.AUTH_TEST_EMAILS ?? "")
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+    return allow.includes(email.toLowerCase());
+}
+// Phase 7-E W12.2 — sender resolves from RESEND_FROM env var so we
+// can swap "onboarding@resend.dev" (sandbox; only delivers to the
+// Resend account owner) for "noreply@<verified-domain>" once the
+// operator finishes domain verification — without a code change.
+// TODO: switch to noreply@<verified-domain> before cohort A onboarding.
+function resolveFromAddress(env: Record<string, string | undefined>): string {
+    return env.RESEND_FROM ?? "NYU Path <onboarding@resend.dev>";
+}
 
 export interface IssueResult {
     ok: boolean;
@@ -53,7 +73,7 @@ export async function issueOtp(
     email: string,
     env: Record<string, string | undefined> = process.env,
 ): Promise<IssueResult> {
-    if (!NYU_EMAIL_RE.test(email)) return { ok: false, reason: "invalid_email" };
+    if (!isAllowedEmail(email, env)) return { ok: false, reason: "invalid_email" };
     const db = getDb(env);
     if (!db) return { ok: false, reason: "db_unavailable" };
 
@@ -78,7 +98,7 @@ export async function issueOtp(
     try {
         const resend = new Resend(apiKey);
         await resend.emails.send({
-            from: FROM_ADDRESS,
+            from: resolveFromAddress(env),
             to: email,
             subject: "Your NYU Path login code",
             text: `Your one-time login code is ${code}. It expires in 10 minutes.\n\nIf you did not request this, ignore this email.`,
@@ -94,7 +114,7 @@ export async function verifyOtp(
     code: string,
     env: Record<string, string | undefined> = process.env,
 ): Promise<VerifyResult> {
-    if (!NYU_EMAIL_RE.test(email)) return { ok: false, reason: "invalid_email" };
+    if (!isAllowedEmail(email, env)) return { ok: false, reason: "invalid_email" };
     const db = getDb(env);
     if (!db) return { ok: false, reason: "db_unavailable" };
 

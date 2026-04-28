@@ -258,6 +258,24 @@
     flex-shrink: 0;
 }
 
+.logoutButton {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid #c9a52e;
+    color: #5b4a00;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 0.25rem 0.65rem;
+    border-radius: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+
+.logoutButton:hover {
+    background: #fff0b8;
+}
+
 /* Phase 7-E W2.3 — fallback link beneath the upload area, only
  * shown while we're awaiting a DPR. Lets the student switch to
  * the legacy unofficial-transcript flow when their DPR isn't

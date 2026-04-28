@@ -343,6 +343,17 @@ export default function ChatPage() {
                     AI advising assistant. <strong>Not a substitute for an academic adviser.</strong>{" "}
                     Verify all decisions with NYU advising before acting.
                 </span>
+                <button
+                    type="button"
+                    onClick={async () => {
+                        await fetch("/api/auth/logout", { method: "POST" });
+                        window.location.href = "/login";
+                    }}
+                    className={styles.logoutButton}
+                    aria-label="Sign out"
+                >
+                    Sign out
+                </button>
             </div>
 
             {/* Drag overlay */}
