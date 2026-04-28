@@ -47,7 +47,8 @@ export const getCreditCapsTool = buildTool({
                 ok: false,
                 userMessage:
                     "DPR is loaded — credit budgets (residency, P/F, outside-CAS, current credits) come from run_full_audit's dprCumulative output. " +
-                    "For F-1 minimum-credit-load or per-semester ceiling questions, refer the student to NYU's Office of Global Services or their academic adviser; the relevant school-config rules are not yet wired into cohort A.",
+                    "For F-1 minimum-credit-load, per-semester ceiling, or overload questions: ALSO call search_policy with the user's question (the bulletin + curated F-1/credit-load templates are there). " +
+                    "Do NOT respond with only this refusal — the student needs an actual answer; this tool just isn't the right source.",
             };
         }
         if (!session.schoolConfig) return { ok: false, userMessage: "School config not loaded." };
