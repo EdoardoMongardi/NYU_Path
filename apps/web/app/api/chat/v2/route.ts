@@ -50,6 +50,7 @@ import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
 import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
 import { getStores } from "../../../../lib/db/store";
 import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
+import { consumeRequest } from "../../../../lib/rateLimit";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -157,6 +158,32 @@ export async function POST(req: NextRequest): Promise<Response> {
     const fallback = createFallbackClient(); // null is OK — the loop tolerates a missing fallback.
 
     const userId = body.userId ?? "anonymous";
+
+    // Phase 7-E W10.5 — per-student daily rate limit (cohort-A cost
+    // guard + abuse signal). 30 messages / UTC day default. Anonymous
+    // mode shares one bucket; once W12 ships real userIds each
+    // student gets their own.
+    const rateCheck = consumeRequest(userId);
+    if (!rateCheck.ok) {
+        return NextResponse.json(
+            {
+                error:
+                    `Daily message limit reached (${rateCheck.limit} per day). ` +
+                    `Resets at ${rateCheck.resetAt}. ` +
+                    `Reach out to your adviser for anything urgent in the meantime.`,
+            },
+            {
+                status: 429,
+                headers: {
+                    "Retry-After": String(rateCheck.retryAfterSeconds),
+                    "X-RateLimit-Limit": String(rateCheck.limit),
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": rateCheck.resetAt,
+                },
+            },
+        );
+    }
+
     const stores = getStores();
 
     // Build the student profile. DPR path takes precedence; transcript
