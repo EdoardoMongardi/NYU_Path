@@ -85,7 +85,11 @@ describe("v2 route cohort gating (Phase 7-A P-1)", () => {
         delete process.env.OPENAI_API_KEY;
         // Without an API key the route returns 503 BEFORE checking
         // cohort. With a key it serves via runTemplateMatcherOnly.
+        // Phase 8 B5: primary swapped to anthropic; fallback is openai.
+        // Set BOTH so createPrimaryClient succeeds regardless of which
+        // provider is the configured default.
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-cohort-test";
+        process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-cohort-test";
         setCohortAssignment({
             overrides: { "u-limited": "limited" },
             default: "alpha",
