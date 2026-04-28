@@ -43,6 +43,8 @@ import {
     loadPolicyTemplates,
     loadSchoolConfig,
     degreeProgressReportSchema,
+    deriveTemporalContext,
+    normalizeGraduationTarget,
     type DegreeProgressReport,
 } from "@nyupath/engine";
 import {
@@ -106,6 +108,10 @@ interface V2RequestBody {
     message: string;
     parsedData?: ParsedDataPayload;
     visaStatus?: string;
+    /** Phase 7-E temporal-context fix — collected during onboarding,
+     *  free-form (e.g., "Spring 2027" or "spring2027"). Normalized
+     *  into the prompt as `graduationTerm`. */
+    graduationTarget?: string | null;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     correlationId?: string;
     /** Phase 7-A: stable user id used for cohort lookup. When omitted,
@@ -250,7 +256,18 @@ export async function POST(req: NextRequest): Promise<Response> {
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
     };
-    const systemPrompt = buildSystemPrompt({ student, dprLoaded: parsedDpr !== undefined });
+    // Phase 7-E temporal-context fix — derive currentTerm + nextTerm
+    // from the DPR's IP rows so the agent answers "next semester" with
+    // the correct label instead of guessing a year from training data.
+    const temporal = parsedDpr ? deriveTemporalContext(parsedDpr) : {};
+    const graduationTerm = normalizeGraduationTarget(body.graduationTarget);
+    const systemPrompt = buildSystemPrompt({
+        student,
+        dprLoaded: parsedDpr !== undefined,
+        ...(temporal.currentTerm ? { currentTerm: temporal.currentTerm } : {}),
+        ...(temporal.nextTerm ? { nextTerm: temporal.nextTerm } : {}),
+        ...(graduationTerm ? { graduationTerm } : {}),
+    });
     const templates = getTemplates();
 
     // Phase 7-A P-1 + Phase 7-B Step 8b: cohort gate. The store factory

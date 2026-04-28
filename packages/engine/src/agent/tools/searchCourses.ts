@@ -26,6 +26,105 @@ interface CatalogCourse {
 
 export type CourseSearchFn = (query: string, opts?: { departmentPrefix?: string; limit?: number }) => Promise<CatalogCourse[]>;
 
+// ---- Phase 7-E follow-up: cross-school accessibility annotation ----
+// NYU course-id suffix → (school name, undergrad-availability tier).
+// Tier semantics (relative to the student's homeSchool):
+//   - "home"          — same school, freely accessible
+//   - "cross_school"  — different undergrad school in NY; needs cross-
+//                       school enrollment per the home school's policy
+//   - "global_site"   — Abu Dhabi or Shanghai courses; only for study-
+//                       abroad terms
+//   - "graduate"      — graduate/professional course; generally not
+//                       open to undergrads
+//   - "unknown"       — suffix we don't have a rule for
+
+interface SchoolMeta {
+    school: string;
+    undergrad: boolean;
+    /** When undergrad=false, the course is graduate. */
+    globalSite: "abudhabi" | "shanghai" | null;
+}
+
+const SUFFIX_META: Record<string, SchoolMeta> = {
+    "UA":  { school: "CAS",                          undergrad: true,  globalSite: null },
+    "UB":  { school: "Stern (undergrad)",            undergrad: true,  globalSite: null },
+    "UY":  { school: "Tandon (undergrad)",           undergrad: true,  globalSite: null },
+    "UE":  { school: "Steinhardt (undergrad)",       undergrad: true,  globalSite: null },
+    "UF":  { school: "Tisch (undergrad)",            undergrad: true,  globalSite: null },
+    "UT":  { school: "Tisch (undergrad, alt)",       undergrad: true,  globalSite: null },
+    "UN":  { school: "Gallatin",                     undergrad: true,  globalSite: null },
+    "UP":  { school: "Liberal Studies",              undergrad: true,  globalSite: null },
+    "UH":  { school: "NYU Abu Dhabi",                undergrad: true,  globalSite: "abudhabi" },
+    "SHU": { school: "NYU Shanghai",                 undergrad: true,  globalSite: "shanghai" },
+    "GA":  { school: "GSAS (graduate)",              undergrad: false, globalSite: null },
+    "GY":  { school: "Tandon (graduate)",            undergrad: false, globalSite: null },
+    "GU":  { school: "Steinhardt (graduate)",        undergrad: false, globalSite: null },
+    "GH":  { school: "Steinhardt (graduate)",        undergrad: false, globalSite: null },
+    "GX":  { school: "Cross-school (graduate)",      undergrad: false, globalSite: null },
+    "GB":  { school: "Stern (graduate)",             undergrad: false, globalSite: null },
+    "GS":  { school: "SPS (graduate)",               undergrad: false, globalSite: null },
+    "MD":  { school: "Medical School",               undergrad: false, globalSite: null },
+    "MS":  { school: "Medical School",               undergrad: false, globalSite: null },
+    "DN":  { school: "Dental",                       undergrad: false, globalSite: null },
+    "BMSC":{ school: "Biomedical Sciences (graduate)", undergrad: false, globalSite: null },
+    "BMIN":{ school: "Biomedical Informatics (grad)",  undergrad: false, globalSite: null },
+    "LW":  { school: "Law",                          undergrad: false, globalSite: null },
+};
+
+const HOME_SCHOOL_TO_SUFFIX: Record<string, string> = {
+    "cas":        "UA",
+    "stern":      "UB",
+    "tandon":     "UY",
+    "steinhardt": "UE",
+    "tisch":      "UF",
+    "gallatin":   "UN",
+    "ls":         "UP",
+};
+
+type Accessibility = "home" | "cross_school" | "global_site" | "graduate" | "unknown";
+
+function classifyCourse(courseId: string, homeSchool: string | undefined):
+    { school: string; accessibility: Accessibility; note?: string } {
+    // Extract the alpha suffix after the dash. NYU ids look like
+    // "CSCI-UA 102", "CS-UH 2220", "BMIN-GA 1004", "ENGR-UH 3332".
+    const m = courseId.match(/-([A-Z]+)\b/);
+    if (!m) return { school: "Unknown", accessibility: "unknown" };
+    const suffix = m[1]!;
+    const meta = SUFFIX_META[suffix];
+    if (!meta) {
+        // Try the SUBJECT prefix (some ids don't follow the dash-suffix
+        // convention — e.g., "BMSC-GA"). Fall back to last 2-letter token.
+        const fallback = SUFFIX_META[suffix.slice(-2)];
+        if (!fallback) return { school: `Subject "${suffix}"`, accessibility: "unknown" };
+        return classifyFromMeta(fallback, homeSchool);
+    }
+    return classifyFromMeta(meta, homeSchool);
+}
+
+function classifyFromMeta(meta: SchoolMeta, homeSchool: string | undefined):
+    { school: string; accessibility: Accessibility; note?: string } {
+    if (!meta.undergrad) {
+        return { school: meta.school, accessibility: "graduate", note: "graduate course — not open to undergrads except by petition" };
+    }
+    if (meta.globalSite) {
+        return {
+            school: meta.school,
+            accessibility: "global_site",
+            note: `${meta.school} site — only available during a study-abroad term`,
+        };
+    }
+    const homeSuffix = homeSchool ? HOME_SCHOOL_TO_SUFFIX[homeSchool.toLowerCase()] : undefined;
+    const studentSchool = homeSuffix && SUFFIX_META[homeSuffix]?.school;
+    if (homeSuffix && studentSchool && meta.school === studentSchool) {
+        return { school: meta.school, accessibility: "home" };
+    }
+    return {
+        school: meta.school,
+        accessibility: "cross_school",
+        note: `cross-school course — your home school may require approval to count it toward your degree`,
+    };
+}
+
 export const searchCoursesTool = buildTool({
     name: "search_courses",
     description:
@@ -55,35 +154,66 @@ export const searchCoursesTool = buildTool({
         // Allow tests + production callers to inject either a fully
         // resolved catalog or a custom search function.
         const limit = input.limit ?? 20;
+        let raw: CatalogCourse[];
         if (sessExt.searchCoursesFn) {
-            const matches = await sessExt.searchCoursesFn(input.query, {
+            raw = await sessExt.searchCoursesFn(input.query, {
                 departmentPrefix: input.departmentPrefix,
                 limit,
             });
-            return { query: input.query, totalReturned: matches.length, matches };
+        } else {
+            const catalog = sessExt.courseCatalog ?? [];
+            const q = input.query.toLowerCase();
+            const dept = input.departmentPrefix?.toUpperCase();
+            raw = [];
+            for (const c of catalog) {
+                if (raw.length >= limit) break;
+                if (dept && !c.courseId.toUpperCase().startsWith(dept)) continue;
+                const haystack = `${c.courseId} ${c.title} ${c.description ?? ""}`.toLowerCase();
+                if (haystack.includes(q)) raw.push(c);
+            }
         }
-        const catalog = sessExt.courseCatalog ?? [];
-        const q = input.query.toLowerCase();
-        const dept = input.departmentPrefix?.toUpperCase();
-        const matches: CatalogCourse[] = [];
-        for (const c of catalog) {
-            if (matches.length >= limit) break;
-            if (dept && !c.courseId.toUpperCase().startsWith(dept)) continue;
-            const haystack = `${c.courseId} ${c.title} ${c.description ?? ""}`.toLowerCase();
-            if (haystack.includes(q)) matches.push(c);
-        }
-        return { query: input.query, totalReturned: matches.length, matches };
+
+        // Annotate every match with school + accessibility tier so the
+        // agent surfaces "this is Tandon, you'd need cross-school
+        // approval" instead of pretending it's freely available.
+        const homeSchool = session.student?.homeSchool;
+        const matches = raw.map((c) => ({
+            ...c,
+            ...classifyCourse(c.courseId, homeSchool),
+        }));
+        // Order: home → cross_school → global_site → graduate → unknown.
+        const order: Record<Accessibility, number> = { home: 0, cross_school: 1, global_site: 2, graduate: 3, unknown: 4 };
+        matches.sort((a, b) => order[a.accessibility] - order[b.accessibility]);
+        return { query: input.query, totalReturned: matches.length, matches, homeSchool: homeSchool ?? null };
     },
     summarizeResult(out) {
         const lines: string[] = [];
-        lines.push(`COURSE SEARCH (query="${out.query}"; ${out.totalReturned} matches)`);
+        lines.push(`COURSE SEARCH (query="${out.query}"; ${out.totalReturned} matches; home=${out.homeSchool ?? "?"})`);
         if (out.matches.length === 0) {
             lines.push(`No courses matched. Try a broader keyword or remove department filter.`);
             return lines.join("\n");
         }
-        for (const c of out.matches) {
-            const credits = c.credits ? ` [${c.credits}cr]` : "";
-            lines.push(`  ${c.courseId}: ${c.title}${credits}`);
+        // Group by accessibility so the agent surfaces home-school
+        // results first and clearly labels everything else.
+        const byTier: Record<string, typeof out.matches> = {};
+        for (const m of out.matches) {
+            (byTier[m.accessibility] ??= []).push(m);
+        }
+        const labels: Record<Accessibility, string> = {
+            home: "AT YOUR HOME SCHOOL (open enrollment for you)",
+            cross_school: "CROSS-SCHOOL (likely needs approval to count toward your degree)",
+            global_site: "GLOBAL SITE (only via a study-abroad term)",
+            graduate: "GRADUATE (not open to undergrads except by petition)",
+            unknown: "UNCLASSIFIED",
+        };
+        for (const tier of ["home", "cross_school", "global_site", "graduate", "unknown"] as const) {
+            const ms = byTier[tier];
+            if (!ms || ms.length === 0) continue;
+            lines.push(`-- ${labels[tier]} --`);
+            for (const c of ms) {
+                const credits = c.credits ? ` [${c.credits}cr]` : "";
+                lines.push(`  ${c.courseId} (${c.school}): ${c.title}${credits}`);
+            }
         }
         return lines.join("\n");
     },
