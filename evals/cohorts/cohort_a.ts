@@ -43,6 +43,7 @@
 import type { ConversationCase } from "../cohort/runner.js";
 import type { StudentProfile } from "@nyupath/shared";
 import { COHORT_A_DPR_CASES } from "./cohort_a_dpr.js";
+import { COHORT_A_REAL_DPR_CASES } from "./cohort_a_real_dpr.js";
 
 // ----------------------------------------------------------------
 // Reusable student profiles
@@ -229,4 +230,5 @@ const COHORT_A_LEGACY_CASES: ConversationCase[] = [
 export const COHORT_A_CASES: ConversationCase[] = [
     ...COHORT_A_LEGACY_CASES,
     ...COHORT_A_DPR_CASES,
+    ...COHORT_A_REAL_DPR_CASES,
 ];

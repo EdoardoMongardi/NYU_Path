@@ -51,3 +51,7 @@ packages/engine/tests/fixtures/*.unredacted.*
 
 # Scraper progress state (tool-local checkpointing)
 tools/playwright-scraper/.scrape_progress.json
+
+# Phase 7-E W8 — surrogate run results carry full transcripts that
+# may include synthetic-but-PII-sensitive content; keep them local-only.
+tools/cohort-eval/results/

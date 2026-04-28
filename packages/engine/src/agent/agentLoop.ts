@@ -22,7 +22,7 @@
 // loop DOES NOT swallow them silently.
 // ============================================================
 
-import type { z } from "zod";
+import { z } from "zod";
 import type {
     LLMClient,
     LLMCompletion,
@@ -698,9 +698,19 @@ async function callWithFallback(
 
 /**
  * Convert the registry's tools into the vendor-neutral
- * `LLMToolDef` shape the LLMClient expects. Uses each tool's Zod
- * schema → JSON-schema-shaped `parameters`. Falls back to a permissive
- * object schema when the Zod schema can't be cleanly reflected.
+ * `LLMToolDef` shape the LLMClient expects. Uses Zod v4's native
+ * `toJSONSchema()` (also exposed as `z.toJSONSchema(schema)` for
+ * older codepaths). Falls back to `{type:"object"}` for anything
+ * the converter rejects.
+ *
+ * Phase 7-E W8 surrogate-run regression: the previous converter
+ * pattern-matched on `_def.typeName` strings ("ZodObject",
+ * "ZodString", etc.) which Zod v3 used. Zod v4 reorganized
+ * `_def` and dropped those strings — every schema collapsed to
+ * `{type:"object"}`, OpenAI rejected the tool list with
+ * `400 Invalid schema for function ... object schema missing
+ * properties`. Switching to the v4 native converter restores
+ * proper schemas.
  */
 function toLLMToolDefs(registry: ToolRegistry, session: ToolSession): LLMToolDef[] {
     return registry.list().map((tool) => ({
@@ -710,45 +720,52 @@ function toLLMToolDefs(registry: ToolRegistry, session: ToolSession): LLMToolDef
     }));
 }
 
-/**
- * Minimal Zod → JSON-schema converter for the bakeoff/agent's tool
- * descriptors. Handles the shapes the 6 NYU Path tools use; falls back
- * to `{type:"object"}` for anything more exotic. Intentionally lightweight
- * — production should swap in `zod-to-json-schema` if richer shapes
- * appear.
- */
-function zodToJsonSchema(schema: unknown): Record<string, unknown> {
-    const z = schema as { _def?: { typeName?: string; shape?: () => Record<string, unknown> } };
-    const typeName = z._def?.typeName;
-    if (typeName === "ZodObject") {
-        const shape = z._def!.shape!();
-        const properties: Record<string, unknown> = {};
-        const required: string[] = [];
-        for (const [k, v] of Object.entries(shape)) {
-            const innerName = (v as { _def?: { typeName?: string; innerType?: unknown } })._def?.typeName;
-            const isOptional = innerName === "ZodOptional" || innerName === "ZodDefault";
-            properties[k] = describeZodLeaf(v);
-            if (!isOptional) required.push(k);
+function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+    let out: Record<string, unknown> | null = null;
+    try {
+        // Zod v4: each schema instance carries its own toJSONSchema().
+        const s = schema as unknown as { toJSONSchema?: () => unknown };
+        if (typeof s.toJSONSchema === "function") {
+            out = s.toJSONSchema() as Record<string, unknown>;
+        } else {
+            const zMod = z as unknown as { toJSONSchema?: (schema: unknown) => unknown };
+            if (typeof zMod.toJSONSchema === "function") {
+                out = zMod.toJSONSchema(schema) as Record<string, unknown>;
+            }
         }
-        return { type: "object", properties, required, additionalProperties: false };
+    } catch {
+        // Fall through to the permissive default below.
     }
-    if (typeName === "ZodDiscriminatedUnion") {
-        // For the update_profile tool — accept any object.
-        return { type: "object" };
+    if (!out) return { type: "object", properties: {}, additionalProperties: true };
+    out = stripJsonSchemaMeta(out);
+    // OpenAI's Functions API requires the top-level schema to be
+    // `type: "object"`. Discriminated unions, plain types, etc.
+    // produce top-level `oneOf` / `anyOf` / array types that OpenAI
+    // rejects with `400 Invalid schema for function ...: schema must
+    // be a JSON Schema of 'type: "object"'`. Wrap any such schema in
+    // a permissive object so the model can still call the tool;
+    // the engine's Zod-validated `validateInput` runs at call time
+    // and rejects malformed args, so coercion here is safe.
+    if (out["type"] !== "object") {
+        return {
+            type: "object",
+            properties: { input: out as unknown as Record<string, unknown> },
+            required: ["input"],
+            additionalProperties: false,
+        };
     }
-    return { type: "object" };
+    return out;
 }
 
-function describeZodLeaf(v: unknown): Record<string, unknown> {
-    const z = v as { _def?: { typeName?: string; innerType?: unknown } };
-    const t = z._def?.typeName;
-    if (t === "ZodOptional" || t === "ZodDefault") return describeZodLeaf(z._def!.innerType);
-    if (t === "ZodString") return { type: "string" };
-    if (t === "ZodNumber") return { type: "number" };
-    if (t === "ZodBoolean") return { type: "boolean" };
-    if (t === "ZodArray") return { type: "array", items: describeZodLeaf((z._def as unknown as { type: unknown }).type) };
-    if (t === "ZodEnum") return { type: "string" };
-    return {};
+/** Drop JSON-Schema metadata (`$schema`, draft pragma) and any
+ *  unknown top-level fields that confuse OpenAI's strict parser. */
+function stripJsonSchemaMeta(s: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(s)) {
+        if (k === "$schema") continue;
+        out[k] = v;
+    }
+    return out;
 }
 
 // ============================================================

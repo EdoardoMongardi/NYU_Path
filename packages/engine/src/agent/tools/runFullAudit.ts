@@ -34,6 +34,33 @@ interface RunFullAuditOutput {
     /** When source=dpr, the DPR header date so the summarizer can
      *  surface staleness. */
     dprPreparedDate?: string;
+    /** When source=dpr, the structured cumulative block from the DPR
+     *  (residency, P/F, outside-CAS, time limit). Lets the summarizer
+     *  + the agent surface specific budget numbers without rooting
+     *  through the requirement tree. */
+    dprCumulative?: {
+        creditsRequired: number | null;
+        creditsUsed: number | null;
+        cumulativeGpa: number | null;
+        residencyRequired: number | null;
+        residencyUsed: number | null;
+        passFailUsedUnits: number | null;
+        passFailCapUnits: number | null;
+        outsideHomeUsedUnits: number | null;
+        outsideHomeCapUnits: number | null;
+        timeLimitYears: number | null;
+    };
+    /** When source=dpr, the leaf Requirements that are NOT satisfied,
+     *  rendered as { rId, title, description, counter }. Lets the
+     *  summarizer name specific missing courses (e.g., "CSCI-UA 421")
+     *  rather than just counting them. */
+    dprUnsatisfiedRequirements?: Array<{
+        rId: string;
+        title: string;
+        statusText: string;
+        description?: string;
+        needed?: number;
+    }>;
 }
 
 export const runFullAuditTool = buildTool({
@@ -116,11 +143,22 @@ export const runFullAuditTool = buildTool({
                     : `Cumulative GPA ${cumGpa.toFixed(3)} is below the 2.0 floor; the DPR flags academic concern.`,
                 warnings: [],
             };
+            const unsatisfied = notSatisfiedRequirements(dpr.requirementGroups).map((req) => ({
+                rId: req.rId,
+                title: req.title,
+                statusText: req.statusText,
+                ...(req.description ? { description: req.description } : {}),
+                ...(req.counter && "needed" in req.counter && req.counter.needed !== undefined
+                    ? { needed: req.counter.needed }
+                    : {}),
+            }));
             return {
                 audits: filtered,
                 standing,
                 source: "dpr",
                 dprPreparedDate: dpr.header.preparedDate,
+                dprCumulative: { ...dpr.cumulative },
+                dprUnsatisfiedRequirements: unsatisfied,
             };
         }
 
@@ -143,6 +181,33 @@ export const runFullAuditTool = buildTool({
             ? `from your Degree Progress Report (prepared ${output.dprPreparedDate ?? "recently"})`
             : "from the authored program rules";
         lines.push(`AUDIT (${sourceTag}):`);
+
+        // Phase 7-E W8 fix — surface DPR cumulative budgets explicitly
+        // so the agent has a verbatim source for residency / P/F /
+        // outside-CAS questions without rooting through the rule tree.
+        if (output.source === "dpr" && output.dprCumulative) {
+            const c = output.dprCumulative;
+            lines.push(`CUMULATIVE (DPR-verified):`);
+            if (c.creditsRequired !== null && c.creditsUsed !== null) {
+                lines.push(`  Credits earned: ${c.creditsUsed} of ${c.creditsRequired} required`);
+            }
+            if (c.cumulativeGpa !== null) {
+                lines.push(`  Cumulative GPA: ${c.cumulativeGpa.toFixed(3)}`);
+            }
+            if (c.residencyRequired !== null && c.residencyUsed !== null) {
+                lines.push(`  Residency credits (CAS): ${c.residencyUsed} of ${c.residencyRequired} required`);
+            }
+            if (c.passFailUsedUnits !== null && c.passFailCapUnits !== null) {
+                lines.push(`  Pass/Fail units used: ${c.passFailUsedUnits} of ${c.passFailCapUnits} cap`);
+            }
+            if (c.outsideHomeUsedUnits !== null && c.outsideHomeCapUnits !== null) {
+                lines.push(`  Outside-home credits used: ${c.outsideHomeUsedUnits} of ${c.outsideHomeCapUnits} cap`);
+            }
+            if (c.timeLimitYears !== null) {
+                lines.push(`  Degree time limit: ${c.timeLimitYears} years from matriculation`);
+            }
+        }
+
         for (const a of output.audits) {
             lines.push(`PROGRAM: ${a.programName} (${a.programId}) — ${a.overallStatus}`);
             lines.push(`  Credits: ${a.totalCreditsCompleted} / ${a.totalCreditsRequired}`);
@@ -159,6 +224,21 @@ export const runFullAuditTool = buildTool({
                 lines.push(`  Warnings: ${a.warnings.slice(0, 3).join("; ")}`);
             }
         }
+
+        // Phase 7-E W8 fix — list unsatisfied requirements with their
+        // verbatim status sentence (which often names the missing
+        // course, e.g., "Not Satisfied: Complete CSCI-UA 421...").
+        if (output.source === "dpr" && output.dprUnsatisfiedRequirements && output.dprUnsatisfiedRequirements.length > 0) {
+            lines.push(`UNSATISFIED REQUIREMENTS (verbatim from DPR):`);
+            for (const req of output.dprUnsatisfiedRequirements.slice(0, 10)) {
+                const needTag = req.needed ? ` [need ${req.needed} more]` : "";
+                lines.push(`  - ${req.rId} ${req.title}${needTag}: ${req.statusText}`);
+                if (req.description && req.description.length > 0 && req.description.length < 220) {
+                    lines.push(`    ${req.description}`);
+                }
+            }
+        }
+
         lines.push(`STANDING: ${output.standing.level} (cumulative GPA ${output.standing.cumulativeGPA.toFixed(3)}, completion ${(output.standing.completionRate * 100).toFixed(0)}%)`);
         return lines.join("\n");
     },
