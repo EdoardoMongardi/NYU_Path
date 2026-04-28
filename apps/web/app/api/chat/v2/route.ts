@@ -54,6 +54,7 @@ import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
 import { getStores } from "../../../../lib/db/store";
 import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
 import { consumeRequest } from "../../../../lib/rateLimit";
+import { readSessionFromRequest } from "../../../../lib/auth/session";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -178,12 +179,20 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
     const fallback = createFallbackClient(); // null is OK — the loop tolerates a missing fallback.
 
-    const userId = body.userId ?? "anonymous";
+    // Phase 7-E W12.5 — derive the canonical userId from the session
+    // cookie if present (authenticated student). Fall back to the
+    // body's per-browser UUID for the anonymous-mode path that cohort
+    // A may still hit during operator self-testing. The cookie always
+    // wins — a malicious client cannot escape rate-limit by sending a
+    // forged body.userId once the user is signed in.
+    const authClaims = await readSessionFromRequest(req);
+    const userId = authClaims?.sub ?? body.userId ?? "anonymous";
 
     // Phase 7-E W10.5 — per-student daily rate limit (cohort-A cost
-    // guard + abuse signal). 30 messages / UTC day default. Anonymous
-    // mode shares one bucket; once W12 ships real userIds each
-    // student gets their own.
+    // guard + abuse signal). 30 messages / UTC day default. With W12,
+    // authenticated students get a per-NetID bucket; pre-auth callers
+    // get a per-browser-UUID bucket; the literal "anonymous" id shares
+    // one global bucket as a last resort.
     const rateCheck = consumeRequest(userId);
     if (!rateCheck.ok) {
         return NextResponse.json(
@@ -470,6 +479,32 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             finalText: finalResult.finalText,
             modelUsedId: finalResult.modelUsedId,
         });
+
+        // Phase 7-E W12.5 — persist a short rolling session summary so
+        // the next chat sees minimal cross-session context. We DON'T
+        // make a separate LLM call here (the cohort-A cost guard would
+        // double on every turn); instead we write a heuristic marker
+        // that captures intent + tools called. Authenticated user only
+        // — anonymous "userId === 'anonymous'" should not write to
+        // shared storage.
+        if (userId !== "anonymous") {
+            try {
+                const toolNames = Array.from(new Set(finalResult.invocations.map((i) => i.toolName)));
+                const userSnippet = userMessage.slice(0, 140).replace(/\s+/g, " ").trim();
+                const summary =
+                    `Asked: "${userSnippet}${userMessage.length > 140 ? "…" : ""}". ` +
+                    `Tools called: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}.`;
+                await stores.sessionStore.appendSummary(userId, {
+                    date: new Date().toISOString().slice(0, 10),
+                    summary,
+                });
+            } catch (e) {
+                // A failed summary write must NOT break the live turn.
+                // The dashboard will surface the underlying error via
+                // fallback_log if anything systemic is wrong.
+                console.error("[v2 route] appendSummary failed:", e);
+            }
+        }
     } catch (err) {
         writer.write({
             kind: "error",

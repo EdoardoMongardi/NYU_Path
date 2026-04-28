@@ -16,12 +16,20 @@
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema.js";
-import ws from "ws";
 
 // Required when running outside the Vercel edge runtime — the Neon
-// serverless driver opens WebSocket connections under the hood and
-// needs a `ws` polyfill in plain Node.
-neonConfig.webSocketConstructor = ws;
+// serverless driver opens WebSocket connections under the hood.
+// Node 22+ ships a built-in global `WebSocket`; on older versions
+// we lazily fall back to the `ws` package. Using the native global
+// when present sidesteps `ws`'s native-binding (`bufferutil`)
+// dependency that breaks under Next.js bundling.
+if (typeof globalThis.WebSocket === "function") {
+    neonConfig.webSocketConstructor = globalThis.WebSocket;
+} else {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ws = require("ws");
+    neonConfig.webSocketConstructor = ws.default ?? ws;
+}
 
 let cachedDb: NeonDatabase<typeof schema> | null = null;
 let cachedPool: Pool | null = null;
