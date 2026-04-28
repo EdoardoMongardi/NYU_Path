@@ -180,19 +180,28 @@ function normalizeText(raw: string): string {
 // ============================================================
 
 function extractHeader(lines: string[]): DPRHeader | null {
+    // Albert PDFs often emit "Page 1 of 9Degree Progress Report" on a
+    // single line because the page-number runner and the title share
+    // the same y-coordinate in the source PDF. Allow either form by
+    // matching `contains` rather than equality, and stripping any
+    // leading "Page N of M" prefix from the title line.
     let titleIdx = -1;
     for (let i = 0; i < Math.min(lines.length, 20); i++) {
-        if (lines[i]!.trim() === "Degree Progress Report") {
+        const trimmed = lines[i]!.trim();
+        const stripped = trimmed.replace(/^Page\s+\d+\s+of\s+\d+\s*/i, "");
+        if (stripped === "Degree Progress Report") {
             titleIdx = i;
             break;
         }
     }
     if (titleIdx === -1) return null;
 
-    // Next non-empty line: "For <name> prepared on <date>".
+    // Next non-empty line: "For <name> prepared on <date>". Also strip
+    // any "Page N of M" prefix that landed on the same line.
     let nameLineIdx = titleIdx + 1;
     while (nameLineIdx < lines.length && lines[nameLineIdx]!.trim() === "") nameLineIdx++;
-    const nameLine = lines[nameLineIdx]?.trim() ?? "";
+    const nameLine = (lines[nameLineIdx]?.trim() ?? "")
+        .replace(/^Page\s+\d+\s+of\s+\d+\s*/i, "");
     const nameMatch = nameLine.match(/^For (.+?) prepared on (\S+)$/);
     if (!nameMatch) return null;
     const studentName = nameMatch[1]!.trim();
