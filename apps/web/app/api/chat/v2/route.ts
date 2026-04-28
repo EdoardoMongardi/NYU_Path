@@ -25,7 +25,10 @@ import {
     runAgentTurnStreaming,
     buildDefaultRegistry,
     buildSystemPrompt,
-    preLoopDispatch,
+    // Phase 8 A1: preLoopDispatch removed from active path; import
+    // dropped to surface compile-time mistakes if anything tries to
+    // reintroduce the keyword router. runTemplateMatcherOnly stays
+    // for recovery mode (cohortConfig.evalGateFailing).
     validateResponse,
     createPrimaryClient,
     createFallbackClient,
@@ -364,21 +367,27 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             return;
         }
 
-        // §5.5 pre-loop dispatch — template fast-path first.
-        const dispatch = preLoopDispatch(userMessage, session, { templates });
-        if (dispatch.kind === "template") {
-            const t = dispatch.match.template;
-            writer.write({
-                kind: "template_match",
-                templateId: t.id,
-                body: t.body,
-                source: t.source,
-            });
-            writer.write({ kind: "token", text: t.body });
-            writer.write({ kind: "done", finalText: t.body, modelUsedId: "template" });
-            writer.close();
-            return;
-        }
+        // Phase 8 Stage A1 — preLoopDispatch DEMOTED.
+        // Pre-Phase-8 we ran a keyword/similarity matcher BEFORE the
+        // agent loop and short-circuited with template.body when it
+        // hit. That hijacked DPR-grounded questions ("how many P/F
+        // have I used?" matched cas_pf_career_cap → returned bulletin
+        // verbatim → DPR never consulted, student's actual usage
+        // ("4 of 32") never surfaced).
+        //
+        // Architectural inspiration: Claude Code (recovered-src/src/
+        // query.ts:307) goes straight to the model. Tool descriptions
+        // + reasoning route, not keyword matchers. We follow the same
+        // pattern: every question now enters the agent loop, which
+        // calls run_full_audit / search_policy / etc. as needed.
+        // search_policy already consults the same template registry
+        // internally (rag/policySearch.ts:111) — so curated bulletin
+        // quotes are still surfaced when relevant, but the AGENT
+        // decides whether to quote them, blend with DPR data, or skip.
+        //
+        // Recovery mode (cohortConfig.evalGateFailing, above) keeps
+        // template-only routing because in that mode we deliberately
+        // disable LLM behavior.
 
         // Convert prior history (from the client) into LLMMessages.
         // Phase 7-B Step 9: prepend the formatted sessionSummaries

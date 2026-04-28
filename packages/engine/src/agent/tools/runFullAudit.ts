@@ -61,6 +61,16 @@ interface RunFullAuditOutput {
         description?: string;
         needed?: number;
     }>;
+    /** Phase 8 A2 — when source=dpr, the courses the student is
+     *  currently enrolled in (DPR rows with type="IP"). Lets the agent
+     *  answer "what classes am I taking now?" / "am I currently
+     *  enrolled in [X]?" without saying "the audit doesn't list them". */
+    dprInProgressCourses?: Array<{
+        term: string;        // PeopleSoft term, e.g. "2026 Fall"
+        courseId: string;    // "CSCI-UA 473"
+        courseTitle: string;
+        units: number;
+    }>;
 }
 
 export const runFullAuditTool = buildTool({
@@ -69,16 +79,32 @@ export const runFullAuditTool = buildTool({
         "Returns the student's degree audit. When their Albert Degree " +
         "Progress Report (DPR) is loaded, returns NYU's pre-computed " +
         "audit verdicts (deterministic, authoritative). Otherwise runs " +
-        "the local rule engine against authored programs. Use this for " +
-        "any question about graduation progress, remaining requirements, " +
-        "GPA, or credit counts. Per Cardinal Rule §2.1, do NOT synthesize " +
-        "numerical claims (GPA, credits, requirement counts) without " +
-        "calling this tool.",
+        "the local rule engine against authored programs.\n\n" +
+        "Use this for ANY of these question types (Cardinal Rule §2.1):\n" +
+        "  • GPA, cumulative credits, credits-required, credits-remaining\n" +
+        "  • Requirements satisfied / remaining / unmet for any program\n" +
+        "  • Pass/Fail used + cap, outside-CAS used + cap, residency met/short\n" +
+        "  • Academic standing (good standing / probation), time limit\n" +
+        "  • \"Am I on track to graduate?\", \"can I graduate this/next term?\"\n" +
+        "  • Currently-enrolled / in-progress courses (DPR carries these)\n" +
+        "  • What is my profile, what programs am I declared in\n\n" +
+        "PREFER THIS OVER `get_academic_standing` and `get_credit_caps` " +
+        "whenever the DPR is loaded — those tools can't see the DPR and " +
+        "return defaults like GPA 0.00. Their validateInput will refuse " +
+        "and tell you to call this tool instead.\n\n" +
+        "If the user references themselves (\"how many credits do I have?\", " +
+        "\"have I met X?\"), call this. Quoting bulletin policy without the " +
+        "student's specific numbers is incomplete.",
     inputSchema: z.object({
         programId: z.string().optional()
             .describe("Optional: limit the audit to a specific program id (e.g., 'cs_major_ba')."),
     }),
-    maxResultChars: 3500,
+    // Phase 8 A2 — bumped from 3500 to 5000 because the new
+    // CURRENTLY ENROLLED block pushed STANDING past the truncation
+    // edge for students with 7+ in-progress courses (truncating the
+    // most critical fact). The audit summary is now the single
+    // largest tool result we surface; budget accordingly.
+    maxResultChars: 5000,
     // Phase 7-B Step 15 — semi_hardened: GPA + cumulative credits are
     // deterministic verdicts the validator must guard against drift.
     outputMode: "semi_hardened",
@@ -152,6 +178,20 @@ export const runFullAuditTool = buildTool({
                     ? { needed: req.counter.needed }
                     : {}),
             }));
+            // Phase 8 A2 — surface in-progress (currently-enrolled)
+            // courses from the DPR. The student needs to be able to ask
+            // "what am I taking now?" and get a specific answer.
+            const inProgress = dpr.courseHistory
+                .filter((c) => c.type === "IP")
+                .map((c) => ({
+                    term: c.term,
+                    // PeopleSoft splits the course code as subject="CSCI-UA",
+                    // catalogNbr="473" — the canonical NYU display form is
+                    // "CSCI-UA 473" (space, not hyphen).
+                    courseId: `${c.subject} ${c.catalogNbr}`,
+                    courseTitle: c.courseTitle,
+                    units: c.units,
+                }));
             return {
                 audits: filtered,
                 standing,
@@ -159,6 +199,7 @@ export const runFullAuditTool = buildTool({
                 dprPreparedDate: dpr.header.preparedDate,
                 dprCumulative: { ...dpr.cumulative },
                 dprUnsatisfiedRequirements: unsatisfied,
+                ...(inProgress.length > 0 ? { dprInProgressCourses: inProgress } : {}),
             };
         }
 
@@ -235,6 +276,26 @@ export const runFullAuditTool = buildTool({
                 lines.push(`  - ${req.rId} ${req.title}${needTag}: ${req.statusText}`);
                 if (req.description && req.description.length > 0 && req.description.length < 220) {
                     lines.push(`    ${req.description}`);
+                }
+            }
+        }
+
+        // Phase 8 A2 — currently-enrolled (in-progress) courses from
+        // the DPR. Lets the agent answer "what am I taking now?" /
+        // "am I currently enrolled in [X]?" without saying "the audit
+        // doesn't list them" (a real bug from the 20-question sweep).
+        if (output.dprInProgressCourses && output.dprInProgressCourses.length > 0) {
+            lines.push(`CURRENTLY ENROLLED (in-progress per DPR):`);
+            // Group by term so the agent can answer term-specific questions cleanly.
+            const byTerm = new Map<string, typeof output.dprInProgressCourses>();
+            for (const c of output.dprInProgressCourses) {
+                if (!byTerm.has(c.term)) byTerm.set(c.term, []);
+                byTerm.get(c.term)!.push(c);
+            }
+            for (const [term, courses] of byTerm) {
+                lines.push(`  ${term}:`);
+                for (const c of courses) {
+                    lines.push(`    - ${c.courseId} (${c.units}u) — ${c.courseTitle}`);
                 }
             }
         }

@@ -105,21 +105,27 @@ describe("buildTool + ToolRegistry", () => {
 // ============================================================
 describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt({});
-    it("contains all 25 numbered rules", () => {
-        for (let i = 1; i <= 25; i++) {
-            expect(prompt).toMatch(new RegExp(`^${i}\\. `, "m"));
-        }
-    });
-    it("declares Appendix A's CORE RULES section verbatim", () => {
-        // Per reviewer P0a: the system prompt is now Appendix A verbatim,
-        // not the old "Cardinal Rules / synthesize a numerical claim"
-        // paraphrase. The §2.1 Cardinal-Rule equivalent is rule #1
-        // ("NEVER compute numbers yourself…").
+    // Phase 8 A1 — system prompt was trimmed from a 25-rule prescriptive
+    // block to ~5 cross-cutting core rules. Tool-specific routing now
+    // lives in each tool's `description` field (Claude Code pattern,
+    // recovered-src/src/tools/GrepTool/prompt.ts). The asserts here pin
+    // the load-bearing properties that survived the trim.
+    it("declares the load-bearing core rules", () => {
         expect(prompt).toContain("CORE RULES");
-        expect(prompt).toContain("NEVER compute numbers yourself");
-        expect(prompt).toContain("FALLBACK RULES");
-        expect(prompt).toContain("PRECISION RULES");
-        expect(prompt).toContain("PLANNING-SPECIFIC RULES");
+        expect(prompt).toContain("CARDINAL RULE"); // §2.1 — every number from a tool result
+        expect(prompt).toContain("I / my / me"); // self-reference must cite DPR data
+        expect(prompt).toContain("POLICY CITATIONS"); // citation discipline
+        expect(prompt).toContain("UNCERTAIN POLICY"); // honest refusal posture
+        expect(prompt).toContain("MISSING PROFILE DATA"); // ask, don't guess
+    });
+    it("does NOT carry the legacy 25-rule prescriptive block (Phase 8 trim)", () => {
+        // The legacy block had a `25.` rule. Its absence is the marker
+        // that the trim happened.
+        expect(prompt).not.toMatch(/^25\. /m);
+        // Tool-specific routing rules ("Before discussing CREDIT COUNTS,
+        // call get_academic_standing → get_credit_caps") are gone — they
+        // live in tool descriptions now.
+        expect(prompt).not.toContain("get_academic_standing → get_credit_caps");
     });
     it("renders per-session context when student is supplied", () => {
         const out = buildSystemPrompt({
