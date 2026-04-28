@@ -1,4 +1,87 @@
-# NYU Path — Model Selection (Phase-5-prep Bakeoff)
+# NYU Path — Model Selection & Cohort A Composite Measurement
+
+> **Phase 7-E W8 update — 2026-04-28:** Cohort A surrogate composite **0.936**, §12.6.5 0.90 gate **PASSED** (surrogate, upper-bound). See "Phase 7-E W8" section below. The Phase-5-prep bakeoff content from 2026-04-26 is preserved for archival reference; W9 (re-validation against the 84-case bakeoff post-DPR-pivot) is pending.
+
+---
+
+## Phase 7-E W8 — Cohort A surrogate measurement
+
+**Headline: 0.936 composite, §12.6.5 0.90 gate PASS (surrogate, upper-bound).**
+
+The surrogate composite is an *upper bound* per ARCHITECTURE.md §12.6.5 line 4134 — real students ask off-distribution questions the cohort doesn't cover, multi-intent follow-ups, and edge cases the persona surrogate can't simulate. A real-cohort composite of 0.85–0.92 is the realistic expectation given the 0.936 surrogate.
+
+### Run metadata
+
+- **Date**: 2026-04-28
+- **Cohort version**: cohort_a frozen at sha256:a053d1c17e857a788d624ce2e1bb09175baa504f8fd7a3cc931f95c04b6a971d (65 cases: 10 legacy + 47 DPR-driven + 8 real-DPR-backed)
+- **Agent model**: `openai:gpt-4.1-mini`
+- **Persona model**: `anthropic:claude-haiku-4-5-20251001` (different family per LLM-as-judge best practice)
+- **Run duration**: 322.9 s
+- **API spend (estimated)**: ~$3 OpenAI + ~$1 Anthropic + ~$0.05 Cohere
+
+### Per-dimension breakdown
+
+| Dimension | Score |
+|---|---|
+| Grounding (numbers traced to tool results) | 0.968 |
+| Completeness (required caveats present) | 0.853 |
+| Uncertainty (hedges when unknown) | 0.987 |
+| Non-fabrication (no synthesized data) | 1.000 |
+
+Non-fabrication at 1.000 is the load-bearing result: across all 65 cases, the agent never invented a number that wasn't in some tool result. Cardinal Rule §2.1 holds end-to-end after the W3 pivot to DPR-primary tool routing.
+
+### Per-domain composite
+
+| Domain | n | mean composite |
+|---|---|---|
+| legacy-f1 | 1 | 0.688 |
+| legacy-pf | 2 | 0.738 |
+| whatif-minor | 4 | 0.781 |
+| transfer | 3 | 0.850 |
+| pf-outside-cas | 4 | 0.912 |
+| whatif-major | 8 | 0.912 |
+| real-DPR | 8 | 0.912 |
+| plan-semester | 6 | 0.921 |
+| audit-reads | 8 | 1.000 |
+| remaining-reqs | 8 | 1.000 |
+| policy-rag | 6 | 1.000 |
+| legacy-cs / -transfer / -econ / -low-conf / -cardinal / -cross-school | 7 | 1.000 |
+
+### Iteration history (caught + fixed in flight)
+
+| Run | Change | Composite | Notes |
+|---|---|---|---|
+| 1–3 | n/a (broken) | 0.000 | Bug #1: Zod-v4 schema converter; bug #2: discriminated-union root |
+| 4 | Live cohort runs | **0.835** | Below 0.90; agent calls fallback tools that don't see DPR data |
+| 5 | DPR-aware system prompt | **0.883** | Closer; but `run_full_audit` summary doesn't surface residency/P-F/outside-CAS budgets |
+| 6 | Enrich `run_full_audit` output with `dprCumulative` + `dprUnsatisfiedRequirements` | **0.936** | **PASS** the 0.90 gate |
+
+### Production-blocking bugs caught + fixed
+
+1. **Zod-v4 schema converter** — pre-W8 used Zod-v3 pattern matching; v4 reorganized internals. Every tool's input schema collapsed to `{type:"object"}`, OpenAI rejected the entire tool list. Switched to Zod-v4 native `toJSONSchema()`. Never caught before W8 because all unit tests use `RecordingLLMClient` which doesn't validate schemas.
+
+2. **Discriminated-union root** — `update_profile`'s `z.discriminatedUnion(...)` produces top-level `oneOf`. OpenAI's Functions API requires top-level `type: "object"`. Fixed by wrapping non-object root schemas in a permissive object envelope.
+
+3. **DPR routing absent from system prompt** — agent didn't know `session.degreeProgressReport` existed and called `get_academic_standing` (which doesn't see the DPR) when asked about GPA. Returned "GPA 0.00." Fixed by adding `dprLoaded` flag to `buildSystemPrompt`.
+
+4. **Audit output dropped DPR budget fields** — `run_full_audit`'s summary surfaced GPA + total credits but not residency / P-F / outside-CAS counters. Fixed by adding `dprCumulative` + `dprUnsatisfiedRequirements` to the audit output.
+
+### Caveats
+
+- Surrogate composite is an upper bound; real cohort A will likely score 0.85–0.92.
+- The persona-surrogate (claude-haiku-4-5) is itself an LLM and biased toward producing well-formed user messages.
+- The composite measures process correctness + Cardinal-Rule compliance, NOT advisor-truth. The DPR is the source of truth by design.
+
+### Next gates
+
+1. **W9 — Bakeoff** (pending, ~$10-15): re-validate `gpt-4.1-mini` against `gpt-4o-mini` / `claude-haiku-4-5` / `claude-sonnet-4-6` on 84 frozen cases.
+2. **W10 — Pilot prep**: privacy posture, onboarding tutorial, persistent disclaimer banner, per-student rate limit, observability dashboard.
+3. **W11 — Independent reviewer audit**.
+4. **W12 — Auth activation** (BLOCKED on user provisioning Neon + Resend + SECRET_KEY).
+
+---
+
+## Phase-5-prep Bakeoff (archival, 2026-04-26)
 
 **Run date:** 2026-04-26
 **Posture:** Phase-5-prep bakeoff (Option A per ARCHITECTURE.md §12.6 row 5).

@@ -180,7 +180,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
     };
-    const systemPrompt = buildSystemPrompt({ student });
+    const systemPrompt = buildSystemPrompt({ student, dprLoaded: parsedDpr !== undefined });
     const templates = getTemplates();
 
     // Phase 7-A P-1 + Phase 7-B Step 8b: cohort gate. The store factory
