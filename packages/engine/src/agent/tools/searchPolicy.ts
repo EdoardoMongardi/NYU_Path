@@ -9,20 +9,39 @@ import { matchTemplate } from "../../rag/policyTemplate.js";
 export const searchPolicyTool = buildTool({
     name: "search_policy",
     description:
-        "Looks up NYU policy via the RAG corpus + curated templates. " +
-        "Returns BOTH (when both apply): a curated operator-verified " +
-        "verbatim bulletin quote (\"CURATED TEMPLATE\") AND the top RAG " +
-        "chunks for additional context. The agent decides what to quote.\n\n" +
-        "Use this for any policy / rule question:\n" +
-        "  • Pass/Fail rules (per-term limit, career cap, deadline, eligibility)\n" +
-        "  • Credit caps + overload, residency, time limit\n" +
-        "  • F-1 / J-1 visa enrollment requirements\n" +
-        "  • Withdrawal deadlines, W vs Y, drop windows\n" +
-        "  • Double-counting / cross-school credit / transfer credit\n" +
-        "  • Major/minor declaration, internal transfer, study-away\n\n" +
-        "When the user asks about themselves AND a policy (e.g. \"how many P/F " +
-        "have I used? what's the cap?\"), pair this with `run_full_audit` so " +
-        "you can quote the policy AND surface the student's specific numbers.\n\n" +
+        "Looks up NYU policy + bulletin curriculum via the RAG corpus + " +
+        "curated templates. Phase 9 expanded the corpus to index ALL CAS " +
+        "program pages (Math BA, CS BA, the Math/CS joint major, every minor) " +
+        "+ the College Core Curriculum + Stern, Tandon, Tisch, Gallatin, " +
+        "Liberal Studies, Abu Dhabi, Shanghai program pages. The agent now " +
+        "calls this tool for BOTH policy questions AND curriculum questions.\n\n" +
+        "Returns BOTH (when both apply): a curated operator-verified verbatim " +
+        "bulletin quote (\"CURATED TEMPLATE\") AND the top RAG chunks for " +
+        "additional context. The agent decides what to quote.\n\n" +
+        "Use this for:\n" +
+        "  POLICY QUESTIONS:\n" +
+        "    • Pass/Fail rules (per-term limit, career cap, deadline, eligibility)\n" +
+        "    • Credit caps + overload, residency, time limit\n" +
+        "    • F-1 / J-1 visa enrollment requirements\n" +
+        "    • Withdrawal deadlines, W vs Y, drop windows\n" +
+        "    • Double-counting / cross-school credit / transfer credit\n" +
+        "    • Major/minor declaration, internal transfer, study-away\n" +
+        "  CURRICULUM / MAJOR QUESTIONS (Phase 9):\n" +
+        "    • \"Which CS courses are required for the Math/CS joint major?\"\n" +
+        "    • \"What advanced math electives count for the joint major?\"\n" +
+        "    • \"What is CORE-UA 400-499 — what does the range mean?\"\n" +
+        "    • \"What does CORE-UA 700 satisfy?\"\n" +
+        "    • \"What's the C-or-better-for-major rule?\"\n" +
+        "    • \"What courses are in the [program X] requirements?\"\n\n" +
+        "MANDATORY FOLLOW-UP: when `run_full_audit` returns an unsatisfied " +
+        "requirement with generic text (\"Complete the following courses:\", " +
+        "\"complete 1 course from CORE-UA 400-499\"), call this tool with the " +
+        "program label + the requirement category to fetch the bulletin's " +
+        "actual list, then quote the relevant sentence back to the student.\n\n" +
+        "When the user asks about themselves AND a policy/curriculum (e.g. " +
+        "\"how many P/F have I used? what's the cap?\"), pair this with " +
+        "`run_full_audit` so you can quote the policy AND surface the student's " +
+        "specific numbers.\n\n" +
         "Default-hard scope: returns only the student's home-school chunks " +
         "plus NYU-wide chunks. If the user EXPLICITLY mentions another school " +
         "by name, the override admits that school's chunks too. If you get " +

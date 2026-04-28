@@ -94,7 +94,17 @@ export const runFullAuditTool = buildTool({
         "and tell you to call this tool instead.\n\n" +
         "If the user references themselves (\"how many credits do I have?\", " +
         "\"have I met X?\"), call this. Quoting bulletin policy without the " +
-        "student's specific numbers is incomplete.",
+        "student's specific numbers is incomplete.\n\n" +
+        "MANDATORY HANDOFF (Phase 9): when this tool returns an unsatisfied " +
+        "requirement whose `statusText` is generic (\"Complete the following " +
+        "courses:\", \"Complete the requirements outlined below.\", " +
+        "\"complete 1 course from CORE-UA 400-499\") and does NOT name the " +
+        "specific course(s), you MUST call `search_policy` next with the " +
+        "program label + the requirement keyword (e.g. \"<student's major> " +
+        "required CS courses\", \"<student's major> advanced math electives\", " +
+        "\"Texts and Ideas course range\") to fetch the bulletin's actual " +
+        "list. Then quote the relevant sentence back to the student. Never " +
+        "guess specific course codes from training data.",
     inputSchema: z.object({
         programId: z.string().optional()
             .describe("Optional: limit the audit to a specific program id (e.g., 'cs_major_ba')."),
