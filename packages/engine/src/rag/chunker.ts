@@ -31,6 +31,11 @@ export interface ChunkMeta {
     sourcePath: string;
     /** 1-indexed line in the source where the chunk starts */
     sourceLine: number;
+    /** Phase 9 Stage 1 — kind of source. Lets the agent + reranker
+     *  prefer e.g. "program" pages for curriculum questions and
+     *  "academic_policy" chunks for rule questions. Optional for
+     *  back-compat. */
+    category?: "academic_policy" | "admissions" | "program" | "core_curriculum" | "course_catalog" | "school_overview";
 }
 
 export interface PolicyChunk {
@@ -50,6 +55,12 @@ export interface ChunkOptions {
 /**
  * Chunk a markdown document into PolicyChunk[].
  * Splits on `#` / `##` / `###` headings; sub-splits oversized sections.
+ *
+ * Phase 9 Stage 1 — strips bulletin boilerplate (CDATA / inline JS /
+ * navigation tab markers) before chunking so retrieval doesn't waste
+ * embedding budget on noise. Original line numbers are preserved
+ * because the strip operates on whole-line replacement (lines that
+ * contain noise become empty); paragraph boundaries are unchanged.
  */
 export function chunkMarkdown(
     markdown: string,
@@ -60,7 +71,8 @@ export function chunkMarkdown(
     const overlapTokens = options.overlapTokens ?? 50;
     const slug = options.slug ?? slugify(base.source);
 
-    const sections = splitIntoSections(markdown);
+    const cleaned = stripBulletinBoilerplate(markdown);
+    const sections = splitIntoSections(cleaned);
     const chunks: PolicyChunk[] = [];
     let runningIndex = 0;
 
@@ -179,6 +191,28 @@ function slugify(s: string): string {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "_")
         .replace(/^_+|_+$/g, "");
+}
+
+/** Phase 9 Stage 1 — strip the noise the bulletin scraper baked in.
+ *  Bulletin program pages embed a `<![CDATA[...]]>` JS block + tab
+ *  navigation menus that contribute thousands of tokens of pure
+ *  formatting cruft. This function preserves line indexing (replaces
+ *  noise lines with empty lines) so `sourceLine` annotations stay
+ *  meaningful. */
+function stripBulletinBoilerplate(md: string): string {
+    // 1. Remove the CDATA / inline JS block (between the opening
+    //    `//<![CDATA[` and closing `//]]>` markers).
+    let out = md.replace(/\/\/<!\[CDATA\[[\s\S]*?\/\/]]>/g, "");
+    // 2. Remove tab-anchor navigation lines like:
+    //      * [Overview](#textcontainer)
+    //      * [Curriculum](#curriculumtextcontainer)
+    //      * [Sample Plan of Study](#sampleplanofstudytextcontainer)
+    //    These are pure UI affordances; bulletins put them at the top
+    //    of every program page.
+    out = out.replace(/^\s*\*\s*\[[^\]]+\]\(#[a-zA-Z]+container\)\s*$/gm, "");
+    // 3. Remove "On This Page" navigation blocks (the bulletin page TOC).
+    out = out.replace(/^On This Page\s*$/gm, "");
+    return out;
 }
 
 function pad3(n: number): string {
