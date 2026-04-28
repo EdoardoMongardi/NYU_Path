@@ -20,6 +20,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { join } from "node:path";
 import {
     runAgentTurnStreaming,
     buildDefaultRegistry,
@@ -31,6 +32,8 @@ import {
     getCohortConfig,
     runTemplateMatcherOnly,
     summariesAsPriorMessage,
+    JsonlFileSink,
+    type FallbackSink,
     type ToolSession,
     type LLMMessage,
     type ToolInvocation,
@@ -63,6 +66,24 @@ let TEMPLATES: ReturnType<typeof loadPolicyTemplates>["templates"] | null = null
 function getTemplates() {
     if (TEMPLATES === null) TEMPLATES = loadPolicyTemplates().templates;
     return TEMPLATES;
+}
+
+// Phase 7-E W11 reviewer P1-2 — wire a real fallback sink so the
+// /admin/observability dashboard has data to display. Without this
+// every model_error_no_fallback / validator_replay / context_limit_terminate
+// silently disappears and the operator has nothing to debug from.
+// Resolution order matches the dashboard's LOG_PATH_CANDIDATES:
+//   1. NYUPATH_FALLBACK_LOG_PATH env var (operator override)
+//   2. <cwd>/data/fallback_log.jsonl  (the dashboard's first guess)
+let FALLBACK_SINK: FallbackSink | null = null;
+function getFallbackSink(): FallbackSink {
+    if (FALLBACK_SINK === null) {
+        const path =
+            process.env.NYUPATH_FALLBACK_LOG_PATH
+            ?? join(process.cwd(), "data", "fallback_log.jsonl");
+        FALLBACK_SINK = new JsonlFileSink(path);
+    }
+    return FALLBACK_SINK;
 }
 
 /** Phase 7-E onboarding shape: discriminated union. The DPR variant
@@ -348,6 +369,10 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 ...(fallback ? { fallbackClient: fallback } : {}),
                 ...(correlationId ? { correlationId } : {}),
                 maxTurns: 8,
+                // Phase 7-E W11 reviewer P1-2 — emit observability events
+                // to the JSONL sink so the operator dashboard at
+                // /admin/observability has signal during cohort A.
+                fallbackSink: getFallbackSink(),
                 // Phase 7-B Step 19 — stop-hook re-prompt. The loop
                 // calls this when it has a final reply; if the verdict
                 // is not-ok AND there's replay budget, the loop appends
