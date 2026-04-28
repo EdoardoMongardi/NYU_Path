@@ -175,11 +175,19 @@ export default function ChatPage() {
                 // this guards against partial-chunk artifacts.
                 updateMessage(assistantId, { content: ev.finalText });
                 break;
-            case "error":
-                updateMessage(assistantId, {
-                    content: (assistantId && messages.find(m => m.id === assistantId)?.content) || `Sorry — something went wrong: ${ev.message}`,
-                });
+            case "error": {
+                // Don't leak raw exception text (file paths, internal
+                // identifiers, etc.) to the student. Log the detail so
+                // the operator can correlate via /admin/observability;
+                // show a generic but useful copy in-chat.
+                console.error("[chat v2 error]", ev.message);
+                const friendly =
+                    `Something went wrong on our side handling that turn. ` +
+                    `Try resending — if it keeps happening, email the operator at edoardo.mongardi18@gmail.com.`;
+                const existing = assistantId ? messages.find(m => m.id === assistantId)?.content : "";
+                updateMessage(assistantId, { content: existing && existing.length > 0 ? existing : friendly });
                 break;
+            }
         }
     };
 

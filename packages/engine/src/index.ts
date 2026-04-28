@@ -6,7 +6,7 @@ export { checkPassFailViolations } from "./audit/passfailGuard.js";
 export { calculateStanding, computeSemesterGPA } from "./audit/academicStanding.js";
 export { PrereqGraph } from "./graph/prereqGraph.js";
 export { EquivalenceResolver } from "./equivalence/equivalenceResolver.js";
-export { loadCourses, loadPrereqs, loadPrograms, loadProgram } from "./dataLoader.js";
+export { loadCourses, loadPrereqs, loadPrograms, loadProgram, loadSchoolConfig } from "./dataLoader.js";
 export { resolveExamCredit, EXAM_GENERAL_RULES } from "./data/examEquivalencies.js";
 
 // Phase 1: Planner

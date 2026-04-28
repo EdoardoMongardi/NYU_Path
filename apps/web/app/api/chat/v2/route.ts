@@ -41,6 +41,7 @@ import {
 } from "@nyupath/engine";
 import {
     loadPolicyTemplates,
+    loadSchoolConfig,
     degreeProgressReportSchema,
     type DegreeProgressReport,
 } from "@nyupath/engine";
@@ -228,9 +229,21 @@ export async function POST(req: NextRequest): Promise<Response> {
         : buildStudentProfileV2(transcriptPayload, body.visaStatus);
     const searchCoursesFn = getCourseSearchFn();
     const ragBundle = getPolicyRagBundle();
+    // Phase 7-E reviewer-followup — load the home-school's config so
+    // get_credit_caps + plan_semester can answer cap/floor questions.
+    // Without this every tool that needs school-level data fell over
+    // with "School config not loaded".
+    const schoolConfig = (() => {
+        try {
+            return loadSchoolConfig(student.homeSchool);
+        } catch {
+            return null;
+        }
+    })();
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
+        ...(schoolConfig ? { schoolConfig } : {}),
         ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
         ...(parsedDpr ? { degreeProgressReport: parsedDpr } : {}),
@@ -273,6 +286,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         cohort,
         cohortGateFailing: cohortConfig.evalGateFailing,
         sessionSummaryContext,
+        userId,
         writer,
     });
 
@@ -298,11 +312,15 @@ interface V2TurnArgs {
     cohortGateFailing: boolean;
     /** Phase 7-B Step 9 — formatted sessionSummaries prefix or null. */
     sessionSummaryContext: string | null;
+    /** Phase 7-E W12.5 — canonical student id (cookie-derived when
+     *  authenticated, per-browser UUID otherwise). Used for the
+     *  end-of-turn appendSummary call. */
+    userId: string;
     writer: SseWriter;
 }
 
 async function runV2Turn(args: V2TurnArgs): Promise<void> {
-    const { primary, fallback, session, systemPrompt, templates, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, writer } = args;
+    const { primary, fallback, session, systemPrompt, templates, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, userId, writer } = args;
     if (!primary) {
         writer.write({ kind: "error", message: "primary LLM client not configured" });
         writer.close();
