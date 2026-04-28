@@ -17,8 +17,52 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { extractText } from "unpdf";
 import { parseDpr, type DegreeProgressReport } from "@nyupath/engine";
+import { consumeRequest } from "../../../lib/rateLimit";
+
+// Phase 7-E W11 reviewer P1-1 — onboard-route rate limit. Without
+// this, anyone could pummel the /api/onboard endpoint with 10 MB
+// PDFs and consume parser CPU regardless of the per-student chat
+// rate limit. The chat-route guard means nothing if upload is open.
+//
+// We bucket by `X-Forwarded-For` (first hop) since onboarding doesn't
+// send a userId — students upload before they have a chat-page client
+// id. Limit is intentionally small: students realistically upload
+// 1-3 times per day (initial DPR + maybe a corrected re-export).
+const ONBOARD_LIMIT_PER_DAY = 10;
+
+function ipFromRequest(req: NextRequest): string {
+    const fwd = req.headers.get("x-forwarded-for");
+    if (fwd) return `onboard-ip:${fwd.split(",")[0]!.trim()}`;
+    const real = req.headers.get("x-real-ip");
+    if (real) return `onboard-ip:${real.trim()}`;
+    return "onboard-ip:anonymous";
+}
 
 export async function POST(req: NextRequest) {
+    // Gate BEFORE we touch the multipart body so a flood of
+    // 10MB uploads can't even allocate an ArrayBuffer.
+    const rateKey = ipFromRequest(req);
+    const rate = consumeRequest(rateKey, ONBOARD_LIMIT_PER_DAY);
+    if (!rate.ok) {
+        return NextResponse.json(
+            {
+                message:
+                    `You've uploaded the maximum number of DPRs from this IP today (${rate.limit}). ` +
+                    `If you need to retry, please wait until ${rate.resetAt} or contact the operator.`,
+                onboardingStep: "awaiting_dpr",
+            },
+            {
+                status: 429,
+                headers: {
+                    "Retry-After": String(rate.retryAfterSeconds),
+                    "X-RateLimit-Limit": String(rate.limit),
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": rate.resetAt,
+                },
+            },
+        );
+    }
+
     try {
         const formData = await req.formData();
         const dprFile = formData.get("dpr") as File | null;

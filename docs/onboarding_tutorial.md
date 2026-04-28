@@ -76,7 +76,7 @@ You'll want to re-upload your DPR whenever:
 - You declare a new major or minor.
 - You see grades you didn't see last time.
 
-Just upload the fresh PDF; it replaces the cached one. Old session summaries persist either way.
+Just upload the fresh PDF; it replaces the in-memory one for the current chat. (Cohort A doesn't persist anything across sessions — see [PRIVACY.md](../PRIVACY.md) §2.3 — so a re-upload simply gives the agent the latest snapshot of your DPR for the current conversation.)
 
 ## Privacy reminder
 
