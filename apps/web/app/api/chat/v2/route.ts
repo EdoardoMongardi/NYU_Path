@@ -182,8 +182,12 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const primary = createPrimaryClient();
     if (!primary) {
+        // Phase 8 B5 — primary is no longer always OpenAI; the message
+        // names whichever provider's key is needed by the configured
+        // primary (default: Anthropic).
+        const provider = (process.env.NYUPATH_PRIMARY_PROVIDER ?? "anthropic").toUpperCase();
         return NextResponse.json(
-            { error: "OPENAI_API_KEY not configured." },
+            { error: `${provider}_API_KEY not configured.` },
             { status: 503 },
         );
     }
@@ -259,16 +263,28 @@ export async function POST(req: NextRequest): Promise<Response> {
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
     };
-    // Phase 7-E temporal-context fix — derive currentTerm + nextTerm
-    // from the DPR's IP rows so the agent answers "next semester" with
-    // the correct label instead of guessing a year from training data.
-    const temporal = parsedDpr ? deriveTemporalContext(parsedDpr) : {};
+    // Phase 7-E + Phase 8 calendar fix — temporal context.
+    // currentTerm + nextTerm come from the wall clock + NYU calendar
+    // (independent of the DPR), so "next semester" resolves correctly
+    // even when the student has pre-registered for a future term and
+    // their DPR carries multiple IP-row terms. enrolledNowTerm +
+    // preRegisteredTerms come from the DPR, disambiguated against
+    // the wall clock.
+    const now = new Date();
+    const temporal = parsedDpr
+        ? deriveTemporalContext(parsedDpr, { now })
+        : { currentTerm: undefined, nextTerm: undefined };
     const graduationTerm = normalizeGraduationTarget(body.graduationTarget);
+    const todayIso = now.toISOString().slice(0, 10);
     const systemPrompt = buildSystemPrompt({
         student,
         dprLoaded: parsedDpr !== undefined,
+        today: todayIso,
         ...(temporal.currentTerm ? { currentTerm: temporal.currentTerm } : {}),
         ...(temporal.nextTerm ? { nextTerm: temporal.nextTerm } : {}),
+        ...(temporal.enrolledNowTerm ? { enrolledNowTerm: temporal.enrolledNowTerm } : {}),
+        ...(temporal.preRegisteredTerms && temporal.preRegisteredTerms.length > 0
+            ? { preRegisteredTerms: temporal.preRegisteredTerms } : {}),
         ...(graduationTerm ? { graduationTerm } : {}),
     });
     const templates = getTemplates();
