@@ -46,3 +46,10 @@ export {
     dprToPrimaryAuditResult,
 } from "./dprToAuditResult.js";
 export type { DprToAuditOptions } from "./dprToAuditResult.js";
+
+// Temporal-context derivation
+export {
+    deriveTemporalContext,
+    normalizeGraduationTarget,
+} from "./temporalContext.js";
+export type { DprTemporalContext } from "./temporalContext.js";

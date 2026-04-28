@@ -112,6 +112,7 @@ export default function ChatPage() {
             message: userText,
             parsedData,
             visaStatus,
+            graduationTarget,
             history: recentHistory,
             userId: getOrCreateClientId(),
         })) {

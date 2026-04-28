@@ -210,8 +210,12 @@ function buildDprSummary(report: DegreeProgressReport, fileName: string, sizeMB:
     } else {
         lines += `\n**All requirements satisfied** — congrats!\n`;
     }
+    // Parser warnings are operator-debugging signal — surface them in
+    // server logs (visible via /admin/observability) but never in the
+    // student-facing summary. The student doesn't need to see "15
+    // parser warnings about info-only sections".
     if (report._meta.warnings.length > 0) {
-        lines += `\n_(Note: ${report._meta.warnings.length} parser warning${report._meta.warnings.length === 1 ? "" : "s"} — info-only sections without explicit status flags. Won't affect your audit.)_\n`;
+        console.warn(`[onboard] DPR parsed for ${report.header.studentName} with ${report._meta.warnings.length} parser warnings`);
     }
     lines += `\nDoes this look right? (**yes** / **no**)`;
     return lines;

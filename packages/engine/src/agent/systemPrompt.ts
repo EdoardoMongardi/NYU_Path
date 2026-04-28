@@ -35,6 +35,17 @@ export interface SystemPromptOptions {
      * which can't see the DPR data and return zeros.
      */
     dprLoaded?: boolean;
+    /**
+     * Phase 7-E temporal-context fix — when the student asks "what
+     * should I take next semester?", the agent shouldn't guess "Fall
+     * 2024" because the LLM has no calendar awareness. We pass these
+     * three terms (derived from the DPR's currently-enrolled rows +
+     * the student's stated graduation target) so the agent can answer
+     * with the correct semester labels.
+     */
+    currentTerm?: string;       // e.g., "Fall 2026"
+    nextTerm?: string;          // e.g., "Spring 2027"
+    graduationTerm?: string;    // e.g., "Spring 2027"
 }
 
 /**
@@ -159,6 +170,19 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         if (s.coursesTaken.length > 0) {
             lines.push(`- coursesTaken: ${s.coursesTaken.length} courses on file`);
         }
+    }
+    if (opts.currentTerm || opts.nextTerm || opts.graduationTerm) {
+        lines.push(
+            "",
+            "## Temporal context (use these EXACT labels — do not invent semesters)",
+        );
+        if (opts.currentTerm) lines.push(`- currentTerm: ${opts.currentTerm} (the student is enrolled NOW)`);
+        if (opts.nextTerm) lines.push(`- nextTerm: ${opts.nextTerm} (when the student says "next semester", they mean THIS term)`);
+        if (opts.graduationTerm) lines.push(`- graduationTerm: ${opts.graduationTerm} (the student's stated graduation target)`);
+        lines.push(
+            "- When you build a semester plan, label it with `nextTerm`, NOT a year you guess from training data.",
+            "- When you reason about \"on track to graduate\", compare remaining requirements against the terms between `nextTerm` and `graduationTerm`.",
+        );
     }
     if (opts.transferIntent) {
         lines.push("- transferIntent: TRUE — the student is exploring transferring");

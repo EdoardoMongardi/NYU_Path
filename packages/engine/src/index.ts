@@ -138,6 +138,8 @@ export {
     findRequirementById,
     dprToAuditResults,
     dprToPrimaryAuditResult,
+    deriveTemporalContext,
+    normalizeGraduationTarget,
 } from "./dpr/index.js";
 export type {
     DegreeProgressReport,
@@ -156,6 +158,7 @@ export type {
     ParseDprSuccess,
     ParseDprFailure,
     DprToAuditOptions,
+    DprTemporalContext,
 } from "./dpr/index.js";
 
 // Phase 4: RAG entry points (used by the agent's search_policy tool
