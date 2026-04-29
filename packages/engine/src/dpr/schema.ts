@@ -270,20 +270,29 @@ export function walkRequirements(
 
 /** Filter to requirements whose status indicates work remains.
  *
- *  Phase 8 A3 — DEDUPED. PeopleSoft DPRs sometimes mark a parent
- *  group AND its leaf both `not_satisfied` (e.g., R1004 "Texts &
- *  Ideas" parent + R1004/10 leaf). The pre-Phase-8 walker reported
- *  both, so the agent counted "Texts & Ideas" twice in unmet-
- *  requirement summaries (Q3 / Q9 of the 20-question sweep).
+ *  Phase 8 A3 — DEDUPED parent-vs-leaf. PeopleSoft DPRs sometimes
+ *  mark a parent group AND its leaf both `not_satisfied` (e.g.,
+ *  R1004 "Texts & Ideas" parent + R1004/10 leaf). The pre-Phase-8
+ *  walker reported both, so the agent counted "Texts & Ideas" twice.
+ *
+ *  Phase 9 Stage 5 — also drop "_summary" roll-up markers. The
+ *  parser synthesizes "<rgId>/_summary" requirements when a group
+ *  has a counter directly attached (e.g., RG5076's "Computer
+ *  Science/Math Joint Major (summary)" — total credits across the
+ *  whole major). These are aggregate trackers, not actionable
+ *  requirements; dropping them prevents the agent from treating
+ *  "joint major summary" as a separate course-needed item.
  *
  *  We dedupe by rId-prefix relationship: if rId "X/n" is in the
- *  result, drop any "X" parent. The leaf carries the actionable
- *  status text ("Complete one course from CORE-UA 400-499"); the
- *  parent is just an aggregate marker. */
+ *  result, drop any "X" parent. */
 export function notSatisfiedRequirements(
     groups: DPRRequirementGroup[],
 ): DPRRequirement[] {
-    const all = walkRequirements(groups).filter((r) => r.status !== "satisfied");
+    const all = walkRequirements(groups)
+        .filter((r) => r.status !== "satisfied")
+        // Phase 9 — drop synthetic _summary roll-ups; they're not
+        // course-actionable items, just aggregate counters.
+        .filter((r) => !r.rId.endsWith("/_summary"));
     const leafRIds = new Set(all.map((r) => r.rId));
     return all.filter((r) => {
         // Keep the requirement unless some other unmet requirement's

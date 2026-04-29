@@ -259,29 +259,53 @@ export const runFullAuditTool = buildTool({
             }
         }
 
-        for (const a of output.audits) {
-            lines.push(`PROGRAM: ${a.programName} (${a.programId}) — ${a.overallStatus}`);
-            lines.push(`  Credits: ${a.totalCreditsCompleted} / ${a.totalCreditsRequired}`);
-            const unmet = a.rules.filter((r) => r.status !== "satisfied");
-            lines.push(`  Unmet requirements: ${unmet.length}`);
-            for (const r of unmet.slice(0, 10)) {
-                const remaining = r.remaining > 0 ? `${r.remaining} remaining` : "outstanding";
-                lines.push(`    - ${r.label}: ${remaining}`);
-                if (r.coursesSatisfying.length > 0 && r.coursesSatisfying.length <= 6) {
-                    lines.push(`      already applied: ${r.coursesSatisfying.join(", ")}`);
+        // Phase 9 Stage 5 — when the DPR provides the deduped
+        // UNSATISFIED REQUIREMENTS block, that's the canonical list.
+        // Skip the per-program iteration in that case (it surfaces
+        // R1004 + R1004/10 as separate items even though they're the
+        // same requirement, which the agent then double-counts in
+        // its summary). Only emit the per-program block when DPR
+        // dedup data isn't available (authored-rules fallback path).
+        const hasDedupedDprBlock =
+            output.source === "dpr" &&
+            output.dprUnsatisfiedRequirements !== undefined &&
+            output.dprUnsatisfiedRequirements.length > 0;
+
+        if (!hasDedupedDprBlock) {
+            for (const a of output.audits) {
+                lines.push(`PROGRAM: ${a.programName} (${a.programId}) — ${a.overallStatus}`);
+                lines.push(`  Credits: ${a.totalCreditsCompleted} / ${a.totalCreditsRequired}`);
+                const unmet = a.rules.filter((r) => r.status !== "satisfied");
+                lines.push(`  Unmet requirements: ${unmet.length}`);
+                for (const r of unmet.slice(0, 10)) {
+                    const remaining = r.remaining > 0 ? `${r.remaining} remaining` : "outstanding";
+                    lines.push(`    - ${r.label}: ${remaining}`);
+                    if (r.coursesSatisfying.length > 0 && r.coursesSatisfying.length <= 6) {
+                        lines.push(`      already applied: ${r.coursesSatisfying.join(", ")}`);
+                    }
+                }
+                if (a.warnings.length > 0) {
+                    lines.push(`  Warnings: ${a.warnings.slice(0, 3).join("; ")}`);
                 }
             }
-            if (a.warnings.length > 0) {
-                lines.push(`  Warnings: ${a.warnings.slice(0, 3).join("; ")}`);
+        } else {
+            // DPR-primary path — surface program-level credit headlines
+            // only (no rule iteration; the deduped block below names
+            // every actual unmet requirement once).
+            for (const a of output.audits) {
+                lines.push(`PROGRAM: ${a.programName} — ${a.totalCreditsCompleted}/${a.totalCreditsRequired} credits, ${a.overallStatus}`);
             }
         }
 
         // Phase 7-E W8 fix — list unsatisfied requirements with their
         // verbatim status sentence (which often names the missing
         // course, e.g., "Not Satisfied: Complete CSCI-UA 421...").
-        if (output.source === "dpr" && output.dprUnsatisfiedRequirements && output.dprUnsatisfiedRequirements.length > 0) {
-            lines.push(`UNSATISFIED REQUIREMENTS (verbatim from DPR):`);
-            for (const req of output.dprUnsatisfiedRequirements.slice(0, 10)) {
+        // Phase 9 A3 dedup applies here — only one entry per
+        // distinct unmet leaf requirement (parent groups whose child
+        // rId is also unmet are dropped).
+        if (hasDedupedDprBlock) {
+            lines.push(`UNSATISFIED REQUIREMENTS (verbatim from DPR; ${output.dprUnsatisfiedRequirements!.length} distinct):`);
+            for (const req of output.dprUnsatisfiedRequirements!.slice(0, 10)) {
                 const needTag = req.needed ? ` [need ${req.needed} more]` : "";
                 lines.push(`  - ${req.rId} ${req.title}${needTag}: ${req.statusText}`);
                 if (req.description && req.description.length > 0 && req.description.length < 220) {
@@ -315,14 +339,20 @@ export const runFullAuditTool = buildTool({
     },
     // Phase 7-B Step 15 — verbatim text the LLM must include
     // unchanged. We pin the cumulative GPA verdict (the most common
-    // §2.1 violation pattern). Reasonable synthesis around it stays
-    // allowed; only this clause must appear unchanged.
+    // §2.1 violation pattern).
+    //
+    // Phase 9 Stage 5 LOOSENED: pre-Phase-9 the required text was
+    // "Cumulative GPA: 3.402 (from your Degree Progress Report)." —
+    // models commonly write "Cumulative GPA: 3.402" without the
+    // parenthetical attribution suffix, triggering verbatim_drift on
+    // every audit-using turn and surfacing a noisy ⚠ banner to the
+    // student. The substring `Cumulative GPA: 3.402` is sufficient
+    // to pin the number (the actual Cardinal Rule §2.1 protection);
+    // attribution can be enforced separately via the
+    // checkInvocations validator if needed.
     extractVerbatim(output) {
         const gpa = output.standing.cumulativeGPA.toFixed(3);
-        const grounding = output.source === "dpr"
-            ? "(from your Degree Progress Report)"
-            : "(computed from your transcript)";
-        return `Cumulative GPA: ${gpa} ${grounding}.`;
+        return `Cumulative GPA: ${gpa}`;
     },
 });
 

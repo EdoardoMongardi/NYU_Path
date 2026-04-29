@@ -70,14 +70,20 @@ describe("W3.1 — run_full_audit DPR-primary path", () => {
         expect(out.standing.level).toBe("good_standing");
     });
 
-    it("verbatim disclosure pins the GPA value with DPR provenance", async () => {
+    it("verbatim disclosure pins the GPA value (Phase 9 Stage 5: loosened from full-attribution to substring)", async () => {
         const { session } = buildDprSession();
         const out = await runFullAuditTool.call(
             {},
             { signal: ABORT, session },
         );
         const verbatim = runFullAuditTool.extractVerbatim?.(out);
-        expect(verbatim).toBe("Cumulative GPA: 3.402 (from your Degree Progress Report).");
+        // Pre-Phase-9 the required text was the full sentence with
+        // "(from your Degree Progress Report)." — caused noisy
+        // verbatim_drift on every audit-using turn because models
+        // commonly drop the parenthetical attribution. The substring
+        // "Cumulative GPA: 3.402" is the actual Cardinal Rule §2.1
+        // protection (pins the number against fabrication).
+        expect(verbatim).toBe("Cumulative GPA: 3.402");
     });
 
     it("filters audits by programId when supplied; returns empty when no match (no silent fallback)", async () => {
