@@ -133,11 +133,11 @@ describe("run_full_audit consumes mkDpr fixtures", () => {
         expect(out.standing.level).toBe("academic_concern");
     });
 
-    it("verbatim quotes the GPA with DPR provenance", async () => {
+    it("verbatim quotes the GPA (Phase 9 Stage 5: loosened to substring; see runFullAudit.ts)", async () => {
         const dpr = mkDpr({ cumulative: { cumulativeGpa: 3.214 } });
         const out = await runFullAuditTool.call({}, { signal: ABORT, session: dprSession(dpr) });
         const v = runFullAuditTool.extractVerbatim?.(out);
-        expect(v).toBe("Cumulative GPA: 3.214 (from your Degree Progress Report).");
+        expect(v).toBe("Cumulative GPA: 3.214");
     });
 });
 
