@@ -75,10 +75,18 @@ export function computeScope(query: string, options: ScopeOptions): ScopeDecisio
     }
     const scopedSchools = Array.from(new Set([home, "all", ...matchedOverrides]));
 
-    const yearFilter = options.catalogYear;
+    // Phase 9 — year filter is now ADVISORY, not a hard gate.
+    // Pre-Phase-9 a CAS student on catalog year "2024-2025" would
+    // have ALL chunks tagged "2025-2026" silently dropped, even
+    // though NYU's program requirements are essentially the same
+    // year-over-year and we only ever ingest the latest scrape.
+    // Result: the bulletin program pages were unreachable from any
+    // student whose matriculation year didn't match the scrape year.
+    // The fix: drop year from the hard predicate. If a future need
+    // arises to deprioritize stale-year chunks, do it at the
+    // reranker layer, not here.
     const predicate = (chunk: PolicyChunk): boolean => {
         if (!scopedSchools.includes(chunk.meta.school)) return false;
-        if (yearFilter && chunk.meta.year !== yearFilter) return false;
         return true;
     };
 
