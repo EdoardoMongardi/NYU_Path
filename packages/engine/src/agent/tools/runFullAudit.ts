@@ -104,7 +104,18 @@ export const runFullAuditTool = buildTool({
         "required CS courses\", \"<student's major> advanced math electives\", " +
         "\"Texts and Ideas course range\") to fetch the bulletin's actual " +
         "list. Then quote the relevant sentence back to the student. Never " +
-        "guess specific course codes from training data.",
+        "guess specific course codes from training data.\n\n" +
+        "MAJOR-REQUIREMENT GRADE RULES (Phase 9.5): when you reference an " +
+        "unsatisfied MAJOR requirement in your reply (anything in the " +
+        "Computer Science / Math / joint-major sections — NOT general " +
+        "electives or core curriculum), ALWAYS mention BOTH of these " +
+        "bulletin rules verbatim or close-paraphrase:\n" +
+        "  • \"A grade of C or better is required in any course used to " +
+        "fulfill major requirements.\"\n" +
+        "  • \"Pass/Fail option does not count toward the major.\"\n" +
+        "Source: every CAS major's bulletin page §Program Policies repeats " +
+        "these. Don't quote them when discussing core curriculum, electives, " +
+        "or non-major courses.",
     inputSchema: z.object({
         programId: z.string().optional()
             .describe("Optional: limit the audit to a specific program id (e.g., 'cs_major_ba')."),

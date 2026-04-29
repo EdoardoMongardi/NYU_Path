@@ -58,7 +58,16 @@ export const planSemesterTool = buildTool({
         "I haven't taken\"). plan_semester only surfaces courses that " +
         "satisfy not-yet-satisfied requirements; it doesn't enumerate " +
         "the broader catalog. For elective discovery use `search_courses` " +
-        "with `excludeCompleted: true`.",
+        "with `excludeCompleted: true`.\n\n" +
+        "BULLETIN SAMPLE-PLAN ANCHORING (Phase 9.5): every CAS program " +
+        "page in the bulletin contains a 'Sample Plan of Study' table " +
+        "showing which semester each requirement is recommended for. " +
+        "When you propose a course for a major requirement, ALWAYS call " +
+        "`search_policy` with \"<major name> sample plan of study\" once " +
+        "and reference the suggested semester back to the student (e.g., " +
+        "\"the bulletin's sample plan places CSCI-UA 421 in 7th " +
+        "semester\"). Anchors student expectations and surfaces sequencing " +
+        "constraints (some courses MUST come before others per the plan).",
     inputSchema: z.object({
         targetSemester: z.string().describe("Semester to plan, e.g. '2025-fall'."),
         maxCourses: z.number().int().positive().optional(),

@@ -47,7 +47,18 @@ export const searchPolicyTool = buildTool({
         "by name, the override admits that school's chunks too. If you get " +
         "back \"POLICY UNCERTAINTY\" or no high-confidence hit AND no template, " +
         "say \"I couldn't find a specific policy on [X]\" and recommend the " +
-        "student contact their adviser — do NOT synthesize from training data.",
+        "student contact their adviser — do NOT synthesize from training data.\n\n" +
+        "CORE-UA RANGE MAPPING (Phase 9.5 — memorize; the bulletin College " +
+        "Core Curriculum page confirms):\n" +
+        "  • CORE-UA 4XX  → Texts and Ideas\n" +
+        "  • CORE-UA 5XX  → Cultures and Contexts\n" +
+        "  • CORE-UA 7XX  → Expressive Culture (e.g. CORE-UA 700, 720, 745)\n" +
+        "  • CORE-UA 8XX  → Societies and the Social Sciences\n" +
+        "When a student asks \"does CORE-UA <NNN> satisfy <which req>?\", " +
+        "use this mapping to answer immediately AND cite the bulletin " +
+        "College Core Curriculum chunk if you have one. NEVER guess the " +
+        "mapping the other way (don't say \"CORE-UA 700 might be a " +
+        "Texts and Ideas course\" — it's NOT, by the range rule).",
     inputSchema: z.object({
         query: z.string().min(2).describe("Natural-language policy question."),
     }),
