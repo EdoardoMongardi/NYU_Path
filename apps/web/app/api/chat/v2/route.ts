@@ -437,7 +437,13 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 priorMessages,
                 ...(fallback ? { fallbackClient: fallback } : {}),
                 ...(correlationId ? { correlationId } : {}),
-                maxTurns: 8,
+                // Phase 9 Stage 3 — bumped from 8 to 10 to give the agent
+                // headroom for the new "audit → search_policy → synthesize"
+                // multi-tool flows. Stage-2 nudge tells it to call
+                // search_policy at most twice per requirement gap, but
+                // multiple gaps in one question (CS Required + Texts &
+                // Ideas + joint major roll-up) can chain through 4-6 calls.
+                maxTurns: 10,
                 // Phase 7-E W11 reviewer P1-2 — emit observability events
                 // to the JSONL sink so the operator dashboard at
                 // /admin/observability has signal during cohort A.
