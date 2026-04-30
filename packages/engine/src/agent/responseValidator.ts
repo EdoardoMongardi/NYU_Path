@@ -56,6 +56,50 @@ export interface ValidatorContext {
     student?: StudentProfile;
     /** True when the user is exploring a transfer (changes caveat triggers) */
     transferIntent?: boolean;
+    /**
+     * Phase 10 F4c — last user message this turn. Used by
+     * `checkVerbatim` to detect topical relevance: when the verbatim's
+     * keywords don't overlap with the user question AND the reply has
+     * no overlapping numbers, the verbatim is irrelevant noise and the
+     * validator skips it. Optional — when unset, the F4c skip is
+     * conservative (treats every verbatim as topical).
+     */
+    userQuestion?: string;
+}
+
+// ============================================================
+// Phase 10 F4 — context-awareness helpers
+// ============================================================
+// F4a: negation guard — skip an invocation/caveat trigger when the
+// 30-char window preceding the matched phrase contains a negation
+// marker. Catches "this is NOT an internal transfer" without
+// becoming brittle to specific wordings.
+//
+// F4b: numeric-overlap layer for verbatim_drift. When the reply
+// reuses any of the verbatim's numbers, treat it as a real drift
+// (the agent paraphrased around the number).
+//
+// F4c: no-number-no-keyword skip. When the reply has neither
+// numeric nor keyword overlap with the verbatim, the verbatim is
+// irrelevant to this answer — skip rather than spam a noisy
+// "could not fully ground" banner.
+
+const NEGATION_WINDOW_CHARS = 30;
+const NEGATION_RE = /\b(?:not|isn'?t|aren'?t|never|no longer|rather than|NOT)\b/i;
+
+function isMatchNegated(text: string, regex: RegExp): boolean {
+    const m = regex.exec(text);
+    if (!m || m.index === undefined) return false;
+    const window = text.slice(Math.max(0, m.index - NEGATION_WINDOW_CHARS), m.index);
+    return NEGATION_RE.test(window);
+}
+
+function extractNumbers(text: string): Set<string> {
+    return new Set(text.match(/\d+(?:\.\d+)?/g) ?? []);
+}
+
+function extractKeywords(text: string): Set<string> {
+    return new Set(text.toLowerCase().match(/\b[a-z]{3,}\b/g) ?? []);
 }
 
 // ============================================================
@@ -216,7 +260,17 @@ function checkInvocations(ctx: ValidatorContext): Violation[] {
     const violations: Violation[] = [];
     const calledTools = new Set(ctx.invocations.map((inv) => inv.toolName));
     for (const rule of INVOCATION_RULES) {
-        const triggered = rule.triggers.some((re) => re.test(ctx.assistantText));
+        // Phase 10 F4a — negation guard. Skip the trigger when its
+        // first match in the reply is preceded by a negation marker
+        // ("not", "isn't", "never", "rather than", etc.). The agent
+        // is explicitly disclaiming the topic, so requiring the
+        // associated tool would be a false positive.
+        const triggered = rule.triggers.some((re) => {
+            if (!re.test(ctx.assistantText)) return false;
+            const stateful = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+            if (isMatchNegated(ctx.assistantText, stateful)) return false;
+            return true;
+        });
         if (!triggered) continue;
         const satisfied = rule.requiresAnyOf.some((name) => calledTools.has(name));
         if (!satisfied) {
@@ -304,7 +358,16 @@ function checkCompleteness(ctx: ValidatorContext): Violation[] {
     const violations: Violation[] = [];
     for (const rule of CAVEAT_RULES) {
         if (!rule.triggerCondition(ctx)) continue;
-        const replyTriggered = rule.triggerPatterns.some((re) => re.test(ctx.assistantText));
+        // Phase 10 F4a — negation guard on the trigger pattern, same
+        // mechanism as checkInvocations. A reply that says "this is
+        // NOT an internal transfer" should not require the internal-
+        // transfer GPA caveat.
+        const replyTriggered = rule.triggerPatterns.some((re) => {
+            if (!re.test(ctx.assistantText)) return false;
+            const stateful = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+            if (isMatchNegated(ctx.assistantText, stateful)) return false;
+            return true;
+        });
         if (!replyTriggered) continue;
         const allCovered = rule.requiredSubstrings.every((re) => re.test(ctx.assistantText));
         if (!allCovered) {
@@ -336,19 +399,70 @@ function checkCompleteness(ctx: ValidatorContext): Violation[] {
 function checkVerbatim(ctx: ValidatorContext): Violation[] {
     const violations: Violation[] = [];
     const replyNorm = ctx.assistantText.replace(/\s+/g, " ").trim();
+    // Phase 10 F4b/F4c — pre-compute number + keyword sets once.
+    const replyNumbers = extractNumbers(replyNorm);
+    const questionKeywords = ctx.userQuestion ? extractKeywords(ctx.userQuestion) : new Set<string>();
     for (const inv of ctx.invocations) {
         const v = inv.verbatimText;
         if (!v) continue;
         const verbatimNorm = v.replace(/\s+/g, " ").trim();
         if (!verbatimNorm) continue;
-        if (!replyNorm.includes(verbatimNorm)) {
+        if (replyNorm.includes(verbatimNorm)) continue; // satisfied — verbatim is in the reply
+
+        // Phase 10 F4b — numeric-overlap layer.
+        // If the reply reused at least one of the verbatim's numbers,
+        // it's a paraphrase of the verbatim's load-bearing fact. Fire.
+        // (Catches "Your GPA is 3.402" when verbatim is "Cumulative
+        // GPA: 3.402" — agent kept the number but dropped attribution.)
+        const verbatimNumbers = extractNumbers(verbatimNorm);
+        let numOverlap = 0;
+        for (const n of verbatimNumbers) if (replyNumbers.has(n)) numOverlap++;
+        if (numOverlap > 0) {
+            violations.push({
+                kind: "verbatim_drift",
+                detail:
+                    `Tool "${inv.toolName}" returned verbatim text the reply must quote unchanged, ` +
+                    `but the reply paraphrased it (kept the number, dropped the attribution). ` +
+                    `Required text: ${verbatimNorm.slice(0, 200)}${verbatimNorm.length > 200 ? "…" : ""}`,
+            });
+            continue;
+        }
+
+        // Phase 10 F4c — no-number-no-keyword skip.
+        // The reply doesn't share any numbers with the verbatim. If
+        // the reply also doesn't share any keyword with the user's
+        // question, the verbatim is irrelevant to this answer — skip
+        // the violation. Cardinal Rule §2.1 (extractClaimNumbers /
+        // checkGrounding) still protects against fabricated numbers
+        // via the grounding validator above.
+        //
+        // CONSERVATIVE FALLBACK: when ctx.userQuestion is undefined
+        // (legacy callers, unit tests), preserve the pre-F4c behavior
+        // and FIRE. The skip only applies when the caller has
+        // explicitly threaded the user's question through the
+        // validator context.
+        if (ctx.userQuestion === undefined) {
             violations.push({
                 kind: "verbatim_drift",
                 detail:
                     `Tool "${inv.toolName}" returned verbatim text the reply must quote unchanged, ` +
                     `but the reply does not contain it. Required text: ${verbatimNorm.slice(0, 200)}${verbatimNorm.length > 200 ? "…" : ""}`,
             });
+            continue;
         }
+
+        const verbatimKeywords = extractKeywords(verbatimNorm);
+        let kwOverlap = 0;
+        for (const t of questionKeywords) if (verbatimKeywords.has(t)) kwOverlap++;
+        if (kwOverlap === 0) continue; // skip — irrelevant verbatim
+
+        // Topical relevance present but verbatim missing → fire.
+        violations.push({
+            kind: "verbatim_drift",
+            detail:
+                `Tool "${inv.toolName}" returned verbatim text the reply must quote unchanged, ` +
+                `but the reply does not contain it. Required text: ${verbatimNorm.slice(0, 200)}${verbatimNorm.length > 200 ? "…" : ""}`,
+        });
     }
     return violations;
 }

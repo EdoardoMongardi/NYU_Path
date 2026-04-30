@@ -220,7 +220,7 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "## Temporal context (use these EXACT labels — do not invent semesters)",
         );
         if (opts.today) lines.push(`- today: ${opts.today} (real wall-clock date)`);
-        if (opts.currentTerm) lines.push(`- currentTerm: ${opts.currentTerm} (the term in session right now per the calendar — clock truth, not DPR)`);
+        if (opts.currentTerm) lines.push(`- currentTerm: ${opts.currentTerm} (the term in session right now per the calendar — students take courses DURING this term)`);
         if (opts.nextTerm) lines.push(`- nextTerm: ${opts.nextTerm} (when the student says "next semester" / "this fall" / "this spring", they mean THIS term)`);
         if (opts.enrolledNowTerm && opts.enrolledNowTerm !== opts.currentTerm) {
             lines.push(`- enrolledNowTerm: ${opts.enrolledNowTerm} (DPR's currently-in-progress term — differs from calendar currentTerm; the DPR may be slightly stale)`);
@@ -228,7 +228,7 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         if (opts.preRegisteredTerms && opts.preRegisteredTerms.length > 0) {
             lines.push(`- preRegisteredTerms: ${opts.preRegisteredTerms.join(", ")} (the student has ALREADY registered for these future terms — visible in the DPR's IP rows)`);
         }
-        if (opts.graduationTerm) lines.push(`- graduationTerm: ${opts.graduationTerm} (the student's stated graduation target)`);
+        if (opts.graduationTerm) lines.push(`- graduationTerm: ${opts.graduationTerm} (the term IN WHICH the student graduates — they take their final courses DURING this term, NOT after it. Recommending a course "for ${opts.graduationTerm}" means the course is taken in that term, before graduation. There is no term "after graduation" the student is enrolled in.)`);
         lines.push(
             "- When you build a semester plan, label it with `nextTerm` (clock-derived), NOT a year you guess from training data and NOT the latest IP-row term in the DPR.",
             "- When you reason about \"on track to graduate\", compare remaining requirements against the terms between `nextTerm` and `graduationTerm`.",

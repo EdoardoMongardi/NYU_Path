@@ -459,6 +459,10 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                         assistantText,
                         invocations,
                         student: s.student,
+                        // Phase 10 F4c — pass the user's last message so
+                        // the verbatim-drift check can skip when the
+                        // verbatim is topically irrelevant.
+                        userQuestion: body.message,
                     });
                     return {
                         ok: verdict.ok,
@@ -523,6 +527,9 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             assistantText: finalResult.finalText,
             invocations: finalResult.invocations,
             student: session.student,
+            // Phase 10 F4c — thread the user's last message for
+            // topical-relevance gating in checkVerbatim.
+            userQuestion: body.message,
         });
         if (!verdict.ok) {
             writer.write({

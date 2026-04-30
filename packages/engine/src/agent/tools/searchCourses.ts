@@ -73,11 +73,24 @@ export const searchCoursesTool = buildTool({
         // Allow tests + production callers to inject either a fully
         // resolved catalog or a custom search function.
         const limit = input.limit ?? 20;
+
+        // Phase 10 F3 — quality fix.
+        // Issue: with no departmentPrefix, semantic search returns
+        // results ranked purely by description similarity. For an
+        // open-ended query like "ml course", the top hits are
+        // graduate (CSCI-GA) / global-site (CS-UH) / cross-school
+        // (BMIN-GA, ECE-GY) courses, because their descriptions
+        // mention ML more densely than home-school undergraduate
+        // catalog entries. Over-fetch the result pool by ~3× and
+        // apply the accessibility sort across the wider pool, so a
+        // home-school undergrad course can still surface even when
+        // the raw similarity ranking buries it.
+        const overFetch = input.departmentPrefix ? limit : Math.max(limit * 3, 30);
         let raw: CatalogCourse[];
         if (sessExt.searchCoursesFn) {
             raw = await sessExt.searchCoursesFn(input.query, {
                 departmentPrefix: input.departmentPrefix,
-                limit,
+                limit: overFetch,
             });
         } else {
             const catalog = sessExt.courseCatalog ?? [];
@@ -85,7 +98,7 @@ export const searchCoursesTool = buildTool({
             const dept = input.departmentPrefix?.toUpperCase();
             raw = [];
             for (const c of catalog) {
-                if (raw.length >= limit) break;
+                if (raw.length >= overFetch) break;
                 if (dept && !c.courseId.toUpperCase().startsWith(dept)) continue;
                 const haystack = `${c.courseId} ${c.title} ${c.description ?? ""}`.toLowerCase();
                 if (haystack.includes(q)) raw.push(c);
@@ -117,18 +130,47 @@ export const searchCoursesTool = buildTool({
         // agent surfaces "this is Tandon, you'd need cross-school
         // approval" instead of pretending it's freely available.
         const homeSchool = session.student?.homeSchool;
-        const matches = completedFiltered.map((c) => ({
+        const annotated = completedFiltered.map((c) => ({
             ...c,
             ...classifyCourse(c.courseId, homeSchool),
         }));
-        // Order: home → cross_school → global_site → graduate → unknown.
+        // Stable accessibility sort: home → cross_school → global_site
+        // → graduate → unknown. Then trim to caller's `limit` so the
+        // over-fetch pool surfaces home-school results when the raw
+        // similarity ranker buried them.
         const order: Record<Accessibility, number> = { home: 0, cross_school: 1, global_site: 2, graduate: 3, unknown: 4 };
-        matches.sort((a, b) => order[a.accessibility] - order[b.accessibility]);
+        annotated.sort((a, b) => order[a.accessibility] - order[b.accessibility]);
+        const matches = annotated.slice(0, limit);
+
+        // Phase 10 F3 — diagnostic note. When the displayed top-K
+        // contains few or no home-school undergrad courses but the
+        // wider pool exists, hint to the agent so it can ask the
+        // student whether to broaden. This is data, not a per-case
+        // rule: the same hint helps ANY query whose top-K is mostly
+        // off-target.
+        const homeCount = matches.filter((m) => m.accessibility === "home").length;
+        const undergradCrossSchoolCount = matches.filter((m) => m.accessibility === "cross_school").length;
+        const widerPoolHomeCount = annotated.filter((m) => m.accessibility === "home").length;
+        const notes: string[] = [];
+        if (homeSchool && homeCount === 0 && undergradCrossSchoolCount === 0 && matches.length > 0) {
+            notes.push(
+                `No home-school (${homeSchool}) undergraduate matches surfaced for "${input.query}". ` +
+                `Top results are graduate / cross-school / global-site courses — the student likely cannot register for them. ` +
+                `Either narrow the query (add a course-prefix like "CSCI-UA") or ask the student whether they want broader results.`,
+            );
+        } else if (homeCount === 0 && widerPoolHomeCount > 0) {
+            notes.push(
+                `${widerPoolHomeCount} home-school match(es) exist deeper in the result pool but ranked below ` +
+                `graduate / cross-school courses. Consider passing a more specific query or departmentPrefix.`,
+            );
+        }
+
         return {
             query: input.query,
             totalReturned: matches.length,
             matches,
             homeSchool: homeSchool ?? null,
+            notes,
             ...(input.excludeCompleted ? { excludedCompletedCount: droppedAsCompleted } : {}),
         };
     },
@@ -162,6 +204,15 @@ export const searchCoursesTool = buildTool({
                 const credits = c.credits ? ` [${c.credits}cr]` : "";
                 lines.push(`  ${c.courseId} (${c.school}): ${c.title}${credits}`);
             }
+        }
+        // Phase 10 F3 — diagnostic notes. Surfaced after the result
+        // list so the agent can decide whether to broaden or narrow
+        // the search before quoting matches to the student.
+        const notes = (out as { notes?: string[] }).notes ?? [];
+        if (notes.length > 0) {
+            lines.push("");
+            lines.push("Notes:");
+            for (const n of notes) lines.push(`  • ${n}`);
         }
         return lines.join("\n");
     },
