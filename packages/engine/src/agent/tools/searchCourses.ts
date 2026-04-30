@@ -15,6 +15,7 @@
 
 import { z } from "zod";
 import { buildTool } from "../tool.js";
+import { classifyCourseAccessibility } from "../../data/courseSuffixMap.js";
 
 interface CatalogCourse {
     courseId: string;
@@ -26,104 +27,10 @@ interface CatalogCourse {
 
 export type CourseSearchFn = (query: string, opts?: { departmentPrefix?: string; limit?: number }) => Promise<CatalogCourse[]>;
 
-// ---- Phase 7-E follow-up: cross-school accessibility annotation ----
-// NYU course-id suffix → (school name, undergrad-availability tier).
-// Tier semantics (relative to the student's homeSchool):
-//   - "home"          — same school, freely accessible
-//   - "cross_school"  — different undergrad school in NY; needs cross-
-//                       school enrollment per the home school's policy
-//   - "global_site"   — Abu Dhabi or Shanghai courses; only for study-
-//                       abroad terms
-//   - "graduate"      — graduate/professional course; generally not
-//                       open to undergrads
-//   - "unknown"       — suffix we don't have a rule for
-
-interface SchoolMeta {
-    school: string;
-    undergrad: boolean;
-    /** When undergrad=false, the course is graduate. */
-    globalSite: "abudhabi" | "shanghai" | null;
-}
-
-const SUFFIX_META: Record<string, SchoolMeta> = {
-    "UA":  { school: "CAS",                          undergrad: true,  globalSite: null },
-    "UB":  { school: "Stern (undergrad)",            undergrad: true,  globalSite: null },
-    "UY":  { school: "Tandon (undergrad)",           undergrad: true,  globalSite: null },
-    "UE":  { school: "Steinhardt (undergrad)",       undergrad: true,  globalSite: null },
-    "UF":  { school: "Tisch (undergrad)",            undergrad: true,  globalSite: null },
-    "UT":  { school: "Tisch (undergrad, alt)",       undergrad: true,  globalSite: null },
-    "UN":  { school: "Gallatin",                     undergrad: true,  globalSite: null },
-    "UP":  { school: "Liberal Studies",              undergrad: true,  globalSite: null },
-    "UH":  { school: "NYU Abu Dhabi",                undergrad: true,  globalSite: "abudhabi" },
-    "SHU": { school: "NYU Shanghai",                 undergrad: true,  globalSite: "shanghai" },
-    "GA":  { school: "GSAS (graduate)",              undergrad: false, globalSite: null },
-    "GY":  { school: "Tandon (graduate)",            undergrad: false, globalSite: null },
-    "GU":  { school: "Steinhardt (graduate)",        undergrad: false, globalSite: null },
-    "GH":  { school: "Steinhardt (graduate)",        undergrad: false, globalSite: null },
-    "GX":  { school: "Cross-school (graduate)",      undergrad: false, globalSite: null },
-    "GB":  { school: "Stern (graduate)",             undergrad: false, globalSite: null },
-    "GS":  { school: "SPS (graduate)",               undergrad: false, globalSite: null },
-    "MD":  { school: "Medical School",               undergrad: false, globalSite: null },
-    "MS":  { school: "Medical School",               undergrad: false, globalSite: null },
-    "DN":  { school: "Dental",                       undergrad: false, globalSite: null },
-    "BMSC":{ school: "Biomedical Sciences (graduate)", undergrad: false, globalSite: null },
-    "BMIN":{ school: "Biomedical Informatics (grad)",  undergrad: false, globalSite: null },
-    "LW":  { school: "Law",                          undergrad: false, globalSite: null },
-};
-
-const HOME_SCHOOL_TO_SUFFIX: Record<string, string> = {
-    "cas":        "UA",
-    "stern":      "UB",
-    "tandon":     "UY",
-    "steinhardt": "UE",
-    "tisch":      "UF",
-    "gallatin":   "UN",
-    "ls":         "UP",
-};
-
-type Accessibility = "home" | "cross_school" | "global_site" | "graduate" | "unknown";
-
-function classifyCourse(courseId: string, homeSchool: string | undefined):
-    { school: string; accessibility: Accessibility; note?: string } {
-    // Extract the alpha suffix after the dash. NYU ids look like
-    // "CSCI-UA 102", "CS-UH 2220", "BMIN-GA 1004", "ENGR-UH 3332".
-    const m = courseId.match(/-([A-Z]+)\b/);
-    if (!m) return { school: "Unknown", accessibility: "unknown" };
-    const suffix = m[1]!;
-    const meta = SUFFIX_META[suffix];
-    if (!meta) {
-        // Try the SUBJECT prefix (some ids don't follow the dash-suffix
-        // convention — e.g., "BMSC-GA"). Fall back to last 2-letter token.
-        const fallback = SUFFIX_META[suffix.slice(-2)];
-        if (!fallback) return { school: `Subject "${suffix}"`, accessibility: "unknown" };
-        return classifyFromMeta(fallback, homeSchool);
-    }
-    return classifyFromMeta(meta, homeSchool);
-}
-
-function classifyFromMeta(meta: SchoolMeta, homeSchool: string | undefined):
-    { school: string; accessibility: Accessibility; note?: string } {
-    if (!meta.undergrad) {
-        return { school: meta.school, accessibility: "graduate", note: "graduate course — not open to undergrads except by petition" };
-    }
-    if (meta.globalSite) {
-        return {
-            school: meta.school,
-            accessibility: "global_site",
-            note: `${meta.school} site — only available during a study-abroad term`,
-        };
-    }
-    const homeSuffix = homeSchool ? HOME_SCHOOL_TO_SUFFIX[homeSchool.toLowerCase()] : undefined;
-    const studentSchool = homeSuffix && SUFFIX_META[homeSuffix]?.school;
-    if (homeSuffix && studentSchool && meta.school === studentSchool) {
-        return { school: meta.school, accessibility: "home" };
-    }
-    return {
-        school: meta.school,
-        accessibility: "cross_school",
-        note: `cross-school course — your home school may require approval to count it toward your degree`,
-    };
-}
+// Phase 10 Stage 2 — suffix→school map and accessibility logic moved
+// to packages/engine/src/data/courseSuffixMap.ts. Local alias kept so
+// downstream call sites in this file don't need restructuring.
+const classifyCourse = classifyCourseAccessibility;
 
 export const searchCoursesTool = buildTool({
     name: "search_courses",

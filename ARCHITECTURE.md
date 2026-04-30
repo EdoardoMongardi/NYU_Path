@@ -273,6 +273,44 @@ Layer 3: AGENT ORCHESTRATOR
   Examples:       Multi-step reasoning, data collection, result synthesis
 ```
 
+### 3.1.1 The Phase 10 Inversion: Data → Envelope → Posture
+
+Phase 10 codified an architectural rule that earlier phases violated: **rules
+that fire conditionally on the user's question must NOT live as prose in the
+system prompt**. Per-case prose rules are O(N) tech debt — every new bulletin
+fact requires a new prompt edit. Instead, the agent is shaped by three layers
+that scale with data, not prompt length:
+
+| Layer | What lives here | What does NOT live here |
+|---|---|---|
+| **1. Data** (`packages/engine/src/data/`, `data/schools/*.json`, RAG corpus) | Facts: CORE-UA range mapping, school grade thresholds, F-1 floor, FOSE term encoding, course-suffix → school. | Reasoning, prose paraphrase, decision rules. |
+| **2. Tool envelope** (`packages/engine/src/agent/toolEnvelope.ts`) | Per-call structured fields: `disclaimers`, `suggestedFollowUps`, `anchors`, `confidence`. Tools attach these from data lookups. | Hardcoded disclaimers wired by question keyword; "ALWAYS append X when topic is Y" rules. |
+| **3. System prompt** (`systemPrompt.ts`, ~250 lines) | Pure posture: "render envelope fields verbatim", "don't fabricate when confidence is low", "you have read-only access". | "If the user asks about CORE-UA 700, say...", lookup tables, per-case mandates. |
+
+**The single posture rule that replaces N case rules:**
+
+> "When a tool's envelope is non-empty (disclaimers / anchors / follow-ups),
+> include its content in your reply. Do not paraphrase a disclaimer; surface
+> it verbatim. When confidence is low or uncertain, do NOT format text as a
+> bulletin verbatim quote — surface the disclaimer and recommend the adviser."
+
+A new bulletin policy after Phase 10 is a data-file or RAG-corpus change. It
+flows through the envelope and the agent renders it because of the one
+posture rule above. **No system-prompt edit required.**
+
+**Bake-off measurement** (26 questions × 4 architectures, see
+`evals/results/phase10_bakeoff_comparison.md`):
+
+| Architecture | Section A (known issues) | Section B (unseen edges) | Overall |
+|---|---:|---:|---:|
+| Pre-Phase-10 baseline | 50% | 60% | 54% |
+| Phase 10 (envelope + anti-fab + read-only posture) | **56%** | **80%** | **65%** |
+
+The +20pp jump on Section B (unseen edge cases) is the load-bearing data
+point: it shows the architecture generalizes. Section A's smaller jump is
+bounded by RAG indexing gaps that are orthogonal to Phase 10 (tracked under
+Phase 9 follow-ups).
+
 ### 3.2 How They Interact: Template Matcher → Agentic Loop
 
 Every user message passes through two stages: a **pre-loop template matcher** (deterministic, no LLM) and the **agent loop** (LLM-driven, tool-calling). The template matcher intercepts the ~20-30% of queries that are FAQ-type policy questions with curated, verified answers. Everything else goes through the full agent loop.

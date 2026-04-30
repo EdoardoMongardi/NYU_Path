@@ -15,7 +15,10 @@
 import { z } from "zod";
 import { buildTool } from "../tool.js";
 
-const F1_FULLTIME_MIN_CREDITS = 12;
+// Phase 10 Stage 2 — F-1 floor moved to school config
+// (cfg.f1FullTimeMinCredits). Fallback default mirrors NYU OGS
+// guidance for the 2024-2026 catalog years.
+const DEFAULT_F1_FULLTIME_MIN_CREDITS = 12;
 
 export const getCreditCapsTool = buildTool({
     name: "get_credit_caps",
@@ -72,7 +75,7 @@ export const getCreditCapsTool = buildTool({
             schoolId: cfg.schoolId,
             schoolName: cfg.name,
             perSemesterCeiling,
-            f1FullTimeFloor: isF1 ? F1_FULLTIME_MIN_CREDITS : null,
+            f1FullTimeFloor: isF1 ? (cfg.f1FullTimeMinCredits ?? DEFAULT_F1_FULLTIME_MIN_CREDITS) : null,
             visaStatus: student.visaStatus ?? "domestic",
             overloadRequirements,
             crossSchoolCaps: creditCaps,
