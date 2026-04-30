@@ -33,10 +33,79 @@ import {
     type DPRRequirement,
 } from "../../dpr/schema.js";
 
+/**
+ * Phase 10 F1 — already-registered courses for the target term.
+ * Sourced deterministically from `dpr.courseHistory` IP rows whose
+ * `term` matches the requested `targetSemester`. Lets the agent open
+ * with "you already have X / Y / Z = N credits in [term]" before
+ * suggesting anything new.
+ */
+interface AlreadyRegisteredCourse {
+    courseId: string;       // "CSCI-UA 473"
+    title: string;
+    units: number;
+    /** PeopleSoft-formatted term string from the DPR, e.g. "2026 Fall". */
+    term: string;
+}
+
 interface PlanSemesterOutput extends SemesterPlan {
     /** Phase 7-E — flags whether the plan came from the DPR primary
      *  path or the authored-rules fallback. */
     source: "dpr" | "authored";
+    /** Phase 10 F1 — courses already in the student's IP rows for the
+     *  target term. Empty when no IP rows match. */
+    alreadyRegisteredForTarget?: AlreadyRegisteredCourse[];
+    /** Phase 10 F1 — sum of `units` across alreadyRegisteredForTarget. */
+    creditsAlreadyInTarget?: number;
+    /** Phase 10 F1 — when the student has visaStatus="f1" and a school
+     *  config with `f1FullTimeMinCredits`, surface the gap so the agent
+     *  can answer "do I need more credits to keep my visa?". */
+    remainingCreditsToReachF1Floor?: number | null;
+}
+
+/**
+ * Normalize a target-semester string ("2026-fall", "Fall 2026",
+ * "2026 fall") into the PeopleSoft format used in DPR rows
+ * ("2026 Fall"). Accepts a forgiving set of inputs and returns null
+ * when it can't recognize the shape — caller falls back to surfacing
+ * no IP rows rather than guessing wrong.
+ */
+function normalizeToDprTerm(input: string): string | null {
+    const trimmed = input.trim();
+    // "2026 Fall", "2024 Spr", "2025 Sum"
+    const peopleSoft = trimmed.match(/^(\d{4})\s+(Fall|Spring|Spr|Summer|Sum|J Term|JTerm)$/i);
+    if (peopleSoft) {
+        const yr = peopleSoft[1]!;
+        const seasonRaw = peopleSoft[2]!.toLowerCase();
+        const season =
+            seasonRaw.startsWith("fa") ? "Fall" :
+            seasonRaw.startsWith("sp") ? "Spring" :
+            seasonRaw.startsWith("su") ? "Summer" :
+            seasonRaw.startsWith("j") ? "J Term" : null;
+        return season ? `${yr} ${season}` : null;
+    }
+    // "2026-fall", "2027-spring", "2026-summer"
+    const dashed = trimmed.match(/^(\d{4})-(fall|spring|summer|jterm)$/i);
+    if (dashed) {
+        const yr = dashed[1]!;
+        const season =
+            dashed[2]!.toLowerCase() === "fall" ? "Fall" :
+            dashed[2]!.toLowerCase() === "spring" ? "Spring" :
+            dashed[2]!.toLowerCase() === "summer" ? "Summer" :
+            "J Term";
+        return `${yr} ${season}`;
+    }
+    // "Fall 2026", "Spring 2027"
+    const seasonFirst = trimmed.match(/^(Fall|Spring|Summer|J Term)\s+(\d{4})$/i);
+    if (seasonFirst) {
+        const season =
+            seasonFirst[1]!.toLowerCase() === "fall" ? "Fall" :
+            seasonFirst[1]!.toLowerCase() === "spring" ? "Spring" :
+            seasonFirst[1]!.toLowerCase() === "summer" ? "Summer" :
+            "J Term";
+        return `${seasonFirst[2]} ${season}`;
+    }
+    return null;
 }
 
 export const planSemesterTool = buildTool({
@@ -174,6 +243,33 @@ export const planSemesterTool = buildTool({
             const remainingCredits = Math.max(0, totalRequired - cumulativeCreditsToDate - plannedCredits);
             const estimatedSemestersLeft = Math.max(1, Math.ceil(remainingCredits / Math.max(1, maxCredits)));
 
+            // Phase 10 F1 — surface what the student is ALREADY
+            // registered for in the target term, computed from the
+            // DPR's IP rows. The agent uses this to open with "you
+            // already have X / Y / Z = N credits in this term" so it
+            // doesn't propose redundant or impossible plans.
+            const targetDprTerm = normalizeToDprTerm(input.targetSemester);
+            const alreadyRegisteredForTarget: AlreadyRegisteredCourse[] = targetDprTerm
+                ? dpr.courseHistory
+                    .filter((c) => c.type === "IP" && c.term === targetDprTerm)
+                    .map((c) => ({
+                        courseId: `${c.subject} ${c.catalogNbr}`,
+                        title: c.courseTitle,
+                        units: c.units,
+                        term: c.term,
+                    }))
+                : [];
+            const creditsAlreadyInTarget = alreadyRegisteredForTarget.reduce((s, c) => s + c.units, 0);
+
+            // F-1 floor gap — derived from school config (data, not
+            // a hardcoded constant). Null when the student isn't on
+            // F-1 or no school config is loaded.
+            const isF1 = session.student.visaStatus === "f1";
+            const f1Min = isF1 ? (session.schoolConfig?.f1FullTimeMinCredits ?? 12) : null;
+            const remainingCreditsToReachF1Floor = f1Min !== null
+                ? Math.max(0, f1Min - creditsAlreadyInTarget - plannedCredits)
+                : null;
+
             return {
                 studentId: session.student.id,
                 targetSemester: input.targetSemester,
@@ -185,6 +281,9 @@ export const planSemesterTool = buildTool({
                 freeSlots: Math.max(0, maxCourses - suggestions.length),
                 enrollmentWarnings: [],
                 source: "dpr",
+                ...(alreadyRegisteredForTarget.length > 0 ? { alreadyRegisteredForTarget } : {}),
+                creditsAlreadyInTarget,
+                ...(remainingCreditsToReachF1Floor !== null ? { remainingCreditsToReachF1Floor } : {}),
             };
         }
 
@@ -206,6 +305,29 @@ export const planSemesterTool = buildTool({
         const lines: string[] = [];
         const tag = plan.source === "dpr" ? "from your DPR's not-satisfied requirements" : "from authored program rules";
         lines.push(`PLAN for ${plan.targetSemester} (${tag})`);
+
+        // Phase 10 F1 — surface already-registered courses for the
+        // target term FIRST so the agent never proposes a redundant
+        // plan or miscalculates credits.
+        const ipForTarget = plan.alreadyRegisteredForTarget ?? [];
+        const ipCredits = plan.creditsAlreadyInTarget ?? 0;
+        if (ipForTarget.length > 0) {
+            lines.push(`ALREADY REGISTERED FOR ${plan.targetSemester} (${ipCredits} credits — these are ALREADY in the student's schedule):`);
+            for (const c of ipForTarget) {
+                lines.push(`  ${c.courseId} (${c.units}cr) — ${c.title}`);
+            }
+        } else {
+            lines.push(`ALREADY REGISTERED FOR ${plan.targetSemester}: (none — student has no IP rows in this term)`);
+        }
+        if (typeof plan.remainingCreditsToReachF1Floor === "number") {
+            const gap = plan.remainingCreditsToReachF1Floor;
+            if (gap > 0) {
+                lines.push(`F-1 floor gap: ${gap} more credit(s) needed in ${plan.targetSemester} to keep full-time status (already-registered ${ipCredits} cr + planned ${plan.plannedCredits} cr).`);
+            } else {
+                lines.push(`F-1 floor: already met (already-registered ${ipCredits} cr + planned ${plan.plannedCredits} cr ≥ floor).`);
+            }
+        }
+
         lines.push(`  ${plan.suggestions.length} suggestion(s), ${plan.plannedCredits} credits planned, ~${plan.estimatedSemestersLeft} semester(s) left to graduation`);
         for (const s of plan.suggestions.slice(0, 8)) {
             const risk = s.prereqRisk && s.prereqRisk.length > 0 ? ` ⚠ prereqs needed: ${s.prereqRisk.join(", ")}` : "";

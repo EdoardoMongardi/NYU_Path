@@ -77,6 +77,21 @@ interface RunFullAuditOutput {
         courseTitle: string;
         units: number;
     }>;
+    /** Phase 10 F2 — slimmed transcript from the DPR. Exposes
+     *  per-course term + grade + type so the agent can answer
+     *  "what was my grade in X?", "what's my CS GPA?", "list my
+     *  fall 2024 courses". Truncated to the most-recent N entries
+     *  (anchored at the top, oldest dropped) to fit the tool-result
+     *  budget. The full DPR remains in session.degreeProgressReport
+     *  if a deeper introspection becomes necessary later. */
+    dprCourseHistory?: Array<{
+        term: string;                    // PeopleSoft term, e.g. "2024 Fall"
+        courseId: string;                // "CSCI-UA 102"
+        title: string;
+        units: number;
+        grade: string | null;            // null for IP rows + un-graded TE rows
+        type: string;                    // "EN" | "IP" | "TE" | other
+    }>;
     /** Phase 10 envelope — bulletin facts the agent must surface. */
     disclaimers?: Disclaimer[];
     /** Phase 10 envelope — pre-built next-step tool calls. */
@@ -207,6 +222,22 @@ export const runFullAuditTool = buildTool({
                     courseTitle: c.courseTitle,
                     units: c.units,
                 }));
+
+            // Phase 10 F2 — slim transcript exposure. Sort by term
+            // (most recent first using a coarse key), keep the top
+            // N rows so the agent can answer per-course + per-term
+            // questions without having to re-prompt. Sorting is
+            // deterministic and based on the embedded year + season;
+            // PeopleSoft term strings sort lexicographically by
+            // accident only — we do it explicitly.
+            const dprCourseHistory = sortCourseHistoryRecentFirst(dpr.courseHistory).slice(0, 60).map((c) => ({
+                term: c.term,
+                courseId: `${c.subject} ${c.catalogNbr}`,
+                title: c.courseTitle,
+                units: c.units,
+                grade: c.grade,
+                type: c.type,
+            }));
             // Phase 10 envelope — derive disclaimers + suggested
             // follow-ups from the audit data + school config. Tool
             // RESULT carries the rules; the system prompt only carries
@@ -225,6 +256,7 @@ export const runFullAuditTool = buildTool({
                 dprCumulative: { ...dpr.cumulative },
                 dprUnsatisfiedRequirements: unsatisfied,
                 ...(inProgress.length > 0 ? { dprInProgressCourses: inProgress } : {}),
+                ...(dprCourseHistory.length > 0 ? { dprCourseHistory } : {}),
                 ...(env.disclaimers && env.disclaimers.length > 0 ? { disclaimers: env.disclaimers } : {}),
                 ...(env.suggestedFollowUps && env.suggestedFollowUps.length > 0 ? { suggestedFollowUps: env.suggestedFollowUps } : {}),
             };
@@ -331,6 +363,28 @@ export const runFullAuditTool = buildTool({
             }
         }
 
+        // Phase 10 F2 — slim transcript. Surfacing per-course term +
+        // grade + type lets the agent answer "what was my grade in
+        // X?", "what are my CS grades?", "list my fall 2024 courses".
+        // Bounded at the row level (~60) so the result stays within
+        // budget for students with full transcripts.
+        if (output.dprCourseHistory && output.dprCourseHistory.length > 0) {
+            lines.push(`COURSE HISTORY (most recent first; ${output.dprCourseHistory.length} rows shown):`);
+            // Group by term so the agent can scan a semester at a glance.
+            const byTerm = new Map<string, typeof output.dprCourseHistory>();
+            for (const c of output.dprCourseHistory) {
+                if (!byTerm.has(c.term)) byTerm.set(c.term, []);
+                byTerm.get(c.term)!.push(c);
+            }
+            for (const [term, rows] of byTerm) {
+                lines.push(`  ${term}:`);
+                for (const c of rows) {
+                    const gradeTag = c.grade ? `grade ${c.grade}` : (c.type === "IP" ? "IP (no grade yet)" : c.type === "TE" ? "transfer" : c.type);
+                    lines.push(`    ${c.courseId} (${c.units}cr, ${gradeTag}) — ${c.title}`);
+                }
+            }
+        }
+
         // Phase 8 A2 — currently-enrolled (in-progress) courses from
         // the DPR. Lets the agent answer "what am I taking now?" /
         // "am I currently enrolled in [X]?" without saying "the audit
@@ -390,6 +444,34 @@ export const runFullAuditTool = buildTool({
 // to other tools when they need to introspect the DPR tree without
 // reaching into the dpr/ subpackage directly.
 export { walkRequirements, notSatisfiedRequirements };
+
+// ============================================================
+// Phase 10 F2 — course-history sort helper
+// ============================================================
+// PeopleSoft term strings ("2024 Fall", "2025 Spr", "2024 Sum") don't
+// lexicographically sort by recency on their own. Convert to a
+// numeric key: year * 10 + season-rank, then sort descending. Used
+// to take the most-recent 60 rows from courseHistory while preserving
+// term order.
+
+function termSortKey(term: string): number {
+    const m = term.match(/^(\d{4})\s+(Fall|Spring|Spr|Summer|Sum|J Term|JTerm)$/i);
+    if (!m) return 0;
+    const yr = parseInt(m[1]!, 10);
+    const seasonRaw = m[2]!.toLowerCase();
+    // Within a year: Spring (start) < Summer < J Term < Fall (latest).
+    // We sort descending later, so larger = more recent.
+    const seasonRank =
+        seasonRaw.startsWith("fa") ? 4 :
+        seasonRaw.startsWith("j") ? 3 :
+        seasonRaw.startsWith("su") ? 2 :
+        seasonRaw.startsWith("sp") ? 1 : 0;
+    return yr * 10 + seasonRank;
+}
+
+function sortCourseHistoryRecentFirst<T extends { term: string }>(rows: ReadonlyArray<T>): T[] {
+    return rows.slice().sort((a, b) => termSortKey(b.term) - termSortKey(a.term));
+}
 
 // ============================================================
 // Phase 10 envelope helpers
