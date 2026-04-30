@@ -5,6 +5,17 @@ import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { policySearch } from "../../rag/policySearch.js";
 import { matchTemplate } from "../../rag/policyTemplate.js";
+import {
+    detectCoreUaReferences,
+    detectRequirementReferences,
+    type CoreUaClassification,
+    type CoreUaRange,
+} from "../../data/coreUaRanges.js";
+import {
+    type Disclaimer,
+    type EnvelopeConfidence,
+    renderEnvelopeMeta,
+} from "../toolEnvelope.js";
 
 export const searchPolicyTool = buildTool({
     name: "search_policy",
@@ -48,17 +59,10 @@ export const searchPolicyTool = buildTool({
         "back \"POLICY UNCERTAINTY\" or no high-confidence hit AND no template, " +
         "say \"I couldn't find a specific policy on [X]\" and recommend the " +
         "student contact their adviser — do NOT synthesize from training data.\n\n" +
-        "CORE-UA RANGE MAPPING (Phase 9.5 — memorize; the bulletin College " +
-        "Core Curriculum page confirms):\n" +
-        "  • CORE-UA 4XX  → Texts and Ideas\n" +
-        "  • CORE-UA 5XX  → Cultures and Contexts\n" +
-        "  • CORE-UA 7XX  → Expressive Culture (e.g. CORE-UA 700, 720, 745)\n" +
-        "  • CORE-UA 8XX  → Societies and the Social Sciences\n" +
-        "When a student asks \"does CORE-UA <NNN> satisfy <which req>?\", " +
-        "use this mapping to answer immediately AND cite the bulletin " +
-        "College Core Curriculum chunk if you have one. NEVER guess the " +
-        "mapping the other way (don't say \"CORE-UA 700 might be a " +
-        "Texts and Ideas course\" — it's NOT, by the range rule).",
+        "When the query references a CORE-UA course id or a College Core " +
+        "Curriculum requirement name, the result envelope's " +
+        "`coreUaClassifications` and `coreUaRequirements` fields carry the " +
+        "deterministic bulletin mapping; surface those fields to the student.",
     inputSchema: z.object({
         query: z.string().min(2).describe("Natural-language policy question."),
     }),
@@ -97,14 +101,81 @@ export const searchPolicyTool = buildTool({
         // response validator can relax the home-school caveat and
         // surface target-school policies. The flag is metadata; the
         // policySearch core stays scoped per its hard-filter contract.
+        // Phase 10 Stage 2 — attach deterministic CORE-UA range
+        // classifications when the query references CORE-UA codes or
+        // College Core Curriculum requirement names. The agent surfaces
+        // these via posture rather than via a per-case prose rule.
+        const coreUaClassifications: CoreUaClassification[] = detectCoreUaReferences(input.query);
+        const coreUaRequirements: CoreUaRange[] = detectRequirementReferences(input.query);
+
+        // Phase 10 envelope — anti-hallucination guard. When the
+        // search returns no template AND no high-confidence RAG hit,
+        // we attach a disclaimer that the agent must surface. This
+        // structurally prevents the "agent invents a §-quote" failure
+        // mode (P10_A08, P10_B05 from the baseline). The rule lives
+        // in DATA, not prose: when retrieval is uncertain, the
+        // envelope says so.
+        const disclaimers: Disclaimer[] = [];
+        let envelopeConfidence: EnvelopeConfidence = "high";
+        if (result.kind === "escalate") {
+            envelopeConfidence = "uncertain";
+            disclaimers.push({
+                id: "policy_no_match_no_fabrication",
+                text:
+                    `I couldn't find a specific bulletin policy on "${input.query.slice(0, 80)}". ` +
+                    `Please contact your academic adviser for confirmation.`,
+                reason:
+                    "search_policy returned uncertainty (no template + low RAG confidence). " +
+                    "Surface this verbatim instead of inventing a bulletin quote.",
+            });
+        } else if (result.kind === "rag" && (result.confidence ?? 0) < 0.5) {
+            envelopeConfidence = "low";
+            disclaimers.push({
+                id: "policy_low_confidence_no_fabrication",
+                text:
+                    "I found related bulletin text but my confidence is moderate; " +
+                    "treat the citation below as approximate and verify with your academic adviser before relying on it.",
+                reason:
+                    `RAG confidence is ${(result.confidence ?? 0).toFixed(2)}; do NOT format the snippet as a § verbatim quote.`,
+            });
+        } else if (result.kind === "rag" && (result.confidence ?? 0) < 0.7) {
+            envelopeConfidence = "medium";
+        }
+
         return {
             ...result,
             transferIntent: session.transferIntent === true,
+            coreUaClassifications,
+            coreUaRequirements,
+            disclaimers,
+            confidence: envelopeConfidence,
         };
     },
     summarizeResult(result) {
         const transferTag = result.transferIntent ? " (transferIntent=on)" : "";
         const lines: string[] = [];
+
+        // Phase 10 Stage 2 — emit deterministic CORE-UA classifications
+        // FIRST when present. The agent must surface these per posture
+        // rule (no per-case prose rule needed).
+        const cls = (result as { coreUaClassifications?: CoreUaClassification[] }).coreUaClassifications ?? [];
+        const reqs = (result as { coreUaRequirements?: CoreUaRange[] }).coreUaRequirements ?? [];
+        if (cls.length > 0 || reqs.length > 0) {
+            lines.push(`CORE-UA CLASSIFICATIONS (deterministic; from CAS College Core Curriculum bulletin):`);
+            for (const c of cls) {
+                if (c.range) {
+                    lines.push(`  ${c.courseId} → ${c.range.requirement} (${c.range.lo}-${c.range.hi} range)`);
+                    lines.push(`    Source: ${c.range.bulletinSource}`);
+                } else {
+                    lines.push(`  ${c.courseId} → not in any known College Core Curriculum range`);
+                }
+            }
+            for (const r of reqs) {
+                lines.push(`  ${r.requirement} → CORE-UA ${r.lo}-${r.hi}`);
+                lines.push(`    Source: ${r.bulletinSource}`);
+            }
+            lines.push(``);
+        }
 
         // Phase 8 A1: when a template matched, surface it FIRST (it's
         // operator-verified verbatim bulletin text). Then surface RAG
@@ -132,10 +203,24 @@ export const searchPolicyTool = buildTool({
                 }
             }
             if (result.notes.length > 0) lines.push(``, `Notes: ${result.notes.join(" | ")}`);
+            // Phase 10 envelope rendering — disclaimers + confidence
+            const env = renderEnvelopeMeta({
+                disclaimers: (result as { disclaimers?: Disclaimer[] }).disclaimers,
+                confidence: (result as { confidence?: EnvelopeConfidence }).confidence,
+            });
+            if (env) lines.push("", env);
             return lines.join("\n");
         }
         if (result.kind === "escalate") {
-            return `POLICY UNCERTAINTY${transferTag}: confidence=${result.confidence}. ${result.notes.join(" | ")}\nRecommend: contact your academic adviser.`;
+            const env = renderEnvelopeMeta({
+                disclaimers: (result as { disclaimers?: Disclaimer[] }).disclaimers,
+                confidence: (result as { confidence?: EnvelopeConfidence }).confidence,
+            });
+            return [
+                `POLICY UNCERTAINTY${transferTag}: confidence=${result.confidence}. ${result.notes.join(" | ")}`,
+                `Recommend: contact your academic adviser.`,
+                env,
+            ].filter((s) => s.length > 0).join("\n");
         }
         lines.push(`RAG hits${transferTag} (confidence=${result.confidence}; scope=${result.scopedSchools.join(",")}; override=${result.overrideTriggered})`);
         for (const h of (result.hits ?? []).slice(0, 3)) {
@@ -148,6 +233,14 @@ export const searchPolicyTool = buildTool({
         if (result.transferIntent) {
             lines.push(`Notes: User is exploring an internal transfer — target-school catalog rules may also apply; consider check_transfer_eligibility.`);
         }
+        // Phase 10 envelope rendering — disclaimers + confidence on
+        // the RAG-only path. The anti-hallucination guard fires here
+        // when confidence < 0.5.
+        const env = renderEnvelopeMeta({
+            disclaimers: (result as { disclaimers?: Disclaimer[] }).disclaimers,
+            confidence: (result as { confidence?: EnvelopeConfidence }).confidence,
+        });
+        if (env) lines.push("", env);
         return lines.join("\n");
     },
 });

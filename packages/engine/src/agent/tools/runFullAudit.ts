@@ -23,6 +23,12 @@ import {
     type DegreeProgressReport,
 } from "../../dpr/schema.js";
 import { dprToAuditResults } from "../../dpr/dprToAuditResult.js";
+import {
+    type Disclaimer,
+    type SuggestedFollowUp,
+    type EnvelopeMeta,
+    renderEnvelopeMeta,
+} from "../toolEnvelope.js";
 
 interface RunFullAuditOutput {
     audits: AuditResult[];
@@ -71,6 +77,10 @@ interface RunFullAuditOutput {
         courseTitle: string;
         units: number;
     }>;
+    /** Phase 10 envelope — bulletin facts the agent must surface. */
+    disclaimers?: Disclaimer[];
+    /** Phase 10 envelope — pre-built next-step tool calls. */
+    suggestedFollowUps?: SuggestedFollowUp[];
 }
 
 export const runFullAuditTool = buildTool({
@@ -95,27 +105,11 @@ export const runFullAuditTool = buildTool({
         "If the user references themselves (\"how many credits do I have?\", " +
         "\"have I met X?\"), call this. Quoting bulletin policy without the " +
         "student's specific numbers is incomplete.\n\n" +
-        "MANDATORY HANDOFF (Phase 9): when this tool returns an unsatisfied " +
-        "requirement whose `statusText` is generic (\"Complete the following " +
-        "courses:\", \"Complete the requirements outlined below.\", " +
-        "\"complete 1 course from CORE-UA 400-499\") and does NOT name the " +
-        "specific course(s), you MUST call `search_policy` next with the " +
-        "program label + the requirement keyword (e.g. \"<student's major> " +
-        "required CS courses\", \"<student's major> advanced math electives\", " +
-        "\"Texts and Ideas course range\") to fetch the bulletin's actual " +
-        "list. Then quote the relevant sentence back to the student. Never " +
-        "guess specific course codes from training data.\n\n" +
-        "MAJOR-REQUIREMENT GRADE RULES (Phase 9.5): when you reference an " +
-        "unsatisfied MAJOR requirement in your reply (anything in the " +
-        "Computer Science / Math / joint-major sections — NOT general " +
-        "electives or core curriculum), ALWAYS mention BOTH of these " +
-        "bulletin rules verbatim or close-paraphrase:\n" +
-        "  • \"A grade of C or better is required in any course used to " +
-        "fulfill major requirements.\"\n" +
-        "  • \"Pass/Fail option does not count toward the major.\"\n" +
-        "Source: every CAS major's bulletin page §Program Policies repeats " +
-        "these. Don't quote them when discussing core curriculum, electives, " +
-        "or non-major courses.",
+        "Phase 10 envelope: the result includes structured `disclaimers`, " +
+        "`suggestedFollowUps`, and `dprInProgressCourses` fields. Surface " +
+        "them — the disclaimers carry the bulletin's grade/P-F rules for " +
+        "any unsatisfied major requirement; suggestedFollowUps points at " +
+        "search_policy when a requirement's statusText is generic.",
     inputSchema: z.object({
         programId: z.string().optional()
             .describe("Optional: limit the audit to a specific program id (e.g., 'cs_major_ba')."),
@@ -213,6 +207,16 @@ export const runFullAuditTool = buildTool({
                     courseTitle: c.courseTitle,
                     units: c.units,
                 }));
+            // Phase 10 envelope — derive disclaimers + suggested
+            // follow-ups from the audit data + school config. Tool
+            // RESULT carries the rules; the system prompt only carries
+            // the posture rule "surface every envelope field".
+            const env = deriveAuditEnvelope({
+                unsatisfied,
+                school: session.schoolConfig ?? null,
+                hasMajorRequirementGap: detectMajorRequirementGap(unsatisfied, dpr),
+                programLabel: dpr.programs.find((p) => p.programType === "Major Approved")?.label,
+            });
             return {
                 audits: filtered,
                 standing,
@@ -221,6 +225,8 @@ export const runFullAuditTool = buildTool({
                 dprCumulative: { ...dpr.cumulative },
                 dprUnsatisfiedRequirements: unsatisfied,
                 ...(inProgress.length > 0 ? { dprInProgressCourses: inProgress } : {}),
+                ...(env.disclaimers && env.disclaimers.length > 0 ? { disclaimers: env.disclaimers } : {}),
+                ...(env.suggestedFollowUps && env.suggestedFollowUps.length > 0 ? { suggestedFollowUps: env.suggestedFollowUps } : {}),
             };
         }
 
@@ -346,6 +352,19 @@ export const runFullAuditTool = buildTool({
         }
 
         lines.push(`STANDING: ${output.standing.level} (cumulative GPA ${output.standing.cumulativeGPA.toFixed(3)}, completion ${(output.standing.completionRate * 100).toFixed(0)}%)`);
+
+        // Phase 10 envelope rendering — surface disclaimers + suggested
+        // follow-ups + bulletin anchors as their own block. The agent
+        // sees this text and applies the posture rule "render envelope
+        // fields verbatim".
+        const envText = renderEnvelopeMeta({
+            disclaimers: output.disclaimers,
+            suggestedFollowUps: output.suggestedFollowUps,
+        });
+        if (envText) {
+            lines.push("");
+            lines.push(envText);
+        }
         return lines.join("\n");
     },
     // Phase 7-B Step 15 — verbatim text the LLM must include
@@ -371,3 +390,114 @@ export const runFullAuditTool = buildTool({
 // to other tools when they need to introspect the DPR tree without
 // reaching into the dpr/ subpackage directly.
 export { walkRequirements, notSatisfiedRequirements };
+
+// ============================================================
+// Phase 10 envelope helpers
+// ============================================================
+// Derive the bulletin facts (disclaimers + suggested follow-ups) that
+// must be surfaced for an audit result. These come from school config
+// + DPR shape — not from prose rules in the system prompt.
+
+const GENERIC_STATUS_TEXT_PATTERNS: ReadonlyArray<RegExp> = [
+    /^complete the following courses:?\s*$/i,
+    /^complete the requirements outlined below\.?\s*$/i,
+    /^complete\s+\d+\s+course\s+from/i,
+    /^select\s+\d+\s+course/i,
+    /\bCORE-UA\s+\d{3}-\d{3}\b/i,
+];
+
+const MAJOR_GROUP_HINTS: ReadonlyArray<RegExp> = [
+    /\bcomputer science\b/i,
+    /\bmathematics\b/i,
+    /\bmajor\b/i,
+    /\bjoint major\b/i,
+    /\beconomics\b/i,
+    /\bfinance\b/i,
+    /\bphilosophy\b/i,
+    /\bphysics\b/i,
+    /\bbiology\b/i,
+    /\bchemistry\b/i,
+    /\bengineering\b/i,
+];
+
+function isGenericStatusText(statusText: string | undefined, description: string | undefined): boolean {
+    const candidates = [statusText ?? "", description ?? ""];
+    for (const c of candidates) {
+        const trimmed = c.trim();
+        if (!trimmed) continue;
+        for (const re of GENERIC_STATUS_TEXT_PATTERNS) {
+            if (re.test(trimmed)) return true;
+        }
+    }
+    return false;
+}
+
+function detectMajorRequirementGap(
+    unsatisfied: ReadonlyArray<{ rId: string; title: string; statusText: string; description?: string }>,
+    dpr: DegreeProgressReport,
+): boolean {
+    const major = dpr.programs.find((p) => p.programType === "Major Approved");
+    const majorTitle = major?.label ?? "";
+    for (const u of unsatisfied) {
+        const blob = `${u.title} ${u.statusText} ${u.description ?? ""}`;
+        if (majorTitle && blob.toLowerCase().includes(majorTitle.toLowerCase())) return true;
+        for (const hint of MAJOR_GROUP_HINTS) {
+            if (hint.test(u.title) || hint.test(u.rId)) return true;
+        }
+    }
+    return false;
+}
+
+interface AuditEnvelopeInput {
+    unsatisfied: ReadonlyArray<{ rId: string; title: string; statusText: string; description?: string; needed?: number }>;
+    school: import("@nyupath/shared").SchoolConfig | null;
+    hasMajorRequirementGap: boolean;
+    programLabel?: string;
+}
+
+function deriveAuditEnvelope(input: AuditEnvelopeInput): EnvelopeMeta {
+    const disclaimers: Disclaimer[] = [];
+    const followUps: SuggestedFollowUp[] = [];
+
+    // Major-grade-rule disclaimers — sourced from school config's
+    // gradeThresholds + passFail.countsForMajor, NOT from a prose
+    // rule. When the schema lacks the data, we don't fabricate one.
+    if (input.hasMajorRequirementGap && input.school) {
+        const majorGrade = input.school.gradeThresholds?.major;
+        if (majorGrade) {
+            disclaimers.push({
+                id: "school_major_grade_threshold",
+                text: `A grade of ${majorGrade} or better is required in any course used to fulfill major requirements.`,
+                reason: "Your reply references an unsatisfied major requirement; the school's bulletin grade-threshold rule applies.",
+                bulletinSource: `data/schools/${input.school.schoolId}.json#gradeThresholds.major`,
+            });
+        }
+        if (input.school.passFail && input.school.passFail.countsForMajor === false) {
+            disclaimers.push({
+                id: "school_pf_no_major",
+                text: "Pass/Fail option does not count toward the major.",
+                reason: "Your reply references an unsatisfied major requirement; the school's bulletin P/F rule applies.",
+                bulletinSource: `data/schools/${input.school.schoolId}.json#passFail.countsForMajor`,
+            });
+        }
+    }
+
+    // Generic-statusText follow-up suggestions. When the DPR's prose
+    // doesn't name specific courses, we attach a search_policy call
+    // ready to fire.
+    const seenQueries = new Set<string>();
+    for (const u of input.unsatisfied.slice(0, 3)) {
+        if (!isGenericStatusText(u.statusText, u.description)) continue;
+        const labelHint = input.programLabel ? `${input.programLabel} ` : "";
+        const query = `${labelHint}${u.title}`.trim().slice(0, 120);
+        if (seenQueries.has(query)) continue;
+        seenQueries.add(query);
+        followUps.push({
+            tool: "search_policy",
+            args: { query },
+            why: `Requirement "${u.title}" is described in generic prose; the bulletin program page lists the actual courses.`,
+        });
+    }
+
+    return { disclaimers, suggestedFollowUps: followUps };
+}

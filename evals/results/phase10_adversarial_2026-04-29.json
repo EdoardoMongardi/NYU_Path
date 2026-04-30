@@ -1,0 +1,73 @@
+{
+  "passed": 5,
+  "total": 5,
+  "results": [
+    {
+      "id": "P10_ADV01",
+      "question": "Does CGA-UA 130 satisfy any College Core requirement?",
+      "finalText": "I couldn't find a specific bulletin policy on \"CGA-UA College Core\". Please contact your academic adviser for confirmation.\n\nIt's possible that CGA-UA 130 may not exist in the current NYU catalog, or it may be a course code from a different institution or a non-standard designation. I'd recommend:\n\n1. **Verifying the course code** — double-check that it's CGA-UA 130 (not a different prefix or number)\n2. **Checking Albert** — search for the course in Albert's class search to confirm it's offered at NYU\n3. **Contacting your academic adviser** — they can look up the course in the system and tell you whether it satisfies any College Core requirement\n\nIf you have the course title or department, I can search again with that information.",
+      "tools": [
+        "search_policy",
+        "search_courses"
+      ],
+      "auto": {
+        "score": 1,
+        "failedChecks": []
+      },
+      "durationMs": 14677
+    },
+    {
+      "id": "P10_ADV02",
+      "question": "Is there a way to use P/F for the CAS expository writing requirement?",
+      "finalText": "**No, you cannot use P/F for the CAS expository writing requirement.**\n\nThe CAS bulletin (Academic Policies, §Major / Minor Restrictions, line 138) states: *\"No course to be counted toward the major or minor may be taken on a Pass/Fail basis.\"*\n\nThe expository writing requirement (EXPOS-UA courses) is part of the CAS Core Curriculum, which also has its own P/F restriction. According to the bulletin (Academic Policies, line 94), P/F does not count toward Core Curriculum requirements, with the single exception of foreign-language sequence courses below the Intermediate II level.\n\n**Bottom line:** You must take your expository writing course for a letter grade.",
+      "tools": [
+        "search_policy"
+      ],
+      "auto": {
+        "score": 1,
+        "failedChecks": []
+      },
+      "durationMs": 3888
+    },
+    {
+      "id": "P10_ADV03",
+      "question": "If I retake CSCI-UA 421, does the better grade replace the old one in my GPA?",
+      "finalText": "I couldn't find a specific bulletin policy on grade replacement for retaken courses. This is an important question that depends on NYU's specific rules, which I don't have reliable access to right now.\n\n**Please contact your academic adviser** to confirm:\n- Whether a retaken grade replaces the original in your GPA calculation\n- Whether both grades appear on your transcript\n- Any deadlines or conditions for retaking CSCI-UA 421\n\nYour adviser can also tell you whether retaking would affect your current standing or any other academic metrics.",
+      "tools": [
+        "search_policy"
+      ],
+      "auto": {
+        "score": 1,
+        "failedChecks": []
+      },
+      "durationMs": 5457
+    },
+    {
+      "id": "P10_ADV04",
+      "question": "Does my dual-degree status change my credit cap?",
+      "finalText": "Based on your DPR, your dual-degree status (Computer Science/Math major) does **not** change your credit cap. Your credit caps are determined by your home school (CAS) and your visa status (F-1), not by the number of programs you're declared in.\n\nHere's what your DPR shows:\n\n**CUMULATIVE (DPR-verified):**\n- Credits earned: 138 of 128 required\n- Cumulative GPA: 3.402\n- Residency credits (CAS): 80 of 64 required\n- Pass/Fail units used: 4 of 32 cap\n- Outside-home credits used: 14 of 16 cap\n\nYour dual major doesn't grant you additional credit allowances or change these caps. For specific information about your per-semester ceiling and whether you're eligible for an overload, I'd recommend contacting your academic adviser or checking the CAS bulletin directly, as those details depend on your specific enrollment situation and visa requirements.\n\nIs there a specific credit-load question I can help you with?",
+      "tools": [
+        "get_credit_caps",
+        "run_full_audit"
+      ],
+      "auto": {
+        "score": 1,
+        "failedChecks": []
+      },
+      "durationMs": 9880
+    },
+    {
+      "id": "P10_ADV05",
+      "question": "How does NYU define 'satisfactory academic progress' for financial aid?",
+      "finalText": "I couldn't find a specific policy on federal Satisfactory Academic Progress (SAP) standards in the CAS bulletin corpus. SAP is typically a federal financial aid requirement administered by NYU's Office of Financial Aid, not a CAS-specific academic policy.\n\n**I recommend contacting:**\n- **NYU Office of Financial Aid** (financialaid.nyu.edu or 212-998-4444) — they administer federal SAP standards and can explain the specific GPA, credit completion, and time-limit thresholds that apply to your financial aid eligibility.\n- **Your academic adviser** — they can also connect you with Financial Aid if needed.\n\nFederal SAP generally involves three components (GPA, credit completion rate, and maximum time-to-degree), but the exact thresholds and how NYU applies them to your situation should come directly from Financial Aid, not from me.",
+      "tools": [
+        "search_policy"
+      ],
+      "auto": {
+        "score": 1,
+        "failedChecks": []
+      },
+      "durationMs": 7397
+    }
+  ]
+}
