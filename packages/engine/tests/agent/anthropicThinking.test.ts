@@ -26,7 +26,7 @@ describe("AnthropicEngineClient extended thinking", () => {
         delete process.env.NYUPATH_DISABLE_THINKING;
     });
 
-    it("passes thinking + temperature=1 + bumped max_tokens to messages.create when thinking is enabled", async () => {
+    it("does NOT enable thinking on the block-mode complete() path (only streaming surfaces it)", async () => {
         messagesCreate.mockResolvedValue({
             content: [{ type: "text", text: "ok" }],
             usage: { input_tokens: 10, output_tokens: 5 },
@@ -39,8 +39,45 @@ describe("AnthropicEngineClient extended thinking", () => {
             maxTokens: 1024,
             temperature: 0,
         });
-        expect(messagesCreate).toHaveBeenCalledTimes(1);
         const args = messagesCreate.mock.calls[0][0];
+        // complete() never enables thinking — it would burn budget on output the path discards.
+        expect(args.thinking).toBeUndefined();
+        // Caller's temperature is preserved when thinking is off.
+        expect(args.temperature).toBe(0);
+        // No max_tokens bump.
+        expect(args.max_tokens).toBe(1024);
+    });
+
+    it("enables thinking + temperature=1 + bumped max_tokens on the streaming path", async () => {
+        async function* fakeStream() {
+            yield { type: "message_start", message: { id: "m1", model: "claude-haiku-4-5-20251001", role: "assistant", content: [], usage: { input_tokens: 10, output_tokens: 0 } } };
+            yield { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } };
+            yield { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "ok" } };
+            yield { type: "content_block_stop", index: 0 };
+            yield { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 5 } };
+            yield { type: "message_stop" };
+        }
+        messagesStream.mockReturnValue({
+            [Symbol.asyncIterator]: () => fakeStream(),
+            finalMessage: async () => ({
+                content: [{ type: "text", text: "ok" }],
+                usage: { input_tokens: 10, output_tokens: 5 },
+                stop_reason: "end_turn",
+                model: "claude-haiku-4-5-20251001",
+            }),
+        });
+        const client = new AnthropicEngineClient({ apiKey: "test", modelId: "claude-haiku-4-5-20251001" });
+        const events: Array<unknown> = [];
+        for await (const ev of client.streamComplete({
+            system: "sys",
+            messages: [{ role: "user", content: "hi" }],
+            maxTokens: 1024,
+            temperature: 0,
+        })) {
+            events.push(ev);
+        }
+        expect(messagesStream).toHaveBeenCalledTimes(1);
+        const args = messagesStream.mock.calls[0][0];
         expect(args.thinking).toEqual({ type: "enabled", budget_tokens: 4096 });
         expect(args.temperature).toBe(1);
         expect(args.max_tokens).toBeGreaterThanOrEqual(4096 + 1024);
@@ -63,6 +100,22 @@ describe("AnthropicEngineClient extended thinking", () => {
         const args = messagesCreate.mock.calls[0][0];
         expect(args.thinking).toBeUndefined();
         expect(args.temperature).toBe(0);
+
+        // Also confirm a permissive value works (e.g. "true").
+        process.env.NYUPATH_DISABLE_THINKING = "true";
+        messagesCreate.mockReset();
+        messagesCreate.mockResolvedValue({
+            content: [{ type: "text", text: "ok" }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+            stop_reason: "end_turn",
+        });
+        await client.complete({
+            system: "sys",
+            messages: [{ role: "user", content: "hi" }],
+            maxTokens: 1024,
+            temperature: 0,
+        });
+        expect(messagesCreate.mock.calls[0][0].thinking).toBeUndefined();
     });
 
     it("yields thinking_delta events from the streaming loop", async () => {
