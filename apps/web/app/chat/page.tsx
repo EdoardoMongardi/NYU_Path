@@ -71,6 +71,13 @@ interface Message {
     /** How many chars of `content` are currently revealed in the
      *  final-answer bubble. Drives the ChatGPT-style streaming. */
     contentRevealed?: number;
+    /** True once at least one `thinking` SSE event has fired for this
+     *  message. When set, suppresses the synthesized tool-thought
+     *  fallback so we don't double-narrate (real reasoning + canned
+     *  sentences). Stays unset on OpenAI-fallback turns and template-
+     *  match recovery, where the synthesized fallback is what the
+     *  user sees. */
+    hasRealThinking?: boolean;
 }
 
 type OnboardingStep = "awaiting_dpr" | "awaiting_transcript" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation" | "complete" | "unsupported_major";
@@ -224,13 +231,20 @@ export default function ChatPage() {
             case "tool_invocation_start": {
                 toolStatuses.push({ toolName: ev.toolName, state: "running" });
                 const sentence = getThoughtSentence(ev.toolName);
-                setMessages(prev => prev.map(m => m.id === assistantId
-                    ? {
+                setMessages(prev => prev.map(m => {
+                    if (m.id !== assistantId) return m;
+                    // When the real model is producing a chain-of-thought,
+                    // the synthesized tool-sentence narration would just
+                    // duplicate / contradict the model's words. Skip it.
+                    if (m.hasRealThinking) {
+                        return { ...m, toolStatuses: [...toolStatuses] };
+                    }
+                    return {
                         ...m,
                         toolStatuses: [...toolStatuses],
                         thinkingText: ((m.thinkingText ?? "") + (m.thinkingText ? "\n\n" : "") + sentence),
-                    }
-                    : m));
+                    };
+                }));
                 break;
             }
             case "tool_invocation_done": {
@@ -259,6 +273,15 @@ export default function ChatPage() {
                     ? { ...m, content: (m.content || "") + ev.text }
                     : m));
                 setTimeout(scrollToBottom, 50);
+                break;
+            case "thinking":
+                setMessages(prev => prev.map(m => m.id === assistantId
+                    ? {
+                        ...m,
+                        thinkingText: (m.thinkingText ?? "") + ev.text,
+                        hasRealThinking: true,
+                    }
+                    : m));
                 break;
             case "validator_block":
                 updateMessage(assistantId, {
