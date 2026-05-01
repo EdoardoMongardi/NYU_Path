@@ -88,6 +88,13 @@ export type {
     ValidatorContext,
 } from "./responseValidator.js";
 
+export {
+    reviewCompleteness,
+} from "./completenessReviewer.js";
+export type {
+    CompletenessReviewVerdict,
+} from "./completenessReviewer.js";
+
 // Phase 11 S3 — multi-intent detector
 export {
     detectMultiIntent,
