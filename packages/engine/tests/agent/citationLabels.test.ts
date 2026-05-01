@@ -23,6 +23,23 @@ describe("formatCitation", () => {
             .toBe("NYU policy reference");
     });
 
+    it("falls back to school-only label when field is unknown", () => {
+        // Known school + unknown field → "<School> policy"
+        expect(formatCitation("data/schools/cas.json#mysteryField"))
+            .toBe("NYU CAS policy");
+        expect(formatCitation("data/schools/stern.json#someUnknownKey"))
+            .toBe("NYU Stern policy");
+    });
+
+    it("falls back to field-only label when school is unknown", () => {
+        // Unknown school + known field → "NYU <Field Label>"
+        // (Use schools NOT in SCHOOL_DISPLAY_NAMES: "wagner" and "lawschool".)
+        expect(formatCitation("data/schools/wagner.json#f1FullTimeMinCredits"))
+            .toBe("NYU F-1 Full-Time Minimum Credit Policy");
+        expect(formatCitation("data/schools/lawschool.json#maxCreditsPerSemester"))
+            .toBe("NYU Per-Semester Credit Ceiling");
+    });
+
     it("never returns a string containing a filesystem path", () => {
         const labels = [
             formatCitation("data/schools/cas.json#f1FullTimeMinCredits"),
