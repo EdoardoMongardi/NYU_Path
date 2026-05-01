@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getActiveVerb, getPastVerb, IDLE_VERB, TOOL_VERBS } from "../lib/agentStatusVerbs";
+import { getActiveVerb, getPastVerb, getThoughtSentence, IDLE_VERB, TOOL_THOUGHT_SENTENCES, TOOL_VERBS } from "../lib/agentStatusVerbs";
 
 describe("agentStatusVerbs", () => {
     it("maps every tool name registered in the engine to an active verb", () => {
@@ -39,5 +39,30 @@ describe("agentStatusVerbs", () => {
 
     it("exposes IDLE_VERB constant for the no-tool 'Thinking' state", () => {
         expect(IDLE_VERB).toBe("Thinking");
+    });
+
+    it("maps every registered tool to a natural-language thought sentence", () => {
+        const registered = Object.keys(TOOL_VERBS);
+        for (const t of registered) {
+            expect(TOOL_THOUGHT_SENTENCES[t], `missing thought for ${t}`).toBeDefined();
+            // Sentences should read like a sentence — at least 30 chars and ending in punctuation.
+            expect(TOOL_THOUGHT_SENTENCES[t].length).toBeGreaterThan(30);
+            expect(/[.!?]$/.test(TOOL_THOUGHT_SENTENCES[t])).toBe(true);
+        }
+    });
+
+    it("getThoughtSentence routes template_match prefixes to the canned-answer thought", () => {
+        expect(getThoughtSentence("template:f1_credit_floor")).toMatch(/canned answer/i);
+    });
+
+    it("getThoughtSentence falls back to a generic thought for unknown tool names", () => {
+        const fallback = getThoughtSentence("future_tool_xyz");
+        expect(fallback.length).toBeGreaterThan(10);
+        expect(/[.!?]$/.test(fallback)).toBe(true);
+    });
+
+    it("getThoughtSentence returns the mapped sentence for known tools", () => {
+        expect(getThoughtSentence("search_policy")).toMatch(/policy|bulletin/i);
+        expect(getThoughtSentence("plan_semester")).toMatch(/semester|plan/i);
     });
 });

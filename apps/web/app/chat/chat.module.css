@@ -348,118 +348,115 @@
     }
 }
 
-/* ---------- Agent status pill (live, while turn is in flight) ---------- */
-.statusPill {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    margin-bottom: 8px;
-    background: rgba(13, 110, 253, 0.08);
-    border: 1px solid rgba(13, 110, 253, 0.18);
-    border-radius: 999px;
-    font-size: 0.85em;
-    color: #0d6efd;
-    animation: pulseStatus 1.6s ease-in-out infinite;
+/* ---------- ChatGPT-style reasoning block ---------- */
+/* Header — minimal text with chevron, no pill / no bubble.
+   Live: shimmering "Thinking" while in flight.
+   Done: clickable "Reasoned for Xs ▸" toggle. */
+.reasoning {
+    margin-bottom: 6px;
+    font-size: 0.875rem;
+    line-height: 1.4;
 }
 
-.statusDot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: currentColor;
-    animation: pulseDot 1.6s ease-in-out infinite;
-}
-
-.statusVerb {
-    font-weight: 500;
-    letter-spacing: 0.01em;
-}
-
-@keyframes pulseStatus {
-    0%, 100% { opacity: 0.65; }
-    50%      { opacity: 1.0; }
-}
-
-@keyframes pulseDot {
-    0%, 100% { transform: scale(0.85); opacity: 0.7; }
-    50%      { transform: scale(1.05); opacity: 1.0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .statusPill, .statusDot { animation: none; }
-}
-
-/* ---------- Agent status chip (collapsed, after completion) ---------- */
-.statusChip {
-    margin-bottom: 8px;
-    font-size: 0.85em;
-    color: #6c757d;
-}
-
-.statusChipButton {
+.reasoningHeader {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 10px;
     background: transparent;
-    border: 1px solid rgba(108, 117, 125, 0.25);
-    border-radius: 999px;
-    color: inherit;
+    border: none;
+    padding: 0;
+    color: var(--text-secondary);
     font: inherit;
     cursor: pointer;
 }
 
-.statusChipButton:hover:not(:disabled) {
-    background: rgba(108, 117, 125, 0.06);
-    border-color: rgba(108, 117, 125, 0.45);
+button.reasoningHeader:hover:not(:disabled) {
+    color: var(--text-primary);
 }
 
-.statusChipButton:disabled {
+button.reasoningHeader:disabled {
     cursor: default;
-    opacity: 0.7;
 }
 
-.statusChipButton:focus-visible {
+button.reasoningHeader:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px var(--nyu-violet-glow);
-    border-color: var(--nyu-violet);
+    border-radius: 4px;
 }
 
-.statusChipLabel {
+.reasoningHeaderText {
     font-weight: 500;
 }
 
-.statusChipChevron {
-    font-size: 0.9em;
+.reasoningChevron {
+    font-size: 0.85em;
     line-height: 1;
-}
-
-.statusTrace {
-    list-style: none;
-    margin: 8px 0 0 0;
-    padding: 8px 12px;
-    background: rgba(108, 117, 125, 0.06);
-    border-radius: 8px;
-}
-
-.statusTraceItem {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 2px 0;
-    line-height: 1.45;
-}
-
-.statusTraceIcon {
-    flex: 0 0 auto;
-    font-size: 0.9em;
     opacity: 0.7;
-    width: 14px;
-    text-align: center;
 }
 
-.statusTraceText {
-    flex: 1 1 auto;
-    color: #495057;
+/* In-flight header — shimmer animation on the text itself. */
+.reasoningHeaderActive {
+    background: linear-gradient(
+        90deg,
+        var(--text-tertiary) 0%,
+        var(--text-primary) 50%,
+        var(--text-tertiary) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmerText 2.4s linear infinite;
+}
+
+@keyframes shimmerText {
+    0%   { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .reasoningHeaderActive {
+        animation: none;
+        -webkit-text-fill-color: var(--text-secondary);
+        background: none;
+    }
+}
+
+/* Body — indented quote-bar with streaming paragraphs. */
+.reasoningBody {
+    margin-top: 8px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border-light);
+    color: var(--text-secondary);
+}
+
+.reasoningParagraph {
+    margin: 0 0 8px 0;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+}
+
+.reasoningParagraph:last-child {
+    margin-bottom: 0;
+}
+
+/* Blinking caret at the tail of the streaming paragraph. */
+.reasoningCaret {
+    display: inline-block;
+    width: 6px;
+    height: 0.95em;
+    margin-left: 2px;
+    background: var(--text-secondary);
+    vertical-align: text-bottom;
+    animation: caretBlink 1s steps(1) infinite;
+    border-radius: 1px;
+}
+
+@keyframes caretBlink {
+    50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .reasoningCaret { animation: none; opacity: 0.6; }
 }
