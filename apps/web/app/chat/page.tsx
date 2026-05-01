@@ -44,6 +44,16 @@ interface Message {
     /** Phase 5 §7.2 two-step profile-update affordance — present when
      *  this message reports a `pendingMutationId` from `update_profile`. */
     pendingMutationId?: string;
+    /** Agent-status UX: epoch ms when the v2 stream was opened. Set
+     *  on assistant messages only; absent on welcome / v1 / user. */
+    startedAt?: number;
+    /** Agent-status UX: epoch ms when the `done` SSE event arrived. */
+    completedAt?: number;
+    /** Agent-status UX: epoch ms when an `error` event arrived. Used
+     *  to render "Failed after Xs" instead of "Thought for Xs". */
+    failedAt?: number;
+    /** Agent-status UX: whether the user has expanded the trace. */
+    traceExpanded?: boolean;
 }
 
 type OnboardingStep = "awaiting_dpr" | "awaiting_transcript" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation" | "complete" | "unsupported_major";
@@ -106,6 +116,7 @@ export default function ChatPage() {
 
         // Pre-create the assistant bubble so tokens stream INTO it.
         const assistant = addMessage("assistant", "");
+        updateMessage(assistant.id, { startedAt: Date.now() });
         const toolStatuses: ToolStatus[] = [];
 
         for await (const ev of streamChatV2({
@@ -174,7 +185,7 @@ export default function ChatPage() {
                 // authoritative. For block-streaming this matches the
                 // accumulated tokens; for future intra-token streaming
                 // this guards against partial-chunk artifacts.
-                updateMessage(assistantId, { content: ev.finalText });
+                updateMessage(assistantId, { content: ev.finalText, completedAt: Date.now() });
                 break;
             case "error": {
                 // Don't leak raw exception text (file paths, internal
@@ -186,7 +197,10 @@ export default function ChatPage() {
                     `Something went wrong on our side handling that turn. ` +
                     `Try resending — if it keeps happening, email the operator at edoardo.mongardi18@gmail.com.`;
                 const existing = assistantId ? messages.find(m => m.id === assistantId)?.content : "";
-                updateMessage(assistantId, { content: existing && existing.length > 0 ? existing : friendly });
+                updateMessage(assistantId, {
+                    content: existing && existing.length > 0 ? existing : friendly,
+                    failedAt: Date.now(),
+                });
                 break;
             }
         }
