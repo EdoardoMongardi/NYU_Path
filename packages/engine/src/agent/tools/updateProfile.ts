@@ -89,17 +89,45 @@ function describeImpacts(
 export const updateProfileTool = buildTool({
     name: "update_profile",
     description:
-        "Stages a preview of a single profile-field change (homeSchool / " +
-        "catalogYear / declaredPrograms / visaStatus). DOES NOT apply the " +
-        "change — returns a preview the agent must surface to the user " +
-        "verbatim. The user must confirm explicitly; on confirmation, the " +
-        "agent calls `confirm_profile_update` with the returned " +
-        "pendingMutationId. Two-step write per §7.2.",
+        "Stages a preview of a single profile-field change. EXACTLY ONE of " +
+        "these four field names is supported (no others — you cannot stage " +
+        "credit-cap overrides, adviser approvals, or bulletin exceptions " +
+        "through this tool):\n" +
+        "  • field: \"homeSchool\", value: school id (e.g. \"cas\")\n" +
+        "  • field: \"catalogYear\", value: \"YYYY\" or \"YYYY-YYYY\"\n" +
+        "  • field: \"declaredPrograms\", value: array of {programId, programType: \"major\"|\"minor\"|\"concentration\"}\n" +
+        "  • field: \"visaStatus\", value: \"f1\" | \"domestic\" | \"other\"\n" +
+        "DOES NOT apply the change — returns a preview the agent must " +
+        "surface to the user verbatim. The user must confirm explicitly; " +
+        "on confirmation, the agent calls `confirm_profile_update` with " +
+        "the returned pendingMutationId. Two-step write per §7.2.\n\n" +
+        "If the user mentions an adviser-approved exception (e.g. \"my " +
+        "adviser approved 24 non-CAS credits\"), do NOT try to encode it " +
+        "via update_profile — there is no field for credit-cap overrides. " +
+        "Instead, acknowledge the override verbally + recommend the student " +
+        "confirms it via Albert or their adviser before registration; the " +
+        "audit will continue to compute against the bulletin defaults.",
     inputSchema: updateFieldSchema,
     isReadOnly: true, // staging-only; no profile mutation here
     maxResultChars: 2000,
-    async validateInput(_input, { session }) {
+    async validateInput(input, { session }) {
         if (!session.student) return { ok: false, userMessage: "No student profile loaded." };
+        // Phase 11.2 — friendlier validation error when the agent
+        // tries to stage an unsupported field. Without this, Zod's
+        // generic "Invalid input" error gives the model no signal
+        // about what to fix. Generic across every shape mismatch.
+        const allowedFields = ["homeSchool", "catalogYear", "declaredPrograms", "visaStatus"];
+        const inField = (input as { field?: unknown })?.field;
+        if (typeof inField !== "string" || !allowedFields.includes(inField)) {
+            return {
+                ok: false,
+                userMessage:
+                    `update_profile only supports field ∈ {${allowedFields.join(", ")}}. ` +
+                    `If the user mentioned a credit-cap override or other adviser-approved exception, ` +
+                    `there is no profile field for that — acknowledge the override verbally and tell the ` +
+                    `student to confirm via Albert / their adviser before relying on it.`,
+            };
+        }
         return { ok: true };
     },
     prompt: () =>
