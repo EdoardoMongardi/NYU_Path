@@ -429,8 +429,15 @@ export const planSemesterTool = buildTool({
             // ceiling has room left, suggest free-elective slots
             // explicitly so the agent doesn't either (a) overload
             // with another hard course or (b) leave the term short.
+            //
+            // Phase 12 Task 5 — drop the `semestersUntilGrad > 1` gate.
+            // The original Phase 11.2 fix added it to "keep room for free
+            // electives" but the gate did the opposite at the final term:
+            // it skipped the fill entirely. The user-facing intent is
+            // "fill remaining capacity with free electives" REGARDLESS of
+            // how many semesters remain.
             const remainingBudget = planBudget - suggestedCredits;
-            if (remainingBudget >= 4 && hardSuggested >= hardQuotaForThisTerm && semestersUntilGrad > 1) {
+            if (remainingBudget >= 4 && hardSuggested >= hardQuotaForThisTerm) {
                 const slotsAvailable = Math.min(maxCourses - suggestions.length, Math.floor(remainingBudget / 4));
                 for (let i = 0; i < slotsAvailable; i++) {
                     suggestions.push({
@@ -522,6 +529,31 @@ export const planSemesterTool = buildTool({
                     `Plan-feasibility verifier flagged a ${v.kind.replace(/_/g, " ")} violation. ` +
                     `Surface this verbatim — the student needs to know before acting.`,
             }));
+
+            // Phase 12 Task 5 — emit a structured warning when the agent
+            // explicitly requested a credit target we couldn't fill.
+            // Only fires when `input.maxCredits` was explicitly passed
+            // (not the default-18 fallback) so the warning is meaningful:
+            // the agent said "plan for 16 credits" and we delivered less.
+            // Generic across all reasons the fill might fall short:
+            // unmet requirements exhausted, no eligible electives, schedule
+            // constraints, etc. The agent (and UI) consume this as a
+            // "did the planner satisfy the ask?" signal.
+            if (input.maxCredits !== undefined && plannedCredits < input.maxCredits) {
+                planDisclaimers.push({
+                    id: "plan_could_not_fill_credits",
+                    text:
+                        `Could not fill the requested ${input.maxCredits}-credit plan; ` +
+                        `delivered ${plannedCredits} credits across ${suggestions.length} ` +
+                        `course${suggestions.length === 1 ? "" : "s"}. The student should ` +
+                        `either accept the shorter plan or call search_courses to find ` +
+                        `additional electives.`,
+                    reason:
+                        `The planner reached the end of all available requirements and ` +
+                        `free-elective slots without filling ${input.maxCredits} credits. ` +
+                        `Surface this so the student knows the gap is real, not an error.`,
+                });
+            }
 
             return {
                 studentId: session.student.id,
