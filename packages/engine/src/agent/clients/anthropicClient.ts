@@ -33,6 +33,35 @@ import type {
     LLMToolDef,
 } from "../llmClient.js";
 
+// ============================================================
+// Extended thinking helpers (Phase 10 Task 1)
+// ============================================================
+// Anthropic contract:
+//   - `thinking: { type: "enabled", budget_tokens: N }` enables thinking.
+//   - `temperature` MUST be 1 when thinking is enabled.
+//   - `max_tokens` MUST be > `budget_tokens`.
+// Kill switch: NYUPATH_DISABLE_THINKING=1 disables thinking entirely
+// (useful for fallback debugging and to opt out of latency/cost).
+// ============================================================
+
+const THINKING_BUDGET_TOKENS = 4096;
+const THINKING_HEADROOM_TOKENS = 1024;
+
+function thinkingEnabled(): boolean {
+    return process.env.NYUPATH_DISABLE_THINKING !== "1";
+}
+
+function buildThinkingParams(maxTokens: number, temperature: number) {
+    if (!thinkingEnabled()) {
+        return { thinking: undefined as undefined, max_tokens: maxTokens, temperature };
+    }
+    return {
+        thinking: { type: "enabled" as const, budget_tokens: THINKING_BUDGET_TOKENS },
+        max_tokens: Math.max(maxTokens, THINKING_BUDGET_TOKENS + THINKING_HEADROOM_TOKENS),
+        temperature: 1,
+    };
+}
+
 export interface AnthropicClientOptions {
     /** Anthropic model id, e.g., "claude-sonnet-4-6" */
     modelId: string;
@@ -68,13 +97,15 @@ export class AnthropicEngineClient implements LLMClient {
         const start = Date.now();
         const userAssistant = args.messages.map(toAnthropicMessage);
 
+        const tp = buildThinkingParams(args.maxTokens ?? 1024, args.temperature ?? 0);
         const response = await this.client.messages.create(
             {
                 model: this.model,
-                max_tokens: args.maxTokens ?? 1024,
-                temperature: args.temperature ?? 0,
+                max_tokens: tp.max_tokens,
+                temperature: tp.temperature,
                 system: args.system,
                 messages: userAssistant,
+                ...(tp.thinking ? { thinking: tp.thinking } : {}),
                 ...(args.tools && args.tools.length > 0
                     ? {
                         tools: args.tools.map((t) => ({
@@ -100,6 +131,9 @@ export class AnthropicEngineClient implements LLMClient {
                     name: block.name,
                     args: (block.input ?? {}) as Record<string, unknown>,
                 });
+            } else if (block.type === "thinking") {
+                // Block-mode callers (sync .complete()) don't surface thinking
+                // — only the streaming path forwards it as deltas.
             }
         }
 
@@ -127,13 +161,15 @@ export class AnthropicEngineClient implements LLMClient {
         const start = Date.now();
         const userAssistant = args.messages.map(toAnthropicMessage);
 
+        const stp = buildThinkingParams(args.maxTokens ?? 1024, args.temperature ?? 0);
         const stream = this.client.messages.stream(
             {
                 model: this.model,
-                max_tokens: args.maxTokens ?? 1024,
-                temperature: args.temperature ?? 0,
+                max_tokens: stp.max_tokens,
+                temperature: stp.temperature,
                 system: args.system,
                 messages: userAssistant,
+                ...(stp.thinking ? { thinking: stp.thinking } : {}),
                 ...(args.tools && args.tools.length > 0
                     ? {
                         tools: args.tools.map((t) => ({
@@ -150,9 +186,10 @@ export class AnthropicEngineClient implements LLMClient {
         // Buffer per content_block index. Anthropic emits
         // `content_block_start` (with type+id+name for tool_use, or
         // type=text), then `content_block_delta` events. We yield
-        // text_delta for text deltas, and accumulate tool_use
-        // partial_json deltas to JSON.parse at content_block_stop.
-        type Buf = { type: "text" | "tool_use"; text?: string; toolId?: string; toolName?: string; argsRaw?: string };
+        // text_delta for text deltas, thinking_delta for thinking
+        // deltas, and accumulate tool_use partial_json deltas to
+        // JSON.parse at content_block_stop.
+        type Buf = { type: "text" | "tool_use" | "thinking"; text?: string; toolId?: string; toolName?: string; argsRaw?: string };
         const blocks = new Map<number, Buf>();
         let modelEcho: string | undefined;
 
@@ -172,6 +209,9 @@ export class AnthropicEngineClient implements LLMClient {
                         toolName: block.name,
                         argsRaw: "",
                     });
+                } else if (block.type === "thinking") {
+                    // Register thinking block — deltas will be forwarded as thinking_delta events.
+                    blocks.set(ev.index, { type: "thinking" });
                 }
                 continue;
             }
@@ -184,6 +224,8 @@ export class AnthropicEngineClient implements LLMClient {
                     yield { type: "text_delta", text: delta.text };
                 } else if (delta.type === "input_json_delta" && buf.type === "tool_use") {
                     buf.argsRaw = (buf.argsRaw ?? "") + delta.partial_json;
+                } else if (delta.type === "thinking_delta") {
+                    yield { type: "thinking_delta", text: (delta as { type: "thinking_delta"; thinking: string }).thinking };
                 }
                 continue;
             }
