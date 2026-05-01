@@ -575,6 +575,21 @@ export default function ChatPage() {
                                                         )}
                                                     </p>
                                                 ))}
+                                                {msg.toolStatuses && msg.toolStatuses.length > 0 && (
+                                                    <ul className={styles.reasoningToolList}>
+                                                        {msg.toolStatuses.map((t, idx) => (
+                                                            <li key={idx} className={styles.reasoningToolItem}>
+                                                                <span className={styles.reasoningToolIcon}>
+                                                                    {t.state === "running" ? "•" : t.state === "error" ? "⚠" : "✓"}
+                                                                </span>
+                                                                <span className={styles.reasoningToolText}>
+                                                                    {getPastVerb(t.toolName)}
+                                                                    {t.error ? ` — ${t.error}` : ""}
+                                                                </span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
                                             </div>
                                         )}
                                     </div>
