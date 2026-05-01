@@ -152,13 +152,23 @@ describe("plan_semester consumes mkDpr fixtures", () => {
         expect(out.suggestions.map((s) => s.courseId)).toContain("CSCI-UA 421");
     });
 
-    it("satisfied DPR yields zero suggestions", async () => {
+    it("satisfied DPR yields only free-elective suggestions (no required-course suggestions)", async () => {
+        // Phase 12 Task 5: after dropping the semestersUntilGrad > 1 gate,
+        // a fully-satisfied DPR with remaining budget produces free-elective
+        // slots (not required-course slots). The assertion is updated from
+        // "zero suggestions" to "every suggestion is a free elective" —
+        // zero required-course suggestions is the meaningful invariant.
         const dpr = mkSatisfiedDpr();
         const out = await planSemesterTool.call(
             { targetSemester: "2027-spring" },
             { signal: ABORT, session: dprSession(dpr) },
         );
-        expect(out.suggestions).toHaveLength(0);
+        const requiredSuggestions = out.suggestions.filter((s) => s.category === "required");
+        expect(requiredSuggestions).toHaveLength(0);
+        // All suggestions, if any, should be free electives.
+        for (const s of out.suggestions) {
+            expect(s.category).toBe("elective");
+        }
     });
 
     it("custom requirement with descriptive course IDs surfaces them", async () => {
