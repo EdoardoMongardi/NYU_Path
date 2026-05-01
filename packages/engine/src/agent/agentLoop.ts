@@ -884,7 +884,14 @@ export async function* runAgentTurnStreaming(
             signal: options.signal,
         };
 
+        // Phase 12.5 Task 3 — buffer thinking deltas exactly as we
+        // buffer text deltas. Both must be held until we know the
+        // validator will NOT replay the turn. If `maybeQueueValidatorReplay`
+        // returns true we `continue` and both buffers are discarded,
+        // preventing the model's internal self-correction monologue from
+        // escaping to the SSE writer.
         const bufferedDeltas: string[] = [];
+        const bufferedThinking: string[] = [];
         let runResult:
             | { ok: true; completion: LLMCompletion; usedClientId: string; fallbackTriggered: boolean }
             | { ok: false; error: string };
@@ -892,7 +899,7 @@ export async function* runAgentTurnStreaming(
             let primaryResult: { ok: true; completion: LLMCompletion } | { ok: false; error: string } | null = null;
             for await (const ev of runOneTurn(client, args, bufferedDeltas)) {
                 if (ev.type === "thinking_delta") {
-                    yield ev;
+                    bufferedThinking.push(ev.text);
                 } else if (ev.type === "_turn_result") {
                     primaryResult = ev.result;
                 }
@@ -902,10 +909,11 @@ export async function* runAgentTurnStreaming(
                 runResult = { ok: true, completion: primaryEvents.completion, usedClientId: client.id, fallbackTriggered: false };
             } else if (options.fallbackClient) {
                 bufferedDeltas.length = 0; // discard any partial primary deltas before fallback
+                bufferedThinking.length = 0; // discard partial thinking deltas before fallback
                 let fbResult: { ok: true; completion: LLMCompletion } | { ok: false; error: string } | null = null;
                 for await (const ev of runOneTurn(options.fallbackClient, args, bufferedDeltas)) {
                     if (ev.type === "thinking_delta") {
-                        yield ev;
+                        bufferedThinking.push(ev.text);
                     } else if (ev.type === "_turn_result") {
                         fbResult = ev.result;
                     }
@@ -974,11 +982,14 @@ export async function* runAgentTurnStreaming(
                 validateResponse: options.validateResponse,
             });
             if (replayed) {
-                // Drop the deltas; we'll regenerate on the next turn.
+                // Drop both thinking and text deltas; we'll regenerate
+                // on the next (replay) turn. The validator's system-message
+                // complaint must never reach the SSE writer.
                 continue;
             }
-            // Flush text deltas the streaming client emitted.
-            // Thinking deltas were already yielded immediately by runOneTurn.
+            // Flush buffered thinking deltas first, then text deltas.
+            // Both were held until we confirmed no replay would occur.
+            for (const t of bufferedThinking) yield { type: "thinking_delta", text: t };
             for (const d of bufferedDeltas) yield { type: "text_delta", text: d };
             // If the client had no streamComplete (synthetic path),
             // bufferedDeltas is empty and we yield the full text as a
