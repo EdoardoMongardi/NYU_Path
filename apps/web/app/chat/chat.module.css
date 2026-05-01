@@ -347,3 +347,113 @@
         padding: 12px 16px 16px;
     }
 }
+
+/* ---------- Agent status pill (live, while turn is in flight) ---------- */
+.statusPill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    margin-bottom: 8px;
+    background: rgba(13, 110, 253, 0.08);
+    border: 1px solid rgba(13, 110, 253, 0.18);
+    border-radius: 999px;
+    font-size: 0.85em;
+    color: #0d6efd;
+    animation: pulseStatus 1.6s ease-in-out infinite;
+}
+
+.statusDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulseDot 1.6s ease-in-out infinite;
+}
+
+.statusVerb {
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+@keyframes pulseStatus {
+    0%, 100% { opacity: 0.65; }
+    50%      { opacity: 1.0; }
+}
+
+@keyframes pulseDot {
+    0%, 100% { transform: scale(0.85); opacity: 0.7; }
+    50%      { transform: scale(1.05); opacity: 1.0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .statusPill, .statusDot { animation: none; }
+}
+
+/* ---------- Agent status chip (collapsed, after completion) ---------- */
+.statusChip {
+    margin-bottom: 8px;
+    font-size: 0.85em;
+    color: #6c757d;
+}
+
+.statusChipButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid rgba(108, 117, 125, 0.25);
+    border-radius: 999px;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.statusChipButton:hover:not(:disabled) {
+    background: rgba(108, 117, 125, 0.06);
+    border-color: rgba(108, 117, 125, 0.45);
+}
+
+.statusChipButton:disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
+.statusChipLabel {
+    font-weight: 500;
+}
+
+.statusChipChevron {
+    font-size: 0.9em;
+    line-height: 1;
+}
+
+.statusTrace {
+    list-style: none;
+    margin: 8px 0 0 0;
+    padding: 8px 12px;
+    background: rgba(108, 117, 125, 0.06);
+    border-radius: 8px;
+}
+
+.statusTraceItem {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 2px 0;
+    line-height: 1.45;
+}
+
+.statusTraceIcon {
+    flex: 0 0 auto;
+    font-size: 0.9em;
+    opacity: 0.7;
+    width: 14px;
+    text-align: center;
+}
+
+.statusTraceText {
+    flex: 1 1 auto;
+    color: #495057;
+}

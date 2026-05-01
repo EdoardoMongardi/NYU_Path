@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback } from "react";
 import styles from "./chat.module.css";
 import { streamChatV2, extractPendingMutationId, type ChatV2Event } from "../../lib/chatV2Client";
+import { getActiveVerb, getPastVerb, IDLE_VERB } from "../../lib/agentStatusVerbs";
+import { formatDuration } from "../../lib/formatDuration";
 
 // Phase 7-E W10 reviewer P1-2 — stable per-browser UUID so each
 // student gets their own rate-limit bucket (instead of every
@@ -67,6 +69,16 @@ const WELCOME_MESSAGE: Message = {
     content: `Welcome to **NYU Path** 🎓\n\nI'll help you plan your courses and track your degree progress.\n\nTo get started, please upload your **Degree Progress Report (DPR)** as a PDF.\n\nIn Albert: **Academics tab → Planning Tools → Degree Progress Report**. When the report opens in a new window, save it as PDF (browser print → "Save as PDF") and drop it below.\n\n📎 Drag & drop or click to upload!`,
     timestamp: new Date(),
 };
+
+function currentVerbFor(toolStatuses: ToolStatus[] | undefined): string {
+    if (!toolStatuses || toolStatuses.length === 0) return IDLE_VERB;
+    // Latest tool wins. If nothing is currently running (between
+    // tool calls), the most-recent done tool's *active* form is a
+    // worse fit than IDLE_VERB, so we fall back to "Thinking".
+    const lastRunning = [...toolStatuses].reverse().find(t => t.state === "running");
+    if (lastRunning) return getActiveVerb(lastRunning.toolName);
+    return IDLE_VERB;
+}
 
 export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
@@ -401,16 +413,51 @@ export default function ChatPage() {
                             <div className={styles.avatar}>🎓</div>
                         )}
                         <div className={styles.bubbleContent}>
-                            {/* Tool-invocation log (Phase 6.5 P-1) */}
-                            {msg.toolStatuses && msg.toolStatuses.length > 0 && (
-                                <div className={styles.toolLog ?? ""} style={{ fontSize: "0.85em", opacity: 0.7, marginBottom: 6 }}>
-                                    {msg.toolStatuses.map((t, idx) => (
-                                        <div key={idx}>
-                                            {t.state === "running" && <>⏳ running <code>{t.toolName}</code>…</>}
-                                            {t.state === "done" && <>✓ <code>{t.toolName}</code></>}
-                                            {t.state === "error" && <>⚠ <code>{t.toolName}</code> — {t.error}</>}
-                                        </div>
-                                    ))}
+                            {/* Live status pill — shown while the turn is in flight. */}
+                            {msg.role === "assistant" && msg.startedAt && !msg.completedAt && !msg.failedAt && (
+                                <div className={styles.statusPill}>
+                                    <span className={styles.statusDot} />
+                                    <span className={styles.statusVerb}>
+                                        {currentVerbFor(msg.toolStatuses)}…
+                                    </span>
+                                </div>
+                            )}
+                            {/* Post-completion chip — shown after `done` arrives. */}
+                            {msg.role === "assistant" && msg.startedAt && (msg.completedAt || msg.failedAt) && (
+                                <div className={styles.statusChip}>
+                                    <button
+                                        type="button"
+                                        className={styles.statusChipButton}
+                                        onClick={() => updateMessage(msg.id, { traceExpanded: !msg.traceExpanded })}
+                                        aria-expanded={!!msg.traceExpanded}
+                                        disabled={!msg.toolStatuses || msg.toolStatuses.length === 0}
+                                    >
+                                        <span className={styles.statusChipLabel}>
+                                            {msg.failedAt
+                                                ? `Failed after ${formatDuration(msg.failedAt - msg.startedAt)}`
+                                                : `Thought for ${formatDuration((msg.completedAt ?? Date.now()) - msg.startedAt)}`}
+                                        </span>
+                                        {msg.toolStatuses && msg.toolStatuses.length > 0 && (
+                                            <span className={styles.statusChipChevron}>
+                                                {msg.traceExpanded ? "▾" : "▸"}
+                                            </span>
+                                        )}
+                                    </button>
+                                    {msg.traceExpanded && msg.toolStatuses && msg.toolStatuses.length > 0 && (
+                                        <ul className={styles.statusTrace}>
+                                            {msg.toolStatuses.map((t, idx) => (
+                                                <li key={idx} className={styles.statusTraceItem}>
+                                                    <span className={styles.statusTraceIcon}>
+                                                        {t.state === "running" ? "•" : t.state === "error" ? "⚠" : "✓"}
+                                                    </span>
+                                                    <span className={styles.statusTraceText}>
+                                                        {getPastVerb(t.toolName)}
+                                                        {t.error ? ` — ${t.error}` : ""}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </div>
                             )}
                             <div
