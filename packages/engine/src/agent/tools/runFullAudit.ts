@@ -136,7 +136,21 @@ export const runFullAuditTool = buildTool({
         "  • Academic standing (good standing / probation), time limit\n" +
         "  • \"Am I on track to graduate?\", \"can I graduate this/next term?\"\n" +
         "  • Currently-enrolled / in-progress courses (DPR carries these)\n" +
-        "  • What is my profile, what programs am I declared in\n\n" +
+        "  • What is my profile, what programs am I declared in\n" +
+        "  • IDENTITY questions: \"what is my name?\", \"what's my student ID?\", " +
+        "\"what program / college am I in?\", \"when was my DPR prepared?\" " +
+        "— the result envelope includes `dprHeader` with studentName, " +
+        "studentId, program, college, preparedDate. Always check it before " +
+        "saying \"I don't have access to your name.\"\n" +
+        "  • PER-PROGRAM GPA: \"what's my major GPA?\", \"what's my CS GPA?\", " +
+        "\"how am I doing in [program]?\" — the result envelope includes " +
+        "`dprProgramGpas` with a computed GPA per declared program (using " +
+        "the audit's coursesSatisfying union × DPR grades). Surface that, " +
+        "not \"I don't have access to a separate major GPA.\"\n" +
+        "  • PER-COURSE GRADES: \"what was my grade in X?\", \"my CS grades?\", " +
+        "\"my Spring 2024 transcript?\" — result envelope includes the most " +
+        "recent ~60 `dprCourseHistory` rows with grade + type. Search them " +
+        "by courseId or term before deferring to Albert.\n\n" +
         "PREFER THIS OVER `get_academic_standing` and `get_credit_caps` " +
         "whenever the DPR is loaded — those tools can't see the DPR and " +
         "return defaults like GPA 0.00. Their validateInput will refuse " +
