@@ -460,3 +460,32 @@ button.reasoningHeader:focus-visible {
 @media (prefers-reduced-motion: reduce) {
     .reasoningCaret { animation: none; opacity: 0.6; }
 }
+
+/* ---------- Reasoning panel — tool-list (Phase 12 Task 3) ---------- */
+.reasoningToolList {
+    list-style: none;
+    margin: 12px 0 0 0;
+    padding: 8px 12px 4px 12px;
+    border-top: 1px dashed var(--border-light);
+}
+
+.reasoningToolItem {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 2px 0;
+    line-height: 1.45;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+}
+
+.reasoningToolIcon {
+    flex: 0 0 auto;
+    width: 14px;
+    text-align: center;
+    opacity: 0.7;
+}
+
+.reasoningToolText {
+    flex: 1 1 auto;
+}
