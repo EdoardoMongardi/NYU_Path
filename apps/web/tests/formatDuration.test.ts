@@ -30,4 +30,21 @@ describe("formatDuration", () => {
     it("clamps negative input to 0ms", () => {
         expect(formatDuration(-50)).toBe("0ms");
     });
+
+    it("transitions cleanly from 1-decimal to whole-second at the 10s boundary", () => {
+        // Without the s < 9.95 guard, values in [9.95, 10) would yield "10.0s"
+        // via toFixed(1), leaking the tier-2 format past the tier boundary.
+        // 9949ms = 9.949s < 9.95 → stays in tier-2, toFixed(1) = "9.9s"
+        expect(formatDuration(9949)).toBe("9.9s");
+        // 9999ms = 9.999s >= 9.95 → falls to whole-second tier → "10s"
+        expect(formatDuration(9999)).toBe("10s");
+        expect(formatDuration(10000)).toBe("10s");
+    });
+
+    it("rolls over to the next minute when the seconds slot rounds to 60", () => {
+        // Without the rollover guard, 119500ms would yield "1m 60s",
+        // which is never valid in the seconds slot.
+        expect(formatDuration(119500)).toBe("2m 0s");
+        expect(formatDuration(119999)).toBe("2m 0s");
+    });
 });
