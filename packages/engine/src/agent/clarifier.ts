@@ -112,10 +112,29 @@ export function detectAmbiguity(
         if (!hasSubjectOrVerb) signals.push("fragment");
     }
 
-    // Conservative ambiguity gate: fire only when at least 1 signal
-    // was raised AND the message is short enough that a clarifying
-    // question is reasonable (not for long compound queries).
-    const ambiguous = signals.length > 0 && text.length < 100;
+    // Phase 11 follow-up — conversation-context skip. When the prior
+    // assistant turn ended with `?` (asked the user a question) or
+    // surfaced a denial / I-don't-have, the user's short reply is a
+    // continuation, not a new ambiguous query. Skip the gate so the
+    // main agent loop runs and can read the prior turn's context.
+    // Generic across all conversational threads: works because we
+    // inspect the LAST assistant turn rather than encoding specific
+    // assistant phrases.
+    const lastAssistant = [...history].reverse().find((m) => m.role === "assistant");
+    const lastAssistantText = lastAssistant && typeof lastAssistant.content === "string"
+        ? lastAssistant.content.trim()
+        : "";
+    const priorTurnIsContinuationContext =
+        lastAssistantText.length > 0 && (
+            // Prior turn asked a question — user's short reply is the answer.
+            /\?\s*$/.test(lastAssistantText) ||
+            // Prior turn was a denial / "I don't have / I can't" — user is pushing back or supplying context.
+            /\b(?:i\s+don'?t\s+have|i\s+can'?t|i\s+do\s+not\s+have|no\s+access|not\s+(?:available|in\s+(?:the\s+)?(?:dpr|audit)))\b/i.test(lastAssistantText)
+        );
+
+    const ambiguous = signals.length > 0
+        && text.length < 100
+        && !priorTurnIsContinuationContext;
 
     return { ambiguous, signals, contentTokens };
 }

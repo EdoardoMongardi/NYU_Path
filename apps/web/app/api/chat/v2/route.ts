@@ -260,6 +260,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
+        // Phase 11 follow-up — thread the latest user message so
+        // tool validateInput hooks can apply scope guards (e.g.,
+        // reject check_transfer_eligibility when the message keys
+        // on "minor"). Generic across all tools.
+        lastUserMessage: body.message,
         ...(schoolConfig ? { schoolConfig } : {}),
         ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
@@ -584,7 +589,19 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             // topical-relevance gating in checkVerbatim.
             userQuestion: userMessage,
         });
+        // Phase 11 follow-up — when the validator catches fabricated
+        // bulletin attribution AFTER the replay budget is spent, strip
+        // the offending blockquote from the final text rather than
+        // streaming a known-wrong citation to the student. The UI
+        // still gets a `validator_block` event so the warning is
+        // logged. Generic across every fabrication (any tool, any
+        // school, any policy).
+        let finalTextOut = finalResult.finalText;
         if (!verdict.ok) {
+            const fabrications = verdict.violations.filter((v) => v.kind === "fabricated_attribution");
+            for (const _f of fabrications) {
+                finalTextOut = stripFabricatedBlockquotes(finalTextOut);
+            }
             writer.write({
                 kind: "validator_block",
                 violations: verdict.violations.map((v) => ({
@@ -594,15 +611,11 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                     ...(v.number ? { number: v.number } : {}),
                 })),
             });
-            // Phase 6.1 posture: surface the reply anyway with a
-            // clear validator_block event so the UI can render a
-            // warning. Phase 7 should add an automatic re-run with
-            // an additional system-prompt rule per §9.1 Part 9.
         }
 
         writer.write({
             kind: "done",
-            finalText: finalResult.finalText,
+            finalText: finalTextOut,
             modelUsedId: finalResult.modelUsedId,
         });
 
@@ -639,4 +652,46 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
     } finally {
         writer.close();
     }
+}
+
+// ============================================================
+// Phase 11 follow-up — fabricated-attribution substitution
+// ============================================================
+// When the post-loop validator catches a `fabricated_attribution`
+// violation and the replay budget is exhausted, we strip every
+// blockquote attributed to a bulletin/policy source from the final
+// text so the student doesn't see a known-wrong citation. A short
+// substitution paragraph informs them. Generic across every
+// fabrication shape (any school, any policy, any tool).
+const ATTRIBUTION_LINE_RE = /^\s*(?:.*\b(?:per|according to|from|as stated in|the (?:cas )?bulletin|the policy|the catalog).*?:?\s*)?$/i;
+const BLOCKQUOTE_LINE_RE = /^>\s*(.*)$/;
+
+function stripFabricatedBlockquotes(text: string): string {
+    const lines = text.split("\n");
+    const out: string[] = [];
+    let droppedAny = false;
+    let i = 0;
+    while (i < lines.length) {
+        const line = lines[i]!;
+        if (BLOCKQUOTE_LINE_RE.test(line)) {
+            // Drop this blockquote group and the immediately preceding
+            // attribution-introduction line (e.g., "Per the bulletin:").
+            droppedAny = true;
+            if (out.length > 0 && ATTRIBUTION_LINE_RE.test(out[out.length - 1]!)) {
+                out.pop();
+            }
+            while (i < lines.length && BLOCKQUOTE_LINE_RE.test(lines[i]!)) i++;
+            continue;
+        }
+        out.push(line);
+        i++;
+    }
+    if (!droppedAny) return text;
+    out.push("");
+    out.push(
+        "_(Note: a bulletin quotation was removed because the agent could not " +
+        "verify it against the indexed corpus. Please confirm the underlying " +
+        "policy with your academic adviser before relying on it.)_",
+    );
+    return out.join("\n").replace(/\n{3,}/g, "\n\n");
 }

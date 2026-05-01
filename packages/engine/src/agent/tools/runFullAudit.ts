@@ -23,6 +23,8 @@ import {
     type DegreeProgressReport,
 } from "../../dpr/schema.js";
 import { dprToAuditResults } from "../../dpr/dprToAuditResult.js";
+import { computePoolGpa } from "../../audit/gpaCalculator.js";
+import type { CourseTaken } from "@nyupath/shared";
 import {
     type Disclaimer,
     type SuggestedFollowUp,
@@ -91,6 +93,28 @@ interface RunFullAuditOutput {
         units: number;
         grade: string | null;            // null for IP rows + un-graded TE rows
         type: string;                    // "EN" | "IP" | "TE" | other
+    }>;
+    /** Phase 11 follow-up — DPR header so the agent can answer
+     *  "what's my name?" / "what program am I in?" without a separate
+     *  whoami tool. Pure data-surface; works for any student. */
+    dprHeader?: {
+        studentName: string;
+        studentId: string;
+        program: string;
+        college: string;
+        preparedDate: string;
+    };
+    /** Phase 11 follow-up — per-program GPA computed from the
+     *  graded courseHistory entries that satisfy each program's
+     *  requirements. Generic across all majors / minors / programs
+     *  because the requirementGroups walk identifies which courses
+     *  count for each program directly from DPR data. */
+    dprProgramGpas?: Array<{
+        programLabel: string;             // e.g. "Computer Science/Math"
+        programType: string;              // e.g. "Major Approved"
+        gpa: number | null;               // null when no graded courses
+        creditsCounted: number;
+        coursesCounted: number;
     }>;
     /** Phase 10 envelope — bulletin facts the agent must surface. */
     disclaimers?: Disclaimer[];
@@ -248,6 +272,53 @@ export const runFullAuditTool = buildTool({
                 hasMajorRequirementGap: detectMajorRequirementGap(unsatisfied, dpr),
                 programLabel: dpr.programs.find((p) => p.programType === "Major Approved")?.label,
             });
+            // Phase 11 follow-up — DPR header surface. Pure data
+            // exposure; works for any student. Lets the agent answer
+            // "what's my name?" / "what program am I in?" without a
+            // dedicated whoami tool.
+            const dprHeader = {
+                studentName: dpr.header.studentName,
+                studentId: dpr.header.studentId,
+                program: dpr.header.program,
+                college: dpr.header.college,
+                preparedDate: dpr.header.preparedDate,
+            };
+
+            // Phase 11 follow-up — per-program GPA. Generic across all
+            // majors / minors / programs because we use the audit's
+            // requirement walk (coursesSatisfying lists) to identify
+            // which courses count for each program. No per-major case
+            // branching; works for CS, Math, Joint Math/CS, Stern
+            // Finance, etc.
+            const coursesTakenForGpa: CourseTaken[] = dpr.courseHistory
+                .filter((c) => c.type === "EN" && c.grade && c.grade.trim().length > 0)
+                .map((c) => ({
+                    courseId: `${c.subject} ${c.catalogNbr}`,
+                    grade: c.grade!,
+                    credits: c.units,
+                    semester: c.term,
+                } as CourseTaken));
+            const dprProgramGpas = filtered.map((a) => {
+                const pool = Array.from(new Set(a.rules.flatMap((r) => r.coursesSatisfying ?? [])));
+                if (pool.length === 0) {
+                    return {
+                        programLabel: a.programName,
+                        programType: dpr.programs.find((p) => p.label === a.programName)?.programType ?? "program",
+                        gpa: null,
+                        creditsCounted: 0,
+                        coursesCounted: 0,
+                    };
+                }
+                const r = computePoolGpa(coursesTakenForGpa, pool);
+                return {
+                    programLabel: a.programName,
+                    programType: dpr.programs.find((p) => p.label === a.programName)?.programType ?? "program",
+                    gpa: r.countedCredits > 0 ? r.gpa : null,
+                    creditsCounted: r.countedCredits,
+                    coursesCounted: r.countedCourses,
+                };
+            });
+
             return {
                 audits: filtered,
                 standing,
@@ -255,8 +326,10 @@ export const runFullAuditTool = buildTool({
                 dprPreparedDate: dpr.header.preparedDate,
                 dprCumulative: { ...dpr.cumulative },
                 dprUnsatisfiedRequirements: unsatisfied,
+                dprHeader,
                 ...(inProgress.length > 0 ? { dprInProgressCourses: inProgress } : {}),
                 ...(dprCourseHistory.length > 0 ? { dprCourseHistory } : {}),
+                ...(dprProgramGpas.length > 0 ? { dprProgramGpas } : {}),
                 ...(env.disclaimers && env.disclaimers.length > 0 ? { disclaimers: env.disclaimers } : {}),
                 ...(env.suggestedFollowUps && env.suggestedFollowUps.length > 0 ? { suggestedFollowUps: env.suggestedFollowUps } : {}),
             };
@@ -406,6 +479,32 @@ export const runFullAuditTool = buildTool({
         }
 
         lines.push(`STANDING: ${output.standing.level} (cumulative GPA ${output.standing.cumulativeGPA.toFixed(3)}, completion ${(output.standing.completionRate * 100).toFixed(0)}%)`);
+
+        // Phase 11 follow-up — DPR header surface. Renders the
+        // student's name + program identifiers so the agent can
+        // answer questions like "what's my name?" or "what program
+        // am I in?" deterministically from data.
+        if (output.source === "dpr" && output.dprHeader) {
+            const h = output.dprHeader;
+            lines.push(``);
+            lines.push(`STUDENT (DPR header):`);
+            lines.push(`  Name: ${h.studentName} | StudentId: ${h.studentId}`);
+            lines.push(`  Program: ${h.program} | College: ${h.college}`);
+            lines.push(`  DPR prepared: ${h.preparedDate}`);
+        }
+
+        // Phase 11 follow-up — per-program GPA breakdown. Generic
+        // across all majors / minors / programs.
+        if (output.source === "dpr" && output.dprProgramGpas && output.dprProgramGpas.length > 0) {
+            lines.push(``);
+            lines.push(`PER-PROGRAM GPA (computed from courseHistory grades):`);
+            for (const g of output.dprProgramGpas) {
+                const gpaText = g.gpa === null
+                    ? `not computable (no graded courses match the requirement pool yet)`
+                    : `${g.gpa.toFixed(3)} (${g.coursesCounted} course(s), ${g.creditsCounted} credit(s))`;
+                lines.push(`  ${g.programLabel} [${g.programType}]: ${gpaText}`);
+            }
+        }
 
         // Phase 10 envelope rendering — surface disclaimers + suggested
         // follow-ups + bulletin anchors as their own block. The agent

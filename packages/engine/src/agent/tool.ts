@@ -47,6 +47,14 @@ export interface ToolSession {
     /** Whether the user is exploring a transfer (affects template applicability) */
     transferIntent?: boolean;
     /**
+     * Phase 11 follow-up — the latest user message text. Threaded by
+     * the route layer so tool `validateInput` hooks can apply scope
+     * guards based on the user's intent (e.g., reject
+     * `check_transfer_eligibility` when the message keys on
+     * "minor"). Optional — when unset, scope guards no-op.
+     */
+    lastUserMessage?: string;
+    /**
      * Profile-mutation previews staged by `update_profile`, awaiting an
      * explicit `confirm_profile_update` call. Per §7.2's two-step
      * contract, `update_profile.call()` MUST NOT mutate the profile —
