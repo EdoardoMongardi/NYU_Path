@@ -32,7 +32,8 @@ export type ViolationKind =
     | "missing_invocation"
     | "missing_caveat"
     | "verbatim_drift"
-    | "fabricated_attribution";
+    | "fabricated_attribution"
+    | "identity_drift";
 
 export interface Violation {
     kind: ViolationKind;
@@ -494,6 +495,52 @@ function checkVerbatim(ctx: ValidatorContext): Violation[] {
     return violations;
 }
 
+// ============================================================
+// 6. Identity-drift validator (Phase 12 §6)
+// ============================================================
+// Catches structural output bugs where the agent refers to itself
+// as a contactable third party. The agent IS the assistant — there
+// is no separate entity for the user to "call", "email", or
+// "reply to". This is a generic structural-coherence check, not a
+// per-case keyword blacklist: it matches the first-person-imperative
+// + contact-verb + trailing-pronoun pattern (me/us only), which is
+// the precise structural signal of identity drift.
+
+/**
+ * Catches identity-drift output bugs where the agent refers to
+ * itself in the third person as a contactable entity. The agent
+ * IS the assistant — phrasings like "call me", "email me", "reply
+ * to me" mistakenly cast it as a separate person the user should
+ * contact. Phase 12 §6 — generic structural-coherence check, not
+ * a keyword blacklist (matches first-person-imperative + third-
+ * party-contact-verb structural pattern).
+ */
+function checkIdentityDrift(assistantText: string): Violation[] {
+    const violations: Violation[] = [];
+    // The agent should never instruct the user to "call me" /
+    // "email me" / "reply to me" / "message me" / "contact me".
+    // The trailing pronoun must be "me" or "us" — NOT a third party
+    // (so "call OGS" / "email your adviser" pass through).
+    // Two-branch alternation: the simple contact verbs take an optional
+    // "back"/"to" modifier between the verb and the pronoun; "reply" is
+    // handled separately because it already embeds those modifiers in the
+    // verb phrase ("reply back to me") before the pronoun.
+    const PATTERN = /\b(?:call|email|message|contact|text|reach)\s+(?:back\s+)?(?:to\s+)?(?:me|us)\b|\breply\s+(?:back\s+)?(?:to\s+)?(?:me|us)\b/i;
+    const match = PATTERN.exec(assistantText);
+    if (match) {
+        violations.push({
+            kind: "identity_drift",
+            detail:
+                `Identity drift: assistant referred to itself as a contactable third party ` +
+                `with the phrase "${match[0]}". The agent is the assistant — there is nothing ` +
+                `for the user to "contact". Rephrase as a direct first-person commitment ` +
+                `("I'll suggest electives in the next message") or as a concrete tool the ` +
+                `user can take action on.`,
+        });
+    }
+    return violations;
+}
+
 export function validateResponse(ctx: ValidatorContext): ValidatorVerdict {
     const violations: Violation[] = [
         ...checkGrounding(ctx),
@@ -501,6 +548,7 @@ export function validateResponse(ctx: ValidatorContext): ValidatorVerdict {
         ...checkCompleteness(ctx),
         ...checkVerbatim(ctx),
         ...checkAttribution(ctx),
+        ...checkIdentityDrift(ctx.assistantText),
     ];
     return { ok: violations.length === 0, violations };
 }
