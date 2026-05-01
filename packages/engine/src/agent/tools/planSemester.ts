@@ -66,6 +66,17 @@ interface PlanSemesterOutput extends SemesterPlan {
      *  config with `f1FullTimeMinCredits`, surface the gap so the agent
      *  can answer "do I need more credits to keep my visa?". */
     remainingCreditsToReachF1Floor?: number | null;
+    /** Phase 11 follow-up — requirements the planner could have
+     *  suggested for this term but pruned because adding them would
+     *  push the plan past the school's per-semester ceiling. The
+     *  agent surfaces them as "deferred to a later term" so the
+     *  student knows the full picture. Generic across all programs. */
+    deferredToFutureTerms?: Array<{
+        courseId: string;
+        title: string;
+        credits: number;
+        reason: string;
+    }>;
     /** Phase 11 S2 — deterministic feasibility-check disclaimers
      *  derived from school config + DPR + prereq graph. The agent
      *  surfaces these via the Phase 10 envelope-rendering posture. */
@@ -192,14 +203,30 @@ export const planSemesterTool = buildTool({
                     .map((c) => `${c.subject} ${c.catalogNbr}`),
             );
 
+            // Phase 11 follow-up — compute the credit budget BEFORE
+            // generating suggestions. The effective ceiling is the
+            // tighter of (input.maxCredits) and (school per-semester
+            // ceiling), reduced by what's already in the target term's
+            // IP rows. This prevents the planner from suggesting more
+            // courses than the student can actually register for.
+            // Generic: works for any school + any term + any major.
+            const targetDprTermPreview = normalizeToDprTerm(input.targetSemester);
+            const ipForTarget = targetDprTermPreview
+                ? dpr.courseHistory.filter((c) => c.type === "IP" && c.term === targetDprTermPreview)
+                : [];
+            const ipCreditsForTarget = ipForTarget.reduce((s, c) => s + c.units, 0);
+            const ceilingFromConfig = session.schoolConfig?.maxCreditsPerSemester ?? maxCredits;
+            const ceiling = Math.min(maxCredits, ceilingFromConfig);
+            const planBudget = Math.max(0, ceiling - ipCreditsForTarget);
+
             const suggestions: CourseSuggestion[] = [];
+            const deferredToFutureTerms: NonNullable<PlanSemesterOutput["deferredToFutureTerms"]> = [];
+            let suggestedCredits = 0;
             for (const req of ns) {
                 if (suggestions.length >= maxCourses) break;
                 const candidates = extractCandidateCourseIds(req);
                 const fresh = candidates.filter((id) => !takenIds.has(id));
                 if (fresh.length === 0) {
-                    // Fall back to a guidance suggestion when the DPR
-                    // describes the pool in narrative form.
                     suggestions.push({
                         courseId: "(see search_courses)",
                         title: req.title,
@@ -216,16 +243,32 @@ export const planSemesterTool = buildTool({
                 }
                 for (const courseId of fresh.slice(0, 3)) {
                     if (suggestions.length >= maxCourses) break;
+                    const credits = 4; // bulletin default; refined later when course catalog has explicit credits
+                    if (suggestedCredits + credits > planBudget) {
+                        // Defer to a later term — keeps this term's
+                        // plan within the school's ceiling.
+                        deferredToFutureTerms.push({
+                            courseId,
+                            title: req.title,
+                            credits,
+                            reason:
+                                `Adding ${courseId} (${credits} cr) would push ${input.targetSemester} past the ` +
+                                `${ceiling}-credit ceiling (already-registered ${ipCreditsForTarget} cr + previously-suggested ${suggestedCredits} cr). ` +
+                                `Plan it for a later term instead.`,
+                        });
+                        continue;
+                    }
                     suggestions.push({
                         courseId,
                         title: req.title,
-                        credits: 4,
+                        credits,
                         priority: 1,
                         blockedCount: 0,
                         satisfiesRules: [req.rId],
                         category: "required",
                         reason: `Required for ${req.rId} (${req.title}). ${counterRemainingText(req)}`,
                     });
+                    suggestedCredits += credits;
                 }
             }
 
@@ -317,6 +360,7 @@ export const planSemesterTool = buildTool({
                 ...(alreadyRegisteredForTarget.length > 0 ? { alreadyRegisteredForTarget } : {}),
                 creditsAlreadyInTarget,
                 ...(remainingCreditsToReachF1Floor !== null ? { remainingCreditsToReachF1Floor } : {}),
+                ...(deferredToFutureTerms.length > 0 ? { deferredToFutureTerms } : {}),
                 ...(planDisclaimers.length > 0 ? { disclaimers: planDisclaimers } : {}),
                 ...(feasibilityVerdict.violations.length > 0 ? { feasibilityViolations: feasibilityVerdict.violations } : {}),
             };
@@ -373,6 +417,16 @@ export const planSemesterTool = buildTool({
         }
         if (plan.enrollmentWarnings.length > 0) {
             lines.push(`Enrollment warnings: ${plan.enrollmentWarnings.slice(0, 3).join(" | ")}`);
+        }
+        // Phase 11 follow-up — deferred-to-future-term suggestions.
+        // Surfaces requirements that didn't fit this term so the
+        // agent doesn't simply hide them or recommend an overload.
+        if (plan.deferredToFutureTerms && plan.deferredToFutureTerms.length > 0) {
+            lines.push(`Deferred to a later term (would have exceeded the per-semester ceiling for ${plan.targetSemester}):`);
+            for (const d of plan.deferredToFutureTerms) {
+                lines.push(`  ${d.courseId} (${d.credits}cr): ${d.title}`);
+                lines.push(`    Reason: ${d.reason}`);
+            }
         }
 
         // Phase 11 S2 — render feasibility-verifier disclaimers via the

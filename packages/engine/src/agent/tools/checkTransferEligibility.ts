@@ -8,30 +8,41 @@ import { checkTransferEligibility } from "../../audit/checkTransferEligibility.j
 export const checkTransferEligibilityTool = buildTool({
     name: "check_transfer_eligibility",
     description:
-        "Checks internal-transfer eligibility from the student's home school to a " +
-        "target NYU school. Returns: status (eligible / not_yet_eligible / " +
-        "ineligible / unsupported), entry-year prereq checklist, application " +
-        "deadline, accepted terms, missing-prereq detail.\n\n" +
-        "Use this for: 'how do I transfer to X', 'am I eligible for Stern', " +
-        "'can I switch to Tisch', etc.\n\n" +
+        "Checks INTERNAL-TRANSFER eligibility — i.e., the student moves their " +
+        "degree-granting affiliation from their current NYU school to a different " +
+        "NYU school. The result is about whether they can BECOME a student of the " +
+        "target school, not about whether they can take individual courses or " +
+        "programs offered there.\n\n" +
+        "USE THIS FOR (student wants to CHANGE which school grants their degree):\n" +
+        "  • \"how do I transfer to X\"\n" +
+        "  • \"am I eligible to switch from CAS to Stern\"\n" +
+        "  • \"can I move to Tisch as my home school\"\n\n" +
+        "DO NOT USE THIS FOR (these are NOT internal-transfer questions, even " +
+        "though they may name another NYU school):\n" +
+        "  • \"can I add a [Stern/Tandon/Tisch] minor\" → minor declaration; call " +
+        "    `search_policy` with the minor's name. Cross-school minors are " +
+        "    constrained by the home school's non-home-school credit cap, not " +
+        "    by the internal-transfer rule.\n" +
+        "  • \"can I take a course at [other school]\" → cross-school enrollment; " +
+        "    use `search_courses` + `search_policy` for the home school's " +
+        "    cross-school credit policy.\n" +
+        "  • \"can I count credits from [other school]\" → credit-counting; " +
+        "    `get_credit_caps` + `search_policy`.\n" +
+        "  • \"do I need to transfer to take [course]\" → almost never; usually " +
+        "    cross-school enrollment, not transfer.\n\n" +
+        "Returns: status (eligible / not_yet_eligible / ineligible / unsupported), " +
+        "entry-year prereq checklist, application deadline, accepted terms, " +
+        "missing-prereq detail.\n\n" +
         "Bulletin-grounded constraints this tool enforces:\n" +
-        "  • Lower bound: most schools require ~32+ credits (one full year) " +
-        "    before applying.\n" +
-        "  • Upper bound (CAS bulletin §Internal Transfer Students): " +
-        "    \"the latest students can begin their study at a new NYU school " +
-        "    is the first semester of their junior year. Typically, " +
-        "    applications to transfer between NYU schools, colleges, or " +
-        "    campuses are not accepted during or after the junior year.\" " +
-        "    For seniors (≥96 credits) the tool returns ineligible.\n" +
-        "  • Same-major rule (CAS bulletin, same section): \"Students are " +
-        "    rarely permitted to transfer between NYU schools when their " +
-        "    intended major (or a similar major) is already offered in their " +
-        "    current school.\" The tool does NOT enforce this automatically " +
-        "    (would need a programs-by-school catalog) — when answering, " +
-        "    surface this rule if the student's target major has an analog " +
-        "    in their current school.\n\n" +
-        "ALWAYS include the gpaNote in your reply: GPA thresholds for internal " +
-        "transfer are not published.",
+        "  • Lower bound: most schools require ~32+ credits before applying.\n" +
+        "  • Upper bound (CAS §Internal Transfer Students): seniors (≥96 credits) " +
+        "    are ineligible — applications are not accepted during or after the " +
+        "    junior year.\n" +
+        "  • Same-major rule: students rarely transfer when their intended major " +
+        "    has a close analog in their current school. Tool doesn't enforce " +
+        "    automatically; surface the rule if applicable.\n\n" +
+        "GPA thresholds for internal transfer are not published — the result " +
+        "envelope's `gpaNote` field carries this disclaimer; surface it.",
     inputSchema: z.object({
         targetSchool: z.string().describe("Lowercase school id, e.g. 'stern', 'tandon'."),
     }),
@@ -43,6 +54,35 @@ export const checkTransferEligibilityTool = buildTool({
                 ok: false,
                 userMessage: `You're already in ${input.targetSchool}. Did you mean to change major within your current school?`,
             };
+        }
+        // Generic scope guard: if the latest user message keys on a
+        // non-transfer concept (minor declaration, cross-school
+        // enrollment, course-counting), this tool is the wrong tool.
+        // Use deterministic phrase signals — no per-school keyword
+        // blacklist — so the guard works for any school combination.
+        const lastUser = session.lastUserMessage ?? "";
+        if (lastUser.length > 0) {
+            const minorIntent = /\bminor(?:s)?\b/i.test(lastUser);
+            const transferIntent = /\b(?:transfer|switch (?:to|my)|move to|change (?:my )?school)\b/i.test(lastUser);
+            if (minorIntent && !transferIntent) {
+                return {
+                    ok: false,
+                    userMessage:
+                        "This question looks like a minor-declaration question, not an internal-transfer question. " +
+                        "Internal transfer = changing the degree-granting school. " +
+                        "For minors offered by another NYU school, call `search_policy` with the minor's name " +
+                        "(plus `get_credit_caps` if the question touches the non-home-school credit cap).",
+                };
+            }
+            const courseEnrollIntent = /\b(?:take a course|take courses|enroll in|register for)\b/i.test(lastUser);
+            if (courseEnrollIntent && !transferIntent) {
+                return {
+                    ok: false,
+                    userMessage:
+                        "This looks like a cross-school enrollment question, not an internal-transfer question. " +
+                        "Use `search_courses` for the catalog + `search_policy` for cross-school credit rules.",
+                };
+            }
         }
         return { ok: true };
     },

@@ -401,6 +401,11 @@ function checkCompleteness(ctx: ValidatorContext): Violation[] {
 function checkVerbatim(ctx: ValidatorContext): Violation[] {
     const violations: Violation[] = [];
     const replyNorm = ctx.assistantText.replace(/\s+/g, " ").trim();
+    // Phase 11 follow-up — case-insensitive substring match. The agent
+    // legitimately rephrases capitalization ("your cumulative GPA" vs
+    // verbatim "Cumulative GPA") and that is NOT drift. Generic
+    // across every verbatim-emitting tool.
+    const replyNormLower = replyNorm.toLowerCase();
     // Phase 10 F4b/F4c — pre-compute number + keyword sets once.
     const replyNumbers = extractNumbers(replyNorm);
     const questionKeywords = ctx.userQuestion ? extractKeywords(ctx.userQuestion) : new Set<string>();
@@ -409,24 +414,44 @@ function checkVerbatim(ctx: ValidatorContext): Violation[] {
         if (!v) continue;
         const verbatimNorm = v.replace(/\s+/g, " ").trim();
         if (!verbatimNorm) continue;
-        if (replyNorm.includes(verbatimNorm)) continue; // satisfied — verbatim is in the reply
+        if (replyNormLower.includes(verbatimNorm.toLowerCase())) continue; // satisfied (case-insensitive)
 
         // Phase 10 F4b — numeric-overlap layer.
-        // If the reply reused at least one of the verbatim's numbers,
-        // it's a paraphrase of the verbatim's load-bearing fact. Fire.
-        // (Catches "Your GPA is 3.402" when verbatim is "Cumulative
-        // GPA: 3.402" — agent kept the number but dropped attribution.)
+        // If the reply reused at least one of the verbatim's numbers
+        // AND did NOT attribute that number to a tool/source, treat as
+        // drift. Phase 11 follow-up — added the attribution gate so
+        // attributed paraphrases ("Your cumulative GPA: 3.402 (per
+        // your DPR)") don't fire. Generic across every numeric
+        // verbatim because we only check for the presence of an
+        // attribution noun within ~50 chars of the matched number,
+        // not a specific phrase.
         const verbatimNumbers = extractNumbers(verbatimNorm);
+        const ATTRIBUTION_NOUN_RE = /\b(?:dpr|degree progress report|audit|transcript|albert|registrar|bulletin|tool|gpa(?:\s+breakdown)?)\b/i;
         let numOverlap = 0;
-        for (const n of verbatimNumbers) if (replyNumbers.has(n)) numOverlap++;
-        if (numOverlap > 0) {
+        let attributedNearAll = true;
+        for (const n of verbatimNumbers) {
+            if (!replyNumbers.has(n)) continue;
+            numOverlap++;
+            // Locate the number in the reply and check a 60-char
+            // window around it for an attribution noun.
+            const idx = replyNorm.indexOf(n);
+            if (idx === -1) { attributedNearAll = false; continue; }
+            const window = replyNorm.slice(Math.max(0, idx - 60), Math.min(replyNorm.length, idx + n.length + 60));
+            if (!ATTRIBUTION_NOUN_RE.test(window)) attributedNearAll = false;
+        }
+        if (numOverlap > 0 && !attributedNearAll) {
             violations.push({
                 kind: "verbatim_drift",
                 detail:
                     `Tool "${inv.toolName}" returned verbatim text the reply must quote unchanged, ` +
-                    `but the reply paraphrased it (kept the number, dropped the attribution). ` +
+                    `but the reply paraphrased it (kept the number without attributing it to the source). ` +
                     `Required text: ${verbatimNorm.slice(0, 200)}${verbatimNorm.length > 200 ? "…" : ""}`,
             });
+            continue;
+        }
+        if (numOverlap > 0 && attributedNearAll) {
+            // Reused the number AND attributed it nearby — treat as
+            // satisfied without firing the drift violation.
             continue;
         }
 
