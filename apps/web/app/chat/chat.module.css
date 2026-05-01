@@ -420,6 +420,12 @@
     opacity: 0.7;
 }
 
+.statusChipButton:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+    border-color: var(--nyu-violet);
+}
+
 .statusChipLabel {
     font-weight: 500;
 }
