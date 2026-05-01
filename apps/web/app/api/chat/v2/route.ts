@@ -549,6 +549,9 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                         ...(ev.invocation.error?.message !== undefined ? { error: ev.invocation.error.message } : {}),
                     });
                     break;
+                case "thinking_delta":
+                    writer.write({ kind: "thinking", text: ev.text });
+                    break;
                 case "text_delta":
                     writer.write({ kind: "token", text: ev.text });
                     break;

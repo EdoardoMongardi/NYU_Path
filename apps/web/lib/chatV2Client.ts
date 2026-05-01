@@ -16,6 +16,7 @@ export type ChatV2Event =
     | { kind: "tool_invocation_start"; toolName: string; args: Record<string, unknown> }
     | { kind: "tool_invocation_done"; toolName: string; summary?: string; error?: string }
     | { kind: "token"; text: string }
+    | { kind: "thinking"; text: string }
     | { kind: "validator_block"; violations: Array<{ kind: string; detail: string; caveatId?: string; number?: string }> }
     | { kind: "done"; finalText: string; modelUsedId: string }
     | { kind: "error"; message: string };
