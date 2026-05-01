@@ -25,12 +25,14 @@
 
 import type { StudentProfile } from "@nyupath/shared";
 import type { ToolInvocation } from "./agentLoop.js";
+import { verifyBlockquoteAttribution } from "./verifiers/blockquoteAttribution.js";
 
 export type ViolationKind =
     | "ungrounded_number"
     | "missing_invocation"
     | "missing_caveat"
-    | "verbatim_drift";
+    | "verbatim_drift"
+    | "fabricated_attribution";
 
 export interface Violation {
     kind: ViolationKind;
@@ -473,8 +475,31 @@ export function validateResponse(ctx: ValidatorContext): ValidatorVerdict {
         ...checkInvocations(ctx),
         ...checkCompleteness(ctx),
         ...checkVerbatim(ctx),
+        ...checkAttribution(ctx),
     ];
     return { ok: violations.length === 0, violations };
+}
+
+// ============================================================
+// 5. Attribution validator (Phase 11 Stage 1)
+// ============================================================
+// Catches Class E (confidently-wrong fabrication): blockquotes
+// attributed to "the bulletin" / "§..." with text that does NOT
+// appear in any search_policy chunk this turn. Pattern modeled on
+// claude-code-leak/verificationAgent.ts:81-128 — every PASS must
+// include the executed evidence; same idea here, every blockquote
+// must have a supporting chunk substring.
+function checkAttribution(ctx: ValidatorContext): Violation[] {
+    const verdict = verifyBlockquoteAttribution(ctx.assistantText, ctx.invocations);
+    if (verdict.ok) return [];
+    return verdict.fabrications.map((f) => ({
+        kind: "fabricated_attribution" as const,
+        detail:
+            `Blockquote attributed to "${f.attribution || "(unattributed)"}" was not found ` +
+            `in any of the ${f.chunksSearched} search_policy result(s) this turn. ` +
+            `Either re-run search_policy with a query that surfaces the source, ` +
+            `or rephrase without the verbatim attribution. Quote: ${f.quote}`,
+    }));
 }
 
 // Re-exports for tests
