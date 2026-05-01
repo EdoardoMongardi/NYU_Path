@@ -32,6 +32,11 @@ import {
     notSatisfiedRequirements,
     type DPRRequirement,
 } from "../../dpr/schema.js";
+import {
+    verifyPlanFeasibility,
+    type FeasibilityViolation,
+} from "../verifiers/planFeasibility.js";
+import { renderEnvelopeMeta, type Disclaimer } from "../toolEnvelope.js";
 
 /**
  * Phase 10 F1 — already-registered courses for the target term.
@@ -61,6 +66,12 @@ interface PlanSemesterOutput extends SemesterPlan {
      *  config with `f1FullTimeMinCredits`, surface the gap so the agent
      *  can answer "do I need more credits to keep my visa?". */
     remainingCreditsToReachF1Floor?: number | null;
+    /** Phase 11 S2 — deterministic feasibility-check disclaimers
+     *  derived from school config + DPR + prereq graph. The agent
+     *  surfaces these via the Phase 10 envelope-rendering posture. */
+    disclaimers?: Disclaimer[];
+    /** Phase 11 S2 — raw verifier violations for downstream debugging. */
+    feasibilityViolations?: FeasibilityViolation[];
 }
 
 /**
@@ -270,6 +281,28 @@ export const planSemesterTool = buildTool({
                 ? Math.max(0, f1Min - creditsAlreadyInTarget - plannedCredits)
                 : null;
 
+            // Phase 11 S2 — run the deterministic feasibility verifier
+            // and convert each violation into a Disclaimer that the
+            // agent surfaces via the Phase 10 envelope-rendering rule.
+            const feasibilityVerdict = verifyPlanFeasibility({
+                suggestions,
+                plannedCredits,
+                targetSemester: input.targetSemester,
+                creditsAlreadyInTarget,
+                alreadyRegisteredForTargetIds: alreadyRegisteredForTarget.map((c) => c.courseId),
+                schoolConfig: session.schoolConfig ?? null,
+                visaStatus: session.student.visaStatus,
+                dpr,
+                prereqs: session.prereqs,
+            });
+            const planDisclaimers: Disclaimer[] = feasibilityVerdict.violations.map((v) => ({
+                id: `plan_feasibility_${v.kind}${v.courseId ? `_${v.courseId.replace(/\s+/g, "_")}` : ""}`,
+                text: v.detail,
+                reason:
+                    `Plan-feasibility verifier flagged a ${v.kind.replace(/_/g, " ")} violation. ` +
+                    `Surface this verbatim — the student needs to know before acting.`,
+            }));
+
             return {
                 studentId: session.student.id,
                 targetSemester: input.targetSemester,
@@ -284,6 +317,8 @@ export const planSemesterTool = buildTool({
                 ...(alreadyRegisteredForTarget.length > 0 ? { alreadyRegisteredForTarget } : {}),
                 creditsAlreadyInTarget,
                 ...(remainingCreditsToReachF1Floor !== null ? { remainingCreditsToReachF1Floor } : {}),
+                ...(planDisclaimers.length > 0 ? { disclaimers: planDisclaimers } : {}),
+                ...(feasibilityVerdict.violations.length > 0 ? { feasibilityViolations: feasibilityVerdict.violations } : {}),
             };
         }
 
@@ -338,6 +373,17 @@ export const planSemesterTool = buildTool({
         }
         if (plan.enrollmentWarnings.length > 0) {
             lines.push(`Enrollment warnings: ${plan.enrollmentWarnings.slice(0, 3).join(" | ")}`);
+        }
+
+        // Phase 11 S2 — render feasibility-verifier disclaimers via the
+        // shared envelope renderer so the agent surfaces them per the
+        // Phase 10 posture rule.
+        const env = renderEnvelopeMeta({
+            disclaimers: (plan as { disclaimers?: Disclaimer[] }).disclaimers,
+        });
+        if (env) {
+            lines.push("");
+            lines.push(env);
         }
         return lines.join("\n");
     },

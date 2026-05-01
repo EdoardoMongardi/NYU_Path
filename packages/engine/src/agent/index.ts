@@ -88,6 +88,27 @@ export type {
     ValidatorContext,
 } from "./responseValidator.js";
 
+// Phase 11 S3 — multi-intent detector
+export {
+    detectMultiIntent,
+    renderMultiIntentBriefing,
+} from "./verifiers/multiIntentDetector.js";
+export type {
+    MultiIntentReport,
+    MultiIntentSignal,
+} from "./verifiers/multiIntentDetector.js";
+
+// Phase 11 S4 — gated clarifier sub-agent
+export {
+    detectAmbiguity,
+    askClarification,
+} from "./clarifier.js";
+export type {
+    AmbiguityReport,
+    AmbiguitySignal,
+    ClarificationResult,
+} from "./clarifier.js";
+
 export { RecordingLLMClient } from "./recordingClient.js";
 export { RecorderLLMClient } from "./recorderClient.js";
 export type { RecorderOptions, RecorderMatchStrategy } from "./recorderClient.js";
