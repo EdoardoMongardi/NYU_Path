@@ -14,6 +14,7 @@
 
 import { z } from "zod";
 import { buildTool } from "../tool.js";
+import type { SuggestedFollowUp } from "../toolEnvelope.js";
 
 // Phase 10 Stage 2 — F-1 floor moved to school config
 // (cfg.f1FullTimeMinCredits). Fallback default mirrors NYU OGS
@@ -36,24 +37,12 @@ export const getCreditCapsTool = buildTool({
     outputMode: "semi_hardened",
     async validateInput(_input, { session }) {
         if (!session.student) return { ok: false, userMessage: "No student profile loaded." };
-        // Phase 7-E W10 reviewer P1-5 — mechanical enforcement of the
-        // system-prompt routing rule. When a DPR is loaded the agent
-        // must read residency / P-F / outside-home / current-credits
-        // numbers from `run_full_audit`'s `dprCumulative` output, not
-        // from this tool. The school-config-derived per-semester ceiling
-        // and F-1 floor are NOT in the DPR, but cohort-A ships without
-        // schoolConfig wired into the v2 route — until that lands, F-1
-        // floor questions get a deterministic refusal that points the
-        // student at OGS.
-        if (session.degreeProgressReport) {
-            return {
-                ok: false,
-                userMessage:
-                    "DPR is loaded — credit budgets (residency, P/F, outside-CAS, current credits) come from run_full_audit's dprCumulative output. " +
-                    "For F-1 minimum-credit-load, per-semester ceiling, or overload questions: ALSO call search_policy with the user's question (the bulletin + curated F-1/credit-load templates are there). " +
-                    "Do NOT respond with only this refusal — the student needs an actual answer; this tool just isn't the right source.",
-            };
-        }
+        // Phase 12.5 Task 5 — dropped the DPR-loaded rejection. This tool
+        // always runs; when DPR is loaded the call() appends a
+        // suggestedFollowUp pointing at search_policy so the agent can
+        // chain automatically. Rejecting here caused two contradictory
+        // reasoning iterations (plan get_credit_caps → tool refuses → retry
+        // search_policy) and leaked the rejection text to the user.
         if (!session.schoolConfig) return { ok: false, userMessage: "School config not loaded." };
         return { ok: true };
     },
@@ -71,7 +60,19 @@ export const getCreditCapsTool = buildTool({
         const creditCaps = cfg.creditCaps ?? [];
         const transferCreditLimits = cfg.transferCreditLimits ?? null;
 
-        return {
+        const result: {
+            schoolId: string;
+            schoolName: string;
+            perSemesterCeiling: number | null;
+            f1FullTimeFloor: number | null;
+            visaStatus: string;
+            overloadRequirements: typeof overloadRequirements;
+            crossSchoolCaps: typeof creditCaps;
+            transferCreditLimits: typeof transferCreditLimits;
+            totalCreditsRequired: number | null;
+            overallGpaMin: number;
+            suggestedFollowUps?: SuggestedFollowUp[];
+        } = {
             schoolId: cfg.schoolId,
             schoolName: cfg.name,
             perSemesterCeiling,
@@ -83,6 +84,23 @@ export const getCreditCapsTool = buildTool({
             totalCreditsRequired: cfg.totalCreditsRequired,
             overallGpaMin: cfg.overallGpaMin,
         };
+
+        // Phase 12.5 Task 5 — when DPR is loaded, the bulletin + OGS policy
+        // text is the authoritative source for F-1 floor and credit-cap
+        // *explanations* (this tool returns the numbers, but bulletin language
+        // carries the policy detail). Suggest a follow-up so the agent chains
+        // automatically instead of receiving a hard rejection and retrying.
+        if (session.degreeProgressReport) {
+            result.suggestedFollowUps = [
+                {
+                    tool: "search_policy",
+                    args: { query: "F-1 full-time minimum credit-load policy" },
+                    why: "Bulletin + OGS policy text covers F-1 minimum, RCL, and per-semester ceiling questions in detail. This tool returned the numeric caps; search_policy provides the policy reasoning.",
+                },
+            ];
+        }
+
+        return result;
     },
     summarizeResult(out) {
         const lines: string[] = [];
