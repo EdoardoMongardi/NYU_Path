@@ -21,6 +21,7 @@
 import type { ToolSession } from "../tool.js";
 import type { CourseSuggestion, SchoolConfig } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
+import { formatCitation } from "../citationLabels.js";
 
 export type FeasibilityViolationKind =
     | "exceeds_semester_ceiling"
@@ -75,7 +76,7 @@ export function verifyPlanFeasibility(input: PlanFeasibilityInput): PlanFeasibil
                     `Total projected credits ${totalProjected} ` +
                     `(${input.creditsAlreadyInTarget} already registered + ${input.plannedCredits} planned) ` +
                     `exceed the ${input.schoolConfig.name} per-semester ceiling of ${ceiling}. ` +
-                    `Source: data/schools/${input.schoolConfig.schoolId}.json#maxCreditsPerSemester. ` +
+                    `Source: ${formatCitation(`data/schools/${input.schoolConfig.schoolId}.json#maxCreditsPerSemester`)}. ` +
                     `Reduce the plan or note the overload requires adviser approval.`,
             });
         }
@@ -91,7 +92,7 @@ export function verifyPlanFeasibility(input: PlanFeasibilityInput): PlanFeasibil
                     `Total projected credits ${totalProjected} ` +
                     `(${input.creditsAlreadyInTarget} already registered + ${input.plannedCredits} planned) ` +
                     `are below the F-1 full-time floor of ${floor}. ` +
-                    `Source: data/schools/${input.schoolConfig.schoolId}.json#f1FullTimeMinCredits. ` +
+                    `Source: ${formatCitation(`data/schools/${input.schoolConfig.schoolId}.json#f1FullTimeMinCredits`)}. ` +
                     `Drop below this and visa status is at risk; consult OGS before submitting.`,
             });
         }
