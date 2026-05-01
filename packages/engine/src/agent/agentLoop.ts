@@ -885,18 +885,32 @@ export async function* runAgentTurnStreaming(
         };
 
         const bufferedDeltas: string[] = [];
-        const bufferedThinking: string[] = [];
         let runResult:
             | { ok: true; completion: LLMCompletion; usedClientId: string; fallbackTriggered: boolean }
             | { ok: false; error: string };
         try {
-            const primaryEvents = await runOneTurn(client, args, bufferedDeltas, bufferedThinking);
+            let primaryResult: { ok: true; completion: LLMCompletion } | { ok: false; error: string } | null = null;
+            for await (const ev of runOneTurn(client, args, bufferedDeltas)) {
+                if (ev.type === "thinking_delta") {
+                    yield ev;
+                } else if (ev.type === "_turn_result") {
+                    primaryResult = ev.result;
+                }
+            }
+            const primaryEvents = primaryResult!;
             if (primaryEvents.ok) {
                 runResult = { ok: true, completion: primaryEvents.completion, usedClientId: client.id, fallbackTriggered: false };
             } else if (options.fallbackClient) {
                 bufferedDeltas.length = 0; // discard any partial primary deltas before fallback
-                bufferedThinking.length = 0; // discard any partial thinking deltas before fallback
-                const fbEvents = await runOneTurn(options.fallbackClient, args, bufferedDeltas, bufferedThinking);
+                let fbResult: { ok: true; completion: LLMCompletion } | { ok: false; error: string } | null = null;
+                for await (const ev of runOneTurn(options.fallbackClient, args, bufferedDeltas)) {
+                    if (ev.type === "thinking_delta") {
+                        yield ev;
+                    } else if (ev.type === "_turn_result") {
+                        fbResult = ev.result;
+                    }
+                }
+                const fbEvents = fbResult!;
                 if (fbEvents.ok) {
                     runResult = { ok: true, completion: fbEvents.completion, usedClientId: options.fallbackClient.id, fallbackTriggered: true };
                 } else {
@@ -963,8 +977,8 @@ export async function* runAgentTurnStreaming(
                 // Drop the deltas; we'll regenerate on the next turn.
                 continue;
             }
-            // Flush any thinking and text deltas the streaming client emitted.
-            for (const t of bufferedThinking) yield { type: "thinking_delta", text: t };
+            // Flush text deltas the streaming client emitted.
+            // Thinking deltas were already yielded immediately by runOneTurn.
             for (const d of bufferedDeltas) yield { type: "text_delta", text: d };
             // If the client had no streamComplete (synthetic path),
             // bufferedDeltas is empty and we yield the full text as a
@@ -1024,32 +1038,42 @@ export async function* runAgentTurnStreaming(
     yield { type: "done", result };
 }
 
-/** Run one model turn against a single client, capturing any
- *  text_delta events into `outDeltas` and returning the final
- *  completion. */
-async function runOneTurn(
+/** Run one model turn against a single client. Yields
+ *  `thinking_delta` events IMMEDIATELY as they arrive from the
+ *  client so the caller's generator can forward them upstream
+ *  without buffering. Text deltas are captured into `outDeltas`
+ *  (buffered until the final non-tool-call turn, per the existing
+ *  design). Terminates with a `_turn_result` pseudo-event carrying
+ *  the completion or error so the caller can inspect the result
+ *  after draining the generator. */
+async function* runOneTurn(
     client: LLMClient,
     args: Parameters<NonNullable<LLMClient["streamComplete"]>>[0],
     outDeltas: string[],
-    outThinking: string[],
-): Promise<
-    | { ok: true; completion: LLMCompletion }
-    | { ok: false; error: string }
+): AsyncGenerator<
+    | { type: "thinking_delta"; text: string }
+    | { type: "_turn_result"; result: { ok: true; completion: LLMCompletion } | { ok: false; error: string } },
+    void,
+    void
 > {
     try {
         if (client.streamComplete) {
             let final: LLMCompletion | null = null;
             for await (const ev of client.streamComplete(args)) {
                 if (ev.type === "text_delta") outDeltas.push(ev.text);
-                else if (ev.type === "thinking_delta") outThinking.push(ev.text);
+                else if (ev.type === "thinking_delta") yield { type: "thinking_delta", text: ev.text };
                 else if (ev.type === "done") final = ev.completion;
             }
-            if (!final) return { ok: false, error: "streamComplete returned without a done event" };
-            return { ok: true, completion: final };
+            if (!final) {
+                yield { type: "_turn_result", result: { ok: false, error: "streamComplete returned without a done event" } };
+                return;
+            }
+            yield { type: "_turn_result", result: { ok: true, completion: final } };
+            return;
         }
         const c = await client.complete(args);
-        return { ok: true, completion: c };
+        yield { type: "_turn_result", result: { ok: true, completion: c } };
     } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        yield { type: "_turn_result", result: { ok: false, error: e instanceof Error ? e.message : String(e) } };
     }
 }

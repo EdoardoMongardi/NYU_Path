@@ -62,8 +62,10 @@ interface Message {
     failedAt?: number;
     /** Agent-status UX: whether the user has expanded the reasoning block. */
     traceExpanded?: boolean;
-    /** Synthesized natural-language reasoning text that streams as
-     *  tools fire. Each tool_invocation_start appends one sentence. */
+    /** Reasoning text that streams above the final answer. Holds real
+     *  Anthropic chain-of-thought when `hasRealThinking` is set,
+     *  otherwise a fallback of synthesized tool-sentence narration
+     *  (one sentence per tool fired). */
     thinkingText?: string;
     /** How many chars of `thinkingText` are currently revealed
      *  (typewriter animation; ticker bumps this up over time). */
@@ -275,13 +277,19 @@ export default function ChatPage() {
                 setTimeout(scrollToBottom, 50);
                 break;
             case "thinking":
-                setMessages(prev => prev.map(m => m.id === assistantId
-                    ? {
+                setMessages(prev => prev.map(m => {
+                    if (m.id !== assistantId) return m;
+                    // Insert a paragraph break the FIRST time real thinking
+                    // arrives on a message that already has some text (from
+                    // synthesized fallback sentences fired earlier in the
+                    // turn). Adjacent thinking deltas just concatenate.
+                    const sep = (!m.hasRealThinking && m.thinkingText) ? "\n\n" : "";
+                    return {
                         ...m,
-                        thinkingText: (m.thinkingText ?? "") + ev.text,
+                        thinkingText: (m.thinkingText ?? "") + sep + ev.text,
                         hasRealThinking: true,
-                    }
-                    : m));
+                    };
+                }));
                 break;
             case "validator_block":
                 updateMessage(assistantId, {
