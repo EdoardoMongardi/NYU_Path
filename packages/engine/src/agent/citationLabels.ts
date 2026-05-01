@@ -4,9 +4,15 @@
  * labels. Used by verifiers and tools to keep filesystem paths and
  * config-key names out of student-facing output.
  *
- * The mapping is pattern-based (not a literal table) so a new
- * school config picks up labels automatically: `cas` → "NYU CAS",
- * `stern` → "NYU Stern", `tisch` → "NYU Tisch", etc.
+ * The mapping is a closed allowlist: each known school and each
+ * known field carries an explicit display label. Unknown school
+ * keys (e.g. a new config shipped before the dictionary is
+ * updated) and unknown field keys gracefully degrade to a partial
+ * label or the generic fallback rather than leaking the raw
+ * pointer.
+ *
+ * To add a new school: add a row to `SCHOOL_DISPLAY_NAMES`.
+ * To add a new field: add a row to `FIELD_DISPLAY_NAMES`.
  */
 
 const SCHOOL_DISPLAY_NAMES: Record<string, string> = {
@@ -41,6 +47,12 @@ export function formatCitation(pointer: string): string {
     const [, schoolKey, fieldKey] = match;
     const schoolLabel = SCHOOL_DISPLAY_NAMES[schoolKey];
     const fieldLabel = FIELD_DISPLAY_NAMES[fieldKey];
-    if (!schoolLabel || !fieldLabel) return FALLBACK_LABEL;
-    return `${schoolLabel} ${fieldLabel}`;
+    // Partial-knowledge fallbacks: prefer the half we know rather
+    // than collapsing to the generic phrase. A new school config
+    // shipped before the dictionary is updated still surfaces a
+    // useful "NYU CAS policy" rather than the opaque generic.
+    if (schoolLabel && fieldLabel) return `${schoolLabel} ${fieldLabel}`;
+    if (schoolLabel && !fieldLabel) return `${schoolLabel} policy`;
+    if (!schoolLabel && fieldLabel) return `NYU ${fieldLabel}`;
+    return FALLBACK_LABEL;
 }
