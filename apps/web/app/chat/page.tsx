@@ -415,8 +415,13 @@ export default function ChatPage() {
                         <div className={styles.bubbleContent}>
                             {/* Live status pill — shown while the turn is in flight. */}
                             {msg.role === "assistant" && msg.startedAt && !msg.completedAt && !msg.failedAt && (
-                                <div className={styles.statusPill}>
-                                    <span className={styles.statusDot} />
+                                <div
+                                    className={styles.statusPill}
+                                    role="status"
+                                    aria-live="polite"
+                                    aria-atomic="true"
+                                >
+                                    <span className={styles.statusDot} aria-hidden="true" />
                                     <span className={styles.statusVerb}>
                                         {currentVerbFor(msg.toolStatuses)}…
                                     </span>
@@ -430,6 +435,7 @@ export default function ChatPage() {
                                         className={styles.statusChipButton}
                                         onClick={() => updateMessage(msg.id, { traceExpanded: !msg.traceExpanded })}
                                         aria-expanded={!!msg.traceExpanded}
+                                        aria-controls={`status-trace-${msg.id}`}
                                         disabled={!msg.toolStatuses || msg.toolStatuses.length === 0}
                                     >
                                         <span className={styles.statusChipLabel}>
@@ -444,7 +450,7 @@ export default function ChatPage() {
                                         )}
                                     </button>
                                     {msg.traceExpanded && msg.toolStatuses && msg.toolStatuses.length > 0 && (
-                                        <ul className={styles.statusTrace}>
+                                        <ul id={`status-trace-${msg.id}`} className={styles.statusTrace}>
                                             {msg.toolStatuses.map((t, idx) => (
                                                 <li key={idx} className={styles.statusTraceItem}>
                                                     <span className={styles.statusTraceIcon}>
