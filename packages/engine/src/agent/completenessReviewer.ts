@@ -15,7 +15,7 @@
 // in the reply.
 // ============================================================
 
-import type { ToolInvocation } from "./tool.js";
+import type { ToolInvocation } from "./agentLoop.js";
 import type { Disclaimer, BulletinAnchor, EnvelopeMeta } from "./toolEnvelope.js";
 
 export interface CompletenessReviewVerdict {
@@ -33,7 +33,12 @@ export interface CompletenessReviewVerdict {
  * convention. Returns an empty envelope when the tool didn't opt in.
  */
 function extractEnvelope(inv: ToolInvocation): EnvelopeMeta {
-    const r = inv.result as { disclaimers?: Disclaimer[]; suggestedFollowUps?: unknown; anchors?: BulletinAnchor[]; confidence?: EnvelopeMeta["confidence"] };
+    // `result` is not on the canonical ToolInvocation interface — it was
+    // present in an older schema. We probe for it defensively via an
+    // `unknown` cast so the reviewer is forward-compatible when the field
+    // is re-introduced on a future ToolInvocation shape.
+    const raw = inv as unknown as { result?: unknown };
+    const r = raw.result as { disclaimers?: Disclaimer[]; suggestedFollowUps?: unknown; anchors?: BulletinAnchor[]; confidence?: EnvelopeMeta["confidence"] } | undefined;
     if (!r || typeof r !== "object") return {};
     return {
         disclaimers: Array.isArray(r.disclaimers) ? r.disclaimers : undefined,

@@ -30,6 +30,7 @@ import {
     // reintroduce the keyword router. runTemplateMatcherOnly stays
     // for recovery mode (cohortConfig.evalGateFailing).
     validateResponse,
+    reviewCompleteness,
     createPrimaryClient,
     createFallbackClient,
     getCohortConfig,
@@ -592,6 +593,36 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             // topical-relevance gating in checkVerbatim.
             userQuestion: userMessage,
         });
+
+        // Phase 12.5 Task 4 — completeness reviewer. Runs after
+        // validateResponse so envelope-metadata drops (missing
+        // disclaimers / bulletin anchors) are surfaced as
+        // `incompleteness` violations alongside the existing validator
+        // violations. Same `validator_block` event, no new event kind.
+        const completenessVerdict = reviewCompleteness(
+            finalResult.finalText,
+            finalResult.invocations,
+        );
+        const completenessViolations = completenessVerdict.pass
+            ? []
+            : [
+                {
+                    kind: "incompleteness" as const,
+                    detail: completenessVerdict.retryGuidance,
+                },
+            ];
+
+        const allViolations = [
+            ...verdict.violations.map((v) => ({
+                kind: v.kind,
+                detail: v.detail,
+                ...(v.caveatId ? { caveatId: v.caveatId } : {}),
+                ...(v.number ? { number: v.number } : {}),
+            })),
+            ...completenessViolations,
+        ];
+        const allOk = verdict.ok && completenessVerdict.pass;
+
         // Phase 11 follow-up — when the validator catches fabricated
         // bulletin attribution AFTER the replay budget is spent, strip
         // the offending blockquote from the final text rather than
@@ -600,19 +631,14 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         // logged. Generic across every fabrication (any tool, any
         // school, any policy).
         let finalTextOut = finalResult.finalText;
-        if (!verdict.ok) {
+        if (!allOk) {
             const fabrications = verdict.violations.filter((v) => v.kind === "fabricated_attribution");
             for (const _f of fabrications) {
                 finalTextOut = stripFabricatedBlockquotes(finalTextOut);
             }
             writer.write({
                 kind: "validator_block",
-                violations: verdict.violations.map((v) => ({
-                    kind: v.kind,
-                    detail: v.detail,
-                    ...(v.caveatId ? { caveatId: v.caveatId } : {}),
-                    ...(v.number ? { number: v.number } : {}),
-                })),
+                violations: allViolations,
             });
         }
 

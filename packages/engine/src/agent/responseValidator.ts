@@ -34,7 +34,8 @@ export type ViolationKind =
     | "verbatim_drift"
     | "fabricated_attribution"
     | "identity_drift"
-    | "quantitative_shortfall";
+    | "quantitative_shortfall"
+    | "incompleteness";
 
 export interface Violation {
     kind: ViolationKind;

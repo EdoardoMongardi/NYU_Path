@@ -9,7 +9,7 @@
 
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { POST } from "../app/api/chat/v2/route";
-import { setCohortAssignment } from "@nyupath/engine";
+import { setCohortAssignment, reviewCompleteness } from "@nyupath/engine";
 
 // Helper: synthesize a minimal NextRequest-shaped object.
 function fakeRequest(body: unknown | string): { json: () => Promise<unknown> } {
@@ -123,5 +123,128 @@ describe("v2 route cohort gating (Phase 7-A P-1)", () => {
         // The recovery path tags modelUsedId so we can verify the
         // agent loop did NOT run (no real model would have that id).
         expect(body).toMatch(/cohort:limited:(?:template-only|limited)/);
+    });
+});
+
+// ============================================================
+// Phase 12.5 Task 4 — completenessReviewer wiring
+// ============================================================
+// Unit-tests the `reviewCompleteness` integration that the v2 route
+// now runs alongside `validateResponse`. Rather than mocking the full
+// agent loop (expensive), we pin the reviewer contract directly:
+//   • When the agent reply drops a disclaimer from an invocation's
+//     envelope, `reviewCompleteness` returns pass=false and the
+//     route converts that into an `incompleteness` Violation.
+//   • When all envelope content is surfaced, the reviewer passes and
+//     no incompleteness violation is emitted.
+// This is the exact merge logic wired in route.ts.
+describe("completenessReviewer wiring (Phase 12.5 Task 4)", () => {
+    it("returns pass=true when no invocations carry envelope metadata", () => {
+        const verdict = reviewCompleteness("Any reply.", []);
+        expect(verdict.pass).toBe(true);
+        expect(verdict.droppedDisclaimers).toHaveLength(0);
+        expect(verdict.droppedAnchors).toHaveLength(0);
+        expect(verdict.retryGuidance).toBe("");
+    });
+
+    it("returns pass=true when all disclaimers from invocations are present in the reply", () => {
+        const invocations = [
+            {
+                toolName: "search_policy",
+                args: {},
+                result: {
+                    disclaimers: [
+                        { id: "f1_load", text: "F-1 students must maintain full-time enrollment.", reason: "visa compliance" },
+                    ],
+                },
+                summary: "Policy retrieved",
+            },
+        ];
+        // Reply includes the disclaimer text verbatim.
+        const reply = "Note: F-1 students must maintain full-time enrollment. This is important.";
+        const verdict = reviewCompleteness(reply, invocations);
+        expect(verdict.pass).toBe(true);
+    });
+
+    it("returns pass=false with retryGuidance when a disclaimer is dropped from the reply", () => {
+        const droppedText = "F-1 students must maintain full-time enrollment.";
+        const invocations = [
+            {
+                toolName: "search_policy",
+                args: {},
+                result: {
+                    disclaimers: [
+                        { id: "f1_load", text: droppedText, reason: "visa compliance" },
+                    ],
+                },
+                summary: "Policy retrieved",
+            },
+        ];
+        // Reply deliberately omits the disclaimer.
+        const reply = "You can plan your schedule for next semester.";
+        const verdict = reviewCompleteness(reply, invocations);
+        expect(verdict.pass).toBe(false);
+        expect(verdict.droppedDisclaimers).toHaveLength(1);
+        expect(verdict.droppedDisclaimers[0]!.id).toBe("f1_load");
+        expect(verdict.retryGuidance).toContain("incomplete");
+        expect(verdict.retryGuidance).toContain(droppedText);
+
+        // Verify the route's mapping logic: pass=false → incompleteness Violation
+        const completenessViolations = verdict.pass
+            ? []
+            : [{ kind: "incompleteness" as const, detail: verdict.retryGuidance }];
+        expect(completenessViolations).toHaveLength(1);
+        expect(completenessViolations[0]!.kind).toBe("incompleteness");
+        expect(completenessViolations[0]!.detail).toBeTruthy();
+    });
+
+    it("returns pass=false with retryGuidance when a bulletin anchor is dropped", () => {
+        const anchorQuote = "Students transferring internally must have a minimum 2.0 GPA in residence at NYU.";
+        const invocations = [
+            {
+                toolName: "search_policy",
+                args: {},
+                result: {
+                    anchors: [
+                        { quote: anchorQuote, source: "CAS Bulletin §4.2" },
+                    ],
+                },
+                summary: "Policy retrieved",
+            },
+        ];
+        // Reply doesn't include the anchor quote.
+        const reply = "Internal transfer is possible. Please contact your adviser.";
+        const verdict = reviewCompleteness(reply, invocations);
+        expect(verdict.pass).toBe(false);
+        expect(verdict.droppedAnchors).toHaveLength(1);
+        expect(verdict.retryGuidance).toContain("Missing bulletin anchors");
+    });
+
+    it("merging: incompleteness violations appear alongside other violations in allViolations", () => {
+        // Simulate the exact merge in route.ts:
+        //   allViolations = [...verdict.violations, ...completenessViolations]
+        const verdictViolations = [
+            { kind: "missing_caveat" as const, detail: "F-1 caveat missing", caveatId: "f1_visa" },
+        ];
+        const completenessViolations = [
+            { kind: "incompleteness" as const, detail: "Disclaimer dropped." },
+        ];
+        const allViolations = [
+            ...verdictViolations.map((v) => ({
+                kind: v.kind,
+                detail: v.detail,
+                ...(v.caveatId ? { caveatId: v.caveatId } : {}),
+            })),
+            ...completenessViolations,
+        ];
+        expect(allViolations).toHaveLength(2);
+        expect(allViolations[0]!.kind).toBe("missing_caveat");
+        expect(allViolations[1]!.kind).toBe("incompleteness");
+        // Both belong in a single validator_block violations array — the
+        // SSE shape accepts kind: string, so `incompleteness` is valid.
+        for (const v of allViolations) {
+            expect(typeof v.kind).toBe("string");
+            expect(typeof v.detail).toBe("string");
+        }
     });
 });
