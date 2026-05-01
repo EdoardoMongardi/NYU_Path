@@ -161,14 +161,17 @@ describe("ragScopeFilter", () => {
         expect(scope.overrideTriggered).toBe(false);
     });
 
-    it("year filter excludes off-year chunks", () => {
+    it("year is no longer a hard filter (Phase 9 — was silently dropping all bulletin chunks tagged 2025-2026 for students on 2024-2025)", () => {
         const oldChunk: PolicyChunk = {
             text: "old content",
             meta: { source: "x", school: "cas", year: "2023-2024", section: "s", chunkId: "old1", sourcePath: "p", sourceLine: 1 },
         };
+        // Both should now pass for a CAS student regardless of catalogYear.
+        // Year-based deprioritization, if needed, belongs at the reranker
+        // layer — not as a hard predicate that produces 0 candidates.
         const scope = computeScope("anything", { homeSchool: "cas", catalogYear: "2025-2026" });
         expect(scope.predicate(allChunks[0]!)).toBe(true);
-        expect(scope.predicate(oldChunk)).toBe(false);
+        expect(scope.predicate(oldChunk)).toBe(true);
     });
 
     it("detectExplicitSchools picks up multiple schools by literal name", () => {
@@ -285,14 +288,16 @@ describe("policySearch — full RAG pipeline", () => {
         expect(isT3Program("cs_major_ba")).toBe(false);
     });
 
-    it("Year filter is honored — passing a year not in the corpus → 0 candidates → escalate", async () => {
+    it("year mismatch is no longer a hard escalator (Phase 9 — bulletin scrape year usually differs from a student's matriculation catalog year)", async () => {
         const result = await policySearch("Pass/Fail option", {
             homeSchool: "cas",
-            catalogYear: "1999-2000",
+            catalogYear: "1999-2000", // doesn't match anything in the corpus
             templates: [],
         }, { store, embedder, reranker, matchTemplate });
-        expect(result.candidateCount).toBe(0);
-        expect(result.kind).toBe("escalate");
+        // Pre-Phase-9 this returned 0 candidates / escalate. Now the
+        // year is advisory — the school predicate still matches CAS
+        // chunks regardless of year tag.
+        expect(result.candidateCount).toBeGreaterThan(0);
     });
 
     // ----- Reviewer-flagged coverage gaps -----

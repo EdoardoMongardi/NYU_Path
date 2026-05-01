@@ -15,7 +15,10 @@
 import { z } from "zod";
 import { buildTool } from "../tool.js";
 
-const F1_FULLTIME_MIN_CREDITS = 12;
+// Phase 10 Stage 2 — F-1 floor moved to school config
+// (cfg.f1FullTimeMinCredits). Fallback default mirrors NYU OGS
+// guidance for the 2024-2026 catalog years.
+const DEFAULT_F1_FULLTIME_MIN_CREDITS = 12;
 
 export const getCreditCapsTool = buildTool({
     name: "get_credit_caps",
@@ -33,6 +36,24 @@ export const getCreditCapsTool = buildTool({
     outputMode: "semi_hardened",
     async validateInput(_input, { session }) {
         if (!session.student) return { ok: false, userMessage: "No student profile loaded." };
+        // Phase 7-E W10 reviewer P1-5 — mechanical enforcement of the
+        // system-prompt routing rule. When a DPR is loaded the agent
+        // must read residency / P-F / outside-home / current-credits
+        // numbers from `run_full_audit`'s `dprCumulative` output, not
+        // from this tool. The school-config-derived per-semester ceiling
+        // and F-1 floor are NOT in the DPR, but cohort-A ships without
+        // schoolConfig wired into the v2 route — until that lands, F-1
+        // floor questions get a deterministic refusal that points the
+        // student at OGS.
+        if (session.degreeProgressReport) {
+            return {
+                ok: false,
+                userMessage:
+                    "DPR is loaded — credit budgets (residency, P/F, outside-CAS, current credits) come from run_full_audit's dprCumulative output. " +
+                    "For F-1 minimum-credit-load, per-semester ceiling, or overload questions: ALSO call search_policy with the user's question (the bulletin + curated F-1/credit-load templates are there). " +
+                    "Do NOT respond with only this refusal — the student needs an actual answer; this tool just isn't the right source.",
+            };
+        }
         if (!session.schoolConfig) return { ok: false, userMessage: "School config not loaded." };
         return { ok: true };
     },
@@ -54,7 +75,7 @@ export const getCreditCapsTool = buildTool({
             schoolId: cfg.schoolId,
             schoolName: cfg.name,
             perSemesterCeiling,
-            f1FullTimeFloor: isF1 ? F1_FULLTIME_MIN_CREDITS : null,
+            f1FullTimeFloor: isF1 ? (cfg.f1FullTimeMinCredits ?? DEFAULT_F1_FULLTIME_MIN_CREDITS) : null,
             visaStatus: student.visaStatus ?? "domestic",
             overloadRequirements,
             crossSchoolCaps: creditCaps,

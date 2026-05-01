@@ -371,6 +371,14 @@ export interface SchoolConfig {
     /** Whether this school accepts inbound transfer credit */
     acceptsTransferCredit: boolean;
     maxCreditsPerSemester?: number;
+    /**
+     * F-1 visa-status full-time minimum credits per semester. Sourced
+     * from NYU OGS guidance + the school's own bulletin restatement.
+     * The historic 12-credit floor lives here as data so it can vary
+     * per school (e.g., a graduate school's full-time minimum differs).
+     * Phase 10 Stage 2 — moved out of getCreditCaps.ts magic constant.
+     */
+    f1FullTimeMinCredits?: number;
     overloadRequirements?: OverloadRequirement[];
     /**
      * Per-semester minimum-cumulative-GPA tiers. When present, supersedes

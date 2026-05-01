@@ -17,6 +17,7 @@ import { z } from "zod";
 import { buildTool } from "../tool.js";
 import {
     searchCourses as defaultSearchCourses,
+    generateTermCode,
     type FoseSearchResult,
 } from "../../api/nyuClassSearch.js";
 
@@ -29,33 +30,58 @@ export const searchAvailabilityTool = buildTool({
     description:
         "Looks up whether a course is offered in a given NYU term via the " +
         "FOSE class-search API. Use this BEFORE recommending a specific " +
-        "section. Input: termCode (4-digit FOSE code, e.g. \"1254\" for " +
-        "Spring 2025) and keyword (course code prefix like \"CSCI-UA\" " +
+        "section.\n\n" +
+        "INPUT (Phase 9 Stage 5 — two equivalent forms):\n" +
+        "  Preferred: pass `year` (4-digit, e.g. 2026) AND `term` " +
+        "(\"spring\" | \"summer\" | \"fall\"). The tool computes the FOSE " +
+        "term code internally so the model can't typo it.\n" +
+        "  Fallback: pass `termCode` (4-digit FOSE code) directly. NYU's " +
+        "encoding is `1{lastTwoDigitsOfYear}{4=spring,6=summer,8=fall}` — " +
+        "Fall 2026 = 1268, Spring 2027 = 1274. Most models get this wrong " +
+        "from training data; PREFER the year+term form.\n\n" +
+        "ALSO required: `keyword` (course code prefix like \"CSCI-UA\" " +
         "or full code \"CSCI-UA 101\"). Returns up to 25 sections with " +
         "open/waitlist/closed status, instructors, credits, and meeting " +
         "times.",
     inputSchema: z.object({
-        termCode: z.string().regex(TERM_CODE_RE, "termCode must be a 4-digit FOSE term code"),
+        // Phase 9 Stage 5 — accept both forms; resolve to a single code in call().
+        termCode: z.string().regex(TERM_CODE_RE, "termCode must be a 4-digit FOSE term code").optional(),
+        year: z.number().int().min(2000).max(2099).optional(),
+        term: z.enum(["spring", "summer", "fall"]).optional(),
         keyword: z.string().min(2),
     }),
     isReadOnly: true,
     maxResultChars: 2500,
-    async validateInput(_input, _ctx) {
+    async validateInput(input, _ctx) {
+        const hasCode = typeof input.termCode === "string";
+        const hasYearTerm = typeof input.year === "number" && typeof input.term === "string";
+        if (!hasCode && !hasYearTerm) {
+            return {
+                ok: false,
+                userMessage:
+                    "Pass either `termCode` (4-digit) OR both `year` (e.g. 2026) and `term` (\"spring\"/\"summer\"/\"fall\"). " +
+                    "The year+term form is preferred — the tool computes the FOSE code so you can't typo it.",
+            };
+        }
         return { ok: true };
     },
     prompt: () =>
         `Look up FOSE class-search availability for a course in a given term. ` +
-        `Required input: termCode (4-digit), keyword (course code prefix or ` +
-        `full code). Returns sections with enrollment status.`,
+        `Pass year+term (preferred) or termCode. ALSO required: keyword (course code prefix or full code).`,
     async call(input, { session }) {
         // Allow tests to inject a stub via session. Production runs the
         // live FOSE client by default.
         const sessionExt = session as unknown as { searchAvailabilityFn?: SearchCoursesFn };
         const fn = sessionExt.searchAvailabilityFn ?? defaultSearchCourses;
-        const results = await fn(input.termCode, input.keyword);
+        // Resolve termCode from year+term when provided. Authoritative
+        // mapping lives in api/nyuClassSearch.ts:generateTermCode so a
+        // single source of truth governs the encoding.
+        const resolvedTermCode = input.termCode
+            ?? generateTermCode(input.year!, input.term!);
+        const results = await fn(resolvedTermCode, input.keyword);
         const limited = results.slice(0, 25);
         return {
-            termCode: input.termCode,
+            termCode: resolvedTermCode,
             keyword: input.keyword,
             totalReturned: limited.length,
             totalAvailable: results.length,

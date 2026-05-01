@@ -1,0 +1,7 @@
+{
+  "cohort": "cohort_a",
+  "frozenAt": "2026-04-28T00:03:13.261Z",
+  "caseCount": 65,
+  "sourceHash": "sha256:a053d1c17e857a788d624ce2e1bb09175baa504f8fd7a3cc931f95c04b6a971d",
+  "note": "W8.0 — added 8 real-DPR-backed cases against the user's redacted Albert DPR"
+}

@@ -4,6 +4,27 @@ import { useState, useRef, useCallback } from "react";
 import styles from "./chat.module.css";
 import { streamChatV2, extractPendingMutationId, type ChatV2Event } from "../../lib/chatV2Client";
 
+// Phase 7-E W10 reviewer P1-2 — stable per-browser UUID so each
+// student gets their own rate-limit bucket (instead of every
+// cohort-A user sharing a single "anonymous" bucket). Stored in
+// localStorage; a fresh browser/incognito-session gets a new id.
+// Replaced by real auth-derived ids in W12.
+const USER_ID_LS_KEY = "nyupath:client-id";
+function getOrCreateClientId(): string {
+    if (typeof window === "undefined") return "anonymous";
+    try {
+        const cached = window.localStorage.getItem(USER_ID_LS_KEY);
+        if (cached) return cached;
+        const next = window.crypto?.randomUUID
+            ? window.crypto.randomUUID()
+            : `cohortA-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        window.localStorage.setItem(USER_ID_LS_KEY, next);
+        return next;
+    } catch {
+        return "anonymous";
+    }
+}
+
 interface ToolStatus {
     toolName: string;
     state: "running" | "done" | "error";
@@ -25,7 +46,7 @@ interface Message {
     pendingMutationId?: string;
 }
 
-type OnboardingStep = "awaiting_transcript" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation" | "complete" | "unsupported_major";
+type OnboardingStep = "awaiting_dpr" | "awaiting_transcript" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation" | "complete" | "unsupported_major";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ParsedTranscript = Record<string, any>;
@@ -33,7 +54,7 @@ type ParsedTranscript = Record<string, any>;
 const WELCOME_MESSAGE: Message = {
     id: "welcome",
     role: "assistant",
-    content: `Welcome to **NYU Path** 🎓\n\nI'll help you plan your courses and track your degree progress.\n\nTo get started, please upload your **unofficial transcript PDF**. You can download it from Albert → Student Center → Academics → View Unofficial Transcript.\n\n📎 Just drag & drop or click below to upload!`,
+    content: `Welcome to **NYU Path** 🎓\n\nI'll help you plan your courses and track your degree progress.\n\nTo get started, please upload your **Degree Progress Report (DPR)** as a PDF.\n\nIn Albert: **Academics tab → Planning Tools → Degree Progress Report**. When the report opens in a new window, save it as PDF (browser print → "Save as PDF") and drop it below.\n\n📎 Drag & drop or click to upload!`,
     timestamp: new Date(),
 };
 
@@ -41,7 +62,7 @@ export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("awaiting_transcript");
+    const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("awaiting_dpr");
     const [isDragOver, setIsDragOver] = useState(false);
     const [parsedData, setParsedData] = useState<ParsedTranscript | null>(null);
     const [visaStatus, setVisaStatus] = useState<string | null>(null);
@@ -91,7 +112,9 @@ export default function ChatPage() {
             message: userText,
             parsedData,
             visaStatus,
+            graduationTarget,
             history: recentHistory,
+            userId: getOrCreateClientId(),
         })) {
             applyEvent(ev, assistant.id, toolStatuses);
         }
@@ -153,11 +176,19 @@ export default function ChatPage() {
                 // this guards against partial-chunk artifacts.
                 updateMessage(assistantId, { content: ev.finalText });
                 break;
-            case "error":
-                updateMessage(assistantId, {
-                    content: (assistantId && messages.find(m => m.id === assistantId)?.content) || `Sorry — something went wrong: ${ev.message}`,
-                });
+            case "error": {
+                // Don't leak raw exception text (file paths, internal
+                // identifiers, etc.) to the student. Log the detail so
+                // the operator can correlate via /admin/observability;
+                // show a generic but useful copy in-chat.
+                console.error("[chat v2 error]", ev.message);
+                const friendly =
+                    `Something went wrong on our side handling that turn. ` +
+                    `Try resending — if it keeps happening, email the operator at edoardo.mongardi18@gmail.com.`;
+                const existing = assistantId ? messages.find(m => m.id === assistantId)?.content : "";
+                updateMessage(assistantId, { content: existing && existing.length > 0 ? existing : friendly });
                 break;
+            }
         }
     };
 
@@ -233,17 +264,23 @@ export default function ChatPage() {
     };
 
     const handleFileUpload = useCallback(async (file: File) => {
-        if (!file.name.endsWith(".pdf")) {
-            addMessage("assistant", "Please upload a PDF file (your unofficial transcript).");
+        if (!file.name.toLowerCase().endsWith(".pdf")) {
+            addMessage("assistant", "Please upload a PDF file (your Degree Progress Report).");
             return;
         }
 
         addMessage("user", `📎 Uploaded: ${file.name}`);
         setIsLoading(true);
 
+        // Phase 7-E W2.1: primary path uploads under the "dpr" form
+        // field. The route detects DPR vs transcript by field name;
+        // if the deterministic DPR parser fails, the route returns
+        // an error message and we surface it to the user, who can
+        // then re-upload as a transcript via the fallback button.
         try {
+            const fieldName = onboardingStep === "awaiting_transcript" ? "transcript" : "dpr";
             const formData = new FormData();
-            formData.append("transcript", file);
+            formData.append(fieldName, file);
 
             const res = await fetch("/api/onboard", {
                 method: "POST",
@@ -259,6 +296,14 @@ export default function ChatPage() {
         } finally {
             setIsLoading(false);
         }
+    }, [onboardingStep]);
+
+    const switchToTranscriptFallback = useCallback(() => {
+        setOnboardingStep("awaiting_transcript");
+        addMessage(
+            "assistant",
+            "OK — please upload your **unofficial transcript** PDF instead. From Albert: **Student Center → Academics → View Unofficial Transcript**, then save the page as PDF and drop it here.",
+        );
     }, []);
 
     const handleDrop = (e: React.DragEvent) => {
@@ -296,12 +341,36 @@ export default function ChatPage() {
                 <span className={styles.headerBadge}>AI Advisor</span>
             </header>
 
+            {/* Phase 7-E W10.3 — persistent disclaimer banner.
+                Required by §5 of PRIVACY.md. Reminds the student that
+                this is an unofficial tool and they should verify with
+                an NYU adviser before acting on any output. Stays
+                visible at all times in the chat view. */}
+            <div className={styles.disclaimerBanner} role="note">
+                <span className={styles.disclaimerIcon} aria-hidden="true">⚠</span>
+                <span>
+                    AI advising assistant. <strong>Not a substitute for an academic adviser.</strong>{" "}
+                    Verify all decisions with NYU advising before acting.
+                </span>
+                <button
+                    type="button"
+                    onClick={async () => {
+                        await fetch("/api/auth/logout", { method: "POST" });
+                        window.location.href = "/login";
+                    }}
+                    className={styles.logoutButton}
+                    aria-label="Sign out"
+                >
+                    Sign out
+                </button>
+            </div>
+
             {/* Drag overlay */}
             {isDragOver && (
                 <div className={styles.dropOverlay}>
                     <div className={styles.dropBox}>
                         <span className={styles.dropIcon}>📄</span>
-                        <p>Drop your transcript PDF here</p>
+                        <p>Drop your DPR PDF here</p>
                     </div>
                 </div>
             )}
@@ -379,11 +448,11 @@ export default function ChatPage() {
             {/* Input area */}
             <div className={styles.inputArea}>
                 <div className={styles.inputContainer}>
-                    {onboardingStep === "awaiting_transcript" && (
+                    {(onboardingStep === "awaiting_dpr" || onboardingStep === "awaiting_transcript") && (
                         <button
                             className={styles.uploadBtn}
                             onClick={() => fileInputRef.current?.click()}
-                            title="Upload transcript PDF"
+                            title={onboardingStep === "awaiting_dpr" ? "Upload Degree Progress Report PDF" : "Upload unofficial transcript PDF"}
                         >
                             📎
                         </button>
@@ -392,8 +461,10 @@ export default function ChatPage() {
                         ref={inputRef}
                         className={styles.textInput}
                         placeholder={
-                            onboardingStep === "awaiting_transcript"
-                                ? "Upload your transcript or type a message..."
+                            onboardingStep === "awaiting_dpr"
+                                ? "Upload your DPR (or type a message)…"
+                                : onboardingStep === "awaiting_transcript"
+                                ? "Upload your transcript (or type a message)…"
                                 : "Type your message..."
                         }
                         value={input}
@@ -410,6 +481,15 @@ export default function ChatPage() {
                         ↑
                     </button>
                 </div>
+                {onboardingStep === "awaiting_dpr" && (
+                    <button
+                        className={styles.fallbackLink}
+                        onClick={switchToTranscriptFallback}
+                        type="button"
+                    >
+                        Can&rsquo;t access your DPR? Upload an unofficial transcript instead
+                    </button>
+                )}
                 <input
                     ref={fileInputRef}
                     type="file"

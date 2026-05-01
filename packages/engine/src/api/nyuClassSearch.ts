@@ -5,6 +5,8 @@
 // Endpoint: POST /class-search/api/?page=fose&route=search|details
 // ============================================================
 
+import { encodeFoseTerm } from "../data/foseTerm.js";
+
 /** Raw search result from the FOSE API */
 export interface FoseSearchResult {
     /** Internal key for details lookup, e.g. "4930" */
@@ -77,13 +79,10 @@ export interface TermOption {
  * Verified codes should be cached.
  */
 export function generateTermCode(year: number, term: "spring" | "summer" | "fall"): string {
-    // Observed: Spring 2025 = "1254"
-    // Possible pattern: "1" + last 2 digits of year + suffix
-    // 2025 Spring → "1254", Fall → "1258", Summer → "1256"
-    // 2024 Spring → "1244", Fall → "1248", Summer → "1246"
-    const lastTwo = year % 100;
-    const suffix = term === "spring" ? 4 : term === "summer" ? 6 : 8;
-    return `1${lastTwo}${suffix}`;
+    // Phase 10 Stage 2 — delegates to the data-layer encoder. The
+    // encoding rule + tests live in src/data/foseTerm.ts now; this
+    // wrapper is the legacy import surface.
+    return encodeFoseTerm(year, term);
 }
 
 /**

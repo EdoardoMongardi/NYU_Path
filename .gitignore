@@ -42,3 +42,38 @@ coverage
 .vercel
 packages/engine/src/data/course_embeddings.json
 data/
+
+# PII-containing source DPR PDFs and unredacted text extracts.
+# Only the .redacted.txt + .expected.json fixtures may be committed.
+SAA_STD_DS.pdf
+packages/engine/tests/fixtures/dpr_sample.txt
+packages/engine/tests/fixtures/*.unredacted.*
+
+# Scraper progress state (tool-local checkpointing)
+tools/playwright-scraper/.scrape_progress.json
+
+# Phase 7-E W8 — surrogate run results carry full transcripts that
+# may include synthetic-but-PII-sensitive content; keep them local-only.
+tools/cohort-eval/results/
+
+# Stale tsc-emit artifacts that compete with .tsx sources under
+# Next.js (Phase 7-E W12 incident — duplicate-page warnings + auth
+# layout bypass when app/chat/page.js shadowed app/chat/page.tsx).
+# tsconfig.json sets noEmit:true; this gitignore rule belt-and-suspenders.
+apps/web/app/**/*.js
+apps/web/app/**/*.js.map
+apps/web/app/**/*.d.ts
+apps/web/app/**/*.d.ts.map
+apps/web/lib/**/*.js
+apps/web/lib/**/*.js.map
+apps/web/lib/**/*.d.ts
+apps/web/lib/**/*.d.ts.map
+packages/engine/src/**/*.js
+packages/engine/src/**/*.js.map
+packages/engine/src/**/*.d.ts
+packages/engine/src/**/*.d.ts.map
+tsconfig.tsbuildinfo
+
+# apps/web/.env.local is a copy of the repo-root .env.local for
+# Next.js (which loads from its own cwd, not the monorepo root).
+# Both are gitignored via the global *.local pattern at the top.

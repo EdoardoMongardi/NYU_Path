@@ -11,8 +11,25 @@ export const checkTransferEligibilityTool = buildTool({
         "Checks internal-transfer eligibility from the student's home school to a " +
         "target NYU school. Returns: status (eligible / not_yet_eligible / " +
         "ineligible / unsupported), entry-year prereq checklist, application " +
-        "deadline, accepted terms, missing-prereq detail. Use this for " +
-        "'how do I transfer to X', 'am I eligible for Stern', etc. " +
+        "deadline, accepted terms, missing-prereq detail.\n\n" +
+        "Use this for: 'how do I transfer to X', 'am I eligible for Stern', " +
+        "'can I switch to Tisch', etc.\n\n" +
+        "Bulletin-grounded constraints this tool enforces:\n" +
+        "  • Lower bound: most schools require ~32+ credits (one full year) " +
+        "    before applying.\n" +
+        "  • Upper bound (CAS bulletin §Internal Transfer Students): " +
+        "    \"the latest students can begin their study at a new NYU school " +
+        "    is the first semester of their junior year. Typically, " +
+        "    applications to transfer between NYU schools, colleges, or " +
+        "    campuses are not accepted during or after the junior year.\" " +
+        "    For seniors (≥96 credits) the tool returns ineligible.\n" +
+        "  • Same-major rule (CAS bulletin, same section): \"Students are " +
+        "    rarely permitted to transfer between NYU schools when their " +
+        "    intended major (or a similar major) is already offered in their " +
+        "    current school.\" The tool does NOT enforce this automatically " +
+        "    (would need a programs-by-school catalog) — when answering, " +
+        "    surface this rule if the student's target major has an analog " +
+        "    in their current school.\n\n" +
         "ALWAYS include the gpaNote in your reply: GPA thresholds for internal " +
         "transfer are not published.",
     inputSchema: z.object({
@@ -34,7 +51,16 @@ export const checkTransferEligibilityTool = buildTool({
         `Required input: targetSchool (lowercase id). Returns deadline, prereq ` +
         `status, missing-prereq list, and the standard 'GPA not published' note.`,
     async call(input, { session }) {
-        return checkTransferEligibility(session.student!, input.targetSchool);
+        // When the DPR is loaded, prefer the DPR's authoritative
+        // credit-completed total. Without this override, the function
+        // sums student.coursesTaken which the DPR primary path leaves
+        // empty — producing wrong "you need 32 credits" answers for
+        // seniors with 138.
+        const creditsOverride = session.degreeProgressReport?.cumulative.creditsUsed ?? undefined;
+        const decision = checkTransferEligibility(session.student!, input.targetSchool, {
+            ...(creditsOverride !== undefined ? { creditsOverride } : {}),
+        });
+        return decision;
     },
     summarizeResult(decision) {
         if (decision.status === "unsupported") {

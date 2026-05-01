@@ -6,7 +6,7 @@ export { checkPassFailViolations } from "./audit/passfailGuard.js";
 export { calculateStanding, computeSemesterGPA } from "./audit/academicStanding.js";
 export { PrereqGraph } from "./graph/prereqGraph.js";
 export { EquivalenceResolver } from "./equivalence/equivalenceResolver.js";
-export { loadCourses, loadPrereqs, loadPrograms, loadProgram } from "./dataLoader.js";
+export { loadCourses, loadPrereqs, loadPrograms, loadProgram, loadSchoolConfig } from "./dataLoader.js";
 export { resolveExamCredit, EXAM_GENERAL_RULES } from "./data/examEquivalencies.js";
 
 // Phase 1: Planner
@@ -124,6 +124,42 @@ export type {
     PreLoopOptions,
     SystemPromptOptions,
 } from "./agent/index.js";
+
+// Phase 7-E: Degree Progress Report (DPR) module — the canonical
+// audit ingestion path. The DPR is a structured rendering of NYU's
+// PeopleSoft Academic Advisement Report; ingesting it lets the
+// agent answer current-program audit questions deterministically
+// without authoring per-program rule files.
+export {
+    parseDpr,
+    degreeProgressReportSchema,
+    walkRequirements,
+    notSatisfiedRequirements,
+    findRequirementById,
+    dprToAuditResults,
+    dprToPrimaryAuditResult,
+    deriveTemporalContext,
+    normalizeGraduationTarget,
+} from "./dpr/index.js";
+export type {
+    DegreeProgressReport,
+    DPRMeta,
+    DPRHeader,
+    DPRProgram,
+    DPRAdvisorNotation,
+    DPRCumulative,
+    DPRRequirementGroup,
+    DPRRequirement,
+    DPRCounter,
+    DPRCourseRow,
+    DPRStatus,
+    ParseDprOptions,
+    ParseDprResult,
+    ParseDprSuccess,
+    ParseDprFailure,
+    DprToAuditOptions,
+    DprTemporalContext,
+} from "./dpr/index.js";
 
 // Phase 4: RAG entry points (used by the agent's search_policy tool
 // + by the v2 web route to load the curated template corpus).

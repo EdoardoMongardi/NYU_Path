@@ -65,6 +65,16 @@ export interface ToolSession {
         confidenceBands?: import("../rag/policySearch.js").ConfidenceBandThresholds;
     };
     /**
+     * Phase 7-E W3 — parsed Albert Degree Progress Report. When present,
+     * `run_full_audit` and `plan_semester` read deterministic audit
+     * verdicts from here (NYU's pre-computed numbers) instead of running
+     * the local rule engine. `what_if_audit` uses it as the transcript
+     * source when projecting against just-in-time-extracted hypothetical
+     * programs. Cardinal Rule §2.1 holds because every numerical claim
+     * traces to a field on this object.
+     */
+    degreeProgressReport?: import("../dpr/schema.js").DegreeProgressReport;
+    /**
      * Optional persistence hook. When present, `confirm_profile_update`
      * (Phase 7-B Step 10) writes the post-mutation profile + an audit
      * row through this store on apply. When absent, the tool is purely

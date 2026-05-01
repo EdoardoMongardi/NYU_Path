@@ -41,8 +41,16 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // Onboarding state-machine steps.
-        if (onboardingStep && onboardingStep !== "complete" && onboardingStep !== "awaiting_transcript") {
+        // Onboarding state-machine steps. Phase 7-E pivoted onboarding
+        // from "upload transcript" to "upload DPR"; both states route
+        // here as no-ops so the chat page's drag-drop / button-click
+        // upload UI handles the actual ingestion (the legacy LLM-based
+        // text → state-transition flow is gone).
+        const waitingForUpload =
+            onboardingStep === "awaiting_dpr"
+            || onboardingStep === "awaiting_transcript"
+            || !onboardingStep; // initial chat-page state pre-message
+        if (onboardingStep && onboardingStep !== "complete" && !waitingForUpload) {
             return handleOnboardingStep(message, onboardingStep);
         }
 
@@ -157,10 +165,11 @@ function handleOnboardingStep(message: string, step: string) {
         }
 
         default:
-            return NextResponse.json({
-                message: "Please upload your transcript PDF to get started.",
-                onboardingStep: "awaiting_transcript",
-            });
+            // Phase 7-E: do NOT downgrade the chat page's onboardingStep
+            // to a stale "awaiting_transcript" — the chat page already
+            // tells the student to upload a DPR via the welcome message
+            // + drag-and-drop UI. Pass through to chitchat.
+            return handleBasicChat(message, step);
     }
 }
 
@@ -170,17 +179,19 @@ function handleOnboardingStep(message: string, step: string) {
 
 async function handleBasicChat(message: string, onboardingStep?: string) {
     const apiKey = process.env.OPENAI_API_KEY;
-    const needsTranscript = onboardingStep === "awaiting_transcript";
+    // Phase 7-E: pre-upload onboarding asks for the DPR (Degree Progress
+    // Report) — the legacy "transcript" path is a fallback only.
+    const needsDpr = onboardingStep !== "complete";
 
     // If we have an API key, run a 1-shot completion via the engine
     // adapter (no tools — pre-onboarding has no profile to act on).
     if (apiKey) {
         const llm = new OpenAIEngineClient({ modelId: DEFAULT_PRIMARY_MODEL, apiKey });
-        const systemPrompt = `You are NYU Path 🎓, a friendly AI course planning assistant for NYU students. You are chatting with a student who has NOT yet uploaded their transcript.
+        const systemPrompt = `You are NYU Path 🎓, a friendly AI course planning assistant for NYU students. You are chatting with a student who has NOT yet uploaded their Albert Degree Progress Report (DPR).
 
-Your capabilities: transcript parsing, degree audit, course search, semester planning with prerequisite checks.
+Your capabilities: deterministic DPR parsing, degree audit, course search, semester planning with prerequisite checks.
 
-The student needs to upload their unofficial transcript PDF before you can help with specific academic planning. Mention this naturally if relevant, but don't repeat it in every single response — it gets annoying.
+The student needs to upload their **Degree Progress Report PDF** before you can help with specific academic planning. To get one: in Albert → Academics tab → Planning Tools → Degree Progress Report → save the page as PDF. Mention this naturally if relevant — but don't repeat it in every response.
 
 Keep responses concise (2-3 sentences). Be warm, natural, and conversational. Match the student's tone (casual if they're casual).`;
 
@@ -191,6 +202,10 @@ Keep responses concise (2-3 sentences). Be warm, natural, and conversational. Ma
                 temperature: 0.6,
                 maxTokens: 200,
             });
+            // CRITICAL: do NOT return an onboardingStep here. The chat
+            // page already manages the upload state via the welcome
+            // message + drag-drop UI — overriding it would clobber the
+            // DPR-first flow back into the legacy transcript path.
             return NextResponse.json({ message: response.text });
         } catch {
             // Fall through to hardcoded responses if LLM fails.
@@ -204,12 +219,12 @@ Keep responses concise (2-3 sentences). Be warm, natural, and conversational. Ma
                 "📚 **Find electives** — \"I want courses about machine learning\"\n" +
                 "📊 **Check progress** — \"How many credits do I still need?\"\n" +
                 "📋 **Plan semester** — \"What should I take next semester?\"\n" +
-                (needsTranscript ? "\nBut first, **upload your transcript PDF** so I can see your courses! 📎" : "\nWhat can I help you with?"),
+                (needsDpr ? "\nBut first, **upload your Degree Progress Report PDF** (from Albert → Academics → Planning Tools → Degree Progress Report). 📎" : "\nWhat can I help you with?"),
         });
     }
     return NextResponse.json({
-        message: needsTranscript
-            ? "I'd love to help! But first, please **upload your transcript PDF** so I know what courses you've completed. 📎\n\nYou can download it from Albert → Student Center → Academics → View Unofficial Transcript."
+        message: needsDpr
+            ? "I'd love to help! But first, please **upload your Degree Progress Report PDF** so I can see your degree state. 📎\n\nIn Albert: **Academics tab → Planning Tools → Degree Progress Report**, then browser **Print → Save as PDF** and drop it here."
             : `I understand you're asking: "${message}"\n\nTry asking:\n• "What should I take next semester?"\n• "Am I on track to graduate?"\n• "Find courses about data science"`,
     });
 }
