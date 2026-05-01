@@ -118,6 +118,22 @@ describe("streamChatV2 (Phase 6.5 P-1)", () => {
         expect(events).toHaveLength(1);
         expect(events[0]!.kind).toBe("token");
     });
+
+    it("parses a thinking event and round-trips its text", async () => {
+        const chunks = [
+            "event: thinking\ndata: " + JSON.stringify({ kind: "thinking", text: "Let me think about this." }) + "\n\n",
+            "event: done\ndata: " + JSON.stringify({ kind: "done", finalText: "ok", modelUsedId: "claude-haiku-4-5-20251001" }) + "\n\n",
+        ];
+        installFetch(async () => fakeResponse(chunks));
+        const events: ChatV2Event[] = [];
+        for await (const ev of streamChatV2({ message: "hi", parsedData: {} })) {
+            events.push(ev);
+        }
+        expect(events).toEqual([
+            { kind: "thinking", text: "Let me think about this." },
+            { kind: "done", finalText: "ok", modelUsedId: "claude-haiku-4-5-20251001" },
+        ]);
+    });
 });
 
 describe("extractPendingMutationId", () => {
