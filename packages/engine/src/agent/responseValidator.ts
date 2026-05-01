@@ -33,7 +33,8 @@ export type ViolationKind =
     | "missing_caveat"
     | "verbatim_drift"
     | "fabricated_attribution"
-    | "identity_drift";
+    | "identity_drift"
+    | "quantitative_shortfall";
 
 export interface Violation {
     kind: ViolationKind;
@@ -541,6 +542,83 @@ function checkIdentityDrift(assistantText: string): Violation[] {
     return violations;
 }
 
+// ============================================================
+// 7. Quantitative-shortfall validator (Phase 12.5 §1)
+// ============================================================
+// Catches "asked for N <unit>, delivered M < N <unit>, punted to user"
+// patterns. Generic structural rule: extracts (number, unit) pairs from
+// userQuestion, finds the same unit in assistantText, compares
+// quantities. If assistantText already acknowledges the shortfall (via
+// one of the SHORTFALL_ACKNOWLEDGEMENTS phrases), the rule passes — the
+// agent did its job by being explicit about the gap.
+
+const SHORTFALL_ACKNOWLEDGEMENTS = [
+    /could not fill/i,
+    /below the requested/i,
+    /short of the requested/i,
+    /f-?1 floor/i,
+    /credit ceiling/i,
+    /less than (?:the )?requested/i,
+    /unable to (?:fill|reach) the (?:requested )?(?:target|amount)/i,
+];
+
+/**
+ * Catches "asked for N <unit>, delivered M < N <unit>, punted to user"
+ * patterns. Generic structural rule: extracts (number, unit) pairs from
+ * userQuestion, finds the same unit in assistantText, compares
+ * quantities. If assistantText already acknowledges the shortfall (via
+ * one of the SHORTFALL_ACKNOWLEDGEMENTS phrases), the rule passes — the
+ * agent did its job by being explicit about the gap.
+ *
+ * Phase 12.5 §1 — generic across all unit-keyword + quantity asks; not
+ * a per-case keyword rule.
+ */
+function checkQuantitativeShortfall(userQuestion: string | undefined, assistantText: string): Violation[] {
+    if (!userQuestion) return [];
+
+    // Extract (number, unit) pairs from the user's question. Pattern:
+    // a number followed by an optional adjective then a unit-keyword.
+    // E.g. "16 credits", "5 electives", "courses of 16 credits in total".
+    const requested: Array<{ count: number; unit: string }> = [];
+    const REQ_RE = /\b(\d+)\s+(?:[a-z]+\s+)?(credits?|courses?|electives?|units?|classes)\b/gi;
+    let m: RegExpExecArray | null;
+    while ((m = REQ_RE.exec(userQuestion)) !== null) {
+        requested.push({ count: parseInt(m[1]!, 10), unit: m[2]!.toLowerCase().replace(/s$/, "") });
+    }
+    if (requested.length === 0) return [];
+
+    // Did the assistant acknowledge a shortfall? If so, no violation —
+    // the agent already explained the gap.
+    const acknowledged = SHORTFALL_ACKNOWLEDGEMENTS.some(re => re.test(assistantText));
+    if (acknowledged) return [];
+
+    // For each requested (count, unit), find the highest delivered
+    // count for the same unit in the assistant text. If highest < count,
+    // fire the violation.
+    const violations: Violation[] = [];
+    for (const req of requested) {
+        // Use the singular-or-plural form of the unit key.
+        const DELIV_RE = new RegExp(`\\b(\\d+)\\s+${req.unit}s?\\b`, "gi");
+        let highest = 0;
+        let mm: RegExpExecArray | null;
+        while ((mm = DELIV_RE.exec(assistantText)) !== null) {
+            const delivered = parseInt(mm[1]!, 10);
+            if (delivered > highest) highest = delivered;
+        }
+        if (highest > 0 && highest < req.count) {
+            violations.push({
+                kind: "quantitative_shortfall",
+                detail:
+                    `User requested ${req.count} ${req.unit}${req.count === 1 ? "" : "s"}; ` +
+                    `assistant delivered ${highest}. Either deliver the full request, or explicitly ` +
+                    `acknowledge the shortfall ("could not fill", "below the requested ${req.count}", etc.) ` +
+                    `and explain why. Do not punt with a clarifying question after a partial delivery.`,
+            });
+        }
+    }
+    return violations;
+}
+
 export function validateResponse(ctx: ValidatorContext): ValidatorVerdict {
     const violations: Violation[] = [
         ...checkGrounding(ctx),
@@ -549,6 +627,7 @@ export function validateResponse(ctx: ValidatorContext): ValidatorVerdict {
         ...checkVerbatim(ctx),
         ...checkAttribution(ctx),
         ...checkIdentityDrift(ctx.assistantText),
+        ...checkQuantitativeShortfall(ctx.userQuestion, ctx.assistantText),
     ];
     return { ok: violations.length === 0, violations };
 }
