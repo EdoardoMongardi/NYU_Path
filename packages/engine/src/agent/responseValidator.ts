@@ -176,8 +176,15 @@ function checkGrounding(ctx: ValidatorContext): Violation[] {
     const violations: Violation[] = [];
     const claims = extractClaimNumbers(ctx.assistantText);
     if (claims.size === 0) return violations;
-    const groundCorpus = ctx.invocations
-        .map((inv) => `${inv.summary ?? ""} ${JSON.stringify(inv.args)}`)
+    // Phase 12.5 Task 2 — numbers the user typed in their question are
+    // legitimately groundable by the agent's reply (e.g. "16 credits"
+    // echoed back in a clarifying question). Without this, the
+    // grounding rule false-positives on every quote-back of a user
+    // quantity.
+    const groundCorpus = [
+        ...ctx.invocations.map((inv) => `${inv.summary ?? ""} ${JSON.stringify(inv.args)}`),
+        ctx.userQuestion ?? "",
+    ]
         .join(" ")
         .toLowerCase();
     for (const claim of claims) {
