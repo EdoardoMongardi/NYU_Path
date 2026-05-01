@@ -180,7 +180,11 @@ export const planSemesterTool = buildTool({
         maxCourses: z.number().int().positive().optional(),
         maxCredits: z.number().positive().optional(),
         programId: z.string().optional()
-            .describe("Optional: plan against a specific declared program."),
+            .describe(
+                "The student's program ID (e.g. 'computer_science_math'). " +
+                "If the student has exactly one declared program, omit this and validateInput will fill it in. " +
+                "If the student has multiple programs, this is REQUIRED — the planner will refuse without it.",
+            ),
         graduationTerm: z.string().optional()
             .describe(
                 "Optional: e.g. '2027-spring'. When set, the planner spreads " +
@@ -198,19 +202,46 @@ export const planSemesterTool = buildTool({
     maxResultChars: 3500,
     async validateInput(input, { session }) {
         if (!session.student) return { ok: false, userMessage: "I need your transcript or Degree Progress Report first." };
-        // DPR path: only needs DPR + student.
+
+        // Phase 12 Task 4 — programId auto-default + multi-program guard.
+        // Runs BEFORE the DPR-vs-authored split so both paths get the same
+        // behavior. When the student has exactly one declared program and
+        // the agent omitted programId, we fill it in so the DPR path can
+        // scope its requirement walk. When the student has multiple
+        // declared programs and no explicit programId was passed, we
+        // reject early — the agent must be explicit about which program
+        // to plan for, otherwise the DPR walk is ambiguous.
+        const declared = session.student.declaredPrograms ?? [];
+        if (!input.programId) {
+            if (declared.length === 0) {
+                return {
+                    ok: false,
+                    userMessage:
+                        "You haven't declared a program. Either declare one first or pass an explicit programId.",
+                };
+            }
+            if (declared.length === 1) {
+                // Auto-default to the single declared program. This
+                // makes the agent's life easier — it doesn't have to
+                // remember to pass programId for single-program
+                // students — while still failing loud on ambiguous
+                // multi-declared cases.
+                input.programId = declared[0]!.programId;
+            } else {
+                return {
+                    ok: false,
+                    userMessage:
+                        `Student has ${declared.length} declared programs (${declared.map(p => p.programId).join(", ")}) — ` +
+                        `pass programId explicitly to scope the plan.`,
+                };
+            }
+        }
+
+        // DPR path: only needs DPR + student (programId now guaranteed set above).
         if (session.degreeProgressReport) return { ok: true };
         // Authored-rules fallback: needs full data trio.
         if (!session.courses || !session.prereqs || !session.programs) {
             return { ok: false, userMessage: "Required engine data not loaded." };
-        }
-        const declared = session.student.declaredPrograms;
-        if (declared.length === 0 && !input.programId) {
-            return {
-                ok: false,
-                userMessage:
-                    "You haven't declared a program. Either declare one first or pass an explicit programId.",
-            };
         }
         return { ok: true };
     },
@@ -249,6 +280,21 @@ export const planSemesterTool = buildTool({
             const ceiling = Math.min(maxCredits, ceilingFromConfig);
             const planBudget = Math.max(0, ceiling - ipCreditsForTarget);
 
+            // Phase 12 Task 4 — scope the DPR walk to the requested
+            // program. DPR requirements in this schema are school-level
+            // (DPRRequirement has no programId field — only rId, title,
+            // status, statusText, description, counter, coursesUsed).
+            // The filter is therefore a no-op; left as a placeholder so
+            // future DPR shapes with per-program scope wire through
+            // cleanly. If NYU's parser ever emits a programId field on
+            // leaf requirements, replace the `= ns` assignment with:
+            //   ns.filter(req => {
+            //       const rp = (req as { programId?: string }).programId;
+            //       if (!rp) return true; // school-level requirement
+            //       return rp === input.programId;
+            //   })
+            const scopedRequirements = ns;
+
             // Phase 11.2 — workload-balanced quota computation.
             // When `graduationTerm` is supplied, count the semesters
             // remaining (target → graduation inclusive) and divide
@@ -258,7 +304,7 @@ export const planSemesterTool = buildTool({
             // student into low-credit electives or violates F-1
             // floor). Generic — works for any major and any
             // graduation horizon.
-            const remainingHardRequirements = ns.filter((req) => isHardRequirement(req));
+            const remainingHardRequirements = scopedRequirements.filter((req) => isHardRequirement(req));
             const semestersUntilGrad = input.graduationTerm
                 ? countTermsBetween(input.targetSemester, input.graduationTerm)
                 : 1;
@@ -293,7 +339,7 @@ export const planSemesterTool = buildTool({
                 }
             }
 
-            for (const req of ns) {
+            for (const req of scopedRequirements) {
                 if (suggestions.length >= maxCourses) break;
                 const isHard = isHardRequirement(req);
                 // Phase 11.2 — respect the hard-quota cap. Once we
