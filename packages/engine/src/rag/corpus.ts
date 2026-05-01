@@ -17,7 +17,7 @@
 // vector DB; the rebuild path here exists for tests and dev iteration.
 // ============================================================
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chunkMarkdown, type PolicyChunk } from "./chunker.js";
@@ -33,6 +33,9 @@ interface CorpusEntry {
     source: string;
     /** Path relative to data/bulletin-raw/ */
     relPath: string;
+    /** Phase 9 — category tag so the agent + ranker can prefer the
+     *  right kind of source. Optional for back-compat. */
+    category?: "academic_policy" | "admissions" | "program" | "core_curriculum" | "course_catalog" | "school_overview";
 }
 
 /**
@@ -81,6 +84,106 @@ export interface BuildCorpusOptions {
     strict?: boolean;
     /** When true (default), log skipped entries via console.warn. */
     warnOnSkip?: boolean;
+    /** Phase 9 Stage 1 — when true, the corpus also includes every
+     *  CAS program page (BA / BS / minor) under undergraduate/arts-
+     *  science/programs/ + the College Core Curriculum page. Also
+     *  pulls similar program directories under arts/business/
+     *  engineering/individualized-study/liberal-studies for what-if
+     *  questions. Defaults to false for back-compat — the embed
+     *  script flips it on. */
+    includeProgramPages?: boolean;
+}
+
+/** Phase 9 Stage 1 — map a program-directory location → school id.
+ *  Mirrors the schoolId convention used elsewhere in the engine
+ *  (see SchoolConfig + buildStudentProfileFromDpr). */
+const PROGRAM_DIR_TO_SCHOOL: Record<string, string> = {
+    "arts-science": "cas",
+    "arts": "tisch",
+    "business": "stern",
+    "engineering": "tandon",
+    "individualized-study": "gallatin",
+    "liberal-studies": "liberal_studies",
+    "abu-dhabi": "nyuad",
+    "shanghai": "shanghai",
+};
+
+/** Phase 9 Stage 1 — derive a human-readable program label from the
+ *  directory slug. E.g. "mathematics-computer-science-ba" → "Mathematics
+ *  and Computer Science (BA)". Used for the chunk metadata's `source`
+ *  field so reranker output is human-meaningful. */
+function programSlugToLabel(slug: string, schoolId: string): string {
+    // Trim a trailing degree marker (-ba, -bs, -minor, -ma, -ms) and remember it.
+    const degreeMatch = slug.match(/-(ba|bs|minor|ma|ms|phd|cert)$/);
+    const degree = degreeMatch ? degreeMatch[1] : null;
+    const base = degreeMatch ? slug.slice(0, -degreeMatch[0].length) : slug;
+    // Title-case the rest, joining with spaces.
+    const title = base
+        .split("-")
+        .map((p) => (p === "and" || p === "of" || p === "in" ? p : p[0]?.toUpperCase() + p.slice(1)))
+        .join(" ");
+    const schoolPrefix =
+        schoolId === "cas" ? "CAS"
+        : schoolId === "stern" ? "Stern"
+        : schoolId === "tandon" ? "Tandon"
+        : schoolId === "tisch" ? "Tisch"
+        : schoolId === "gallatin" ? "Gallatin"
+        : schoolId === "liberal_studies" ? "Liberal Studies"
+        : schoolId === "nyuad" ? "NYU Abu Dhabi"
+        : schoolId === "shanghai" ? "NYU Shanghai"
+        : schoolId;
+    const degreeLabel = degree ? ` (${degree.toUpperCase()})` : "";
+    return `${schoolPrefix} ${title}${degreeLabel}`;
+}
+
+/** Phase 9 Stage 1 — walk `data/bulletin-raw/undergraduate/<school-dir>/programs/`
+ *  and produce a CorpusEntry per program _index.md. Skips dirs that
+ *  don't have an _index.md (rare). */
+function discoverProgramEntries(bulletinDir: string): CorpusEntry[] {
+    const out: CorpusEntry[] = [];
+    const undergradRoot = join(bulletinDir, "undergraduate");
+    if (!existsSync(undergradRoot)) return out;
+    for (const schoolDir of readdirSync(undergradRoot)) {
+        const schoolId = PROGRAM_DIR_TO_SCHOOL[schoolDir];
+        if (!schoolId) continue;
+        const programsRoot = join(undergradRoot, schoolDir, "programs");
+        if (!existsSync(programsRoot)) continue;
+        for (const slug of readdirSync(programsRoot)) {
+            const programDir = join(programsRoot, slug);
+            try {
+                if (!statSync(programDir).isDirectory()) continue;
+            } catch { continue; }
+            const indexPath = join(programDir, "_index.md");
+            if (!existsSync(indexPath)) continue;
+            out.push({
+                school: schoolId,
+                source: programSlugToLabel(slug, schoolId),
+                relPath: join("undergraduate", schoolDir, "programs", slug, "_index.md"),
+                category: "program",
+            });
+        }
+    }
+    return out;
+}
+
+/** Phase 9 Stage 1 — entries for the College Core Curriculum page +
+ *  any other school-overview pages we want indexed (e.g. CAS
+ *  college-core-curriculum). */
+function discoverCoreCurriculumEntries(bulletinDir: string): CorpusEntry[] {
+    const out: CorpusEntry[] = [];
+    const candidates: Array<{school: string; relPath: string; source: string}> = [
+        {
+            school: "cas",
+            source: "CAS College Core Curriculum",
+            relPath: "undergraduate/arts-science/college-core-curriculum/_index.md",
+        },
+    ];
+    for (const c of candidates) {
+        if (existsSync(join(bulletinDir, c.relPath))) {
+            out.push({ ...c, category: "core_curriculum" });
+        }
+    }
+    return out;
 }
 
 export interface BuildCorpusResult {
@@ -98,8 +201,17 @@ export async function buildCorpus(
     options: BuildCorpusOptions = {},
 ): Promise<BuildCorpusResult> {
     const year = options.catalogYear ?? "2025-2026";
-    const entries = options.entries ?? DEFAULT_ENTRIES;
     const bulletinDir = options.bulletinDir ?? BULLETIN_DIR;
+    let entries = options.entries ?? DEFAULT_ENTRIES;
+    if (options.includeProgramPages) {
+        // De-duplicate against the explicit DEFAULT_ENTRIES list (we
+        // already include economics-ba there) — keep the explicit
+        // entry's source name + category.
+        const seen = new Set(entries.map((e) => e.relPath));
+        const programEntries = discoverProgramEntries(bulletinDir).filter((e) => !seen.has(e.relPath));
+        const coreEntries = discoverCoreCurriculumEntries(bulletinDir).filter((e) => !seen.has(e.relPath));
+        entries = [...entries, ...programEntries, ...coreEntries];
+    }
     const store = new VectorStore(embedder);
     const allChunks: PolicyChunk[] = [];
     const skipped: CorpusEntry[] = [];
@@ -116,6 +228,7 @@ export async function buildCorpus(
             school: entry.school,
             year,
             sourcePath: entry.relPath,
+            ...(entry.category ? { category: entry.category } : {}),
         });
         allChunks.push(...chunks);
     }

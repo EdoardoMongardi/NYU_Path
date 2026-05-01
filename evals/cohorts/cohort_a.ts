@@ -42,6 +42,8 @@
 
 import type { ConversationCase } from "../cohort/runner.js";
 import type { StudentProfile } from "@nyupath/shared";
+import { COHORT_A_DPR_CASES } from "./cohort_a_dpr.js";
+import { COHORT_A_REAL_DPR_CASES } from "./cohort_a_real_dpr.js";
 
 // ----------------------------------------------------------------
 // Reusable student profiles
@@ -94,10 +96,10 @@ const CAS_ECON_JUNIOR: StudentProfile = {
 };
 
 // ----------------------------------------------------------------
-// Cohort A starter cases (10 of 50)
+// Cohort A starter cases (10 of 50) — legacy, transcript-driven
 // ----------------------------------------------------------------
 
-export const COHORT_A_CASES: ConversationCase[] = [
+const COHORT_A_LEGACY_CASES: ConversationCase[] = [
     {
         id: "cohortA-001-cs-audit",
         description: "CAS/CS junior asks for a degree audit.",
@@ -212,4 +214,21 @@ export const COHORT_A_CASES: ConversationCase[] = [
             // We don't pin a specific tool here because either is acceptable.
         }],
     },
+];
+
+// ----------------------------------------------------------------
+// Final cohort A export (Phase 7-E W6)
+// ----------------------------------------------------------------
+// 10 legacy starter cases (transcript-driven, exercise authored-rules
+// fallback path) + 40 DPR-driven cases (post-pivot, exercise the
+// W3-refactored DPR-primary path on every audit/planner/whatif tool).
+// Total: 50 cases per the §12.6.5 cohort A composite gate.
+//
+// Both case shapes share the ConversationCase interface; the runner
+// dispatches automatically based on whether `degreeProgressReport`
+// is present on the case.
+export const COHORT_A_CASES: ConversationCase[] = [
+    ...COHORT_A_LEGACY_CASES,
+    ...COHORT_A_DPR_CASES,
+    ...COHORT_A_REAL_DPR_CASES,
 ];

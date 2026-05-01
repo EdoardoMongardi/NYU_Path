@@ -45,6 +45,10 @@ export interface PersonaSurrogateOptions {
     maxFollowUps?: number;
     /** Optional fallback for the agent client. */
     fallbackClient?: LLMClient;
+    /** Phase 7-E W8 — extras to merge into every case's ToolSession.
+     *  Lets the runner script inject the production rag bundle +
+     *  searchCoursesFn so tools have the full data path available. */
+    sessionExtras?: Partial<ToolSession>;
 }
 
 /** Build the system prompt for the persona LLM. The persona is
@@ -81,8 +85,17 @@ async function runOneCase(
     c: ConversationCase,
     opts: PersonaSurrogateOptions,
 ): Promise<{ caseId: string; turnReports: CompositeReport[]; transcript: Array<{ role: "user" | "assistant"; content: string }>; errors: string[] }> {
-    const session: ToolSession = { student: c.student };
-    const agentSystemPrompt = buildSystemPrompt({ student: c.student });
+    // Phase 7-E W8 — propagate the DPR + any session extras the
+    // PersonaSurrogateOptions carries (RAG, courseSearchFn, profileStore).
+    const session: ToolSession = {
+        student: c.student,
+        ...(c.degreeProgressReport ? { degreeProgressReport: c.degreeProgressReport } : {}),
+        ...(opts.sessionExtras ?? {}),
+    };
+    const agentSystemPrompt = buildSystemPrompt({
+        student: c.student,
+        dprLoaded: c.degreeProgressReport !== undefined,
+    });
     const personaSystemPrompt = personaSystem(c.student, c.description);
 
     const transcript: Array<{ role: "user" | "assistant"; content: string }> = [];

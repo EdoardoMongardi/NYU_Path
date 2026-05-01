@@ -20,28 +20,47 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { join } from "node:path";
 import {
     runAgentTurnStreaming,
     buildDefaultRegistry,
     buildSystemPrompt,
-    preLoopDispatch,
+    // Phase 8 A1: preLoopDispatch removed from active path; import
+    // dropped to surface compile-time mistakes if anything tries to
+    // reintroduce the keyword router. runTemplateMatcherOnly stays
+    // for recovery mode (cohortConfig.evalGateFailing).
     validateResponse,
     createPrimaryClient,
     createFallbackClient,
     getCohortConfig,
     runTemplateMatcherOnly,
     summariesAsPriorMessage,
+    JsonlFileSink,
+    type FallbackSink,
     type ToolSession,
     type LLMMessage,
     type ToolInvocation,
     type Cohort,
 } from "@nyupath/engine";
-import { loadPolicyTemplates } from "@nyupath/engine";
-import { buildStudentProfileV2, type TranscriptData } from "../../../../lib/buildSession";
+import {
+    loadPolicyTemplates,
+    loadSchoolConfig,
+    degreeProgressReportSchema,
+    deriveTemporalContext,
+    normalizeGraduationTarget,
+    type DegreeProgressReport,
+} from "@nyupath/engine";
+import {
+    buildStudentProfileV2,
+    buildStudentProfileFromDpr,
+    type TranscriptData,
+} from "../../../../lib/buildSession";
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
 import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
 import { getStores } from "../../../../lib/db/store";
 import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
+import { consumeRequest } from "../../../../lib/rateLimit";
+import { readSessionFromRequest } from "../../../../lib/auth/session";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -56,10 +75,46 @@ function getTemplates() {
     return TEMPLATES;
 }
 
+// Phase 7-E W11 reviewer P1-2 — wire a real fallback sink so the
+// /admin/observability dashboard has data to display. Without this
+// every model_error_no_fallback / validator_replay / context_limit_terminate
+// silently disappears and the operator has nothing to debug from.
+// Resolution order matches the dashboard's LOG_PATH_CANDIDATES:
+//   1. NYUPATH_FALLBACK_LOG_PATH env var (operator override)
+//   2. <cwd>/data/fallback_log.jsonl  (the dashboard's first guess)
+let FALLBACK_SINK: FallbackSink | null = null;
+function getFallbackSink(): FallbackSink {
+    if (FALLBACK_SINK === null) {
+        const path =
+            process.env.NYUPATH_FALLBACK_LOG_PATH
+            ?? join(process.cwd(), "data", "fallback_log.jsonl");
+        FALLBACK_SINK = new JsonlFileSink(path);
+    }
+    return FALLBACK_SINK;
+}
+
+/** Phase 7-E onboarding shape: discriminated union. The DPR variant
+ *  is the post-pivot canonical artifact; the transcript variant stays
+ *  as the cohort-A fallback for students whose DPR isn't accessible.
+ *
+ *  IMPORTANT: the `dpr` discriminator is recognized but not yet
+ *  consumed at this route until Workstream 3 lands the
+ *  `session.degreeProgressReport` injection + tool refactor. Until
+ *  then we reject DPR-shaped requests early so the failure mode is
+ *  loud, never silent profile-corruption. */
+type ParsedDataPayload =
+    | (TranscriptData & { kind?: undefined })
+    | { kind: "transcript"; transcript: TranscriptData }
+    | { kind: "dpr"; report: unknown };
+
 interface V2RequestBody {
     message: string;
-    parsedData?: TranscriptData;
+    parsedData?: ParsedDataPayload;
     visaStatus?: string;
+    /** Phase 7-E temporal-context fix — collected during onboarding,
+     *  free-form (e.g., "Spring 2027" or "spring2027"). Normalized
+     *  into the prompt as `graduationTerm`. */
+    graduationTarget?: string | null;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     correlationId?: string;
     /** Phase 7-A: stable user id used for cohort lookup. When omitted,
@@ -84,31 +139,154 @@ export async function POST(req: NextRequest): Promise<Response> {
             { status: 400 },
         );
     }
+    // Phase 7-E W3.4 — discriminated parsedData. The DPR path is the
+    // post-pivot canonical onboarding artifact; the transcript path
+    // remains as the cohort-A fallback.
+    const pd = body.parsedData;
+    const isDprPayload = (
+        pd: ParsedDataPayload,
+    ): pd is { kind: "dpr"; report: DegreeProgressReport } =>
+        pd && typeof pd === "object" && "kind" in pd && pd.kind === "dpr";
+    const isTranscriptPayload = (
+        pd: ParsedDataPayload,
+    ): pd is { kind: "transcript"; transcript: TranscriptData } =>
+        pd && typeof pd === "object" && "kind" in pd && pd.kind === "transcript";
+
+    // Validate DPR payload shape lazily (the engine schema lives in the
+    // engine package; we re-validate here to fail loudly on a bad
+    // client rather than at the first tool call).
+    let parsedDpr: DegreeProgressReport | undefined;
+    if (isDprPayload(pd)) {
+        const v = degreeProgressReportSchema.safeParse(pd.report);
+        if (!v.success) {
+            return NextResponse.json(
+                {
+                    error:
+                        "DPR payload failed schema validation. Re-upload your DPR through onboarding " +
+                        `(${v.error.issues.map((i) => i.path.join(".")).slice(0, 3).join(", ")}).`,
+                },
+                { status: 400 },
+            );
+        }
+        parsedDpr = v.data;
+    }
+
+    // Unwrap the transcript-shaped discriminator so the legacy builder
+    // sees the same flat shape it expected pre-W2. Pre-W2 callers
+    // (no `kind`) continue to work unchanged.
+    const transcriptPayload: TranscriptData = isTranscriptPayload(pd)
+        ? pd.transcript
+        : isDprPayload(pd)
+            ? ({} as TranscriptData) // DPR path doesn't use this; legacy builder gets a stub
+            : (pd as TranscriptData);
 
     const primary = createPrimaryClient();
     if (!primary) {
+        // Phase 8 B5 — primary is no longer always OpenAI; the message
+        // names whichever provider's key is needed by the configured
+        // primary (default: Anthropic).
+        const provider = (process.env.NYUPATH_PRIMARY_PROVIDER ?? "anthropic").toUpperCase();
         return NextResponse.json(
-            { error: "OPENAI_API_KEY not configured." },
+            { error: `${provider}_API_KEY not configured.` },
             { status: 503 },
         );
     }
     const fallback = createFallbackClient(); // null is OK — the loop tolerates a missing fallback.
 
-    const userId = body.userId ?? "anonymous";
+    // Phase 7-E W12.5 — derive the canonical userId from the session
+    // cookie if present (authenticated student). Fall back to the
+    // body's per-browser UUID for the anonymous-mode path that cohort
+    // A may still hit during operator self-testing. The cookie always
+    // wins — a malicious client cannot escape rate-limit by sending a
+    // forged body.userId once the user is signed in.
+    const authClaims = await readSessionFromRequest(req);
+    const userId = authClaims?.sub ?? body.userId ?? "anonymous";
+
+    // Phase 7-E W10.5 — per-student daily rate limit (cohort-A cost
+    // guard + abuse signal). 30 messages / UTC day default. With W12,
+    // authenticated students get a per-NetID bucket; pre-auth callers
+    // get a per-browser-UUID bucket; the literal "anonymous" id shares
+    // one global bucket as a last resort.
+    const rateCheck = consumeRequest(userId);
+    if (!rateCheck.ok) {
+        return NextResponse.json(
+            {
+                error:
+                    `Daily message limit reached (${rateCheck.limit} per day). ` +
+                    `Resets at ${rateCheck.resetAt}. ` +
+                    `Reach out to your adviser for anything urgent in the meantime.`,
+            },
+            {
+                status: 429,
+                headers: {
+                    "Retry-After": String(rateCheck.retryAfterSeconds),
+                    "X-RateLimit-Limit": String(rateCheck.limit),
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": rateCheck.resetAt,
+                },
+            },
+        );
+    }
+
     const stores = getStores();
 
-    const student = buildStudentProfileV2(body.parsedData, body.visaStatus);
+    // Build the student profile. DPR path takes precedence; transcript
+    // path is the fallback. When neither has a usable shape, we still
+    // build a stub via the transcript builder for the legacy tests.
+    const student = parsedDpr
+        ? buildStudentProfileFromDpr(parsedDpr, {
+            ...(body.visaStatus === "f1" || body.visaStatus === "domestic"
+                ? { visaStatus: body.visaStatus }
+                : {}),
+        })
+        : buildStudentProfileV2(transcriptPayload, body.visaStatus);
     const searchCoursesFn = getCourseSearchFn();
     const ragBundle = getPolicyRagBundle();
+    // Phase 7-E reviewer-followup — load the home-school's config so
+    // get_credit_caps + plan_semester can answer cap/floor questions.
+    // Without this every tool that needs school-level data fell over
+    // with "School config not loaded".
+    const schoolConfig = (() => {
+        try {
+            return loadSchoolConfig(student.homeSchool);
+        } catch {
+            return null;
+        }
+    })();
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
+        ...(schoolConfig ? { schoolConfig } : {}),
         ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
+        ...(parsedDpr ? { degreeProgressReport: parsedDpr } : {}),
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
     };
-    const systemPrompt = buildSystemPrompt({ student });
+    // Phase 7-E + Phase 8 calendar fix — temporal context.
+    // currentTerm + nextTerm come from the wall clock + NYU calendar
+    // (independent of the DPR), so "next semester" resolves correctly
+    // even when the student has pre-registered for a future term and
+    // their DPR carries multiple IP-row terms. enrolledNowTerm +
+    // preRegisteredTerms come from the DPR, disambiguated against
+    // the wall clock.
+    const now = new Date();
+    const temporal = parsedDpr
+        ? deriveTemporalContext(parsedDpr, { now })
+        : { currentTerm: undefined, nextTerm: undefined };
+    const graduationTerm = normalizeGraduationTarget(body.graduationTarget);
+    const todayIso = now.toISOString().slice(0, 10);
+    const systemPrompt = buildSystemPrompt({
+        student,
+        dprLoaded: parsedDpr !== undefined,
+        today: todayIso,
+        ...(temporal.currentTerm ? { currentTerm: temporal.currentTerm } : {}),
+        ...(temporal.nextTerm ? { nextTerm: temporal.nextTerm } : {}),
+        ...(temporal.enrolledNowTerm ? { enrolledNowTerm: temporal.enrolledNowTerm } : {}),
+        ...(temporal.preRegisteredTerms && temporal.preRegisteredTerms.length > 0
+            ? { preRegisteredTerms: temporal.preRegisteredTerms } : {}),
+        ...(graduationTerm ? { graduationTerm } : {}),
+    });
     const templates = getTemplates();
 
     // Phase 7-A P-1 + Phase 7-B Step 8b: cohort gate. The store factory
@@ -144,6 +322,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         cohort,
         cohortGateFailing: cohortConfig.evalGateFailing,
         sessionSummaryContext,
+        userId,
         writer,
     });
 
@@ -169,11 +348,15 @@ interface V2TurnArgs {
     cohortGateFailing: boolean;
     /** Phase 7-B Step 9 — formatted sessionSummaries prefix or null. */
     sessionSummaryContext: string | null;
+    /** Phase 7-E W12.5 — canonical student id (cookie-derived when
+     *  authenticated, per-browser UUID otherwise). Used for the
+     *  end-of-turn appendSummary call. */
+    userId: string;
     writer: SseWriter;
 }
 
 async function runV2Turn(args: V2TurnArgs): Promise<void> {
-    const { primary, fallback, session, systemPrompt, templates, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, writer } = args;
+    const { primary, fallback, session, systemPrompt, templates, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, userId, writer } = args;
     if (!primary) {
         writer.write({ kind: "error", message: "primary LLM client not configured" });
         writer.close();
@@ -200,21 +383,27 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             return;
         }
 
-        // §5.5 pre-loop dispatch — template fast-path first.
-        const dispatch = preLoopDispatch(userMessage, session, { templates });
-        if (dispatch.kind === "template") {
-            const t = dispatch.match.template;
-            writer.write({
-                kind: "template_match",
-                templateId: t.id,
-                body: t.body,
-                source: t.source,
-            });
-            writer.write({ kind: "token", text: t.body });
-            writer.write({ kind: "done", finalText: t.body, modelUsedId: "template" });
-            writer.close();
-            return;
-        }
+        // Phase 8 Stage A1 — preLoopDispatch DEMOTED.
+        // Pre-Phase-8 we ran a keyword/similarity matcher BEFORE the
+        // agent loop and short-circuited with template.body when it
+        // hit. That hijacked DPR-grounded questions ("how many P/F
+        // have I used?" matched cas_pf_career_cap → returned bulletin
+        // verbatim → DPR never consulted, student's actual usage
+        // ("4 of 32") never surfaced).
+        //
+        // Architectural inspiration: Claude Code (recovered-src/src/
+        // query.ts:307) goes straight to the model. Tool descriptions
+        // + reasoning route, not keyword matchers. We follow the same
+        // pattern: every question now enters the agent loop, which
+        // calls run_full_audit / search_policy / etc. as needed.
+        // search_policy already consults the same template registry
+        // internally (rag/policySearch.ts:111) — so curated bulletin
+        // quotes are still surfaced when relevant, but the AGENT
+        // decides whether to quote them, blend with DPR data, or skip.
+        //
+        // Recovery mode (cohortConfig.evalGateFailing, above) keeps
+        // template-only routing because in that mode we deliberately
+        // disable LLM behavior.
 
         // Convert prior history (from the client) into LLMMessages.
         // Phase 7-B Step 9: prepend the formatted sessionSummaries
@@ -248,7 +437,17 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 priorMessages,
                 ...(fallback ? { fallbackClient: fallback } : {}),
                 ...(correlationId ? { correlationId } : {}),
-                maxTurns: 8,
+                // Phase 9 Stage 3 — bumped from 8 to 10 to give the agent
+                // headroom for the new "audit → search_policy → synthesize"
+                // multi-tool flows. Stage-2 nudge tells it to call
+                // search_policy at most twice per requirement gap, but
+                // multiple gaps in one question (CS Required + Texts &
+                // Ideas + joint major roll-up) can chain through 4-6 calls.
+                maxTurns: 10,
+                // Phase 7-E W11 reviewer P1-2 — emit observability events
+                // to the JSONL sink so the operator dashboard at
+                // /admin/observability has signal during cohort A.
+                fallbackSink: getFallbackSink(),
                 // Phase 7-B Step 19 — stop-hook re-prompt. The loop
                 // calls this when it has a final reply; if the verdict
                 // is not-ok AND there's replay budget, the loop appends
@@ -260,6 +459,10 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                         assistantText,
                         invocations,
                         student: s.student,
+                        // Phase 10 F4c — pass the user's last message so
+                        // the verbatim-drift check can skip when the
+                        // verbatim is topically irrelevant.
+                        userQuestion: body.message,
                     });
                     return {
                         ok: verdict.ok,
@@ -324,6 +527,9 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             assistantText: finalResult.finalText,
             invocations: finalResult.invocations,
             student: session.student,
+            // Phase 10 F4c — thread the user's last message for
+            // topical-relevance gating in checkVerbatim.
+            userQuestion: body.message,
         });
         if (!verdict.ok) {
             writer.write({
@@ -346,6 +552,32 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             finalText: finalResult.finalText,
             modelUsedId: finalResult.modelUsedId,
         });
+
+        // Phase 7-E W12.5 — persist a short rolling session summary so
+        // the next chat sees minimal cross-session context. We DON'T
+        // make a separate LLM call here (the cohort-A cost guard would
+        // double on every turn); instead we write a heuristic marker
+        // that captures intent + tools called. Authenticated user only
+        // — anonymous "userId === 'anonymous'" should not write to
+        // shared storage.
+        if (userId !== "anonymous") {
+            try {
+                const toolNames = Array.from(new Set(finalResult.invocations.map((i) => i.toolName)));
+                const userSnippet = userMessage.slice(0, 140).replace(/\s+/g, " ").trim();
+                const summary =
+                    `Asked: "${userSnippet}${userMessage.length > 140 ? "…" : ""}". ` +
+                    `Tools called: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}.`;
+                await stores.sessionStore.appendSummary(userId, {
+                    date: new Date().toISOString().slice(0, 10),
+                    summary,
+                });
+            } catch (e) {
+                // A failed summary write must NOT break the live turn.
+                // The dashboard will surface the underlying error via
+                // fallback_log if anything systemic is wrong.
+                console.error("[v2 route] appendSummary failed:", e);
+            }
+        }
     } catch (err) {
         writer.write({
             kind: "error",

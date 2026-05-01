@@ -60,7 +60,16 @@ async function main() {
         embed: async () => new Float32Array(DIM),
         embedBatch: async (texts) => texts.map(() => new Float32Array(DIM)),
     };
-    const { chunks, skipped } = await buildCorpus(stubEmbedder, { warnOnSkip: false });
+    // Phase 9 Stage 1 — flip on includeProgramPages so the corpus
+    // also indexes every CAS / Tisch / Stern / Tandon / etc. program
+    // page + the College Core Curriculum. Pre-Phase-9 the corpus had
+    // ~636 chunks (12 sourcePaths, only economics-ba among program
+    // pages); post-Phase-9 it should be ~5k+ chunks with ~860 program
+    // pages indexed.
+    const { chunks, skipped } = await buildCorpus(stubEmbedder, {
+        warnOnSkip: false,
+        includeProgramPages: true,
+    });
     console.error(`Chunked ${chunks.length} chunks (${skipped.length} entries skipped)`);
 
     // Truncate the JSONL — non-resumable in this tool because the
