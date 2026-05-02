@@ -30,6 +30,16 @@ The regex that recognizes a valid dept-dir is therefore digit-tolerant:
 
     ^[a-z][a-z0-9]*_(ua|ub|ue|uf|uh|ut|uy|shu)$
 
+What counts as covered
+----------------------
+A dept counts as covered iff its `_index.md` exists AND contains at least one
+course-heading line (matching `^**<DEPT>-<SUFFIX> ` in bold-bold-bold form).
+Pure stub pages (header + title only, no courses) are excluded — they
+represent depts the bulletin still indexes but no longer publishes course
+content for, and Phase 12.8 would parse zero courses from them. Treating such
+stubs as covered would let a future stub of an in-Postgres dept silently pass
+this gate.
+
 Postgres dump shape
 -------------------
 DUMP_PATH (`data/course-catalog/course_descriptions.json`) is a DICT, not a
@@ -91,12 +101,38 @@ PG_CODE_RE = re.compile(
     r"^([A-Z][A-Z0-9]*)-(UA|UB|UE|UF|UH|UT|UY|SHU) [0-9]"
 )
 
+# Course-heading line in a bulletin `_index.md`. Real dept pages contain at
+# least one heading like `**CSCI-UA 60**  **Database Design ...**  **(4
+# Credits)**`. Stub pages (header + title only) contain none. We use this to
+# gate "covered" — file existence alone is insufficient because the scraper
+# emitted stub `_index.md`s for depts the bulletin indexes but no longer
+# publishes courses for. Counting those as covered would mask a future
+# regression where an in-Postgres dept lands as a stub.
+COURSE_HEADING_RE = re.compile(
+    r"^\*\*[A-Z][A-Z0-9]*-(UA|UB|UE|UF|UH|UT|UY|SHU) ",
+    re.MULTILINE,
+)
 
-def load_disk_depts() -> dict[str, set[str]]:
+
+def load_disk_depts(
+    stubs_out: dict[str, set[str]] | None = None,
+) -> dict[str, set[str]]:
     """Walk data/bulletin-raw/courses/ and return {suffix: {dept, ...}}.
 
-    A directory only counts if it (a) matches DISK_DIR_RE and (b) actually
-    contains an `_index.md` file — empty stub directories are skipped.
+    A dept counts as covered iff its `_index.md` exists AND contains at least
+    one course-heading line (matched by COURSE_HEADING_RE). Pure stub pages
+    (header + title only, no course headings) are excluded — they represent
+    depts the bulletin still indexes but no longer publishes course content
+    for, and Phase 12.8 would parse zero courses from them. Counting them as
+    covered would let a future stub of an in-Postgres dept silently pass this
+    gate.
+
+    If `stubs_out` is provided, dept-dirs found to be stubs are recorded
+    there as `{suffix: {dept, ...}}` (uppercase dept) so the caller can
+    surface them informationally. Read errors (UnicodeDecodeError, IOError)
+    are caught and reported to stderr; the offending dir is skipped rather
+    than crashing the whole verifier.
+
     Department names are stored uppercase to align with Postgres comparison.
     """
     out: dict[str, set[str]] = {s: set() for s in IN_SCOPE_SUFFIXES}
@@ -113,10 +149,25 @@ def load_disk_depts() -> dict[str, set[str]]:
         if not m:
             # Out-of-scope suffix, or a non-conforming directory name. Skip.
             continue
-        if not (child / "_index.md").is_file():
-            # Empty stub or partial scrape — does not count as coverage.
+        index_md = child / "_index.md"
+        if not index_md.is_file():
+            # No `_index.md` at all — partial scrape. Does not count.
+            continue
+        try:
+            text = index_md.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError) as exc:
+            print(
+                f"WARN: skipping {index_md} — read failed: {exc}",
+                file=sys.stderr,
+            )
             continue
         dept, suffix = m.group(1).upper(), m.group(2)
+        if not COURSE_HEADING_RE.search(text):
+            # Stub page (header + title only). Bulletin still indexes the
+            # dept but publishes no course content. Does not count.
+            if stubs_out is not None:
+                stubs_out[suffix].add(dept)
+            continue
         out[suffix].add(dept)
     return out
 
@@ -152,7 +203,8 @@ def load_pg_depts() -> dict[str, set[str]]:
 
 
 def main() -> int:
-    disk_depts = load_disk_depts()
+    stubs_by_suffix: dict[str, set[str]] = {s: set() for s in IN_SCOPE_SUFFIXES}
+    disk_depts = load_disk_depts(stubs_out=stubs_by_suffix)
     pg_depts = load_pg_depts()
 
     # Per-suffix coverage table.
@@ -235,6 +287,22 @@ def main() -> int:
             depts = ", ".join(sorted(extras))
             print(f"  {suffix.upper()}: {depts}")
     if not any_extras:
+        print("  none")
+
+    # Stubs (informational). Dept-dirs whose `_index.md` exists but contains
+    # no course-heading lines. Latent today (none of these are in Postgres),
+    # but called out so a future regression — an in-Postgres dept landing as
+    # a stub — is debuggable in one place.
+    print()
+    print("STUBS (no parseable courses — not counted as covered):")
+    any_stubs = False
+    for suffix in IN_SCOPE_SUFFIXES:
+        stubs = stubs_by_suffix[suffix]
+        if stubs:
+            any_stubs = True
+            depts = ", ".join(sorted(stubs))
+            print(f"  {suffix.upper()}: {depts}")
+    if not any_stubs:
         print("  none")
 
     print()
