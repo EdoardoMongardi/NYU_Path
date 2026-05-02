@@ -40,19 +40,22 @@ were produced by `verify_coverage.py` on the same date.
 
 | School | Bulletin slug (under `/undergraduate/`) | Course-suffix | Postgres dept-prefixes | Disk dept-dirs |
 |---|---|---|---|---|
-| College of Arts and Science (CAS) | `arts-science` | `UA` | 51 | 51 |
-| Stern School of Business | `business` | `UB` | 10 | 10 |
-| Steinhardt School of Culture, Education, and Human Development | `culture-education-human-development` | `UE` | 45 | 45 |
-| Gallatin School of Individualized Study | `individualized-study` | `UF` | 29 | 31 |
-| NYU Abu Dhabi | `abu-dhabi` | `UH` | 37 | 44 |
-| Tisch School of the Arts | `arts` | `UT` | 19 | 20 |
-| Tandon School of Engineering | `engineering` | `UY` | 24 | 35 |
-| NYU Shanghai | `shanghai` | `SHU` | 43 | 49 |
+| College of Arts and Science (CAS) | [`arts-science`](https://bulletins.nyu.edu/undergraduate/arts-science/) | `UA` | 51 | 51 |
+| Stern School of Business | [`business`](https://bulletins.nyu.edu/undergraduate/business/) | `UB` | 10 | 10 |
+| Steinhardt School of Culture, Education, and Human Development | [`culture-education-human-development`](https://bulletins.nyu.edu/undergraduate/culture-education-human-development/) | `UE` | 45 | 45 |
+| Gallatin School of Individualized Study | [`individualized-study`](https://bulletins.nyu.edu/undergraduate/individualized-study/) | `UF` | 29 | 29 |
+| NYU Abu Dhabi | [`abu-dhabi`](https://bulletins.nyu.edu/undergraduate/abu-dhabi/) | `UH` | 37 | 37 |
+| Tisch School of the Arts | [`arts`](https://bulletins.nyu.edu/undergraduate/arts/) | `UT` | 19 | 19 |
+| Tandon School of Engineering | [`engineering`](https://bulletins.nyu.edu/undergraduate/engineering/) | `UY` | 24 | 24 |
+| NYU Shanghai | [`shanghai`](https://bulletins.nyu.edu/undergraduate/shanghai/) | `SHU` | 43 | 43 |
 
-Disk dept-dir counts equal or exceed Postgres dept-prefix counts in every
-suffix. The "extras" (disk has, Postgres does not) are bulletin-listed
-departments whose course rows aren't currently live in the Postgres dump.
-That's expected and acceptable — see "Coverage status" below.
+Disk dept-dir counts shown above are post-stub-filter — only dept dirs whose
+`_index.md` contains at least one parseable course-heading line are counted.
+27 additional dept dirs exist on disk but contain stub `_index.md` pages
+(header + title only, no courses); the verifier surfaces them under a
+`STUBS` section as informational. They represent depts the bulletin still
+indexes but no longer publishes course content for, and Phase 12.8 would
+parse zero courses from them — see "Coverage status" below.
 
 ## Out of scope
 
@@ -80,14 +83,25 @@ python3 tools/bulletin-scraper/verify_coverage.py
 ```
 
 Exit code is 0; every Postgres dept-prefix has a corresponding scraped
-`<dept>_<suffix>/_index.md` page on disk. Phase 12.8 may proceed.
+`<dept>_<suffix>/_index.md` page on disk that contains at least one
+parseable course heading. Phase 12.8 may proceed.
 
-The verifier reports "extras" — bulletin pages on disk for which Postgres
-currently has no live course rows. These are real departments listed by
-the school but with no active course offerings in the snapshot dump
-(typical for cross-listed-only departments, recently-renamed programs,
-or programs that only offer non-credit work). Extras do not count against
-coverage and are surfaced informationally only.
+The verifier reports two informational sections:
+
+- **EXTRAS** — bulletin pages on disk (with parseable courses) for which
+  Postgres has no live course rows. None at present: every dept that has a
+  populated bulletin page is also live in Postgres.
+- **STUBS** — dept dirs whose `_index.md` exists but contains no course-
+  heading lines (header + title only). Currently 27 such dirs across UF,
+  UH, UT, UY, SHU. These are depts the bulletin still indexes but no longer
+  publishes course content for; Phase 12.8 would parse zero courses from
+  them. None overlap with Postgres today, so they are latent — but they are
+  surfaced explicitly so a future regression where an in-Postgres dept
+  lands as a stub would be debuggable in one place.
+
+A dept counts as covered iff its `_index.md` exists AND contains at least
+one course-heading line. File presence alone is insufficient — that's what
+this fix gates on.
 
 ## Phase 12.8 parser instruction
 
