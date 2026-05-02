@@ -19,7 +19,7 @@
 // ============================================================
 
 import type { ToolSession } from "../tool.js";
-import type { CourseSuggestion, SchoolConfig } from "@nyupath/shared";
+import type { CourseSuggestion, PrereqGroup, SchoolConfig } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import { formatCitation } from "../citationLabels.js";
 
@@ -111,25 +111,33 @@ export function verifyPlanFeasibility(input: PlanFeasibilityInput): PlanFeasibil
     const alreadyInTargetSet = new Set(input.alreadyRegisteredForTargetIds);
 
     // Check 3: prerequisites chain. Source: session.prereqs graph.
-    const prereqIndex = new Map<string, ReadonlyArray<{ type: "AND" | "OR"; courses: string[] }>>();
+    const prereqIndex = new Map<string, ReadonlyArray<PrereqGroup>>();
     if (input.prereqs) {
         for (const p of input.prereqs) {
             prereqIndex.set(p.course, p.prereqGroups);
         }
     }
+    const has = (c: string) => completedIds.has(c) || ipIds.has(c) || alreadyInTargetSet.has(c);
     for (const s of input.suggestions) {
         const groups = prereqIndex.get(s.courseId);
         if (!groups || groups.length === 0) continue;
         const unmetGroups: string[] = [];
         for (const group of groups) {
+            if (group.type === "NOT") {
+                const blocked = (group.notCourses ?? []).filter(has);
+                if (blocked.length > 0) {
+                    unmetGroups.push(`must not have taken [${blocked.join(", ")}]`);
+                }
+                continue;
+            }
             const groupCourses = group.courses;
             if (groupCourses.length === 0) continue;
             const satisfied =
                 group.type === "AND"
-                    ? groupCourses.every((c) => completedIds.has(c) || ipIds.has(c) || alreadyInTargetSet.has(c))
-                    : groupCourses.some((c) => completedIds.has(c) || ipIds.has(c) || alreadyInTargetSet.has(c));
+                    ? groupCourses.every(has)
+                    : groupCourses.some(has);
             if (!satisfied) {
-                const need = groupCourses.filter((c) => !completedIds.has(c) && !ipIds.has(c) && !alreadyInTargetSet.has(c));
+                const need = groupCourses.filter((c) => !has(c));
                 unmetGroups.push(`${group.type === "OR" ? "any of" : "all of"} [${need.join(", ")}]`);
             }
         }
