@@ -219,9 +219,10 @@ export class PrereqGraph {
     ): boolean {
         if (group.type === "AND") {
             return group.courses.every((c) => completedCourses.has(c));
-        } else {
-            // OR
+        }
+        if (group.type === "OR") {
             return group.courses.some((c) => completedCourses.has(c));
         }
+        return (group.notCourses ?? []).every((c) => !completedCourses.has(c));
     }
 }
