@@ -23,9 +23,37 @@ export interface Course {
 
 // ---- Prerequisites ----
 
+/**
+ * A single prerequisite constraint group on a course.
+ *
+ * The semantics:
+ *   - "AND" → every entry in `courses` must be satisfied.
+ *   - "OR"  → at least one entry in `courses` must be satisfied.
+ *   - "NOT" → none of the entries in `notCourses` may have been taken
+ *             (Phase 13 enforces; e.g. "Not open to students who have
+ *             completed CSCI-UA 0002"). For a "NOT" group, `courses`
+ *             is empty and `notCourses` carries the excluded list.
+ *
+ * Optional fields:
+ *   - `requiresPetition` — true when the bulletin English mentions
+ *     "or instructor permission" / "or department approval". The
+ *     solver soft-allows the course (placement is permitted) but the
+ *     UI surfaces a yellow flag so the student knows a real-world
+ *     petition step is needed. Set on the group whose OR clause
+ *     contained the permission language.
+ *   - `notCourses` — populated only when type === "NOT". Listed
+ *     separately from `courses` because the polarity differs (NOT
+ *     excludes; AND/OR include).
+ *
+ * Note on coreqs: corequisites live at the `Prerequisite` entry
+ * level, not inside this group. A coreq applies to the whole
+ * dependent course, not to one particular constraint group.
+ */
 export interface PrereqGroup {
-    type: "AND" | "OR";
-    courses: string[]; // course IDs
+    type: "AND" | "OR" | "NOT";
+    courses: string[]; // course IDs (empty for "NOT" groups)
+    requiresPetition?: boolean;
+    notCourses?: string[];
 }
 
 export interface Prerequisite {
