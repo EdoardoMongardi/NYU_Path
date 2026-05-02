@@ -47,6 +47,7 @@ Before the first code-edit task in each phase, the executor MUST verify the repo
 | `OPENAI_API_KEY` + `ANTHROPIC_API_KEY` env vars live in `.env.local` | `cat .env.local 2>/dev/null \| grep -E "OPENAI\|ANTHROPIC"` |
 | Existing course-catalog embedding index path | `ls data/course-catalog/` |
 | Existing policy chunks file path | `ls data/policy-corpus/` |
+| Bulletin layout: per-dept `_index.md` (NOT per-course subdirs); names are lowercase + underscore + may contain digits | `find data/bulletin-raw/courses -maxdepth 2 -name "_index.md" \| head -5` and confirm output shows `<dept>_<suffix>/_index.md` paths, not `<DEPT>_<SUFFIX>/<NUM>/index.md` |
 
 If any assertion is wrong, **adapt the plan's code to match the actual repo** rather than forcing the repo to match the plan. The plans were drafted from earlier investigations; ground truth is the current repo state.
 
