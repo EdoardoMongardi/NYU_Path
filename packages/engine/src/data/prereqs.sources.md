@@ -20,14 +20,14 @@ Note: Parser misread "X AND Y AND Z OR any equivalent" as all-OR. Curated correc
 Source: data/bulletin-raw/courses/csci_ua/_index.md, line 165
 
 ### MATH-UA 122
-**Status:** FIXED — added MATH-PLCM2-100
+**Status:** FIXED — added PLACE-MATH-PLCM2-100 (Decision Y′ canonical form)
 Bulletin line 58: "Minimum grade of C in [MATH-UA 121] or (minimum AP Calculus AB or BC score of 4) or MATH\_PLCM2 score of 100."
-Curated was missing MATH-PLCM2-100 due to strict-bracket-only rule applied to placement exam placeholder.
+Curated was missing the placement exam clause due to strict-bracket-only rule. Synth-ID schema per Decision Y′ (operator-confirmed): `PLACE-MATH-<LEVEL>-<SCORE>`.
 
 ### MATH-UA 123
-**Status:** FIXED — added MATH-PLCM3-100
+**Status:** FIXED — added PLACE-MATH-PLCM3-100 (Decision Y′ canonical form)
 Bulletin line 70: "Minimum grade of C in [MATH-UA 122] or AP Calculus BC score of 5 or MATH\_PLCM3 score of 100."
-Curated was missing MATH-PLCM3-100 due to strict-bracket-only rule.
+Curated was missing the placement exam clause due to strict-bracket-only rule. Synth-ID schema per Decision Y′ (operator-confirmed): `PLACE-MATH-<LEVEL>-<SCORE>`.
 
 ### MGMT-UB 2
 **STATUS:** FIXED — added ECON-UA 0005, ECON-SHU 0002, ECON-SHU 0150
