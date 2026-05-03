@@ -654,7 +654,7 @@ export type ConfidenceTier =
     | "confirmed";
 
 /**
- * One entry in `data/bulletin-raw/courses-offerings.json`.
+ * One entry in `packages/engine/src/data/courses-offerings.json`.
  *
  * Formally defined here in Phase 12.9.5; previously existed only as an
  * inline interface in packages/engine/tests/data/parsedDataValidation.test.ts.
