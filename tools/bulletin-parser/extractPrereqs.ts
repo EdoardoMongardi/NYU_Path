@@ -100,11 +100,16 @@ You must respond with a single JSON object (no markdown, no prose):
    - Course numbers with letters (e.g., "INTM-SHU 140T-A") are passed through verbatim.
    - The entry-level "course" field is NEVER padded.
 
-2. **Synthetic AP/IB IDs (Decision Y):**
+2. **Synthetic AP/IB IDs (Decision Y) + Placement Exams (Decision Y′):**
    - AP/IB clauses become synthetic IDs: "AP-<SUBJECT>-<SCORE>" or "IB-<SUBJECT>-<LEVEL>-<SCORE>"
    - Example: "Advanced Placement Examination Computer Science A >= 3" → "AP-CS-A-3"
    - Example: "IB Higher Level Mathematics >= 5" → "IB-MATH-HL-5"
    - NEVER emit "PLACEMENT_EXAM" — if unrecognized, omit and continue.
+   - **Decision Y′ Placement Exam IDs (NEW):**
+     * Math placement: "MATH_PLCM2 score of 100" → "PLACE-MATH-PLCM2-100"; "Math Placement Test score 85" → "PLACE-MATH-85"
+     * Language placement: "Japanese Language Placement >= 3302" → "PLACE-LANG-JAPANESE-3302"; "Foreign language placement exam score 4" → "PLACE-LANG-4"
+     * SAT II: "SAT II Math Level 2 score 700" → "SAT2-MATH2-700"; "SAT Subject Test in Chemistry >= 650" → "SAT2-CHEM-650"
+     * NO fallback to PLACEMENT_EXAM. If the form is unclear, skip silently.
 
 3. **Campus-Specific Prerequisites:**
    - When the bulletin lists "Prerequisite for Brooklyn Students: X | Prerequisite for Abu Dhabi Students: Y | Prerequisite for Shanghai Students: Z", collect ALL variants into a SINGLE OR group.
@@ -120,14 +125,27 @@ You must respond with a single JSON object (no markdown, no prose):
    - If a clause says "or instructor permission", "or department approval", "or consent of instructor", etc., set requiresPetition: true on that specific group.
    - Do NOT create a synthetic course for the permission itself.
 
-6. **Corequisites:**
+6.5. **Boolean Precedence & Grouping (Critical for AND/OR parsing):**
+   - **AND binds tighter than OR.** Parse as: "A AND B OR C" → "(A AND B) OR C", not "A AND (B OR C)".
+   - **One group per top-level AND-clause.** When the bulletin contains multiple AND-connected courses, emit SEPARATE groups for each. Do NOT consolidate single-course AND clauses into a multi-course AND group.
+     * WRONG: "CSCI-UA 102 AND MATH-UA 140" → `[{type:"AND", courses:["CSCI-UA 0102", "MATH-UA 0140"]}]`
+     * RIGHT: "CSCI-UA 102 AND MATH-UA 140" → `[{type:"AND", courses:["CSCI-UA 0102"]}, {type:"AND", courses:["MATH-UA 0140"]}]`
+   - **Follow bulletin parenthesization literally.** Example: bulletin says "(X) AND (Y) AND (Z)" → three separate AND groups. Do NOT reinterpret as "(X AND Y) OR Z" or other redistribution.
+   - **Worked example (CSCI-UA 421 actual bulletin text):**
+     Input: "Prerequisites: [CSCI-UA 102] AND [MATH-UA 140] with a Minimum Grade of C AND ([MATH-UA 121] or [MATH-UA 131])"
+     Correct parsing:
+     - {type:"AND", courses:["CSCI-UA 0102"]}
+     - {type:"AND", courses:["MATH-UA 0140"]}
+     - {type:"OR", courses:["MATH-UA 0121", "MATH-UA 0131"]}
+
+7. **Corequisites:**
    - ALWAYS set coreqs: [] (empty array). Phase 14 will populate coreqs; the parser only outputs empty.
    - Even if the bulletin mentions "Corequisite: X", emit coreqs: [] and let Phase 14 handle it.
 
-7. **Grade Thresholds:**
+8. **Grade Thresholds:**
    - Ignore "Minimum Grade of X" annotations. The parser does not emit grade info.
 
-8. **Empty Prerequisites:**
+9. **Empty Prerequisites:**
    - If there are no prerequisites, return {course, prereqGroups: [], coreqs: []}.
 
 ## AP/IB REFERENCE (Sample Common Mappings)
@@ -220,6 +238,56 @@ Output:
     {
       "type": "OR",
       "courses": ["CS-UY 1114", "CS-UY 1121", "CS-UH 1001", "ENGR-UH 1000", "CSCI-SHU 0101"]
+    }
+  ],
+  "coreqs": []
+}
+
+### Example 6: Multiple AND Groups (Correct Grouping)
+Input: "[CSCI-UA 102] AND [MATH-UA 140] with a Minimum Grade of C AND ([MATH-UA 121] or [MATH-UA 131])"
+Output (CORRECT — three separate groups, not consolidated):
+{
+  "course": "CSCI-UA 421",
+  "prereqGroups": [
+    {
+      "type": "AND",
+      "courses": ["CSCI-UA 0102"]
+    },
+    {
+      "type": "AND",
+      "courses": ["MATH-UA 0140"]
+    },
+    {
+      "type": "OR",
+      "courses": ["MATH-UA 0121", "MATH-UA 0131"]
+    }
+  ],
+  "coreqs": []
+}
+
+### Example 7: Decision Y′ Placement Exams
+Input: "Prerequisites: ([MATH_PLCM2 score of 100] OR [MATH_PLCM3 score of 100] OR [CSCI-UA 101])"
+Output:
+{
+  "course": "MATH-UA 251",
+  "prereqGroups": [
+    {
+      "type": "OR",
+      "courses": ["PLACE-MATH-PLCM2-100", "PLACE-MATH-PLCM3-100", "CSCI-UA 0101"]
+    }
+  ],
+  "coreqs": []
+}
+
+### Example 8: SAT II Subject Test
+Input: "Prerequisites: [SAT II Math Level 2 score 700] OR [CSCI-UA 10]"
+Output:
+{
+  "course": "MATH-UA 123",
+  "prereqGroups": [
+    {
+      "type": "OR",
+      "courses": ["SAT2-MATH2-700", "CSCI-UA 0010"]
     }
   ],
   "coreqs": []

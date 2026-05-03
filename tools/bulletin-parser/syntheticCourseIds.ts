@@ -321,3 +321,216 @@ function titleCaseSubject(s: string): string {
         })
         .join(" ");
 }
+
+
+// ============================================================
+// Decision Y′ — Math/Language/SAT2 placement exams (Phase 12.8 Task 4)
+// ============================================================
+//
+// PURPOSE
+// -------
+// The bulletin references placement exams (math, language, SAT II) inline
+// alongside normal course IDs. We mint synthetic IDs so the solver can
+// treat them uniformly inside `prereqGroups[].courses`.
+//
+//   PLACE-MATH-<LEVEL>-<SCORE>         e.g. PLACE-MATH-PLCM2-100
+//                                            PLACE-MATH-100 (no level)
+//   PLACE-LANG-<LANGUAGE>-<SCORE>      e.g. PLACE-LANG-JAPANESE-3302
+//   PLACE-LANG-<SCORE>                 e.g. PLACE-LANG-4
+//   SAT2-<SUBJECT>-<SCORE>              e.g. SAT2-MATH2-700, SAT2-CHEM-650
+//
+// NO PLACEMENT_EXAM fallback. If the form is unrecognizable or score
+// format is unclear, skip silently (caller logs).
+//
+// HARD INVARIANT: NO generic PLACEMENT_EXAM token. Per-exam mapping
+// preserved.
+
+export interface PlacementExamScore {
+    kind: "math-place" | "lang-place" | "sat2";
+    level?: string; // math placement level (PLCM2, PLCM3, etc)
+    language?: string; // language name (JAPANESE, KOREAN, etc) — uppercase
+    subject?: string; // SAT2 subject (MATH2, CHEM, etc) — uppercase compact
+    score: number;
+}
+
+// Language aliases (bulletin text → canonical uppercase)
+const LANGUAGE_ALIASES: Record<string, string> = {
+    "japanese": "JAPANESE",
+    "korean": "KOREAN",
+    "mandarin": "MANDARIN",
+    "french": "FRENCH",
+    "spanish": "SPANISH",
+    "german": "GERMAN",
+    "italian": "ITALIAN",
+    "portuguese": "PORTUGUESE",
+    "russian": "RUSSIAN",
+    "chinese": "MANDARIN", // alias
+};
+
+// SAT2 subject codes (bulletin text → canonical uppercase compact)
+const SAT2_SUBJECT_CODES: Record<string, string> = {
+    // Math
+    "mathematics level 1": "MATH1",
+    "mathematics level 2": "MATH2",
+    "math level 1": "MATH1",
+    "math level 2": "MATH2",
+    // Sciences
+    "biology": "BIO",
+    "chemistry": "CHEM",
+    "physics": "PHYS",
+    // History
+    "us history": "USHIST",
+    "world history": "WHIST",
+    // Languages
+    "french": "FRENCH",
+    "spanish": "SPANISH",
+    "german": "GERMAN",
+    "chinese": "CHINESE",
+    "japanese": "JAPANESE",
+    "korean": "KOREAN",
+};
+
+/**
+ * Parse a math placement exam clause.
+ * Forms: "MATH_PLCM2 score of 100", "MATH_PLCM3 score of 100",
+ *        "Mathematics placement exam score X", "Math Placement Test score X"
+ */
+export function parseMathPlacementClause(
+    text: string
+): { level?: string; score: number } | null {
+    if (!text) return null;
+
+    // Try named-level forms (MATH_PLCM2 score of 100, etc)
+    const levelMatch = /MATH_(\w+)\s+score\s+(?:of\s+)?(\d+)/i.exec(text);
+    if (levelMatch) {
+        const levelRaw = levelMatch[1].toUpperCase();
+        const scoreStr = levelMatch[2];
+        const score = parseInt(scoreStr, 10);
+        if (!isNaN(score)) {
+            return {
+                level: levelRaw,
+                score,
+            };
+        }
+    }
+
+    // Try generic forms (Math Placement, Mathematics placement exam, etc)
+    const genericMatch =
+        /(?:math|mathematics)(?:\s+placement)?(?:\s+exam)?(?:\s+test)?\s+score\s+(?:of\s+)?(\d+)/i.exec(
+            text
+        );
+    if (genericMatch) {
+        const scoreStr = genericMatch[1];
+        const score = parseInt(scoreStr, 10);
+        if (!isNaN(score)) {
+            return { score }; // No level
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Parse a language placement exam clause.
+ * Forms: "Japanese Language Placement >= 3302",
+ *        "Korean Language Placement Score 21",
+ *        "Foreign language placement exam score 4"
+ */
+export function parseLanguagePlacementClause(
+    text: string
+): { language?: string; score: number } | null {
+    if (!text) return null;
+
+    // Try generic "Foreign language placement" forms first (no language specified)
+    const genericMatch =
+        /(?:foreign|Foreign)\s+(?:language|Language)\s+(?:placement|Placement)(?:\s+exam)?\s+score\s+(\d+)/i.exec(
+            text
+        );
+    if (genericMatch) {
+        const scoreStr = genericMatch[1];
+        const score = parseInt(scoreStr, 10);
+        if (!isNaN(score)) {
+            return { score }; // No language
+        }
+    }
+
+    // Try named-language forms (Japanese Language Placement >= 3302)
+    // Match a capitalized word followed by Language/language and placement
+    const namedMatch =
+        /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:language|Language)\s+(?:placement|Placement)(?:\s+exam)?\s+(?:score|Score|≥|>=)\s*(\d+)/i.exec(
+            text
+        );
+    if (namedMatch) {
+        const languageRaw = namedMatch[1].trim().toLowerCase();
+        const scoreStr = namedMatch[2];
+        const score = parseInt(scoreStr, 10);
+        if (!isNaN(score)) {
+            const canonical = LANGUAGE_ALIASES[languageRaw];
+            return {
+                language: canonical || languageRaw.toUpperCase(),
+                score,
+            };
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Parse a SAT II / Subject Test clause.
+ * Forms: "SAT II Math Level 2 score 700",
+ *        "SAT Subject Test in Chemistry >= 650"
+ */
+export function parseSAT2Clause(text: string): { subject: string; score: number } | null {
+    if (!text) return null;
+
+    // SAT II / SAT Subject Test forms
+    const satMatch =
+        /(?:SAT\s+(?:II|Subject\s+Test(?:\s+in)?)|SAT\s+II\s+Subject)\s+([A-Za-z\s0-9]+?)\s+(?:≥|>=|score)\s*(\d+)/i.exec(
+            text
+        );
+    if (satMatch) {
+        const subjectRaw = satMatch[1].trim().toLowerCase();
+        const scoreStr = satMatch[2];
+        const score = parseInt(scoreStr, 10);
+        if (!isNaN(score)) {
+            const canonical = SAT2_SUBJECT_CODES[subjectRaw];
+            if (canonical) {
+                return { subject: canonical, score };
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Synthesize a placement exam courseId from parsed data.
+ * Returns null if the data cannot be synthesized.
+ */
+export function synthesizePlacementCourseId(exam: PlacementExamScore): string | null {
+    const score = Math.trunc(exam.score);
+
+    switch (exam.kind) {
+        case "math-place":
+            if (exam.level) {
+                return `PLACE-MATH-${exam.level}-${score}`;
+            } else {
+                return `PLACE-MATH-${score}`;
+            }
+
+        case "lang-place":
+            if (exam.language) {
+                return `PLACE-LANG-${exam.language}-${score}`;
+            } else {
+                return `PLACE-LANG-${score}`;
+            }
+
+        case "sat2":
+            if (!exam.subject) return null;
+            return `SAT2-${exam.subject}-${score}`;
+
+        default:
+            return null;
+    }
+}

@@ -21,15 +21,21 @@
         "prereqGroups": [
             {
                 "type": "AND",
-                "courses": ["MATH-UA 0140"]
+                "courses": [
+                    "MATH-UA 0140"
+                ]
             },
             {
                 "type": "AND",
-                "courses": ["CSCI-UA 0201"]
+                "courses": [
+                    "CSCI-UA 0201"
+                ]
             },
             {
                 "type": "AND",
-                "courses": ["MATH-UA 0121"]
+                "courses": [
+                    "MATH-UA 0121"
+                ]
             }
         ],
         "coreqs": []
@@ -39,15 +45,22 @@
         "prereqGroups": [
             {
                 "type": "AND",
-                "courses": ["CSCI-UA 0102"]
+                "courses": [
+                    "CSCI-UA 0102"
+                ]
             },
             {
                 "type": "AND",
-                "courses": ["MATH-UA 0120"]
+                "courses": [
+                    "MATH-UA 0120"
+                ]
             },
             {
                 "type": "OR",
-                "courses": ["MATH-UA 0121", "MATH-UA 0131"]
+                "courses": [
+                    "MATH-UA 0121",
+                    "MATH-UA 0131"
+                ]
             }
         ],
         "coreqs": []
@@ -102,7 +115,9 @@
             {
                 "type": "NOT",
                 "courses": [],
-                "notCourses": ["MGMT-UB 0018"]
+                "notCourses": [
+                    "MGMT-UB 0018"
+                ]
             }
         ],
         "coreqs": []
@@ -131,7 +146,9 @@
         "prereqGroups": [
             {
                 "type": "AND",
-                "courses": ["CS-UY 1113"]
+                "courses": [
+                    "CS-UY 1113"
+                ]
             }
         ],
         "coreqs": []
@@ -157,21 +174,29 @@
         "prereqGroups": [
             {
                 "type": "AND",
-                "courses": ["MPATC-UE 1302"]
+                "courses": [
+                    "MPATC-UE 1302"
+                ]
             }
         ],
-        "coreqs": []
+        "coreqs": [
+            "MPATC-UE 9312"
+        ]
     },
     {
         "course": "PHTI-UT 1014",
         "prereqGroups": [
             {
                 "type": "AND",
-                "courses": ["PHTI-UT 0001"]
+                "courses": [
+                    "PHTI-UT 0001"
+                ]
             },
             {
                 "type": "AND",
-                "courses": ["PHTI-UT 0002"]
+                "courses": [
+                    "PHTI-UT 0002"
+                ]
             }
         ],
         "coreqs": []
@@ -181,7 +206,10 @@
         "prereqGroups": [
             {
                 "type": "OR",
-                "courses": ["IDSEM-UG 1839", "IDSEM-UG 2136"]
+                "courses": [
+                    "IDSEM-UG 1839",
+                    "IDSEM-UG 2136"
+                ]
             }
         ],
         "coreqs": []
@@ -191,7 +219,10 @@
         "prereqGroups": [
             {
                 "type": "OR",
-                "courses": ["MATH-SHU 0131", "MATH-SHU 0201"]
+                "courses": [
+                    "MATH-SHU 0131",
+                    "MATH-SHU 0201"
+                ]
             }
         ],
         "coreqs": []
@@ -201,18 +232,27 @@
         "prereqGroups": [
             {
                 "type": "AND",
-                "courses": ["CS-UH 1052"]
+                "courses": [
+                    "CS-UH 1052"
+                ]
             },
             {
                 "type": "AND",
-                "courses": ["CS-UH 2010"]
+                "courses": [
+                    "CS-UH 2010"
+                ]
             },
             {
                 "type": "OR",
-                "courses": ["MATH-UH 1012Q", "MATH-UH 1013Q"]
+                "courses": [
+                    "MATH-UH 1012Q",
+                    "MATH-UH 1013Q"
+                ]
             }
         ],
-        "coreqs": []
+        "coreqs": [
+            "CS-UH 2012"
+        ]
     },
     {
         "course": "MATH-UA 121",
