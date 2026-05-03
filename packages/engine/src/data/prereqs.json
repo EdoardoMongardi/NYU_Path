@@ -105,7 +105,16 @@
   },
   {
     "course": "ACE-UE 110",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "EXPOS-UA 0001",
+          "EXPOS-UA 0005",
+          "EXPOS-UA 0004"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -263,7 +272,14 @@
   },
   {
     "course": "AE-UY 4653",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "ME-UY 2223"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -5241,7 +5257,15 @@
   },
   {
     "course": "BMS-UY 4924",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "CM-UY 4011"
+        ],
+        "requiresPetition": true
+      }
+    ],
     "coreqs": []
   },
   {
@@ -6153,7 +6177,20 @@
   },
   {
     "course": "CAM-UY 4504",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "EXPOS-UA 0001",
+          "EXPOS-UA 0004",
+          "EXPOS-UA 0005",
+          "EXPOS-UA 0009",
+          "ASPP-UT 0002",
+          "WREX-UF 0101",
+          "WRCI-UF 0102"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -6722,7 +6759,20 @@
   },
   {
     "course": "CBE-UY 4263",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "CBE-UY 4163"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "CBE-UY 4143"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -14706,7 +14756,22 @@
   },
   {
     "course": "CS-UY 4793G",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "CS-UY 2134",
+          "CS-UY 1134"
+        ]
+      },
+      {
+        "type": "OR",
+        "courses": [
+          "CS-UY 2124",
+          "CS-UY 1124"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -15613,7 +15678,17 @@
   },
   {
     "course": "CSCI-UA 9480",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "CSCI-UA 0201",
+          "CSCI-SHU 0311",
+          "CS-UH 2010",
+          "CS-UY 2214"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -16822,7 +16897,14 @@
   },
   {
     "course": "DS-UA 9201",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "DS-UA 0112"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -19394,7 +19476,15 @@
   },
   {
     "course": "ECON-UA 9316",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "ECON-UA 0010",
+          "ECON-UA 0011"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -20575,7 +20665,15 @@
   },
   {
     "course": "EN-UY 3814W",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "EXPOS-UA 0001",
+          "EXPOS-UA 0004"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -23471,7 +23569,26 @@
   },
   {
     "course": "FIN-UY 4903",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "FIN-UY 2003"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "FIN-UY 2103"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "FIN-UY 2203"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -24638,7 +24755,14 @@
   },
   {
     "course": "FMTV-UT 1777",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "FMTV-UT 0101"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -28925,7 +29049,14 @@
   },
   {
     "course": "HI-UY 3144",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "EXPOS-UA 0001"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -37652,7 +37783,18 @@
   },
   {
     "course": "MD-UY 2314G",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "EXPOS-UA 0002",
+          "EXPOS-UA 0009",
+          "EXPOS-UA 0022",
+          "ASPP-UT 0002",
+          "WRCI-UF 0102"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -39973,7 +40115,20 @@
   },
   {
     "course": "MPAJZ-UE 1119",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "MPAJZ-UE 1039"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "MPAJZ-UE 1040"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -41276,8 +41431,18 @@
   },
   {
     "course": "MPATC-UE 9343",
-    "prereqGroups": [],
-    "coreqs": []
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "MPATC-UE 1301",
+          "MPATC-UE 0035"
+        ]
+      }
+    ],
+    "coreqs": [
+      "MPATC-UE 9331"
+    ]
   },
   {
     "course": "MPATE-UE 1000",
@@ -46223,7 +46388,30 @@
   },
   {
     "course": "PHIL-UA 9085",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "PHIL-UA 0001",
+          "PHIL-UA 0002",
+          "PHIL-UA 0003",
+          "PHIL-UA 0004",
+          "PHIL-UA 0005",
+          "PHIL-UA 0006",
+          "PHIL-UA 0007",
+          "PHIL-UA 0008"
+        ],
+        "requiresPetition": true
+      },
+      {
+        "type": "OR",
+        "courses": [
+          "PHIL-UA 0070",
+          "PHIL-SHU 0070",
+          "MATH-UA 0120"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -48117,7 +48305,15 @@
   },
   {
     "course": "PHYS-UA 9012",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "PHYS-UA 0011",
+          "PHYS-UA 9011"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -50276,7 +50472,20 @@
   },
   {
     "course": "PSYCH-UA 9051",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "PSYCH-UA 0030",
+          "PSYCH-UA 9030",
+          "PSYCH-UA 0032",
+          "PSYCH-UA 9032",
+          "PSYCH-UA 0034",
+          "PSYCH-UA 9034",
+          "APSY-UE 0010"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -52508,7 +52717,20 @@
   },
   {
     "course": "STS-UY 4504",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "EXPOS-UA 0001",
+          "EXPOS-UA 0004",
+          "EXPOS-UA 0005",
+          "EXPOS-UA 0009",
+          "ASPP-UT 0002",
+          "WREX-UF 0101",
+          "WRCI-UF 0102"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -52690,7 +52912,20 @@
   },
   {
     "course": "URB-UY 4504",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "EXPOS-UA 0001",
+          "EXPOS-UA 0004",
+          "EXPOS-UA 0005",
+          "EXPOS-UA 0009",
+          "ASPP-UT 0002",
+          "WREX-UF 0101",
+          "WRCI-UF 0102"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
@@ -52710,7 +52945,14 @@
   },
   {
     "course": "URBS-UA 301",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "URBS-UA 0102"
+        ]
+      }
+    ],
     "coreqs": []
   }
 ]

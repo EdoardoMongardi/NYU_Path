@@ -1,15 +1,25 @@
 {
   "phase": "12.8",
-  "task": "4b",
-  "timestamp": "2026-05-02",
+  "task": "4b + 5 (hand-curation 2026-05-03)",
+  "timestamp": "2026-05-03",
   "summary": {
     "total_entries": 7083,
     "curated_golden_preserved": "16/16",
     "non_canonical_inner_ids": 0,
     "missing_courses_field": 0,
-    "silent_failures": 29,
+    "silent_failures_outstanding": 0,
+    "silent_failures_resolved_2026_05_03": 29,
+    "detector_residuals_false_positives": 7,
     "abu_dhabi_references": 16,
-    "vitest_regression_pass_rate": "17/17 (100%)"
+    "vitest_regression_pass_rate": "96/96 (100%)"
+  },
+  "hand_curation_2026_05_03": {
+    "approach": "Pure manual translation, no LLM calls, per Decision A/P/Y/Y'.",
+    "fixed_count": 29,
+    "patches_applied_to": "packages/engine/src/data/prereqs.json",
+    "per_entry_citation_log": "packages/engine/src/data/prereqs.sources.md (section: Phase 12.8 Silent-Failure Hand-Curation)",
+    "detector_residual_explanation": "7 entries (CHEM-UH 3011, 3013, 3016; CM-UY 1001, 1011; CS-UY 1113; MA-UY 914) match the silent-failure detector regex but are correctly empty in prereqGroups — the bulletin Prerequisites line only contains a coreq reference (already at entry level) or a vague placement-exam mention (unparseable per Decision Y'). False positives, not bugs.",
+    "phil_uh_3410_note": "Bulletin found in data/bulletin-raw/courses/phil_uh/_index.md (the doc's prior 'missing entirely' claim was wrong). Bulletin Prerequisites line is wildcard-only (PHIL-UH 2200-2799) → no concrete refs to encode → entry intentionally NOT added to prereqs.json."
   },
   "improvements_from_task_4b": [
     "Rule A: Groups MUST always have courses field (fixed 3 petition-only entries)",
@@ -19,7 +29,9 @@
     "Rule E: Brooklyn-only suffixes (dropped Abu Dhabi -AD, -UC, -GP references)"
   ],
   "silent_failures_category": {
-    "count": 29,
+    "count": 0,
+    "resolved_count": 29,
+    "resolved_date": "2026-05-03",
     "definition": "Bulletin Prerequisites line contains course references but parser output has empty prereqGroups and empty coreqs",
     "subcategories": {
       "confirm_only": 13,
