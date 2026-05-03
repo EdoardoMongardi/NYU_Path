@@ -36,16 +36,28 @@
 //
 // PATTERNS
 // --------
-// 1. Trailing form (canonical, ~95% of mentions):
+// 1. Trailing form (most common):
 //      [CSCI-UA 102](...) with a Minimum Grade of C
 //      ECE-UY 2024 with a Minimum Grade of C-
+//      [CE-UY 2112] with a grade of C or better          (no "Minimum")
+//      [CSCI-UA 201] with a Grade of C or Higher          (no "Minimum"; "or higher" tail)
 //
 // 2. Prefix form (less common):
 //      Minimum grade of A- in [MATH-UA 122]
+//      A grade of C or better in MA-UY 1022               (no "Minimum")
 //
-// Both are case-insensitive on "Minimum"/"minimum" and
-// "Grade"/"grade". Course IDs are zero-padded to 4 digits
-// (Decision A) so the keys align with `prereqGroups[].courses[]`.
+// Both forms accept an optional "Minimum" prefix and an optional
+// "or better/higher/above" tail (which we ignore — the threshold
+// letter is what counts). Case-insensitive on "Minimum"/"Grade".
+// Course IDs are zero-padded to 4 digits (Decision A) so the keys
+// align with `prereqGroups[].courses[]`.
+//
+// Limitation (acknowledged): the prefix form's "in <COURSE>" clause
+// can be followed by an OR-chain of additional courses that all
+// inherit the same grade ("A grade of C or better in [X] or [Y] or [Z]").
+// We capture only the first courseId in such chains; the few entries
+// that depend on this stay unaugmented and would need hand-curation
+// if the threshold matters for those particular courses.
 //
 // VALIDATION
 // ----------
@@ -106,20 +118,35 @@ const STUB_DEPT_DIRS = new Set<string>([
 
 const SUFFIX_GROUP = "(?:UA|UB|UE|UH|UT|UY|SHU)";
 
-// Trailing form: <courseId> [...up to 80 chars, no [/]/newline...] with a Minimum Grade of <X>
-//   Allows an optional outer `[...]` markdown bracket and an optional
-//   `(...)` markdown link (matched as a single non-capturing group so
-//   the gap clause can stay short).
+// Grade-letter pattern: tolerates optional whitespace between letter and
+// sign (the bulletin occasionally writes "B + " or "C - " with a space).
+const GRADE_LETTER = `[A-Z](?:\\s*[+\\-])?`;
+
+// Trailing form: <courseId> [...up to 80 chars...] with a [Minimum] [Gg]rade(s) of <X> [or better/higher/above]
 const TRAILING_GRADE_RE = new RegExp(
-    `\\[?([A-Z][A-Z0-9]*-${SUFFIX_GROUP})\\s+(\\d+[A-Z0-9]*)\\]?(?:\\([^)]*\\))?[^\\n\\[\\]]{0,80}?with a [Mm]inimum [Gg]rade of\\s+([A-Z][+\\-]?)`,
+    `\\[?([A-Z][A-Z0-9]*-${SUFFIX_GROUP})\\s+(\\d+[A-Z0-9]*)\\]?(?:\\([^)]*\\))?[^\\n\\[\\]]{0,80}?with a (?:[Mm]inimum )?[Gg]rades? of\\s+(${GRADE_LETTER})(?:\\s+or\\s+(?:better|higher|above))?`,
     "g",
 );
 
-// Prefix form: Minimum grade of <X> in [<courseId>]
-const PREFIX_GRADE_RE = new RegExp(
-    `[Mm]inimum [Gg]rade of\\s+([A-Z][+\\-]?)\\s+in\\s+\\[?([A-Z][A-Z0-9]*-${SUFFIX_GROUP})\\s+(\\d+[A-Z0-9]*)\\]?`,
+// Prefix marker only (no course capture here). After a match, the
+// surrounding logic walks forward through the next ~250 chars and
+// applies the grade to every in-scope courseId encountered until a
+// hard delimiter (`.`, `;`, `\n`, " and ", " with ") — this captures
+// "A grade of C or better in (X or Y) and Z" patterns where the chain
+// inside parens (and inheritance across "or") all share the threshold.
+const PREFIX_MARKER_RE = new RegExp(
+    `(?:^|[\\s.,;(])(?:[Aa]\\s+)?(?:[Mm]inimum\\s+)?[Gg]rades? of\\s+(${GRADE_LETTER})(?:\\s+or\\s+(?:better|higher|above))?\\s+in\\s+`,
     "g",
 );
+
+// Course-ID scanner used by the prefix-context loop.
+const COURSE_ID_SCAN = new RegExp(
+    `\\[?([A-Z][A-Z0-9]*-${SUFFIX_GROUP})\\s+(\\d+[A-Z0-9]*)\\]?`,
+    "g",
+);
+
+// Hard delimiters that terminate a prefix-context window.
+const PREFIX_TERMINATORS = /[\.;\n]|\s+and\s+a\s+grade|\s+with\s+/i;
 
 const PREREQ_LINE_RE = /\*\*Prerequisites?:\*\*\s*(.+?)(?=\n\n|\n\*\*|$)/is;
 const COURSE_HEADING_RE = /^\*\*([A-Z][A-Z0-9]*-[A-Z]+\s+\S+)\*\*/gm;
@@ -219,6 +246,12 @@ function extractCourseChunks(filePath: string): CourseChunk[] {
  * win on collision (extremely rare — a single line both prefix-
  * and trailing-pairing the same course).
  */
+function normalizeGrade(raw: string): string | null {
+    // Strip whitespace inside the grade ("B + " → "B+") and uppercase.
+    const g = raw.replace(/\s+/g, "").toUpperCase();
+    return VALID_GRADES.has(g) ? g : null;
+}
+
 function extractPairings(prereqLine: string): Record<string, string> {
     const out: Record<string, string> = {};
 
@@ -228,24 +261,37 @@ function extractPairings(prereqLine: string): Record<string, string> {
     while ((tm = TRAILING_GRADE_RE.exec(prereqLine)) !== null) {
         const dept = tm[1];
         const numWithSuffix = tm[2];
-        const grade = tm[3].toUpperCase();
-        if (!VALID_GRADES.has(grade)) continue;
+        const grade = normalizeGrade(tm[3]);
+        if (!grade) continue;
         const [num, sfx] = splitNumberSuffix(numWithSuffix);
-        const padded = zeroPad(dept, num, sfx);
-        out[padded] = grade;
+        out[zeroPad(dept, num, sfx)] = grade;
     }
 
-    // Prefix form
-    PREFIX_GRADE_RE.lastIndex = 0;
+    // Prefix-context loop: locate every "<grade> in" marker, then walk
+    // forward applying the grade to every in-scope courseId until a hard
+    // delimiter. Captures "A grade of C or better in (X or Y) and Z"
+    // patterns where parenthesized chains and OR-chains share a threshold.
+    PREFIX_MARKER_RE.lastIndex = 0;
     let pm: RegExpExecArray | null;
-    while ((pm = PREFIX_GRADE_RE.exec(prereqLine)) !== null) {
-        const grade = pm[1].toUpperCase();
-        const dept = pm[2];
-        const numWithSuffix = pm[3];
-        if (!VALID_GRADES.has(grade)) continue;
-        const [num, sfx] = splitNumberSuffix(numWithSuffix);
-        const padded = zeroPad(dept, num, sfx);
-        out[padded] = grade;
+    while ((pm = PREFIX_MARKER_RE.exec(prereqLine)) !== null) {
+        const grade = normalizeGrade(pm[1]);
+        if (!grade) continue;
+        const windowStart = pm.index + pm[0].length;
+        const window = prereqLine.slice(windowStart, windowStart + 250);
+        const termMatch = PREFIX_TERMINATORS.exec(window);
+        const scope = termMatch
+            ? window.slice(0, termMatch.index)
+            : window;
+        COURSE_ID_SCAN.lastIndex = 0;
+        let cm: RegExpExecArray | null;
+        while ((cm = COURSE_ID_SCAN.exec(scope)) !== null) {
+            const dept = cm[1];
+            const numWithSuffix = cm[2];
+            const [num, sfx] = splitNumberSuffix(numWithSuffix);
+            const padded = zeroPad(dept, num, sfx);
+            // Don't overwrite a more-specific trailing-form pairing.
+            if (!(padded in out)) out[padded] = grade;
+        }
     }
 
     return out;
