@@ -1,13 +1,17 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Phase 12.9.5 — Offering Confidence Enrichment (frequency pass).
+ * Phase 12.9.5 — Offering Confidence Enrichment (frequency + restriction passes).
  *
- * Classifies each course's historical FOSE termsOffered pattern into a
- * confidence tier based on appearance rate in the last 4 same-season
- * terms. Restriction pass (Task 3) overrides this for permission-only
- * and major-restricted courses.
+ * Task 2 (frequency pass): Classifies each course's historical FOSE
+ * termsOffered pattern into a confidence tier based on appearance rate
+ * in the last 4 same-season terms.
  *
- * Algorithm:
+ * Task 3 (restriction pass + combine + write): Scans the bulletin chunk for
+ * each course for permission-only / major-restricted enrollment signals and
+ * overrides the frequency tier where found. Writes the result back to
+ * packages/engine/src/data/courses-offerings.json.
+ *
+ * Algorithm (frequency):
  *   1. Load course_catalog_full.json — get termsOffered per course.
  *   2. Build a global reference set of all distinct term codes in the
  *      dataset, grouped by season (the "universe" of available terms).
@@ -28,10 +32,13 @@
  * number the course appeared in. This implementation uses the reference
  * set — confirmed correct against smoke samples below.
  *
- * Run: pnpm tsx tools/bulletin-parser/extractOfferingConfidence.ts --smoke
+ * Run (default — combine + write):
+ *   pnpm tsx tools/bulletin-parser/extractOfferingConfidence.ts
+ * Run (smoke test — frequency pass only, no writes):
+ *   pnpm tsx tools/bulletin-parser/extractOfferingConfidence.ts --smoke
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,16 +50,36 @@ const FOSE_CATALOG_PATH = join(
     "packages/engine/src/data/course_catalog_full.json",
 );
 
+const OFFERINGS_PATH = join(
+    REPO_ROOT,
+    "packages/engine/src/data/courses-offerings.json",
+);
+
 // ----------------------------------------------------------------
 // Types
 // ----------------------------------------------------------------
 
 type Season = "spring" | "summer" | "fall" | "winter";
-// Local 3-tier subset; the canonical 6-tier union lives in
-// packages/shared/src/types.ts. Task 3 layers the override tiers
-// (`permission_only` / `restricted`) on top of this output and writes
-// the augmented map under the shared `ConfidenceTier` type.
-type ConfidenceTier = "historically_likely" | "historically_partial" | "irregular";
+
+// Local 5-tier union. The canonical type lives in
+// packages/shared/src/types.ts as `ConfidenceTier`. The two restriction
+// tiers (`permission_only` / `restricted`) are added here for Task 3;
+// the shared type already includes them.
+type ConfidenceTier =
+    | "historically_likely"
+    | "historically_partial"
+    | "irregular"
+    | "permission_only"
+    | "restricted";
+
+// Matches packages/shared/src/types.ts:664 (OfferingEntry). Defined
+// locally here to avoid a build dependency from a tool script.
+interface OfferingEntry {
+    termsOffered: ("fall" | "spring" | "summer" | "january")[];
+    rawLine: string;
+    inferred: boolean;
+    confidence?: ConfidenceTier;
+}
 
 const SEASON_BY_LAST_DIGIT: Record<string, Season> = {
     "2": "winter",
@@ -161,6 +188,102 @@ export function buildFrequencyMap(): Map<string, ConfidenceTier> {
 }
 
 // ----------------------------------------------------------------
+// Restriction classifier (Task 3)
+// ----------------------------------------------------------------
+
+// Verbatim from Phase 12.9.5 plan §Task-3 Step 1. Do NOT widen these
+// patterns for individual cases (operator rule: general fixes only).
+const PERMISSION_PATTERNS: RegExp[] = [
+    /permission of (?:the )?department/i,
+    /permission of (?:the )?instructor/i,
+    /consent of (?:the )?(?:instructor|department)/i,
+    /by application only/i,
+    /requires? (?:departmental )?application/i,
+    /enrollment by permission/i,
+];
+
+const RESTRICTED_PATTERNS: RegExp[] = [
+    /restricted to (?:[A-Z][a-z]+ )?(?:majors|students)/i,
+    /open only to (?:[A-Z][a-z]+ )?(?:majors|students)/i,
+    /reserved for (?:[A-Z][a-z]+ )?(?:majors|students)/i,
+    /limited to (?:students in )?[A-Z][a-z]+/i,
+    /honors students only/i,
+];
+
+/**
+ * Looks up the bulletin chunk for `courseId` and returns an override
+ * tier if a restriction signal is found, or `null` otherwise.
+ *
+ * File path convention:
+ *   data/bulletin-raw/courses/<DEPT_lower>_<SFX_lower>/_index.md
+ */
+function classifyByRestriction(courseId: string): "permission_only" | "restricted" | null {
+    const m = courseId.match(/^([A-Z][A-Z0-9]*)-([A-Z]+) /);
+    if (!m) return null;
+    const [, dept, sfx] = m;
+    const path = join(
+        REPO_ROOT,
+        `data/bulletin-raw/courses/${dept.toLowerCase()}_${sfx.toLowerCase()}/_index.md`,
+    );
+    let content: string;
+    try {
+        content = readFileSync(path, "utf-8");
+    } catch {
+        return null;
+    }
+
+    // Extract the chunk belonging to this specific course only.
+    const chunkRe = new RegExp(
+        `\\*\\*${courseId.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\*\\*.*?(?=\\*\\*[A-Z][A-Z0-9]*-[A-Z]+ \\S+\\*\\*|$)`,
+        "s",
+    );
+    const chunkMatch = chunkRe.exec(content);
+    if (!chunkMatch) return null;
+    const chunk = chunkMatch[0];
+
+    for (const pat of PERMISSION_PATTERNS) {
+        if (pat.test(chunk)) return "permission_only";
+    }
+    for (const pat of RESTRICTED_PATTERNS) {
+        if (pat.test(chunk)) return "restricted";
+    }
+    return null;
+}
+
+// ----------------------------------------------------------------
+// Main entry point — combine passes + write (Task 3)
+// ----------------------------------------------------------------
+
+function main(): void {
+    const offerings = JSON.parse(
+        readFileSync(OFFERINGS_PATH, "utf-8"),
+    ) as Record<string, OfferingEntry>;
+
+    const freqMap = buildFrequencyMap();
+
+    let augmented = 0;
+    const tierCounts: Record<string, number> = {};
+
+    for (const [courseId, entry] of Object.entries(offerings)) {
+        // Restriction pass takes precedence over frequency.
+        const restrictionTier = classifyByRestriction(courseId);
+        const frequencyTier = freqMap.get(courseId) ?? "irregular";
+        const finalTier = restrictionTier ?? frequencyTier;
+
+        entry.confidence = finalTier;
+        tierCounts[finalTier] = (tierCounts[finalTier] ?? 0) + 1;
+        augmented++;
+    }
+
+    writeFileSync(OFFERINGS_PATH, JSON.stringify(offerings, null, 2));
+
+    console.log(`Augmented ${augmented} entries with confidence tiers.`);
+    for (const [tier, count] of Object.entries(tierCounts).sort(([, a], [, b]) => b - a)) {
+        console.log(`  ${tier}: ${count}`);
+    }
+}
+
+// ----------------------------------------------------------------
 // Smoke test (--smoke flag)
 // ----------------------------------------------------------------
 
@@ -194,3 +317,4 @@ function smokeTest(): void {
 }
 
 if (process.argv.includes("--smoke")) smokeTest();
+else main();
