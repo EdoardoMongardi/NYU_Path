@@ -155,6 +155,49 @@ You must respond with a single JSON object (no markdown, no prose):
 
 9. **Empty Prerequisites:**
    - If there are no prerequisites, return {course, prereqGroups: [], coreqs: []}.
+10. **Groups MUST always have a courses field (Rule A):**
+   - Even when a group is petition-only with no actual course prerequisites, emit courses: [] (empty array).
+   - Example:
+     Input: "Prerequisites: instructor permission required."
+     Output:
+     {
+       "course": "X-UA 100",
+       "prereqGroups": [
+         {"type": "OR", "courses": [], "requiresPetition": true}
+       ],
+       "coreqs": []
+     }
+
+11. **Skip non-course eligibility constraints — do not fabricate IDs (Rule B):**
+   - Eligibility text like "Sophomore Level", "Senior standing", "Must be a Games Design major", "Must be in Steinhardt", "Junior status", "department permission" is NOT a course prerequisite.
+   - Do NOT emit synthetic IDs like CLASS-SOPHOMORE, Games Design Major, SENIOR_STANDING, Steinhardt, Games-Design-Major, etc.
+   - Drop these constraints silently. Only emit IDs for actual NYU course catalog references (matching the standard courseId pattern) or the locked synthetic-ID schemas (AP-/IB-/PLACE-/SAT2-).
+
+12. **Skip wildcard course ranges (Rule C):**
+   - If the bulletin says [CE-UY 25xx], [MATH-UA 1##], [FIRST-UG 3##], [FIRST-UG 4##], or similar patterns with xx, ##, or trailing placeholders, drop the clause silently.
+   - These are not parseable to specific course IDs and inventing them is wrong.
+   - Examples to drop: "CE-UY 25xx", "FIRST-UG 3##", "MATH-UA 1##", "ECON-UA 1##"
+
+13. **Synthetic IDs MUST conform to the locked schema (Rule D):**
+   - Every synthetic ID must match exactly one of:
+     * AP-<SUBJECT>-<SCORE> where SUBJECT is one of {CS-A, CS-P, CALC-AB, CALC-BC, STATS, BIO, CHEM, PHYS-1, PHYS-2, PHYS-C-MECH, PHYS-C-EM, ECON-MICRO, ECON-MACRO, USH, WH, EH, ENG-LANG, ENG-LIT, PSYCH, FRENCH, SPANISH, CHINESE, LATIN} and SCORE is a single digit
+     * IB-<SUBJECT>-<LEVEL>-<SCORE> where LEVEL is HL or SL (NEVER omit the level), SUBJECT is one of {MATH, CS, CHEM, BIO, PHYS, ECON, HIST}, SCORE is a single digit
+     * PLACE-MATH-<LEVEL>-<SCORE> (e.g., PLACE-MATH-PLCM2-100) or PLACE-MATH-<SCORE> if no level specified
+     * PLACE-LANG-<LANGUAGE>-<SCORE> (e.g., PLACE-LANG-JAPANESE-3302) or PLACE-LANG-<SCORE> if no language; SCORE must be a number
+     * SAT2-<SUBJECT>-<SCORE> (e.g., SAT2-MATH2-700)
+   - If you cannot confidently fit a clause to one of these forms (score is a range like 15-22, language has multi-segment variants, subject not in dictionary), DROP the clause silently.
+   - Forbidden examples (drop these): IB-MATH-6 (missing HL/SL level), PLACE-LANG-MANDARIN-SIMP-3302 (multi-segment language), PLACE-LANG-GREEK-15-22 (score range), PLACE-MATH-CALC2 (missing score), AP-CS-10 (two-digit score)
+
+14. **Only emit course IDs for actual NYU catalog references (Rule E):**
+   - A valid NYU course ID matches the pattern: ^[A-Z][A-Z0-9]*-(UA|UB|UE|UF|UG|UH|UT|UY|SHU) <NUMBER>$ (with a SPACE, not hyphen, between dept and number)
+   - Examples that are NOT valid and must be dropped:
+     * CSCI-0201 (missing dept-suffix like -UA; has only a number)
+     * MPATC-0 1322 (numeric "0" instead of a valid suffix)
+     * PLAN-UEARFBFA / PLAN-UEARFABFA (no space, no number — fabricated)
+     * STS-UY-L2-HUSSEC (multi-segment hyphens; not a number)
+     * FOUND-SCI-1-6 / FOUND-SCI-0001 (NYU has no FOUND-SCI suffix)
+   - If the bulletin text references "Foundations of Science 1-6" or similar non-standard concepts, drop them — the bulletin only uses the standard courseId pattern.
+
 
 ## RESPONSE FORMAT (CRITICAL)
 

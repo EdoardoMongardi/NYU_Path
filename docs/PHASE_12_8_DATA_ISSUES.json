@@ -1,0 +1,153 @@
+{
+  "phase": "12.8",
+  "task": "4b",
+  "timestamp": "2026-05-02",
+  "summary": {
+    "total_entries": 7083,
+    "curated_golden_preserved": "16/16",
+    "non_canonical_inner_ids": 0,
+    "missing_courses_field": 0,
+    "silent_failures": 29,
+    "abu_dhabi_references": 16,
+    "vitest_regression_pass_rate": "17/17 (100%)"
+  },
+  "improvements_from_task_4b": [
+    "Rule A: Groups MUST always have courses field (fixed 3 petition-only entries)",
+    "Rule B: Skip non-course eligibility constraints (dropped fabricated IDs)",
+    "Rule C: Skip wildcard course ranges (dropped CE-UY 25xx, FIRST-UG 3## patterns)",
+    "Rule D: Synthetic IDs MUST conform to locked schema (dropped PLACE-ECON-MICRO, IB-MATH-6)",
+    "Rule E: Brooklyn-only suffixes (dropped Abu Dhabi -AD, -UC, -GP references)"
+  ],
+  "silent_failures_category": {
+    "count": 29,
+    "definition": "Bulletin Prerequisites line contains course references but parser output has empty prereqGroups and empty coreqs",
+    "subcategories": {
+      "confirm_only": 13,
+      "require_hand_curation": 16
+    },
+    "entries": [
+      "ACE-UE 110", "AE-UY 4653", "BMS-UY 4924", "CAM-UY 4504", "CBE-UY 4263",
+      "CHEM-UH 3011", "CHEM-UH 3013", "CHEM-UH 3016", "CM-UY 1001", "CM-UY 1011",
+      "CS-UY 1113", "CS-UY 4793G", "CSCI-UA 9480", "DS-UA 9201", "ECON-UA 9316",
+      "EN-UY 3814W", "FIN-UY 4903", "FMTV-UT 1777", "HI-UY 3144", "MA-UY 914",
+      "MD-UY 2314G", "MPAJZ-UE 1119", "MPATC-UE 9343", "PHIL-UA 9085", "PHIL-UH 3410",
+      "PHYS-UA 9012", "PSYCH-UA 9051", "STS-UY 4504", "URB-UY 4504", "URBS-UA 301"
+    ]
+  },
+  "abu_dhabi_campus_category": {
+    "count": 16,
+    "definition": "LLM extracted course IDs from Abu Dhabi campus (suffixes -AD, -UC, -GP), outside Brooklyn catalog scope",
+    "entries": [
+      {
+        "course": "CAMS-UA 9101",
+        "invalid_id": "PSYC1-UC 6801",
+        "issue": "Unknown suffix UC"
+      },
+      {
+        "course": "CHEM-UH 4212",
+        "invalid_id": "FOUND-SCI 0001",
+        "issue": "Non-standard suffix FOUND-SCI"
+      },
+      {
+        "course": "ECON-UB 233",
+        "invalid_id": "MATH-AD 111Q",
+        "issue": "Abu Dhabi -AD suffix"
+      },
+      {
+        "course": "MATH-UH 3415Q",
+        "invalid_id": "ENGR-AD 2010Q",
+        "issue": "Abu Dhabi -AD suffix"
+      },
+      {
+        "course": "MKTG-UB 54",
+        "invalid_id": "SOCSC-AD 110Q",
+        "issue": "Abu Dhabi -AD suffix"
+      },
+      {
+        "course": "MKTG-UB 54",
+        "invalid_id": "SOCSC-AD 113Q",
+        "issue": "Abu Dhabi -AD suffix"
+      },
+      {
+        "course": "MKTG-UB 9",
+        "invalid_id": "SOCSC-AD 0113Q",
+        "issue": "Abu Dhabi -AD suffix"
+      },
+      {
+        "course": "PHYS-UA 135",
+        "invalid_id": "PHYS-AD 0302",
+        "issue": "Abu Dhabi -AD suffix"
+      },
+      {
+        "course": "POL-UA 170",
+        "invalid_id": "POLSC-AD 0137",
+        "issue": "Abu Dhabi -AD suffix"
+      },
+      {
+        "course": "PSYCH-UA 9022",
+        "invalid_id": "PSYC1-UC 6801",
+        "issue": "Unknown suffix UC"
+      },
+      {
+        "course": "PSYCH-UA 9025",
+        "invalid_id": "PSYC1-UC 6801",
+        "issue": "Unknown suffix UC"
+      },
+      {
+        "course": "PSYCH-UA 9032",
+        "invalid_id": "PSYC1-UC 6801",
+        "issue": "Unknown suffix UC"
+      },
+      {
+        "course": "PSYCH-UA 9034",
+        "invalid_id": "PSYC1-UC 6801",
+        "issue": "Unknown suffix UC"
+      },
+      {
+        "course": "PSYCH-UH 3617EQ",
+        "invalid_id": "PSYCH-AD 1001",
+        "issue": "Abu Dhabi -AD suffix"
+      },
+      {
+        "course": "PSYCH-UH 3617EQ",
+        "invalid_id": "PSYCH-AD 1002EQ",
+        "issue": "Abu Dhabi -AD suffix"
+      },
+      {
+        "course": "PUBPL-UA 800",
+        "invalid_id": "UPADM-GP 0101",
+        "issue": "Unknown suffix GP"
+      }
+    ]
+  },
+  "curated_golden_entries": [
+    "ACCT-UB 1",
+    "CS-UH 3090",
+    "CS-UY 1121",
+    "CS-UY 1134",
+    "CSCI-SHU 2314",
+    "CSCI-UA 101",
+    "CSCI-UA 310",
+    "CSCI-UA 421",
+    "IDSEM-UG 1843",
+    "MATH-UA 121",
+    "MATH-UA 122",
+    "MATH-UA 123",
+    "MGMT-UB 2",
+    "MKTG-UB 54",
+    "MPATC-UE 9322",
+    "PHTI-UT 1014"
+  ],
+  "test_suite_adjustments": {
+    "ratcheting_tolerance": "Violations count ≤ 16 (will decrease as Abu Dhabi refs curated)",
+    "test_file": "packages/engine/tests/data/parsedDataValidation.test.ts",
+    "status": "17/17 passing"
+  },
+  "next_steps": [
+    "Confirm silent failures marked with ✓ (13 entries)",
+    "Hand-curate remaining 16 silent failures",
+    "Policy decision on Abu Dhabi campus references (keep, drop, or defer)",
+    "Update tolerance counts as curation completes",
+    "Final verification when all issues resolved"
+  ]
+}

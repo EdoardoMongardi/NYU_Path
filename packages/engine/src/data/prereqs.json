@@ -1429,8 +1429,7 @@
       {
         "type": "OR",
         "courses": [
-          "ARABL-UH 1110",
-          "PLACE-LANG-ARABIC-PROFICIENCY"
+          "ARABL-UH 1110"
         ]
       }
     ],
@@ -1814,19 +1813,6 @@
         "courses": [
           "ART-UE 0314"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "PLAN-UEARFBFA"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "SOPHOMORE_LEVEL"
-        ],
-        "requiresPetition": true
       }
     ],
     "coreqs": []
@@ -1864,26 +1850,6 @@
         "courses": [
           "ART-UE 0107"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "PLAN-UEARFABFA"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "CLASS-SOPHOMORE"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "CLASS-JUNIOR",
-          "CLASS-SENIOR"
-        ],
-        "requiresPetition": true
       }
     ],
     "coreqs": []
@@ -1896,22 +1862,6 @@
         "courses": [
           "ART-UE 0107"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "PLAN-UEARFABFA"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "CLASS-SOPHOMORE"
-        ]
-      },
-      {
-        "type": "AND",
-        "requiresPetition": true
       }
     ],
     "coreqs": []
@@ -1924,26 +1874,6 @@
         "courses": [
           "ART-UE 0107"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "PLAN-UEARFABFA"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "CLASS-SOPHOMORE"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "CLASS-JUNIOR",
-          "CLASS-SENIOR"
-        ],
-        "requiresPetition": true
       }
     ],
     "coreqs": []
@@ -2017,13 +1947,6 @@
         "courses": [
           "ART-UE 0212"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "PLAN-UEARFABFA"
-        ],
-        "requiresPetition": true
       }
     ],
     "coreqs": []
@@ -2041,19 +1964,6 @@
         "courses": [
           "ART-UE 0314"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "PLAN-UEARFABFA"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "Sophomore Level"
-        ],
-        "requiresPetition": true
       }
     ],
     "coreqs": []
@@ -2133,23 +2043,6 @@
         "courses": [
           "ART-UE 0107"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "PLAN-UEARFABFA"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "CLASS-SOPHOMORE"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [],
-        "requiresPetition": true
       }
     ],
     "coreqs": []
@@ -4530,8 +4423,7 @@
         "type": "OR",
         "courses": [
           "BIOL-UA 0012",
-          "ENVST-UA 0100",
-          "ENVST-0370"
+          "ENVST-UA 0100"
         ]
       }
     ],
@@ -4994,9 +4886,7 @@
     "prereqGroups": [
       {
         "type": "OR",
-        "courses": [
-          "FOUND-SCI-1-6"
-        ],
+        "courses": [],
         "requiresPetition": true
       }
     ],
@@ -9545,10 +9435,8 @@
         ]
       },
       {
-        "type": "AND",
-        "courses": [
-          "SENIOR_STANDING"
-        ],
+        "type": "OR",
+        "courses": [],
         "requiresPetition": true
       }
     ],
@@ -10224,12 +10112,6 @@
           "CE-UY 4183",
           "CE-UY 3143"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "Senior standing"
-        ]
       }
     ],
     "coreqs": []
@@ -10243,12 +10125,6 @@
           "CE-UY 3303",
           "CE-UY 3373"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "Senior standing"
-        ]
       }
     ],
     "coreqs": []
@@ -10260,20 +10136,6 @@
         "type": "AND",
         "courses": [
           "CE-UY 2533"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "CE-UY 25xx"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "CE-UY 25xx",
-          "CE-UY 35xx",
-          "CE-UY 45xx"
         ]
       }
     ],
@@ -11004,12 +10866,6 @@
         "courses": [
           "MATH-UH 1020"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "Foundations of Science 1-6"
-        ]
       }
     ],
     "coreqs": []
@@ -11096,13 +10952,8 @@
     "course": "CHEM-UH 3260",
     "prereqGroups": [
       {
-        "type": "AND",
-        "courses": [
-          "FOUND-SCI-0001",
-          "FOUND-SCI-0002",
-          "FOUND-SCI-0003",
-          "FOUND-SCI-0004"
-        ],
+        "type": "OR",
+        "courses": [],
         "requiresPetition": true
       }
     ],
@@ -14289,7 +14140,7 @@
         "type": "OR",
         "courses": [
           "CS-UH 2010",
-          "CSCI-0201",
+          "CSCI-UA 0201",
           "CSCI-SHU 0201",
           "CENG-SHU 0202"
         ]
@@ -14531,7 +14382,8 @@
         ]
       },
       {
-        "type": "AND",
+        "type": "OR",
+        "courses": [],
         "requiresPetition": true
       }
     ],
@@ -17511,8 +17363,7 @@
         "courses": [
           "EAST-UA 0206",
           "EAST-UA 9206",
-          "PLACE-LANG-MANDARIN-SIMP-3302",
-          "PLACE-LANG-MANDARIN-TRAD-3302"
+          "PLACE-LANG-MANDARIN-3302"
         ]
       }
     ],
@@ -17620,8 +17471,8 @@
           "EAST-UA 0221",
           "EAST-UA 0222",
           "EAST-UA 0224",
-          "PLACE-LANG-MANDARIN-SIMP-3302",
-          "PLACE-LANG-MANDARIN-TRAD-3302"
+          "PLACE-LANG-MANDARIN-3302",
+          "PLACE-LANG-MANDARIN-3302"
         ]
       }
     ],
@@ -19412,8 +19263,7 @@
       {
         "type": "OR",
         "courses": [
-          "ECON-UA 0010",
-          "C31"
+          "ECON-UA 0010"
         ]
       }
     ],
@@ -19653,9 +19503,10 @@
           "MATH-SHU 0131",
           "AP-CALC-AB-4",
           "AP-CALC-BC-4",
-          "PLACE-MATH-CALC2",
-          "PLACE-MATH-CALC3",
-          "IB-MATH-6"
+          "PLACE-MATH-2",
+          "PLACE-MATH-3",
+          "IB-MATH-HL-6",
+          "IB-MATH-SL-6"
         ]
       }
     ],
@@ -19797,10 +19648,7 @@
           "MATH-UA 0396",
           "MATH-SHU 0131",
           "AP-CALC-AB-4",
-          "AP-CALC-BC-4",
-          "PLACE-MATH-CALC-2",
-          "PLACE-MATH-CALC-3",
-          "IB-MATH-6"
+          "AP-CALC-BC-4"
         ]
       }
     ],
@@ -19827,8 +19675,7 @@
       {
         "type": "OR",
         "courses": [
-          "SOCSC-UH 1111",
-          "PLACE-ECON-MICRO"
+          "SOCSC-UH 1111"
         ]
       }
     ],
@@ -27062,12 +26909,6 @@
           "GAMES-UT 0101",
           "GAMES-UT 0110"
         ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "Games Design Major"
-        ]
       }
     ],
     "coreqs": []
@@ -27228,12 +27069,6 @@
         "courses": [
           "GAMES-UT 0120",
           "GAMES-UT 0150"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "Game Design Major"
         ]
       }
     ],
@@ -28876,8 +28711,7 @@
       {
         "type": "OR",
         "courses": [
-          "HEL-UA 0103",
-          "PLACE-LANG-GREEK-15-22"
+          "HEL-UA 0103"
         ]
       }
     ],
@@ -30819,12 +30653,6 @@
         "courses": [
           "HIST-UH 2010",
           "HIST-UH 3010"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "SENIOR_STANDING"
         ]
       }
     ],
@@ -33107,7 +32935,7 @@
         "courses": [
           "ITAL-UA 0012",
           "ITAL-UA 0020",
-          "PLACE-LANG-ITALIAN-59-67"
+          "PLACE-LANG-ITALIAN-59"
         ]
       }
     ],
@@ -33453,9 +33281,7 @@
           "WRCI-UF 0102",
           "WREX-UF 0101",
           "WREX-UF 9101",
-          "GWS-UF 0101",
-          "FIRST-UG 3##",
-          "FIRST-UG 4##"
+          "GWS-UF 0101"
         ]
       }
     ],
@@ -35705,7 +35531,6 @@
       {
         "type": "OR",
         "courses": [
-          "PLACE-MATH-NYUSH-CALC-LA",
           "MATH-SHU 0131"
         ]
       }
@@ -35879,8 +35704,6 @@
         "type": "OR",
         "courses": [
           "MATH-UA 0009",
-          "SAT-MATH-670",
-          "ACT-MATH-30",
           "AP-CALC-AB-3",
           "AP-CALC-BC-3",
           "AP-PRECALC-4",
@@ -35931,8 +35754,6 @@
         "type": "OR",
         "courses": [
           "MATH-UA 0009",
-          "SAT-MATH-670",
-          "ACT-MATH-30",
           "AP-CALC-AB-3",
           "AP-CALC-BC-3",
           "AP-PRECALC-4",
@@ -35978,8 +35799,6 @@
         "type": "OR",
         "courses": [
           "MATH-UA 0009",
-          "SAT-MATH-670",
-          "ACT-MATH-30",
           "AP-CALC-AB-3",
           "AP-CALC-BC-3",
           "AP-PRECALC-4",
@@ -36015,12 +35834,10 @@
         "type": "OR",
         "courses": [
           "MATH-UA 0009",
-          "SAT-MATH-670",
-          "ACT-MATH-30",
           "AP-CALC-AB-3",
           "AP-CALC-BC-3",
           "AP-PRECALC-4",
-          "PLACE-MATH-PLCMT-100"
+          "PLACE-MATH-PLCM1-100"
         ]
       }
     ],
@@ -36746,19 +36563,14 @@
         "type": "OR",
         "courses": [
           "MATH-UH 1000B",
-          "MATH-UH 0002"
+          "MATH-UH 0002",
+          "PLACE-MATH-85"
         ]
       },
       {
         "type": "AND",
         "courses": [
           "MATH-UH 0005"
-        ]
-      },
-      {
-        "type": "OR",
-        "courses": [
-          "PLACE-MATH-PROFICIENCY"
         ]
       }
     ],
@@ -36808,8 +36620,7 @@
       {
         "type": "OR",
         "courses": [
-          "MATH-UH 1012",
-          "PLACE-MATH-PROFICIENCY-ASSESSMENT"
+          "MATH-UH 1012"
         ]
       }
     ],
@@ -41233,7 +41044,7 @@
         "type": "OR",
         "courses": [
           "MPATC-UE 1321",
-          "MPATC-0 1322",
+          "MPATC-UE 1322",
           "MPATC-UE 0007"
         ]
       }
@@ -41247,7 +41058,7 @@
         "type": "OR",
         "courses": [
           "MPATC-UE 1321",
-          "MPATC-01322",
+          "MPATC-UE 1322",
           "MPATC-UE 0007"
         ]
       }
@@ -42668,8 +42479,7 @@
       {
         "type": "OR",
         "courses": [
-          "MUSIC-UH 1010",
-          "PLACE-MUSIC-PLACEMENT"
+          "MUSIC-UH 1010"
         ]
       },
       {
@@ -48382,12 +48192,6 @@
     "course": "PHYS-UH 3010",
     "prereqGroups": [
       {
-        "type": "AND",
-        "courses": [
-          "Foundations of Science 1-4"
-        ]
-      },
-      {
         "type": "OR",
         "courses": [
           "MATH-UH 1022",
@@ -49570,13 +49374,7 @@
       },
       {
         "type": "OR",
-        "courses": [
-          "PLACE-LANG-PORTUGUESE"
-        ],
-        "requiresPetition": true
-      },
-      {
-        "type": "OR",
+        "courses": [],
         "requiresPetition": true
       }
     ],
@@ -49920,12 +49718,9 @@
         "type": "OR",
         "courses": [
           "PSYCH-UA 0001",
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M",
+          "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6",
-          "APSY-UE 0002"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -49967,7 +49762,7 @@
           "PSYCH-UA 0001",
           "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -49982,7 +49777,7 @@
           "PSYCH-UA 0001",
           "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -50002,7 +49797,7 @@
           "PSYCH-UA 0001",
           "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -50015,12 +49810,9 @@
         "type": "OR",
         "courses": [
           "PSYCH-UA 0001",
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M",
+          "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6",
-          "APSY-UE 0002"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -50035,7 +49827,7 @@
           "PSYCH-UA 0001",
           "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -50110,26 +49902,10 @@
       {
         "type": "OR",
         "courses": [
-          "UAPSYCBA",
-          "UAPSYC-S"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "PSYCH-UA 0034"
-        ]
-      },
-      {
-        "type": "OR",
-        "courses": [
+          "PSYCH-UA 0034",
           "PSYCH-UA 0010",
           "PSYCH-UA 0011"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [],
+        ],
         "requiresPetition": true
       }
     ],
@@ -50198,7 +49974,7 @@
           "PSYCH-UA 0001",
           "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -50237,9 +50013,6 @@
         "type": "OR",
         "courses": [
           "PSYCH-UA 0001",
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M",
           "AP-PSYCH-4",
           "IB-PSYCH-HL-6",
           "APSY-UE 0002"
@@ -50247,22 +50020,7 @@
       },
       {
         "type": "AND",
-        "courses": [
-          "PSYCH-UA 0010"
-        ]
-      },
-      {
-        "type": "OR",
-        "courses": [
-          "PSYCH-UA 0011",
-          "PSYCH-UA 0022",
-          "PSYCH-UA 0025",
-          "PSYCH-UA 0029",
-          "PSYCH-UA 0030",
-          "PSYCH-UA 0032",
-          "PSYCH-UA 0034",
-          "PSYCH-UA 0035"
-        ]
+        "courses": []
       }
     ],
     "coreqs": []
@@ -50274,33 +50032,16 @@
         "type": "OR",
         "courses": [
           "PSYCH-UA 0001",
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M",
           "AP-PSYCH-4",
           "IB-PSYCH-HL-6",
-          "APSY-UE 0002"
+          "APSY-UE 0002",
+          "LING-UA 0001"
         ]
       },
       {
         "type": "AND",
         "courses": [
           "PSYCH-UA 0022"
-        ]
-      },
-      {
-        "type": "OR",
-        "courses": [
-          "PSYCH-UA 0025",
-          "PSYCH-UA 0027",
-          "PSYCH-UA 0029",
-          "PSYCH-UA 0034",
-          "LING-UA 0001",
-          "LING-UA 0003",
-          "LING-UA 0004",
-          "LING-UA 0005",
-          "LING-UA 0011",
-          "LING-UA 0027"
         ]
       }
     ],
@@ -50315,7 +50056,7 @@
           "PSYCH-UA 0001",
           "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -50330,10 +50071,7 @@
           "PSYCH-UA 0001",
           "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-HL-6",
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -50368,9 +50106,6 @@
       {
         "type": "OR",
         "courses": [
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M",
           "PSYCH-UA 0001",
           "AP-PSYCH-4"
         ]
@@ -50403,10 +50138,7 @@
           "PSYCH-UA 0001",
           "AP-PSYCH-4",
           "IB-PSYCH-HL-6",
-          "APSY-UE 0002",
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M"
+          "APSY-UE 0002"
         ]
       },
       {
@@ -52633,14 +52365,7 @@
   },
   {
     "course": "STS-UY 3004W",
-    "prereqGroups": [
-      {
-        "type": "OR",
-        "courses": [
-          "STS-UY-L2-HUSSEC"
-        ]
-      }
-    ],
+    "prereqGroups": [],
     "coreqs": []
   },
   {
@@ -52688,14 +52413,7 @@
   },
   {
     "course": "STS-UY 3224",
-    "prereqGroups": [
-      {
-        "type": "AND",
-        "courses": [
-          "EXPOS-0001"
-        ]
-      }
-    ],
+    "prereqGroups": [],
     "coreqs": []
   },
   {
