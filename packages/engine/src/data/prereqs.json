@@ -243,7 +243,12 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ME-UY 3333": "D",
+      "ME-UY 2313": "D",
+      "ME-UY 3313": "D"
+    }
   },
   {
     "course": "AE-UY 4613",
@@ -268,7 +273,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "AE-UY 4603": "D"
+    }
   },
   {
     "course": "AE-UY 4653",
@@ -280,7 +288,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ME-UY 2223": "D"
+    }
   },
   {
     "course": "ANST-UA 200",
@@ -2544,7 +2555,12 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0001": "C",
+      "ARTH-UA 0002": "C",
+      "ARTH-UA 0005": "C"
+    }
   },
   {
     "course": "ARTH-UA 304",
@@ -2899,7 +2915,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0002": "C",
+      "ARTH-UA 0006": "C"
+    }
   },
   {
     "course": "ARTH-UA 450",
@@ -2997,7 +3017,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0661": "C",
+      "ARTH-UA 0601": "C"
+    }
   },
   {
     "course": "ARTH-UA 661",
@@ -3025,7 +3049,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0661": "C",
+      "ARTH-UA 0601": "C"
+    }
   },
   {
     "course": "ARTH-UA 671",
@@ -3043,7 +3071,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0661": "C",
+      "ARTH-UA 0601": "C"
+    }
   },
   {
     "course": "ARTH-UA 672",
@@ -3062,7 +3094,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0661": "C",
+      "ARTH-UA 0601": "C"
+    }
   },
   {
     "course": "ARTH-UA 673",
@@ -3080,7 +3116,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0661": "C",
+      "ARTH-UA 0601": "C"
+    }
   },
   {
     "course": "ARTH-UA 674",
@@ -3129,7 +3169,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0601": "C",
+      "ARTH-UA 0661": "C"
+    }
   },
   {
     "course": "ARTH-UA 677",
@@ -3147,7 +3191,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0661": "C",
+      "ARTH-UA 0601": "C"
+    }
   },
   {
     "course": "ARTH-UA 701",
@@ -3954,7 +4002,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-UA 0012": "C"
+    }
   },
   {
     "course": "BIOL-UA 22",
@@ -3967,7 +4018,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-SHU 0021": "C"
+    }
   },
   {
     "course": "BIOL-UA 223",
@@ -3984,7 +4038,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-UA 0021": "C"
+    }
   },
   {
     "course": "BIOL-UA 25",
@@ -4014,7 +4071,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-UA 0021": "C"
+    }
   },
   {
     "course": "BIOL-UA 255",
@@ -4080,7 +4140,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-UA 0021": "C",
+      "BIOL-UA 0022": "C"
+    }
   },
   {
     "course": "BIOL-UA 27",
@@ -4104,7 +4168,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-UA 0021": "C",
+      "BIOL-UA 0022": "C"
+    }
   },
   {
     "course": "BIOL-UA 3",
@@ -4135,7 +4203,10 @@
     ],
     "coreqs": [
       "CHEM-UA 0881"
-    ]
+    ],
+    "minGrades": {
+      "BIOL-UA 0021": "C"
+    }
   },
   {
     "course": "BIOL-UA 31",
@@ -4231,7 +4302,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-UA 0021": "C"
+    }
   },
   {
     "course": "BIOL-UA 45",
@@ -4263,7 +4337,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-UA 0022": "C",
+      "BIOL-UH 2010": "C"
+    }
   },
   {
     "course": "BIOL-UA 500",
@@ -4400,7 +4478,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-UA 0021": "C"
+    }
   },
   {
     "course": "BIOL-UA 63",
@@ -4515,7 +4596,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BIOL-SHU 0021": "C"
+    }
   },
   {
     "course": "BIOL-UA 9123",
@@ -5188,7 +5272,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "BMS-UY 3314": "D"
+    }
   },
   {
     "course": "BMS-UY 4424",
@@ -6385,7 +6472,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CAMS-UA 0101": "C"
+    }
   },
   {
     "course": "CAMS-UA 202",
@@ -6403,7 +6493,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CAMS-UA 0101": "C"
+    }
   },
   {
     "course": "CAMS-UA 205",
@@ -6415,7 +6508,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CAMS-UA 0101": "C"
+    }
   },
   {
     "course": "CAMS-UA 206",
@@ -6428,7 +6524,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CAMS-UA 0101": "C"
+    }
   },
   {
     "course": "CAMS-UA 300",
@@ -6620,7 +6719,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CBE-UY 3153": "D",
+      "CBE-UY 3313": "D"
+    }
   },
   {
     "course": "CBE-UY 3233",
@@ -6638,7 +6741,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CBE-UY 3153": "D",
+      "CBE-UY 3313": "D"
+    }
   },
   {
     "course": "CBE-UY 3313",
@@ -6693,7 +6800,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CBE-UY 3233": "D"
+    }
   },
   {
     "course": "CBE-UY 4143",
@@ -6705,7 +6815,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CBE-UY 3223": "D"
+    }
   },
   {
     "course": "CBE-UY 4163",
@@ -6741,7 +6854,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CBE-UY 4113": "D",
+      "CBE-UY 4143": "D"
+    }
   },
   {
     "course": "CBE-UY 4223",
@@ -6773,7 +6890,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CBE-UY 4163": "D",
+      "CBE-UY 4143": "D"
+    }
   },
   {
     "course": "CBE-UY 481X",
@@ -10451,7 +10572,12 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0125": "C",
+      "CHEM-UA 0101": "C",
+      "CHEM-UA 0103": "C"
+    }
   },
   {
     "course": "CHEM-UA 129",
@@ -10469,7 +10595,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0122": "C"
+    }
   },
   {
     "course": "CHEM-UA 210",
@@ -10481,7 +10610,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0120": "C"
+    }
   },
   {
     "course": "CHEM-UA 225",
@@ -10499,7 +10631,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0126": "C"
+    }
   },
   {
     "course": "CHEM-UA 226",
@@ -10556,7 +10691,12 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0225": "C",
+      "CHEM-UA 0227": "C",
+      "CHEM-UH 2010": "C"
+    }
   },
   {
     "course": "CHEM-UA 651",
@@ -10586,7 +10726,12 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0651": "C",
+      "CHEM-UA 0652": "C",
+      "CHEM-SHU 0651": "C"
+    }
   },
   {
     "course": "CHEM-UA 662",
@@ -10734,7 +10879,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0228": "C",
+      "CHEM-UA 0881": "C"
+    }
   },
   {
     "course": "CHEM-UA 881",
@@ -10751,7 +10900,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0226": "C"
+    }
   },
   {
     "course": "CHEM-UA 882",
@@ -10768,7 +10920,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0881": "C"
+    }
   },
   {
     "course": "CHEM-UA 890",
@@ -10809,7 +10964,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0126": "C"
+    }
   },
   {
     "course": "CHEM-UA 9226",
@@ -10843,7 +11001,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CHEM-UA 0226": "C"
+    }
   },
   {
     "course": "CHEM-UA 993",
@@ -12211,7 +12372,10 @@
     ],
     "coreqs": [
       "CM-UY 2223"
-    ]
+    ],
+    "minGrades": {
+      "CM-UY 2211": "D"
+    }
   },
   {
     "course": "CM-UY 2223",
@@ -12224,7 +12388,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CM-UY 2213": "D",
+      "CM-UY 2214": "D"
+    }
   },
   {
     "course": "CM-UY 3314",
@@ -12256,7 +12424,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CM-UY 3314": "D"
+    }
   },
   {
     "course": "CM-UY 3334",
@@ -15056,7 +15227,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0002": "C",
+      "CSCI-SHU 0011": "C"
+    }
   },
   {
     "course": "CSCI-UA 102",
@@ -15070,7 +15245,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0101": "C"
+    }
   },
   {
     "course": "CSCI-UA 2",
@@ -15090,7 +15268,12 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0102": "C",
+      "CSCI-SHU 0210": "C",
+      "CS-UH 1050": "C"
+    }
   },
   {
     "course": "CSCI-UA 202",
@@ -15105,7 +15288,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0201": "C"
+    }
   },
   {
     "course": "CSCI-UA 3",
@@ -15135,7 +15321,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0102": "C",
+      "MATH-UA 0120": "C"
+    }
   },
   {
     "course": "CSCI-UA 330",
@@ -15160,7 +15350,12 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0121": "C",
+      "MATH-UA 0132": "C",
+      "PHYS-UA 0011": "C"
+    }
   },
   {
     "course": "CSCI-UA 380",
@@ -15281,7 +15476,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0201": "C"
+    }
   },
   {
     "course": "CSCI-UA 469",
@@ -15301,7 +15499,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0201": "C"
+    }
   },
   {
     "course": "CSCI-UA 472",
@@ -15324,7 +15525,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0201": "C",
+      "CSCI-UA 0310": "C"
+    }
   },
   {
     "course": "CSCI-UA 473",
@@ -15363,7 +15568,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0201": "C"
+    }
   },
   {
     "course": "CSCI-UA 475",
@@ -15406,7 +15614,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0310": "C"
+    }
   },
   {
     "course": "CSCI-UA 479",
@@ -15421,7 +15632,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0102": "C"
+    }
   },
   {
     "course": "CSCI-UA 480",
@@ -15448,7 +15662,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0201": "C"
+    }
   },
   {
     "course": "CSCI-UA 520",
@@ -15460,7 +15677,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0202": "C"
+    }
   },
   {
     "course": "CSCI-UA 521",
@@ -15472,7 +15692,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0202": "C"
+    }
   },
   {
     "course": "CSCI-UA 60",
@@ -15496,7 +15719,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CSCI-UA 0002": "C"
+    }
   },
   {
     "course": "CSCI-UA 61",
@@ -17611,7 +17837,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "EAST-UA 0247": "C-"
+    }
   },
   {
     "course": "EAST-UA 249",
@@ -17623,7 +17852,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "EAST-UA 0248": "C-"
+    }
   },
   {
     "course": "EAST-UA 250",
@@ -17635,7 +17867,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "EAST-UA 0249": "C-"
+    }
   },
   {
     "course": "EAST-UA 252",
@@ -18360,7 +18595,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECE-UY 3064": "D"
+    }
   },
   {
     "course": "ECE-UY 4123",
@@ -18395,7 +18633,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "CS-UY 2204": "C-",
+      "ECE-UY 2024": "C-"
+    }
   },
   {
     "course": "ECE-UY 4163",
@@ -18414,7 +18656,10 @@
     ],
     "coreqs": [
       "ECE-UY 3613"
-    ]
+    ],
+    "minGrades": {
+      "ECE-UY 3404": "D"
+    }
   },
   {
     "course": "ECE-UY 4183",
@@ -18466,7 +18711,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECE-UY 4313": "D"
+    }
   },
   {
     "course": "ECE-UY 4423",
@@ -18794,7 +19042,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0002": "C"
+    }
   },
   {
     "course": "ECON-UA 11",
@@ -18981,7 +19232,13 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0002": "C",
+      "ECON-UA 9002": "C",
+      "ECON-UB 0001": "C",
+      "SOCSC-UH 1111": "C"
+    }
   },
   {
     "course": "ECON-UA 238",
@@ -19081,7 +19338,13 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0010": "C",
+      "ECON-UA 9010": "C",
+      "ECON-UB 0001": "C",
+      "ECON-UH 2010": "C"
+    }
   },
   {
     "course": "ECON-UA 320",
@@ -19184,7 +19447,14 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0010": "C",
+      "ECON-UA 9010": "C",
+      "ECON-UA 0011": "C",
+      "ECON-UB 0001": "C",
+      "ECON-UH 2010": "C"
+    }
   },
   {
     "course": "ECON-UA 345",
@@ -19200,7 +19470,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0011": "C"
+    }
   },
   {
     "course": "ECON-UA 351",
@@ -19217,7 +19490,14 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0010": "C",
+      "ECON-UA 9010": "C",
+      "ECON-UA 0011": "C",
+      "ECON-UB 0001": "C",
+      "ECON-UH 2010": "C"
+    }
   },
   {
     "course": "ECON-UA 353",
@@ -19234,7 +19514,14 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0010": "C",
+      "ECON-UA 9010": "C",
+      "ECON-UA 0011": "C",
+      "ECON-UB 0001": "C",
+      "ECON-UH 2010": "C"
+    }
   },
   {
     "course": "ECON-UA 354",
@@ -19256,7 +19543,14 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0010": "C",
+      "ECON-UA 9010": "C",
+      "ECON-UA 0011": "C",
+      "ECON-UB 0001": "C",
+      "ECON-UH 2010": "C"
+    }
   },
   {
     "course": "ECON-UA 365",
@@ -19315,7 +19609,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0011": "C"
+    }
   },
   {
     "course": "ECON-UA 368",
@@ -19337,7 +19634,13 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0010": "C",
+      "ECON-UA 9010": "C",
+      "ECON-UA 0012": "C",
+      "ECON-UA 9012": "C"
+    }
   },
   {
     "course": "ECON-UA 370",
@@ -19417,7 +19720,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ECON-UA 0002": "C"
+    }
   },
   {
     "course": "ECON-UA 9012",
@@ -20546,7 +20852,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "EXPOS-UA 0004": "D"
+    }
   },
   {
     "course": "EN-UY 2244",
@@ -20583,7 +20892,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "EXPOS-UA 0004": "D"
+    }
   },
   {
     "course": "EN-UY 2424W",
@@ -20605,7 +20917,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "EXPOS-UA 0004": "D"
+    }
   },
   {
     "course": "EN-UY 2534W",
@@ -22303,7 +22618,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ENGR-UH 2310": "C"
+    }
   },
   {
     "course": "ENGR-UH 4330",
@@ -22705,7 +23023,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0121": "B"
+    }
   },
   {
     "course": "ENVST-UA 370",
@@ -23248,7 +23569,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "EXPOS-UA 0001": "B"
+    }
   },
   {
     "course": "EXPOS-UA 18",
@@ -23589,7 +23913,12 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "FIN-UY 2003": "D",
+      "FIN-UY 2103": "D",
+      "FIN-UY 2203": "D"
+    }
   },
   {
     "course": "FINC-UB 13",
@@ -35842,7 +36171,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0009": "C"
+    }
   },
   {
     "course": "MATH-UA 121",
@@ -35862,7 +36194,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0121": "C"
+    }
   },
   {
     "course": "MATH-UA 123",
@@ -35876,7 +36211,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0122": "C"
+    }
   },
   {
     "course": "MATH-UA 126",
@@ -35892,7 +36230,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0009": "C"
+    }
   },
   {
     "course": "MATH-UA 129",
@@ -35906,7 +36247,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0122": "A-"
+    }
   },
   {
     "course": "MATH-UA 131",
@@ -35937,7 +36281,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0009": "C"
+    }
   },
   {
     "course": "MATH-UA 144",
@@ -35972,7 +36319,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0009": "C"
+    }
   },
   {
     "course": "MATH-UA 185",
@@ -36145,7 +36495,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0255": "C"
+    }
   },
   {
     "course": "MATH-UA 262",
@@ -36185,7 +36538,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0262": "C",
+      "MATH-UA 0268": "C"
+    }
   },
   {
     "course": "MATH-UA 264",
@@ -36203,7 +36560,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0328": "B+",
+      "MATH-UA 0325": "A-"
+    }
   },
   {
     "course": "MATH-UA 325",
@@ -36301,7 +36662,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0233": "C",
+      "MATH-UA 0238": "C"
+    }
   },
   {
     "course": "MATH-UA 338",
@@ -36388,7 +36753,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0348": "C"
+    }
   },
   {
     "course": "MATH-UA 352",
@@ -36450,7 +36818,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0325": "C"
+    }
   },
   {
     "course": "MATH-UA 377",
@@ -37987,7 +38358,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ME-UY 3333": "D",
+      "ME-UY 2313": "D"
+    }
   },
   {
     "course": "ME-UY 3333",
@@ -38014,7 +38389,10 @@
     ],
     "coreqs": [
       "ME-UY 3413"
-    ]
+    ],
+    "minGrades": {
+      "ME-UY 3511": "D"
+    }
   },
   {
     "course": "ME-UY 3413",
@@ -38131,7 +38509,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ME-UY 4313": "D"
+    }
   },
   {
     "course": "ME-UY 4373",
@@ -38143,7 +38524,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PH-UY 3103": "D"
+    }
   },
   {
     "course": "ME-UY 4393",
@@ -38445,7 +38829,12 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "ARTH-UA 0001": "C",
+      "ARTH-UA 0002": "C",
+      "ARTH-UA 0005": "C"
+    }
   },
   {
     "course": "MEDI-UA 311",
@@ -45217,7 +45606,13 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PH-UY 2004": "D",
+      "PH-UY 2033": "D",
+      "PH-UY 2033H": "D",
+      "CM-UY 1003": "D"
+    }
   },
   {
     "course": "PH-UY 3474",
@@ -47953,7 +48348,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0095": "C",
+      "MATH-UA 0123": "C"
+    }
   },
   {
     "course": "PHYS-UA 11",
@@ -47970,7 +48369,10 @@
     ],
     "coreqs": [
       "MATH-UA 0121"
-    ]
+    ],
+    "minGrades": {
+      "MATH-UA 0121": "C"
+    }
   },
   {
     "course": "PHYS-UA 110",
@@ -47983,7 +48385,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0012": "C",
+      "PHYS-UA 0093": "C"
+    }
   },
   {
     "course": "PHYS-UA 112",
@@ -47999,7 +48405,14 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0123": "C",
+      "PHYS-UA 0074": "C",
+      "SCIEN-UH 1601": "C",
+      "SCIEN-UH 1602": "C",
+      "PHYS-UH 3012": "C"
+    }
   },
   {
     "course": "PHYS-UA 115",
@@ -48017,7 +48430,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0011": "C-",
+      "PHYS-UA 9011": "C-"
+    }
   },
   {
     "course": "PHYS-UA 120",
@@ -48047,7 +48464,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0120": "C",
+      "PHYS-UA 0106": "C"
+    }
   },
   {
     "course": "PHYS-UA 124",
@@ -48060,7 +48481,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0123": "C"
+    }
   },
   {
     "course": "PHYS-UA 13",
@@ -48081,7 +48505,14 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0106": "C",
+      "PHYS-UA 0095": "C",
+      "SCIEN-UH 1601": "C",
+      "SCIEN-UH 1602": "C",
+      "MATH-UH 1020": "C"
+    }
   },
   {
     "course": "PHYS-UA 132",
@@ -48093,7 +48524,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0131": "C"
+    }
   },
   {
     "course": "PHYS-UA 135",
@@ -48129,7 +48563,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0106": "C"
+    }
   },
   {
     "course": "PHYS-UA 138",
@@ -48153,7 +48590,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0106": "C"
+    }
   },
   {
     "course": "PHYS-UA 15",
@@ -48172,7 +48612,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0012": "C",
+      "PHYS-UA 0095": "C"
+    }
   },
   {
     "course": "PHYS-UA 170",
@@ -48184,7 +48628,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0120": "C"
+    }
   },
   {
     "course": "PHYS-UA 180",
@@ -48198,7 +48645,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "MATH-UA 0123": "C",
+      "MATH-UA 0394": "C"
+    }
   },
   {
     "course": "PHYS-UA 20",
@@ -48233,7 +48684,13 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0106": "C",
+      "SCIEN-UH 1601": "C",
+      "SCIEN-UH 1602": "C",
+      "MATH-UH 2010": "C"
+    }
   },
   {
     "course": "PHYS-UA 7",
@@ -48301,7 +48758,10 @@
     ],
     "coreqs": [
       "MATH-UA 0121"
-    ]
+    ],
+    "minGrades": {
+      "MATH-UA 0121": "C"
+    }
   },
   {
     "course": "PHYS-UA 9012",
@@ -48314,7 +48774,11 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0011": "C-",
+      "PHYS-UA 9011": "C-"
+    }
   },
   {
     "course": "PHYS-UA 91",
@@ -48331,7 +48795,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0091": "C"
+    }
   },
   {
     "course": "PHYS-UA 95",
@@ -48343,7 +48810,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "PHYS-UA 0093": "C"
+    }
   },
   {
     "course": "PHYS-UA 997",
@@ -52587,7 +53057,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [],
+    "minGrades": {
+      "STS-UY 3004": "D"
+    }
   },
   {
     "course": "STS-UY 3204",

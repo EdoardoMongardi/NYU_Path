@@ -53,6 +53,7 @@ interface PrereqEntry {
     course: string;
     prereqGroups: PrereqGroup[];
     coreqs: string[];
+    minGrades?: Record<string, string>;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -94,19 +95,45 @@ function normalizeGroup(g: PrereqGroup): {
 }
 
 /**
- * Normalize a prereq entry: normalize each group, sort coreqs.
- * Group order is preserved (load-bearing for AND/OR precedence).
+ * Sort minGrades keys for stable normalization. Empty/missing maps
+ * collapse to `undefined` so a snapshot without `minGrades` matches a
+ * live entry that also lacks any grade thresholds.
+ */
+function normalizeMinGrades(
+    m: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+    if (!m) return undefined;
+    const keys = Object.keys(m);
+    if (keys.length === 0) return undefined;
+    const sorted: Record<string, string> = {};
+    for (const k of keys.sort()) sorted[k] = m[k];
+    return sorted;
+}
+
+/**
+ * Normalize a prereq entry: normalize each group, sort coreqs, sort
+ * minGrades keys. Group order is preserved (load-bearing for AND/OR
+ * precedence).
  */
 function normalizeEntry(e: PrereqEntry): {
     course: string;
     prereqGroups: ReturnType<typeof normalizeGroup>[];
     coreqs: string[];
+    minGrades?: Record<string, string>;
 } {
-    return {
+    const out: {
+        course: string;
+        prereqGroups: ReturnType<typeof normalizeGroup>[];
+        coreqs: string[];
+        minGrades?: Record<string, string>;
+    } = {
         course: e.course,
         prereqGroups: (e.prereqGroups ?? []).map(normalizeGroup),
         coreqs: [...(e.coreqs ?? [])].sort(),
     };
+    const mg = normalizeMinGrades(e.minGrades);
+    if (mg) out.minGrades = mg;
+    return out;
 }
 
 function entriesEqual(a: PrereqEntry, b: PrereqEntry): boolean {

@@ -74,7 +74,25 @@ interface PrereqEntry {
     course: string;
     prereqGroups: PrereqGroup[];
     coreqs: string[];
+    minGrades?: Record<string, string>;
 }
+
+// Canonical NYU letter-grade strings allowed in `Prerequisite.minGrades`.
+// Mirrors the bulletin's "with a Minimum Grade of X" universe — does NOT
+// include D-, F, or pass-fail equivalents (the bulletin never asserts
+// those as thresholds).
+const VALID_MIN_GRADE_VALUES = new Set([
+    "A",
+    "A-",
+    "B+",
+    "B",
+    "B-",
+    "C+",
+    "C",
+    "C-",
+    "D+",
+    "D",
+]);
 
 interface OfferingEntry {
     termsOffered: string[];
@@ -158,16 +176,36 @@ function normalizeGroup(g: PrereqGroup): {
     return out;
 }
 
+function normalizeMinGrades(
+    m: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+    if (!m) return undefined;
+    const keys = Object.keys(m);
+    if (keys.length === 0) return undefined;
+    const sorted: Record<string, string> = {};
+    for (const k of keys.sort()) sorted[k] = m[k];
+    return sorted;
+}
+
 function normalizeEntry(e: PrereqEntry): {
     course: string;
     prereqGroups: ReturnType<typeof normalizeGroup>[];
     coreqs: string[];
+    minGrades?: Record<string, string>;
 } {
-    return {
+    const out: {
+        course: string;
+        prereqGroups: ReturnType<typeof normalizeGroup>[];
+        coreqs: string[];
+        minGrades?: Record<string, string>;
+    } = {
         course: e.course,
         prereqGroups: (e.prereqGroups ?? []).map(normalizeGroup),
         coreqs: [...(e.coreqs ?? [])].sort(),
     };
+    const mg = normalizeMinGrades(e.minGrades);
+    if (mg) out.minGrades = mg;
+    return out;
 }
 
 function suffixOf(courseId: string): string | null {
@@ -287,6 +325,82 @@ describe("Phase 12.8 Task 5 — prereqs.json shape", () => {
             }
         }
         expect(bad).toEqual([]);
+    });
+});
+
+// ============================================================
+// Test 1b — minGrades shape (Decision #4 reversal)
+// ============================================================
+//
+// minGrades is an optional entry-level field added by
+// tools/bulletin-parser/extractGradeThresholds.ts. When present:
+//   - Every key must match the courseId regex (zero-padded form,
+//     consistent with prereqGroups[].courses[]).
+//   - Every value must be one of the canonical letter grades
+//     listed in VALID_MIN_GRADE_VALUES (the bulletin universe;
+//     D-/F/P/CR/S are never used as thresholds).
+//   - Every key SHOULD appear in at least one of the entry's
+//     prereqGroups[].courses[]/notCourses[] — otherwise the regex
+//     paired with a course the LLM didn't include and we want to
+//     flag it (informational, not a hard fail at this layer; the
+//     extractor surfaces orphan-pairings as warnings).
+
+describe("Phase 13 prereq-fix — Prerequisite.minGrades shape", () => {
+    it("every minGrades key matches the courseId regex", () => {
+        const prereqs = loadPrereqs();
+        const bad: string[] = [];
+        for (const e of prereqs) {
+            if (!e.minGrades) continue;
+            for (const cid of Object.keys(e.minGrades)) {
+                if (!COURSE_ID_RE.test(cid)) {
+                    bad.push(`${e.course}: minGrades key ${JSON.stringify(cid)} fails courseId regex`);
+                }
+            }
+        }
+        expect(bad).toEqual([]);
+    });
+
+    it("every minGrades value is one of the canonical letter grades", () => {
+        const prereqs = loadPrereqs();
+        const bad: string[] = [];
+        for (const e of prereqs) {
+            if (!e.minGrades) continue;
+            for (const [cid, grade] of Object.entries(e.minGrades)) {
+                if (typeof grade !== "string") {
+                    bad.push(`${e.course}: minGrades[${cid}] not string`);
+                    continue;
+                }
+                if (!VALID_MIN_GRADE_VALUES.has(grade)) {
+                    bad.push(`${e.course}: minGrades[${cid}]=${JSON.stringify(grade)} not canonical`);
+                }
+            }
+        }
+        expect(bad).toEqual([]);
+    });
+
+    it("every minGrades key appears in at least one of the entry's prereqGroups[].courses[]/notCourses[]", () => {
+        const prereqs = loadPrereqs();
+        const orphans: string[] = [];
+        for (const e of prereqs) {
+            if (!e.minGrades) continue;
+            const known = new Set<string>();
+            for (const g of e.prereqGroups) {
+                for (const c of g.courses ?? []) known.add(c);
+                for (const c of g.notCourses ?? []) known.add(c);
+            }
+            for (const cid of Object.keys(e.minGrades)) {
+                if (!known.has(cid)) {
+                    orphans.push(`${e.course}: ${cid}`);
+                }
+            }
+        }
+        // Orphans are informational at the extractor layer (the
+        // bulletin asserts a grade for a course the LLM dropped from
+        // the prereq tree). At the data-validation layer we still
+        // expect zero — if the regex pairs with something not in the
+        // tree, the extractor warned and the curator should have
+        // reconciled it. The bound is set to 0 to surface drift.
+        expect(orphans).toEqual([]);
     });
 });
 
