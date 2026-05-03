@@ -128,9 +128,10 @@ You must respond with a single JSON object (no markdown, no prose):
 6.5. **Boolean Precedence & Grouping (Critical for AND/OR parsing):**
    - **AND binds tighter than OR.** Parse as: "A AND B OR C" → "(A AND B) OR C", not "A AND (B OR C)".
    - **One group per top-level AND-clause.** When the bulletin contains multiple AND-connected courses, emit SEPARATE groups for each. Do NOT consolidate single-course AND clauses into a multi-course AND group.
-     * WRONG: "CSCI-UA 102 AND MATH-UA 140" → `[{type:"AND", courses:["CSCI-UA 0102", "MATH-UA 0140"]}]`
-     * RIGHT: "CSCI-UA 102 AND MATH-UA 140" → `[{type:"AND", courses:["CSCI-UA 0102"]}, {type:"AND", courses:["MATH-UA 0140"]}]`
+     * WRONG: "CSCI-UA 102 AND MATH-UA 140" → \`[{type:"AND", courses:["CSCI-UA 0102", "MATH-UA 0140"]}]\`
+     * RIGHT: "CSCI-UA 102 AND MATH-UA 140" → \`[{type:"AND", courses:["CSCI-UA 0102"]}, {type:"AND", courses:["MATH-UA 0140"]}]\`
    - **Follow bulletin parenthesization literally.** Example: bulletin says "(X) AND (Y) AND (Z)" → three separate AND groups. Do NOT reinterpret as "(X AND Y) OR Z" or other redistribution.
+   - **Trailing "OR equivalent" is unparseable meta-text.** If a prereq line ends with "OR any equivalent courses", "OR equivalents", or "OR any equivalent", DROP that trailing OR clause entirely. It is bulletin shorthand for "or whatever counts as equivalent", not a real OR alternative naming specific courses.
    - **Worked example (CSCI-UA 421 actual bulletin text):**
      Input: "Prerequisites: [CSCI-UA 102] AND [MATH-UA 140] with a Minimum Grade of C AND ([MATH-UA 121] or [MATH-UA 131])"
      Correct parsing:
@@ -139,8 +140,15 @@ You must respond with a single JSON object (no markdown, no prose):
      - {type:"OR", courses:["MATH-UA 0121", "MATH-UA 0131"]}
 
 7. **Corequisites:**
-   - ALWAYS set coreqs: [] (empty array). Phase 14 will populate coreqs; the parser only outputs empty.
-   - Even if the bulletin mentions "Corequisite: X", emit coreqs: [] and let Phase 14 handle it.
+   - Extract corequisites from the bulletin when explicitly listed. Patterns to recognize:
+     * Inline within Prerequisites: "[X] AND Corequisite [Y]" → coreqs: ["Y"], prereqs: AND-group containing only X.
+     * Standalone field: "**Corequisites:** [X] for Y" or "**Corequisites:** [X], [Z]" → coreqs: ["X", ...].
+     * Variants: "Coreq:", "Co-requisite:", "Co-Req:" — treat the same.
+   - Place coreqs at the ENTRY level (sibling of prereqGroups), NOT inside any PrereqGroup. The entry shape is {course, prereqGroups, coreqs}.
+   - **CRITICAL: Apply the exact same zero-pad-4-digits rule to coreq course IDs.**
+     * Example: "EX-UY 1" in the bulletin becomes "EX-UY 0001" in the output.
+     * Example: "MATH-UA 121" in the bulletin becomes "MATH-UA 0121" in the output.
+   - If the bulletin doesn't specify a coreq, emit coreqs: [].
 
 8. **Grade Thresholds:**
    - Ignore "Minimum Grade of X" annotations. The parser does not emit grade info.
@@ -265,7 +273,75 @@ Output (CORRECT — three separate groups, not consolidated):
   "coreqs": []
 }
 
-### Example 7: Decision Y′ Placement Exams
+### Example 6b: Trailing "OR any equivalent courses" is unparseable meta-text
+Input (verbatim from CSCI-UA 421 bulletin): "Prerequisites: [MATH-UA 140] AND [CSCI-UA 201] AND [MATH-UA 121] OR any equivalent courses."
+
+The phrase "or any equivalent courses" / "or equivalents" / "or equivalent" at the END of a prereq line is bulletin shorthand for "or whatever counts as equivalent" — it does NOT name specific courses. Drop the trailing OR clause entirely. Treat the preceding AND-chain as the actual constraints.
+
+Output:
+{
+  "course": "CSCI-UA 421",
+  "prereqGroups": [
+    {
+      "type": "AND",
+      "courses": ["MATH-UA 0140"]
+    },
+    {
+      "type": "AND",
+      "courses": ["CSCI-UA 0201"]
+    },
+    {
+      "type": "AND",
+      "courses": ["MATH-UA 0121"]
+    }
+  ],
+  "coreqs": []
+}
+
+WRONG output (the LLM commonly makes this mistake):
+{
+  "course": "CSCI-UA 421",
+  "prereqGroups": [
+    {
+      "type": "AND",
+      "courses": ["MATH-UA 0140"]
+    },
+    {
+      "type": "AND",
+      "courses": ["CSCI-UA 0201"]
+    },
+    {
+      "type": "OR",
+      "courses": ["MATH-UA 0121"]
+    }
+  ],
+  "coreqs": []
+}
+
+### Example 7: Coreq inline within Prerequisites
+Input: "Prerequisites: [MPATC-UE 1302] AND Corequisite [MPATC-UE 9312]."
+Output:
+{
+  "course": "MPATC-UE 9322",
+  "prereqGroups": [{"type": "AND", "courses": ["MPATC-UE 1302"]}],
+  "coreqs": ["MPATC-UE 9312"]
+}
+
+### Example 8: Standalone Corequisites field
+Input: prereqs section: "Prerequisites: [CS-UH 1052] AND [CS-UH 2010] AND ([MATH-UH 1012Q] OR MATH 1013Q)."
+       Plus a separate "Corequisites: [CS-UH 2012] for [CS-UH 3090]." line.
+Output:
+{
+  "course": "CS-UH 3090",
+  "prereqGroups": [
+    {"type": "AND", "courses": ["CS-UH 1052"]},
+    {"type": "AND", "courses": ["CS-UH 2010"]},
+    {"type": "OR", "courses": ["MATH-UH 1012Q", "MATH-UH 1013Q"]}
+  ],
+  "coreqs": ["CS-UH 2012"]
+}
+
+### Example 9: Decision Y′ Placement Exams
 Input: "Prerequisites: ([MATH_PLCM2 score of 100] OR [MATH_PLCM3 score of 100] OR [CSCI-UA 101])"
 Output:
 {
@@ -279,7 +355,7 @@ Output:
   "coreqs": []
 }
 
-### Example 8: SAT II Subject Test
+### Example 10: SAT II Subject Test
 Input: "Prerequisites: [SAT II Math Level 2 score 700] OR [CSCI-UA 10]"
 Output:
 {
@@ -300,7 +376,7 @@ Output:
 - Collect campus-specific variants into ONE OR group (not separate groups per campus).
 - Treat each AND-connected segment as a separate group; collect OR-connected segments within a group.
 - Parse unambiguous parts; skip unparseable.
-- Always emit coreqs: [] (even if the bulletin has coreqs).
+- Extract coreqs when explicitly listed in the bulletin; otherwise emit empty.
 `;
 
 // ============================================================
@@ -354,12 +430,26 @@ function extractPrereqText(chunk: string): string | null {
     return match[2].trim();
 }
 
-async function callLLM(courseId: string, prereqText: string): Promise<string> {
+function extractCoreqText(chunk: string): string | null {
+    // Look for standalone Corequisites field
+    const match = /\*\*Corequisite(s)?:\*\*\s*(.+?)(?=\n\n|\n\*\*|\Z)/is.exec(
+        chunk,
+    );
+    if (match) {
+        return match[2].trim();
+    }
+    return null;
+}
+
+async function callLLM(courseId: string, prereqText: string, coreqText?: string): Promise<string> {
     const client = new Anthropic({
         apiKey: process.env.ANTHROPIC_API_KEY,
     });
 
-    const userMessage = `Course: ${courseId}\n\nPrerequisite text:\n${prereqText}`;
+    let userMessage = `Course: ${courseId}\n\nPrerequisite text:\n${prereqText}`;
+    if (coreqText) {
+        userMessage += `\n\nCorequisite text:\n${coreqText}`;
+    }
 
     const response = await client.messages.create({
         model: "claude-haiku-4-5-20251001",
@@ -393,15 +483,17 @@ function parseJSONResponse(response: string): ParsedPrereq {
     return JSON.parse(json);
 }
 
-function extractCourseChunks(filePath: string): Array<{
+function extractCourseChunks(filePath: string, bypassSuffixFilter?: boolean): Array<{
     courseId: string;
     chunk: string;
 }> {
     const raw = readFileSync(filePath, "utf-8");
 
     const chunks: Array<{ courseId: string; chunk: string }> = [];
+    // Regex matches any course heading: [A-Z][A-Z0-9]*-([A-Z]+) \S+
+    // This includes all suffixes, not just IN_SCOPE_SUFFIXES
     const courseHeadingRe =
-        /^\*\*([A-Z][A-Z0-9]*-(?:UA|UB|UE|UH|UT|UY|SHU)\s+\S+)\*\*/gm;
+        /^\*\*([A-Z][A-Z0-9]*-[A-Z]+\s+\S+)\*\*/gm;
 
     let match: RegExpExecArray | null;
     const matches: Array<{ courseId: string; idx: number }> = [];
@@ -449,6 +541,10 @@ function prereqGroupsEqual(
     return true;
 }
 
+function coreqsEqual(actual: string[], expected: string[]): boolean {
+    return normalizeArray(actual).join(",") === normalizeArray(expected).join(",");
+}
+
 async function runSmokeTest(curated: Map<string, CuratedEntry>) {
     console.log("=== SMOKE TEST: 5 Hand-Picked Courses ===\n");
 
@@ -492,6 +588,7 @@ async function runSmokeTest(curated: Map<string, CuratedEntry>) {
         }
 
         const prereqText = extractPrereqText(courseChunk.chunk);
+        const coreqText = extractCoreqText(courseChunk.chunk);
 
         if (!prereqText) {
             const parsed: ParsedPrereq = {
@@ -504,7 +601,7 @@ async function runSmokeTest(curated: Map<string, CuratedEntry>) {
         } else {
             console.log(`Prerequisite text: ${prereqText.substring(0, 80)}...`);
             try {
-                const response = await callLLM(courseId, prereqText);
+                const response = await callLLM(courseId, prereqText, coreqText ?? undefined);
                 const parsed = parseJSONResponse(response);
                 results.push(parsed);
                 console.log(`Parsed: ${JSON.stringify(parsed)}`);
@@ -517,10 +614,15 @@ async function runSmokeTest(curated: Map<string, CuratedEntry>) {
 
         const curatedEntry = curated.get(courseId);
         if (curatedEntry) {
-            const matched = prereqGroupsEqual(
+            const groupsMatched = prereqGroupsEqual(
                 results[results.length - 1].prereqGroups,
                 curatedEntry.prereqGroups,
             );
+            const coreqsMatched = coreqsEqual(
+                results[results.length - 1].coreqs,
+                curatedEntry.coreqs,
+            );
+            const matched = groupsMatched && coreqsMatched;
 
             if (matched) {
                 console.log("✓ MATCH");
@@ -546,17 +648,156 @@ async function runSmokeTest(curated: Map<string, CuratedEntry>) {
     return { matches, mismatches };
 }
 
+async function runValidateAllCurated(curated: Map<string, CuratedEntry>) {
+    console.log("=== VALIDATION: All 16 Curated Courses ===\n");
+
+    const curatedCourses = Array.from(curated.keys()).sort();
+    const results: Map<string, {parsed: ParsedPrereq, status: "MATCH" | "MISMATCH" | "ERROR"}> = new Map();
+
+    for (const courseId of curatedCourses) {
+        console.log(`\n--- ${courseId} ---`);
+
+        // Extract dept from course ID (e.g., "CSCI-UA 101" → "csci_ua")
+        const match = /^([A-Z]+[A-Z0-9]*)-([A-Z]+)/.exec(courseId);
+        if (!match) {
+            console.log(`ERROR: Cannot parse course ID`);
+            results.set(courseId, {
+                parsed: { course: courseId, prereqGroups: [], coreqs: [] },
+                status: "ERROR",
+            });
+            continue;
+        }
+
+        const [, dept, suffix] = match;
+        const deptDir = `${dept.toLowerCase()}_${suffix.toLowerCase()}`;
+        const bulletinPath = join(BULLETIN_DIR, deptDir, "_index.md");
+
+        let fileExists = false;
+        try {
+            readFileSync(bulletinPath, "utf-8");
+            fileExists = true;
+        } catch {
+            fileExists = false;
+        }
+
+        if (!fileExists) {
+            console.log(`ERROR: Bulletin file not found: ${deptDir}`);
+            results.set(courseId, {
+                parsed: { course: courseId, prereqGroups: [], coreqs: [] },
+                status: "ERROR",
+            });
+            continue;
+        }
+
+        // Extract chunks with bypassed suffix filter (we already know dept is valid)
+        let chunks: Array<{ courseId: string; chunk: string }>;
+        try {
+            chunks = extractCourseChunks(bulletinPath, true);
+        } catch (err) {
+            console.log(`ERROR: Could not extract chunks: ${err}`);
+            results.set(courseId, {
+                parsed: { course: courseId, prereqGroups: [], coreqs: [] },
+                status: "ERROR",
+            });
+            continue;
+        }
+
+        const courseChunk = chunks.find((c) => c.courseId === courseId);
+        if (!courseChunk) {
+            console.log(`ERROR: Could not find chunk for ${courseId}`);
+            results.set(courseId, {
+                parsed: { course: courseId, prereqGroups: [], coreqs: [] },
+                status: "ERROR",
+            });
+            continue;
+        }
+
+        const prereqText = extractPrereqText(courseChunk.chunk);
+        const coreqText = extractCoreqText(courseChunk.chunk);
+
+        let parsed: ParsedPrereq;
+        if (!prereqText) {
+            parsed = {
+                course: courseId,
+                prereqGroups: [],
+                coreqs: [],
+            };
+            console.log(`Parsed (no prerequisites)`);
+        } else {
+            console.log(`Prerequisite text: ${prereqText.substring(0, 80)}...`);
+            try {
+                const response = await callLLM(courseId, prereqText, coreqText ?? undefined);
+                parsed = parseJSONResponse(response);
+                console.log(`Parsed: ${JSON.stringify(parsed)}`);
+            } catch (err) {
+                console.error(`ERROR parsing: ${err}`);
+                results.set(courseId, {
+                    parsed: { course: courseId, prereqGroups: [], coreqs: [] },
+                    status: "ERROR",
+                });
+                continue;
+            }
+        }
+
+        const curatedEntry = curated.get(courseId)!;
+        const groupsMatched = prereqGroupsEqual(parsed.prereqGroups, curatedEntry.prereqGroups);
+        const coreqsMatched = coreqsEqual(parsed.coreqs, curatedEntry.coreqs);
+        const matched = groupsMatched && coreqsMatched;
+
+        if (matched) {
+            console.log("✓ MATCH");
+            results.set(courseId, { parsed, status: "MATCH" });
+        } else {
+            console.log("✗ MISMATCH");
+            console.log(`  Expected prereqs: ${JSON.stringify(curatedEntry.prereqGroups)}`);
+            console.log(`  Actual prereqs:   ${JSON.stringify(parsed.prereqGroups)}`);
+            console.log(`  Expected coreqs: ${JSON.stringify(curatedEntry.coreqs)}`);
+            console.log(`  Actual coreqs:   ${JSON.stringify(parsed.coreqs)}`);
+            results.set(courseId, { parsed, status: "MISMATCH" });
+        }
+    }
+
+    // Summary table
+    console.log("\n\n=== VALIDATION SUMMARY TABLE ===");
+    console.log("Course              Status");
+    console.log("-------------------  --------");
+
+    let matchCount = 0;
+    let mismatchCount = 0;
+    let errorCount = 0;
+
+    for (const courseId of curatedCourses) {
+        const result = results.get(courseId);
+        if (!result) continue;
+        const statusStr = result.status === "MATCH" ? "✓ MATCH" : result.status === "MISMATCH" ? "✗ MISMATCH" : "ERROR";
+        console.log(`${courseId.padEnd(19)} ${statusStr}`);
+
+        if (result.status === "MATCH") matchCount++;
+        else if (result.status === "MISMATCH") mismatchCount++;
+        else errorCount++;
+    }
+
+    console.log(`\nTotal: ${matchCount} MATCH, ${mismatchCount} MISMATCH, ${errorCount} ERROR`);
+    console.log(`Target: 16/16 match`);
+
+    return { matchCount, mismatchCount, errorCount };
+}
+
 async function main() {
     const args = process.argv.slice(2);
     const isSmoke = args.includes("--smoke");
+    const isValidateAllCurated = args.includes("--validate-all-curated");
 
     const curated = loadCuratedPrereqs();
 
     if (isSmoke) {
         await runSmokeTest(curated);
+    } else if (isValidateAllCurated) {
+        await runValidateAllCurated(curated);
     } else {
-        console.log("Full extraction not yet implemented in Task 4a.");
-        console.log("Run with --smoke for the 5-course smoke test.");
+        console.log("Usage:");
+        console.log("  --smoke                 Run smoke test on 5 courses");
+        console.log("  --validate-all-curated  Validate all 16 curated courses");
     }
 }
 

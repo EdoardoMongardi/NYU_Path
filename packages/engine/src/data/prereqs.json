@@ -1,267 +1,271 @@
 [
-    {
-        "course": "CSCI-UA 101",
-        "prereqGroups": [
-            {
-                "type": "OR",
-                "courses": [
-                    "CSCI-UA 0002",
-                    "CSCI-SHU 0011",
-                    "CSCI-UA 0003",
-                    "CS-UY 1114",
-                    "AP-CS-A-3",
-                    "AP-CS-P-4"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "CSCI-UA 421",
-        "prereqGroups": [
-            {
-                "type": "AND",
-                "courses": [
-                    "MATH-UA 0140"
-                ]
-            },
-            {
-                "type": "AND",
-                "courses": [
-                    "CSCI-UA 0201"
-                ]
-            },
-            {
-                "type": "AND",
-                "courses": [
-                    "MATH-UA 0121"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "CSCI-UA 310",
-        "prereqGroups": [
-            {
-                "type": "AND",
-                "courses": [
-                    "CSCI-UA 0102"
-                ]
-            },
-            {
-                "type": "AND",
-                "courses": [
-                    "MATH-UA 0120"
-                ]
-            },
-            {
-                "type": "OR",
-                "courses": [
-                    "MATH-UA 0121",
-                    "MATH-UA 0131"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "MATH-UA 122",
-        "prereqGroups": [
-            {
-                "type": "OR",
-                "courses": [
-                    "MATH-UA 0121",
-                    "AP-CALC-AB-4",
-                    "AP-CALC-BC-4",
-                    "PLACE-MATH-PLCM2-100"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "MATH-UA 123",
-        "prereqGroups": [
-            {
-                "type": "OR",
-                "courses": [
-                    "MATH-UA 0122",
-                    "AP-CALC-BC-5",
-                    "PLACE-MATH-PLCM3-100"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "MGMT-UB 2",
-        "prereqGroups": [
-            {
-                "type": "OR",
-                "courses": [
-                    "ECON-UB 0001",
-                    "ECON-UB 0002",
-                    "ECON-UA 0002",
-                    "ECON-UA 0005",
-                    "ECON-UA 0010",
-                    "ECII-UF 0102",
-                    "ECON-UH 2010",
-                    "ECON-SHU 0002",
-                    "ECON-SHU 0003",
-                    "ECON-SHU 0150"
-                ]
-            },
-            {
-                "type": "NOT",
-                "courses": [],
-                "notCourses": [
-                    "MGMT-UB 0018"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "MKTG-UB 54",
-        "prereqGroups": [
-            {
-                "type": "OR",
-                "courses": [
-                    "STAT-UB 0103",
-                    "STAT-UB 0003",
-                    "BUSF-SHU 0101",
-                    "ECON-UA 0020",
-                    "ECON-UA 0266",
-                    "ECON-UA 0380",
-                    "SOCSC-AD 110Q",
-                    "SOCSC-AD 113Q"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "CS-UY 1121",
-        "prereqGroups": [
-            {
-                "type": "AND",
-                "courses": [
-                    "CS-UY 1113"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "CS-UY 1134",
-        "prereqGroups": [
-            {
-                "type": "OR",
-                "courses": [
-                    "CS-UY 1114",
-                    "CS-UY 1121",
-                    "CS-UH 1001",
-                    "ENGR-UH 1000",
-                    "CSCI-SHU 0101"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "MPATC-UE 9322",
-        "prereqGroups": [
-            {
-                "type": "AND",
-                "courses": [
-                    "MPATC-UE 1302"
-                ]
-            }
-        ],
-        "coreqs": [
-            "MPATC-UE 9312"
+  {
+    "course": "CSCI-UA 101",
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "CSCI-UA 0002",
+          "CSCI-SHU 0011",
+          "CSCI-UA 0003",
+          "CS-UY 1114",
+          "AP-CS-A-3",
+          "AP-CS-P-4"
         ]
-    },
-    {
-        "course": "PHTI-UT 1014",
-        "prereqGroups": [
-            {
-                "type": "AND",
-                "courses": [
-                    "PHTI-UT 0001"
-                ]
-            },
-            {
-                "type": "AND",
-                "courses": [
-                    "PHTI-UT 0002"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "IDSEM-UG 1843",
-        "prereqGroups": [
-            {
-                "type": "OR",
-                "courses": [
-                    "IDSEM-UG 1839",
-                    "IDSEM-UG 2136"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "CSCI-SHU 2314",
-        "prereqGroups": [
-            {
-                "type": "OR",
-                "courses": [
-                    "MATH-SHU 0131",
-                    "MATH-SHU 0201"
-                ]
-            }
-        ],
-        "coreqs": []
-    },
-    {
-        "course": "CS-UH 3090",
-        "prereqGroups": [
-            {
-                "type": "AND",
-                "courses": [
-                    "CS-UH 1052"
-                ]
-            },
-            {
-                "type": "AND",
-                "courses": [
-                    "CS-UH 2010"
-                ]
-            },
-            {
-                "type": "OR",
-                "courses": [
-                    "MATH-UH 1012Q",
-                    "MATH-UH 1013Q"
-                ]
-            }
-        ],
-        "coreqs": [
-            "CS-UH 2012"
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "CSCI-UA 421",
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "MATH-UA 0140"
         ]
-    },
-    {
-        "course": "MATH-UA 121",
-        "prereqGroups": [],
-        "coreqs": []
-    },
-    {
-        "course": "ACCT-UB 1",
-        "prereqGroups": [],
-        "coreqs": []
-    }
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "CSCI-UA 0201"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "MATH-UA 0121"
+        ]
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "CSCI-UA 310",
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "CSCI-UA 0102"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "MATH-UA 0120"
+        ]
+      },
+      {
+        "type": "OR",
+        "courses": [
+          "MATH-UA 0121",
+          "MATH-UA 0131"
+        ]
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "MATH-UA 122",
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "MATH-UA 0121",
+          "AP-CALC-AB-4",
+          "AP-CALC-BC-4",
+          "PLACE-MATH-PLCM2-100"
+        ]
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "MATH-UA 123",
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "MATH-UA 0122",
+          "AP-CALC-BC-5",
+          "PLACE-MATH-PLCM3-100"
+        ]
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "MGMT-UB 2",
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "ECON-UB 0001",
+          "ECON-UB 0002",
+          "ECON-UA 0002",
+          "ECON-UA 0005",
+          "ECON-UA 0010",
+          "ECII-UF 0102",
+          "ECON-UH 2010",
+          "ECON-SHU 0002",
+          "ECON-SHU 0003",
+          "ECON-SHU 0150"
+        ]
+      },
+      {
+        "type": "NOT",
+        "courses": [],
+        "notCourses": [
+          "MGMT-UB 0018"
+        ]
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "MKTG-UB 54",
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "STAT-UB 0103",
+          "STAT-UB 0003",
+          "BUSF-SHU 0101",
+          "ECON-UA 0020",
+          "ECON-UA 0266",
+          "ECON-UA 0380",
+          "SOCSC-AD 110Q",
+          "SOCSC-AD 113Q"
+        ]
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "CS-UY 1121",
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "CS-UY 1113"
+        ]
+      }
+    ],
+    "coreqs": [
+      "EX-UY 0001"
+    ]
+  },
+  {
+    "course": "CS-UY 1134",
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "CS-UY 1114",
+          "CS-UY 1121",
+          "CS-UH 1001",
+          "ENGR-UH 1000",
+          "CSCI-SHU 0101"
+        ]
+      }
+    ],
+    "coreqs": [
+      "EX-UY 0001"
+    ]
+  },
+  {
+    "course": "MPATC-UE 9322",
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "MPATC-UE 1302"
+        ]
+      }
+    ],
+    "coreqs": [
+      "MPATC-UE 9312"
+    ]
+  },
+  {
+    "course": "PHTI-UT 1014",
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "PHTI-UT 0001"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "PHTI-UT 0002"
+        ]
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "IDSEM-UG 1843",
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "IDSEM-UG 1839",
+          "IDSEM-UG 2136"
+        ]
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "CSCI-SHU 2314",
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "MATH-SHU 0131",
+          "MATH-SHU 0201"
+        ]
+      }
+    ],
+    "coreqs": []
+  },
+  {
+    "course": "CS-UH 3090",
+    "prereqGroups": [
+      {
+        "type": "AND",
+        "courses": [
+          "CS-UH 1052"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "CS-UH 2010"
+        ]
+      },
+      {
+        "type": "OR",
+        "courses": [
+          "MATH-UH 1012Q",
+          "MATH-UH 1013Q"
+        ]
+      }
+    ],
+    "coreqs": [
+      "CS-UH 2012"
+    ]
+  },
+  {
+    "course": "MATH-UA 121",
+    "prereqGroups": [],
+    "coreqs": []
+  },
+  {
+    "course": "ACCT-UB 1",
+    "prereqGroups": [],
+    "coreqs": []
+  }
 ]
