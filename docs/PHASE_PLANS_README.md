@@ -51,11 +51,11 @@ Before the first code-edit task in each phase, the executor MUST verify the repo
 
 If any assertion is wrong, **adapt the plan's code to match the actual repo** rather than forcing the repo to match the plan. The plans were drafted from earlier investigations; ground truth is the current repo state.
 
-## All 20 locked design decisions (canonical list)
+## All 21 locked design decisions (canonical list)
 
 Recorded across the plans. Restated here so a fresh executor sees them in one place.
 
-### Phase 13 (decisions 1–8)
+### Phase 13 (decisions 1–8 + 21)
 
 1. **NOT operator** in prereq trees: strictly enforced. Solver filters out a dependent course when any course in `notCourses` is in `coursesTaken`.
 2. **AP/IB equivalency:** modeled as synthetic course IDs (`AP-CS-A-3`, `IB-MATH-HL-5`). Treated as normal courseIds; the DPR ingest path injects synthetic IDs when an AP-credit row is present.
@@ -65,6 +65,8 @@ Recorded across the plans. Restated here so a fresh executor sees them in one pl
 6. **Co-requisites:** Phase 13 ignores the `coreqs` field. Phase 14 implements same-term enforcement.
 7. **Same-course retake:** trust DPR. If the course appears in both `coursesTaken` and `unmetRequirements`, the solver places it normally; downstream prereqs naturally chain.
 8. **Optional electives above floor:** distinct rendering. Free-elective placeholders BELOW the credit floor (or when degree-credit minimum NOT met) render solid + "required." Above floor when degree minimum IS met → `optional: true`, dotted border + "optional" tag.
+
+21. **Study-abroad courses (9000-series CAS) default-skip in solver, FOSE materializes site at runtime.** Bulletin location data is unreliable (~3% of chunks mention a study-abroad city, mostly as descriptive content like "Languages of Paris" rather than as a location qualifier; year-to-year drift makes static extraction stale). The structural signal is the courseId number range — NYU CAS uses 9000-series for site offerings (`ANTH-UA 9070`, `EXPOS-UA 9070`). Phase 13's solver default-skips any courseId matching `^[A-Z]+-UA 9\d{3}` unless the student has explicitly opted into a study-abroad term (Phase 14 preference, same shape as the summer/J-term opt-in). When a structural-plan course materializes through Phase 15's FOSE call, the section's `location` field tells the UI which site it actually runs at; the student picks the section accordingly. This split — bulletin for structure, FOSE for runtime — mirrors the prereqs-vs-availability split.
 
 ### Phase 14 (decisions 9–15)
 

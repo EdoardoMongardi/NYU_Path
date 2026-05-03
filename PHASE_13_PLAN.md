@@ -42,6 +42,7 @@ These shape the constraint solver. Recorded here so an executor implementing Pha
 | 6 | Co-requisites | Deferred to Phase 14. PrereqGroup.coreqs is parsed empty in Phase 12.8; solver ignores. |
 | 7 | Same-course retake | Trust DPR. If DPR shows the course in coursesTaken AND in unmetRequirements, solver places it normally. |
 | 8 | Optional electives above floor | Sidebar distinguishes electives below floor (solid border, required) from above floor (dotted border, "optional" tag). |
+| 21 | Study-abroad (9000-series CAS) default-skip | Solver filters out any candidate course whose ID matches `^[A-Z]+-UA 9\d{3}` unless `profile.studyAbroadOptIn === true`. Bulletin location data is too sparse and drift-prone to encode statically; Phase 15's FOSE materializer surfaces actual section locations via `meetingPattern.location`. UI's "I want to study abroad in [Term X]" preference (Phase 14, same shape as summer/J-term opt-in) flips the flag and re-runs the solver. |
 
 ---
 
