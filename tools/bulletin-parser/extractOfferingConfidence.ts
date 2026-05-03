@@ -48,6 +48,10 @@ const FOSE_CATALOG_PATH = join(
 // ----------------------------------------------------------------
 
 type Season = "spring" | "summer" | "fall" | "winter";
+// Local 3-tier subset; the canonical 6-tier union lives in
+// packages/shared/src/types.ts. Task 3 layers the override tiers
+// (`permission_only` / `restricted`) on top of this output and writes
+// the augmented map under the shared `ConfidenceTier` type.
 type ConfidenceTier = "historically_likely" | "historically_partial" | "irregular";
 
 const SEASON_BY_LAST_DIGIT: Record<string, Season> = {
@@ -126,10 +130,14 @@ function classifyByFrequency(
     }
 
     // Edge case: sparse history (fewer than 4 total historical terms).
-    // A course with only 1-3 data points that still shows ≥50% of
-    // available reference terms → "historically_partial"; otherwise
-    // "irregular". This avoids inflating confidence on new courses.
-    if (historicalTerms.length < 4 && bestRate < 0.5) return "irregular";
+    // The plan caps sparse courses at `historically_partial` regardless
+    // of bestRate — a course with 1-of-1 spring history is not strong
+    // enough evidence for `historically_likely`. Below 50% reference
+    // appearance → `irregular`; otherwise `historically_partial`.
+    if (historicalTerms.length < 4) {
+        if (bestRate < 0.5) return "irregular";
+        return "historically_partial";
+    }
 
     if (bestRate >= 0.75) return "historically_likely";
     if (bestRate >= 0.25) return "historically_partial";
