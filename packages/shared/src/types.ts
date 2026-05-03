@@ -634,3 +634,37 @@ export interface SemesterPlan {
     /** Enrollment validation warnings (F-1 rules, half-time status) */
     enrollmentWarnings: string[];
 }
+
+// === Phase 12.9.5 — Offering Confidence ===
+
+/**
+ * Phase 12.9.5 — confidence tier for a course's term-offering pattern.
+ *
+ * Used by Phase 13's solver to penalize scheduling low-confidence courses
+ * into critical-path slots, and by the agent to honestly surface
+ * scheduling risk to students. Phase 15's FOSE materializer promotes
+ * courses to `confirmed` when their actual section lands in FOSE.
+ */
+export type ConfidenceTier =
+    | "historically_likely"
+    | "historically_partial"
+    | "irregular"
+    | "permission_only"
+    | "restricted"
+    | "confirmed";
+
+/**
+ * One entry in `data/bulletin-raw/courses-offerings.json`.
+ *
+ * Formally defined here in Phase 12.9.5; previously existed only as an
+ * inline interface in packages/engine/tests/data/parsedDataValidation.test.ts.
+ * That inline definition is left in place (duplicate-but-harmless) until a
+ * future cleanup task imports from shared instead.
+ */
+export interface OfferingEntry {
+    termsOffered: ("fall" | "spring" | "summer" | "january")[];
+    rawLine: string;
+    inferred: boolean;
+    /** Phase 12.9.5: classified confidence in this offering pattern. */
+    confidence?: ConfidenceTier;
+}
