@@ -1,0 +1,202 @@
+{
+  "summary": {
+    "total_targets": 30,
+    "fixed": 0,
+    "still_failing": 30
+  },
+  "fixed_entries": [],
+  "still_failing": [
+    {
+      "course": "ACE-UE 110",
+      "bulletin_prereq_line": "[EXPOS-UA\u00a01](/search/?P=EXPOS-UA%201 \"EXPOS-UA\u00a01\") OR [EXPOS-UA\u00a05](/search/?P=EXPOS-UA%205 \"EXPOS-UA\u00a05\") OR [EXPOS-UA\u00a04](/search/?P=EXPOS-UA%204 \"EXPOS-UA\u00a04\")&9 and must be in Steinhardt, Nursing or Social Work.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "AE-UY 4653",
+      "bulletin_prereq_line": "[ME-UY\u00a02223](/search/?P=ME-UY%202223 \"ME-UY\u00a02223\") with a Minimum Grade of D.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "BMS-UY 4924",
+      "bulletin_prereq_line": "[CM-UY\u00a04011](/search/?P=CM-UY%204011 \"CM-UY\u00a04011\") and senior status or adviser\u2019s approval.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "CAM-UY 4504",
+      "bulletin_prereq_line": "[EXPOS-UA\u00a01](/search/?P=EXPOS-UA%201 \"EXPOS-UA\u00a01\"), [EXPOS-UA\u00a04](/search/?P=EXPOS-UA%204 \"EXPOS-UA\u00a04\"), [EXPOS-UA\u00a05](/search/?P=EXPOS-UA%205 \"EXPOS-UA\u00a05\"), [EXPOS-UA\u00a09](/search/?P=EXPOS-UA%209 \"EXPOS-UA\u00a09\"), [ASPP-UT\u00a02](/search/?P=ASPP-UT%202 \"ASPP-UT\u00a02\"), [WREX-UF\u00a0101](/search/?P=WREX-UF%20101 \"WREX-UF\u00a0101\") or [WRCI-UF\u00a0102](/search/?P=WRCI-UF%20102 \"WRCI-UF\u00a0102\") and Junior/Senior standing.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "CBE-UY 4263",
+      "bulletin_prereq_line": "[CBE-UY\u00a04163](/search/?P=CBE-UY%204163 \"CBE-UY\u00a04163\") with a Minimum Grade of D AND [CBE-UY\u00a04143](/search/?P=CBE-UY%204143 \"CBE-UY\u00a04143\") with a Minimum Grade of D.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "CHEM-UH 3011",
+      "bulletin_prereq_line": "Foundations of Science 1-6 Corequisite: [CHEM-UH\u00a03012](/search/?P=CHEM-UH%203012 \"CHEM-UH\u00a03012\").",
+      "parser_output": [],
+      "parser_coreqs": [
+        "CHEM-UH 3012"
+      ]
+    },
+    {
+      "course": "CHEM-UH 3013",
+      "bulletin_prereq_line": "Foundations of Science 1-6 Corequisite: [CHEM-UH\u00a03014](/search/?P=CHEM-UH%203014 \"CHEM-UH\u00a03014\").",
+      "parser_output": [],
+      "parser_coreqs": [
+        "CHEM-UH 3014"
+      ]
+    },
+    {
+      "course": "CHEM-UH 3016",
+      "bulletin_prereq_line": "Foundations of Science 1-4 Pre- or Corequisite: [CHEM-UH\u00a02010](/search/?P=CHEM-UH%202010 \"CHEM-UH\u00a02010\").",
+      "parser_output": [],
+      "parser_coreqs": [
+        "CHEM-UH 2010"
+      ]
+    },
+    {
+      "course": "CM-UY 1001",
+      "bulletin_prereq_line": "Co-requisites: [CM-UY\u00a01003](/search/?P=CM-UY%201003 \"CM-UY\u00a01003\").",
+      "parser_output": [],
+      "parser_coreqs": [
+        "CM-UY 1003"
+      ]
+    },
+    {
+      "course": "CM-UY 1011",
+      "bulletin_prereq_line": "Co-requisites: [CM-UY\u00a01013](/search/?P=CM-UY%201013 \"CM-UY\u00a01013\").",
+      "parser_output": [],
+      "parser_coreqs": [
+        "CM-UY 1013"
+      ]
+    },
+    {
+      "course": "CS-UY 1113",
+      "bulletin_prereq_line": "Co-requisite: EX-UY 1;.",
+      "parser_output": [],
+      "parser_coreqs": [
+        "EX-UY 0001"
+      ]
+    },
+    {
+      "course": "CS-UY 4793G",
+      "bulletin_prereq_line": "(CS-UY 2134 or [CS-UY\u00a01134](/search/?P=CS-UY%201134 \"CS-UY\u00a01134\")) and ([CS-UY\u00a02124](/search/?P=CS-UY%202124 \"CS-UY\u00a02124\") or CS-UY 1124) (C- or better).",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "CSCI-UA 9480",
+      "bulletin_prereq_line": "([CSCI-UA\u00a0201](/search/?P=CSCI-UA%20201 \"CSCI-UA\u00a0201\") OR [CSCI-SHU\u00a0311](/search/?P=CSCI-SHU%20311 \"CSCI-SHU\u00a0311\") OR [CS-UH\u00a02010](/search/?P=CS-UH%202010 \"CS-UH\u00a02010\") OR [CS-UY\u00a02214](/search/?P=CS-UY%202214 \"CS-UY\u00a02214\")).",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "DS-UA 9201",
+      "bulletin_prereq_line": "[DS-UA\u00a0112](/search/?P=DS-UA%20112 \"DS-UA\u00a0112\").",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "ECON-UA 9316",
+      "bulletin_prereq_line": "([ECON-UA\u00a010](/search/?P=ECON-UA%2010 \"ECON-UA\u00a010\") OR [ECON-UA\u00a011](/search/?P=ECON-UA%2011 \"ECON-UA\u00a011\")).",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "EN-UY 3814W",
+      "bulletin_prereq_line": "[EXPOS-UA\u00a01](/search/?P=EXPOS-UA%201 \"EXPOS-UA\u00a01\") or [EXPOS-UA\u00a04](/search/?P=EXPOS-UA%204 \"EXPOS-UA\u00a04\").",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "FIN-UY 4903",
+      "bulletin_prereq_line": "[FIN-UY\u00a02003](/search/?P=FIN-UY%202003 \"FIN-UY\u00a02003\") with a Minimum Grade of D AND [FIN-UY\u00a02103](/search/?P=FIN-UY%202103 \"FIN-UY\u00a02103\") with a Minimum Grade of D AND [FIN-UY\u00a02203](/search/?P=FIN-UY%202203 \"FIN-UY\u00a02203\") with a Minimum Grade of D.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "FMTV-UT 1777",
+      "bulletin_prereq_line": "One Intermediate level production course and [FMTV-UT\u00a0101](/search/?P=FMTV-UT%20101 \"FMTV-UT\u00a0101\") and Plan = Film and Television or Dual Degree Stern/Tisch.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "HI-UY 3144",
+      "bulletin_prereq_line": "[EXPOS-UA\u00a01](/search/?P=EXPOS-UA%201 \"EXPOS-UA\u00a01\").",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "MA-UY 914",
+      "bulletin_prereq_line": "placement exam.",
+      "parser_output": [],
+      "parser_coreqs": [
+        "EX-UY 0001"
+      ]
+    },
+    {
+      "course": "MD-UY 2314G",
+      "bulletin_prereq_line": "EXPOS-UA 2, [EXPOS-UA\u00a09](/search/?P=EXPOS-UA%209 \"EXPOS-UA\u00a09\"), [EXPOS-UA\u00a022](/search/?P=EXPOS-UA%2022 \"EXPOS-UA\u00a022\"), [ASPP-UT\u00a02](/search/?P=ASPP-UT%202 \"ASPP-UT\u00a02\") or [WRCI-UF\u00a0102](/search/?P=WRCI-UF%20102 \"WRCI-UF\u00a0102\").",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "MPAJZ-UE 1119",
+      "bulletin_prereq_line": "[MPAJZ-UE\u00a01039](/search/?P=MPAJZ-UE%201039 \"MPAJZ-UE\u00a01039\") and [MPAJZ-UE\u00a01040](/search/?P=MPAJZ-UE%201040 \"MPAJZ-UE\u00a01040\") Restriction: MPAP Plan Codes.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "MPATC-UE 9343",
+      "bulletin_prereq_line": "MPATC-UE 1301Music or [MPATC-UE\u00a035](/search/?P=MPATC-UE%2035 \"MPATC-UE\u00a035\") and CO-REQ [MPATC-UE\u00a09331](/search/?P=MPATC-UE%209331 \"MPATC-UE\u00a09331\").",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "PHIL-UA 9085",
+      "bulletin_prereq_line": "([PHIL-UA\u00a01](/search/?P=PHIL-UA%201 \"PHIL-UA\u00a01\") OR [PHIL-UA\u00a02](/search/?P=PHIL-UA%202 \"PHIL-UA\u00a02\") OR [PHIL-UA\u00a03](/search/?P=PHIL-UA%203 \"PHIL-UA\u00a03\") OR [PHIL-UA\u00a04](/search/?P=PHIL-UA%204 \"PHIL-UA\u00a04\") OR [PHIL-UA\u00a05](/search/?P=PHIL-UA%205 \"PHIL-UA\u00a05\") OR [PHIL-UA\u00a06](/search/?P=PHIL-UA%206 \"PHIL-UA\u00a06\") OR [PHIL-UA\u00a07](/search/?P=PHIL-UA%207 \"PHIL-UA\u00a07\") OR [PHIL-UA\u00a08](/search/?P=PHIL-UA%208 \"PHIL-U",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "PHIL-UH 3410",
+      "reason": "still missing entirely"
+    },
+    {
+      "course": "PHYS-UA 9012",
+      "bulletin_prereq_line": "([PHYS-UA\u00a011](/search/?P=PHYS-UA%2011 \"PHYS-UA\u00a011\") with a Minimum Grade of C- OR [PHYS-UA\u00a09011](/search/?P=PHYS-UA%209011 \"PHYS-UA\u00a09011\") with a Minimum Grade of C-).",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "PSYCH-UA 9051",
+      "bulletin_prereq_line": "([PSYCH-UA\u00a030](/search/?P=PSYCH-UA%2030 \"PSYCH-UA\u00a030\") OR [PSYCH-UA\u00a09030](/search/?P=PSYCH-UA%209030 \"PSYCH-UA\u00a09030\") OR [PSYCH-UA\u00a032](/search/?P=PSYCH-UA%2032 \"PSYCH-UA\u00a032\") OR [PSYCH-UA\u00a09032](/search/?P=PSYCH-UA%209032 \"PSYCH-UA\u00a09032\") OR [PSYCH-UA\u00a034](/search/?P=PSYCH-UA%2034 \"PSYCH-UA\u00a034\") OR [PSYCH-UA\u00a09034](/search/?P=PSYCH-UA%209034 \"PSYCH-UA\u00a09034\") OR [APSY-UE\u00a010](/search/?P=APSY-UE%2010 \"A",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "STS-UY 4504",
+      "bulletin_prereq_line": "[EXPOS-UA\u00a01](/search/?P=EXPOS-UA%201 \"EXPOS-UA\u00a01\"), [EXPOS-UA\u00a04](/search/?P=EXPOS-UA%204 \"EXPOS-UA\u00a04\"), [EXPOS-UA\u00a05](/search/?P=EXPOS-UA%205 \"EXPOS-UA\u00a05\"), [EXPOS-UA\u00a09](/search/?P=EXPOS-UA%209 \"EXPOS-UA\u00a09\"), [ASPP-UT\u00a02](/search/?P=ASPP-UT%202 \"ASPP-UT\u00a02\"), [WREX-UF\u00a0101](/search/?P=WREX-UF%20101 \"WREX-UF\u00a0101\") or [WRCI-UF\u00a0102](/search/?P=WRCI-UF%20102 \"WRCI-UF\u00a0102\") and Junior/Senior standing.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "URB-UY 4504",
+      "bulletin_prereq_line": "[EXPOS-UA\u00a01](/search/?P=EXPOS-UA%201 \"EXPOS-UA\u00a01\"), [EXPOS-UA\u00a04](/search/?P=EXPOS-UA%204 \"EXPOS-UA\u00a04\"), [EXPOS-UA\u00a05](/search/?P=EXPOS-UA%205 \"EXPOS-UA\u00a05\"), [EXPOS-UA\u00a09](/search/?P=EXPOS-UA%209 \"EXPOS-UA\u00a09\"), [ASPP-UT\u00a02](/search/?P=ASPP-UT%202 \"ASPP-UT\u00a02\"), [WREX-UF\u00a0101](/search/?P=WREX-UF%20101 \"WREX-UF\u00a0101\") or [WRCI-UF\u00a0102](/search/?P=WRCI-UF%20102 \"WRCI-UF\u00a0102\") and Junior/Senior standing.",
+      "parser_output": [],
+      "parser_coreqs": []
+    },
+    {
+      "course": "URBS-UA 301",
+      "bulletin_prereq_line": "[URBS-UA\u00a0102](/search/?P=URBS-UA%20102 \"URBS-UA\u00a0102\").",
+      "parser_output": [],
+      "parser_coreqs": []
+    }
+  ]
+}

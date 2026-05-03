@@ -1823,6 +1823,9 @@
       },
       {
         "type": "AND",
+        "courses": [
+          "SOPHOMORE_LEVEL"
+        ],
         "requiresPetition": true
       }
     ],
@@ -1864,7 +1867,22 @@
       },
       {
         "type": "AND",
-        "courses": [],
+        "courses": [
+          "PLAN-UEARFABFA"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "CLASS-SOPHOMORE"
+        ]
+      },
+      {
+        "type": "AND",
+        "courses": [
+          "CLASS-JUNIOR",
+          "CLASS-SENIOR"
+        ],
         "requiresPetition": true
       }
     ],
@@ -9130,6 +9148,111 @@
           "CE-UY 2598",
           "CE-UY 2599"
         ]
+      },
+      {
+        "type": "OR",
+        "courses": [
+          "CE-UY 2500",
+          "CE-UY 2501",
+          "CE-UY 2502",
+          "CE-UY 2503",
+          "CE-UY 2504",
+          "CE-UY 2505",
+          "CE-UY 2506",
+          "CE-UY 2507",
+          "CE-UY 2508",
+          "CE-UY 2509",
+          "CE-UY 2510",
+          "CE-UY 2511",
+          "CE-UY 2512",
+          "CE-UY 2513",
+          "CE-UY 2514",
+          "CE-UY 2515",
+          "CE-UY 2516",
+          "CE-UY 2517",
+          "CE-UY 2518",
+          "CE-UY 2519",
+          "CE-UY 2520",
+          "CE-UY 2521",
+          "CE-UY 2522",
+          "CE-UY 2523",
+          "CE-UY 2524",
+          "CE-UY 2525",
+          "CE-UY 2526",
+          "CE-UY 2527",
+          "CE-UY 2528",
+          "CE-UY 2529",
+          "CE-UY 2530",
+          "CE-UY 2531",
+          "CE-UY 2532",
+          "CE-UY 2533",
+          "CE-UY 2534",
+          "CE-UY 2535",
+          "CE-UY 2536",
+          "CE-UY 2537",
+          "CE-UY 2538",
+          "CE-UY 2539",
+          "CE-UY 2540",
+          "CE-UY 2541",
+          "CE-UY 2542",
+          "CE-UY 2543",
+          "CE-UY 2544",
+          "CE-UY 2545",
+          "CE-UY 2546",
+          "CE-UY 2547",
+          "CE-UY 2548",
+          "CE-UY 2549",
+          "CE-UY 2550",
+          "CE-UY 2551",
+          "CE-UY 2552",
+          "CE-UY 2553",
+          "CE-UY 2554",
+          "CE-UY 2555",
+          "CE-UY 2556",
+          "CE-UY 2557",
+          "CE-UY 2558",
+          "CE-UY 2559",
+          "CE-UY 2560",
+          "CE-UY 2561",
+          "CE-UY 2562",
+          "CE-UY 2563",
+          "CE-UY 2564",
+          "CE-UY 2565",
+          "CE-UY 2566",
+          "CE-UY 2567",
+          "CE-UY 2568",
+          "CE-UY 2569",
+          "CE-UY 2570",
+          "CE-UY 2571",
+          "CE-UY 2572",
+          "CE-UY 2573",
+          "CE-UY 2574",
+          "CE-UY 2575",
+          "CE-UY 2576",
+          "CE-UY 2577",
+          "CE-UY 2578",
+          "CE-UY 2579",
+          "CE-UY 2580",
+          "CE-UY 2581",
+          "CE-UY 2582",
+          "CE-UY 2583",
+          "CE-UY 2584",
+          "CE-UY 2585",
+          "CE-UY 2586",
+          "CE-UY 2587",
+          "CE-UY 2588",
+          "CE-UY 2589",
+          "CE-UY 2590",
+          "CE-UY 2591",
+          "CE-UY 2592",
+          "CE-UY 2593",
+          "CE-UY 2594",
+          "CE-UY 2595",
+          "CE-UY 2596",
+          "CE-UY 2597",
+          "CE-UY 2598",
+          "CE-UY 2599"
+        ]
       }
     ],
     "coreqs": []
@@ -9137,6 +9260,111 @@
   {
     "course": "CE-UY 3543",
     "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "CE-UY 2500",
+          "CE-UY 2501",
+          "CE-UY 2502",
+          "CE-UY 2503",
+          "CE-UY 2504",
+          "CE-UY 2505",
+          "CE-UY 2506",
+          "CE-UY 2507",
+          "CE-UY 2508",
+          "CE-UY 2509",
+          "CE-UY 2510",
+          "CE-UY 2511",
+          "CE-UY 2512",
+          "CE-UY 2513",
+          "CE-UY 2514",
+          "CE-UY 2515",
+          "CE-UY 2516",
+          "CE-UY 2517",
+          "CE-UY 2518",
+          "CE-UY 2519",
+          "CE-UY 2520",
+          "CE-UY 2521",
+          "CE-UY 2522",
+          "CE-UY 2523",
+          "CE-UY 2524",
+          "CE-UY 2525",
+          "CE-UY 2526",
+          "CE-UY 2527",
+          "CE-UY 2528",
+          "CE-UY 2529",
+          "CE-UY 2530",
+          "CE-UY 2531",
+          "CE-UY 2532",
+          "CE-UY 2533",
+          "CE-UY 2534",
+          "CE-UY 2535",
+          "CE-UY 2536",
+          "CE-UY 2537",
+          "CE-UY 2538",
+          "CE-UY 2539",
+          "CE-UY 2540",
+          "CE-UY 2541",
+          "CE-UY 2542",
+          "CE-UY 2543",
+          "CE-UY 2544",
+          "CE-UY 2545",
+          "CE-UY 2546",
+          "CE-UY 2547",
+          "CE-UY 2548",
+          "CE-UY 2549",
+          "CE-UY 2550",
+          "CE-UY 2551",
+          "CE-UY 2552",
+          "CE-UY 2553",
+          "CE-UY 2554",
+          "CE-UY 2555",
+          "CE-UY 2556",
+          "CE-UY 2557",
+          "CE-UY 2558",
+          "CE-UY 2559",
+          "CE-UY 2560",
+          "CE-UY 2561",
+          "CE-UY 2562",
+          "CE-UY 2563",
+          "CE-UY 2564",
+          "CE-UY 2565",
+          "CE-UY 2566",
+          "CE-UY 2567",
+          "CE-UY 2568",
+          "CE-UY 2569",
+          "CE-UY 2570",
+          "CE-UY 2571",
+          "CE-UY 2572",
+          "CE-UY 2573",
+          "CE-UY 2574",
+          "CE-UY 2575",
+          "CE-UY 2576",
+          "CE-UY 2577",
+          "CE-UY 2578",
+          "CE-UY 2579",
+          "CE-UY 2580",
+          "CE-UY 2581",
+          "CE-UY 2582",
+          "CE-UY 2583",
+          "CE-UY 2584",
+          "CE-UY 2585",
+          "CE-UY 2586",
+          "CE-UY 2587",
+          "CE-UY 2588",
+          "CE-UY 2589",
+          "CE-UY 2590",
+          "CE-UY 2591",
+          "CE-UY 2592",
+          "CE-UY 2593",
+          "CE-UY 2594",
+          "CE-UY 2595",
+          "CE-UY 2596",
+          "CE-UY 2597",
+          "CE-UY 2598",
+          "CE-UY 2599"
+        ]
+      },
       {
         "type": "OR",
         "courses": [
@@ -9612,10 +9840,213 @@
     "course": "CE-UY 4523",
     "prereqGroups": [
       {
-        "type": "AND",
+        "type": "OR",
         "courses": [
-          "CE-UY 25XX",
-          "CE-UY 25XX"
+          "CE-UY 2500",
+          "CE-UY 2501",
+          "CE-UY 2502",
+          "CE-UY 2503",
+          "CE-UY 2504",
+          "CE-UY 2505",
+          "CE-UY 2506",
+          "CE-UY 2507",
+          "CE-UY 2508",
+          "CE-UY 2509",
+          "CE-UY 2510",
+          "CE-UY 2511",
+          "CE-UY 2512",
+          "CE-UY 2513",
+          "CE-UY 2514",
+          "CE-UY 2515",
+          "CE-UY 2516",
+          "CE-UY 2517",
+          "CE-UY 2518",
+          "CE-UY 2519",
+          "CE-UY 2520",
+          "CE-UY 2521",
+          "CE-UY 2522",
+          "CE-UY 2523",
+          "CE-UY 2524",
+          "CE-UY 2525",
+          "CE-UY 2526",
+          "CE-UY 2527",
+          "CE-UY 2528",
+          "CE-UY 2529",
+          "CE-UY 2530",
+          "CE-UY 2531",
+          "CE-UY 2532",
+          "CE-UY 2533",
+          "CE-UY 2534",
+          "CE-UY 2535",
+          "CE-UY 2536",
+          "CE-UY 2537",
+          "CE-UY 2538",
+          "CE-UY 2539",
+          "CE-UY 2540",
+          "CE-UY 2541",
+          "CE-UY 2542",
+          "CE-UY 2543",
+          "CE-UY 2544",
+          "CE-UY 2545",
+          "CE-UY 2546",
+          "CE-UY 2547",
+          "CE-UY 2548",
+          "CE-UY 2549",
+          "CE-UY 2550",
+          "CE-UY 2551",
+          "CE-UY 2552",
+          "CE-UY 2553",
+          "CE-UY 2554",
+          "CE-UY 2555",
+          "CE-UY 2556",
+          "CE-UY 2557",
+          "CE-UY 2558",
+          "CE-UY 2559",
+          "CE-UY 2560",
+          "CE-UY 2561",
+          "CE-UY 2562",
+          "CE-UY 2563",
+          "CE-UY 2564",
+          "CE-UY 2565",
+          "CE-UY 2566",
+          "CE-UY 2567",
+          "CE-UY 2568",
+          "CE-UY 2569",
+          "CE-UY 2570",
+          "CE-UY 2571",
+          "CE-UY 2572",
+          "CE-UY 2573",
+          "CE-UY 2574",
+          "CE-UY 2575",
+          "CE-UY 2576",
+          "CE-UY 2577",
+          "CE-UY 2578",
+          "CE-UY 2579",
+          "CE-UY 2580",
+          "CE-UY 2581",
+          "CE-UY 2582",
+          "CE-UY 2583",
+          "CE-UY 2584",
+          "CE-UY 2585",
+          "CE-UY 2586",
+          "CE-UY 2587",
+          "CE-UY 2588",
+          "CE-UY 2589",
+          "CE-UY 2590",
+          "CE-UY 2591",
+          "CE-UY 2592",
+          "CE-UY 2593",
+          "CE-UY 2594",
+          "CE-UY 2595",
+          "CE-UY 2596",
+          "CE-UY 2597",
+          "CE-UY 2598",
+          "CE-UY 2599"
+        ]
+      },
+      {
+        "type": "OR",
+        "courses": [
+          "CE-UY 2500",
+          "CE-UY 2501",
+          "CE-UY 2502",
+          "CE-UY 2503",
+          "CE-UY 2504",
+          "CE-UY 2505",
+          "CE-UY 2506",
+          "CE-UY 2507",
+          "CE-UY 2508",
+          "CE-UY 2509",
+          "CE-UY 2510",
+          "CE-UY 2511",
+          "CE-UY 2512",
+          "CE-UY 2513",
+          "CE-UY 2514",
+          "CE-UY 2515",
+          "CE-UY 2516",
+          "CE-UY 2517",
+          "CE-UY 2518",
+          "CE-UY 2519",
+          "CE-UY 2520",
+          "CE-UY 2521",
+          "CE-UY 2522",
+          "CE-UY 2523",
+          "CE-UY 2524",
+          "CE-UY 2525",
+          "CE-UY 2526",
+          "CE-UY 2527",
+          "CE-UY 2528",
+          "CE-UY 2529",
+          "CE-UY 2530",
+          "CE-UY 2531",
+          "CE-UY 2532",
+          "CE-UY 2533",
+          "CE-UY 2534",
+          "CE-UY 2535",
+          "CE-UY 2536",
+          "CE-UY 2537",
+          "CE-UY 2538",
+          "CE-UY 2539",
+          "CE-UY 2540",
+          "CE-UY 2541",
+          "CE-UY 2542",
+          "CE-UY 2543",
+          "CE-UY 2544",
+          "CE-UY 2545",
+          "CE-UY 2546",
+          "CE-UY 2547",
+          "CE-UY 2548",
+          "CE-UY 2549",
+          "CE-UY 2550",
+          "CE-UY 2551",
+          "CE-UY 2552",
+          "CE-UY 2553",
+          "CE-UY 2554",
+          "CE-UY 2555",
+          "CE-UY 2556",
+          "CE-UY 2557",
+          "CE-UY 2558",
+          "CE-UY 2559",
+          "CE-UY 2560",
+          "CE-UY 2561",
+          "CE-UY 2562",
+          "CE-UY 2563",
+          "CE-UY 2564",
+          "CE-UY 2565",
+          "CE-UY 2566",
+          "CE-UY 2567",
+          "CE-UY 2568",
+          "CE-UY 2569",
+          "CE-UY 2570",
+          "CE-UY 2571",
+          "CE-UY 2572",
+          "CE-UY 2573",
+          "CE-UY 2574",
+          "CE-UY 2575",
+          "CE-UY 2576",
+          "CE-UY 2577",
+          "CE-UY 2578",
+          "CE-UY 2579",
+          "CE-UY 2580",
+          "CE-UY 2581",
+          "CE-UY 2582",
+          "CE-UY 2583",
+          "CE-UY 2584",
+          "CE-UY 2585",
+          "CE-UY 2586",
+          "CE-UY 2587",
+          "CE-UY 2588",
+          "CE-UY 2589",
+          "CE-UY 2590",
+          "CE-UY 2591",
+          "CE-UY 2592",
+          "CE-UY 2593",
+          "CE-UY 2594",
+          "CE-UY 2595",
+          "CE-UY 2596",
+          "CE-UY 2597",
+          "CE-UY 2598",
+          "CE-UY 2599"
         ]
       }
     ],
@@ -14101,7 +14532,6 @@
       },
       {
         "type": "AND",
-        "courses": [],
         "requiresPetition": true
       }
     ],
@@ -19368,8 +19798,8 @@
           "MATH-SHU 0131",
           "AP-CALC-AB-4",
           "AP-CALC-BC-4",
-          "PLACE-MATH-CALC2-100",
-          "PLACE-MATH-CALC3-100",
+          "PLACE-MATH-CALC-2",
+          "PLACE-MATH-CALC-3",
           "IB-MATH-6"
         ]
       }
@@ -21063,20 +21493,7 @@
   },
   {
     "course": "ENGR-UH 2012",
-    "prereqGroups": [
-      {
-        "type": "AND",
-        "courses": [
-          "ENGR-UH 0001"
-        ]
-      },
-      {
-        "type": "AND",
-        "courses": [
-          "ENGR-UH 0002"
-        ]
-      }
-    ],
+    "prereqGroups": [],
     "coreqs": []
   },
   {
@@ -35288,7 +35705,7 @@
       {
         "type": "OR",
         "courses": [
-          "PLACE-MATH-NYUSH-CALCLIN",
+          "PLACE-MATH-NYUSH-CALC-LA",
           "MATH-SHU 0131"
         ]
       }
@@ -36392,7 +36809,7 @@
         "type": "OR",
         "courses": [
           "MATH-UH 1012",
-          "PLACE-MATH-PROFICIENCY"
+          "PLACE-MATH-PROFICIENCY-ASSESSMENT"
         ]
       }
     ],
@@ -49201,7 +49618,7 @@
       {
         "type": "OR",
         "courses": [
-          "WRITTEN_EXAM"
+          "PORT-UA 0050"
         ],
         "requiresPetition": true
       }
@@ -49253,9 +49670,7 @@
       },
       {
         "type": "OR",
-        "courses": [
-          "WRITTEN_EXAM"
-        ],
+        "courses": [],
         "requiresPetition": true
       }
     ],
@@ -49525,7 +49940,7 @@
           "PSYCH-UA 0001",
           "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6"
+          "IB-PSYCH-HL-6"
         ]
       }
     ],
@@ -49550,12 +49965,9 @@
         "type": "OR",
         "courses": [
           "PSYCH-UA 0001",
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M",
+          "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6",
-          "APSY-UE 0002"
+          "IB-PSYCH-6"
         ]
       }
     ],
@@ -49568,12 +49980,9 @@
         "type": "OR",
         "courses": [
           "PSYCH-UA 0001",
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M",
+          "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6",
-          "APSY-UE 0002"
+          "IB-PSYCH-6"
         ]
       }
     ],
@@ -49591,12 +50000,9 @@
         "type": "OR",
         "courses": [
           "PSYCH-UA 0001",
-          "UAPSYCBA",
-          "UAPSYC-S",
-          "UAPSYC-M",
+          "APSY-UE 0002",
           "AP-PSYCH-4",
-          "IB-PSYCH-6",
-          "APSY-UE 0002"
+          "IB-PSYCH-6"
         ]
       }
     ],
@@ -49609,9 +50015,12 @@
         "type": "OR",
         "courses": [
           "PSYCH-UA 0001",
-          "APSY-UE 0002",
+          "UAPSYCBA",
+          "UAPSYC-S",
+          "UAPSYC-M",
           "AP-PSYCH-4",
-          "IB-PSYCH-6"
+          "IB-PSYCH-6",
+          "APSY-UE 0002"
         ]
       }
     ],
@@ -49845,12 +50254,7 @@
       {
         "type": "OR",
         "courses": [
-          "PSYCH-UA 0011"
-        ]
-      },
-      {
-        "type": "OR",
-        "courses": [
+          "PSYCH-UA 0011",
           "PSYCH-UA 0022",
           "PSYCH-UA 0025",
           "PSYCH-UA 0029",
@@ -50448,19 +50852,19 @@
       {
         "type": "OR",
         "courses": [
-          "PSYCH-UH 1001",
-          "SOCSC-UH 1112"
+          "PSYCH-UH 1001"
         ]
       },
       {
         "type": "AND",
         "courses": [
-          "PSYCH-UH 1002EQ"
+          "SOCSC-UH 1112"
         ]
       },
       {
         "type": "OR",
         "courses": [
+          "PSYCH-UH 1002EQ",
           "SOCSC-UH 2212"
         ]
       }
@@ -52229,7 +52633,14 @@
   },
   {
     "course": "STS-UY 3004W",
-    "prereqGroups": [],
+    "prereqGroups": [
+      {
+        "type": "OR",
+        "courses": [
+          "STS-UY-L2-HUSSEC"
+        ]
+      }
+    ],
     "coreqs": []
   },
   {
