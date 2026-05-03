@@ -210,6 +210,24 @@ const RESTRICTED_PATTERNS: RegExp[] = [
     /honors students only/i,
 ];
 
+// ~263 unique _index.md files serve all 7,963 courses (avg 30 reads per
+// file). Cache file contents by path so the per-course classifier doesn't
+// pay re-read I/O on every call.
+const bulletinFileCache = new Map<string, string | null>();
+
+function readBulletin(path: string): string | null {
+    const cached = bulletinFileCache.get(path);
+    if (cached !== undefined) return cached;
+    try {
+        const content = readFileSync(path, "utf-8");
+        bulletinFileCache.set(path, content);
+        return content;
+    } catch {
+        bulletinFileCache.set(path, null);
+        return null;
+    }
+}
+
 /**
  * Looks up the bulletin chunk for `courseId` and returns an override
  * tier if a restriction signal is found, or `null` otherwise.
@@ -225,12 +243,8 @@ function classifyByRestriction(courseId: string): "permission_only" | "restricte
         REPO_ROOT,
         `data/bulletin-raw/courses/${dept.toLowerCase()}_${sfx.toLowerCase()}/_index.md`,
     );
-    let content: string;
-    try {
-        content = readFileSync(path, "utf-8");
-    } catch {
-        return null;
-    }
+    const content = readBulletin(path);
+    if (content === null) return null;
 
     // Extract the chunk belonging to this specific course only.
     const chunkRe = new RegExp(
