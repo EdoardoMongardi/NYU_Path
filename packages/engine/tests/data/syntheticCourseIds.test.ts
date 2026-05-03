@@ -231,3 +231,177 @@ describe("parseIBClause — bulletin variants", () => {
         expect(parseIBClause("IB HL Underwater Basket Weaving >= 6")).toBeNull();
     });
 });
+
+// ============================================================
+// Decision Y′ — Math/Language/SAT2 placement exams (Phase 12.8 Task 4)
+// ============================================================
+
+import {
+    parseMathPlacementClause,
+    parseLanguagePlacementClause,
+    parseSAT2Clause,
+    synthesizePlacementCourseId,
+} from "../../../../tools/bulletin-parser/syntheticCourseIds.js";
+
+describe("parseMathPlacementClause", () => {
+    it("parses 'MATH_PLCM2 score of 100' → {level: PLCM2, score: 100}", () => {
+        expect(parseMathPlacementClause("MATH_PLCM2 score of 100")).toEqual({
+            level: "PLCM2",
+            score: 100,
+        });
+    });
+
+    it("parses 'MATH_PLCM3 score of 100' → {level: PLCM3, score: 100}", () => {
+        expect(parseMathPlacementClause("MATH_PLCM3 score of 100")).toEqual({
+            level: "PLCM3",
+            score: 100,
+        });
+    });
+
+    it("parses 'Mathematics placement exam score 85' (no level) → {score: 85}", () => {
+        expect(parseMathPlacementClause("Mathematics placement exam score 85")).toEqual({
+            score: 85,
+        });
+    });
+
+    it("parses 'Math Placement Test score 75' (no level) → {score: 75}", () => {
+        expect(parseMathPlacementClause("Math Placement Test score 75")).toEqual({
+            score: 75,
+        });
+    });
+
+    it("returns null for empty string", () => {
+        expect(parseMathPlacementClause("")).toBeNull();
+    });
+
+    it("returns null for unrecognized format", () => {
+        expect(parseMathPlacementClause("Some random text")).toBeNull();
+    });
+});
+
+describe("parseLanguagePlacementClause", () => {
+    it("parses 'Japanese Language Placement >= 3302' → {language: JAPANESE, score: 3302}", () => {
+        expect(parseLanguagePlacementClause("Japanese Language Placement >= 3302")).toEqual({
+            language: "JAPANESE",
+            score: 3302,
+        });
+    });
+
+    it("parses 'Korean Language Placement Score 21' → {language: KOREAN, score: 21}", () => {
+        expect(parseLanguagePlacementClause("Korean Language Placement Score 21")).toEqual({
+            language: "KOREAN",
+            score: 21,
+        });
+    });
+
+    it("parses 'Foreign language placement exam score 4' (no language) → {score: 4}", () => {
+        expect(parseLanguagePlacementClause("Foreign language placement exam score 4")).toEqual({
+            score: 4,
+        });
+    });
+
+    it("returns null for empty string", () => {
+        expect(parseLanguagePlacementClause("")).toBeNull();
+    });
+
+    it("returns null for unrecognized format", () => {
+        expect(parseLanguagePlacementClause("CSCI-UA 2")).toBeNull();
+    });
+});
+
+describe("parseSAT2Clause", () => {
+    it("parses 'SAT II Math Level 2 score 700' → {subject: MATH2, score: 700}", () => {
+        expect(parseSAT2Clause("SAT II Math Level 2 score 700")).toEqual({
+            subject: "MATH2",
+            score: 700,
+        });
+    });
+
+    it("parses 'SAT Subject Test in Chemistry >= 650' → {subject: CHEM, score: 650}", () => {
+        expect(parseSAT2Clause("SAT Subject Test in Chemistry >= 650")).toEqual({
+            subject: "CHEM",
+            score: 650,
+        });
+    });
+
+    it("parses 'SAT II Biology >= 700' → {subject: BIO, score: 700}", () => {
+        expect(parseSAT2Clause("SAT II Biology >= 700")).toEqual({
+            subject: "BIO",
+            score: 700,
+        });
+    });
+
+    it("parses 'SAT II Physics score 650' → {subject: PHYS, score: 650}", () => {
+        expect(parseSAT2Clause("SAT II Physics score 650")).toEqual({
+            subject: "PHYS",
+            score: 650,
+        });
+    });
+
+    it("returns null for empty string", () => {
+        expect(parseSAT2Clause("")).toBeNull();
+    });
+
+    it("returns null for unrecognized SAT2 subject", () => {
+        expect(parseSAT2Clause("SAT II Advanced Basket Weaving score 700")).toBeNull();
+    });
+});
+
+describe("synthesizePlacementCourseId", () => {
+    it("synthesizes math-place with level → PLACE-MATH-PLCM2-100", () => {
+        expect(
+            synthesizePlacementCourseId({
+                kind: "math-place",
+                level: "PLCM2",
+                score: 100,
+            })
+        ).toBe("PLACE-MATH-PLCM2-100");
+    });
+
+    it("synthesizes math-place without level → PLACE-MATH-85", () => {
+        expect(
+            synthesizePlacementCourseId({
+                kind: "math-place",
+                score: 85,
+            })
+        ).toBe("PLACE-MATH-85");
+    });
+
+    it("synthesizes lang-place with language → PLACE-LANG-JAPANESE-3302", () => {
+        expect(
+            synthesizePlacementCourseId({
+                kind: "lang-place",
+                language: "JAPANESE",
+                score: 3302,
+            })
+        ).toBe("PLACE-LANG-JAPANESE-3302");
+    });
+
+    it("synthesizes lang-place without language → PLACE-LANG-4", () => {
+        expect(
+            synthesizePlacementCourseId({
+                kind: "lang-place",
+                score: 4,
+            })
+        ).toBe("PLACE-LANG-4");
+    });
+
+    it("synthesizes sat2 → SAT2-MATH2-700", () => {
+        expect(
+            synthesizePlacementCourseId({
+                kind: "sat2",
+                subject: "MATH2",
+                score: 700,
+            })
+        ).toBe("SAT2-MATH2-700");
+    });
+
+    it("returns null for sat2 with no subject", () => {
+        expect(
+            synthesizePlacementCourseId({
+                kind: "sat2",
+                score: 700,
+            })
+        ).toBeNull();
+    });
+});
