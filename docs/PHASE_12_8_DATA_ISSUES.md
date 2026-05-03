@@ -1,6 +1,6 @@
 # Phase 12.8 Data Quality Issues — Final Analysis
 
-After Phase 12.8 Task 4b's targeted backfill pass with five new general prompt rules, the system achieved **100% vitest regression suite pass** (96/96 tests). This document catalogs the remaining data quality issues that require human review and operator curation.
+After Phase 12.8 Task 4b's targeted backfill pass with five new general prompt rules, the system achieved **100% vitest regression suite pass** (96/96 tests). After the 2026-05-03 hand-curation pass, all 29 silent-failure entries are RESOLVED. This document catalogs the remaining data quality issues that require human review and operator curation.
 
 ## Summary
 
@@ -9,8 +9,8 @@ After Phase 12.8 Task 4b's targeted backfill pass with five new general prompt r
 - **Curated golden entries (preserved):** 16/16 ✓
 - **Non-canonical inner IDs:** 0 (down from 50+)
 - **Missing courses[] field on petition-only groups:** 0 (fixed from 3)
-- **Silent failures (empty prereqGroups):** 29 (unchanged from prior audits)
-- **Vitest regression suite:** 17/17 passing
+- **Silent failures (empty prereqGroups):** 0 RESOLVED (29/29 hand-curated 2026-05-03; 7 detector-residuals are coreq-only false positives — see "Detector residuals" below)
+- **Vitest regression suite:** 96/96 passing
 
 **Key Improvements from Task 4b:**
 1. Rule A (courses field always present): Fixed 3 petition-only entries
@@ -23,9 +23,11 @@ After Phase 12.8 Task 4b's targeted backfill pass with five new general prompt r
 
 ## Issue Category 1: Silent Failures (Empty prereqGroups)
 
+**Status (2026-05-03):** RESOLVED via manual hand-curation. All 29 entries below have been hand-translated from bulletin source per the schema rules (Decision A/P/Y/Y′). See `packages/engine/src/data/prereqs.sources.md` "Phase 12.8 Silent-Failure Hand-Curation (2026-05-03)" for per-entry citation + justification.
+
 **Definition:** The bulletin Prerequisites line contains course references (in brackets like `[CSCI-UA 102]`), but the parser output has empty `prereqGroups` and empty `coreqs`.
 
-**Count:** 29 entries (unchanged from prior audits)
+**Count:** 0 outstanding (29 RESOLVED). 7 detector-residual false positives — see "Detector residuals" subsection below.
 
 **Root Causes:**
 1. Coreq-only syntax variations — lines like "Corequisite: [CHEM-UH 3012]" parsed correctly as coreqs (not prereqs)
@@ -214,6 +216,27 @@ After Phase 12.8 Task 4b's targeted backfill pass with five new general prompt r
 - **Parser output:** `prereqGroups: []`, `coreqs: []`
 - **Issue:** Single course in brackets; LLM missed it
 - **Action needed:** One AND group with URBS-UA 102
+
+---
+
+## Hand-Curation Resolution (2026-05-03)
+
+All 29 silent-failure entries above are now RESOLVED via manual hand-translation from the bulletin chunks at `data/bulletin-raw/courses/<dept>_<sfx>/_index.md`. Detailed per-entry citations live in `packages/engine/src/data/prereqs.sources.md`.
+
+**Pattern breakdown:**
+- Coreq-only Prerequisites lines (parser correctly emitted `[]`; we keep `prereqGroups: []` and the existing entry-level coreqs): 6 entries (CHEM-UH 3011, 3013, 3016; CM-UY 1001, 1011; CS-UY 1113).
+- Vague placement-exam reference, no level/score (per Decision Y′ — no fallback): 1 entry (MA-UY 914 — coreq populated separately).
+- Single bracketed course → AND group: 4 entries (DS-UA 9201, HI-UY 3144, AE-UY 4653, URBS-UA 301).
+- Two-or-more AND-connected courses → separate AND groups: 4 entries (CBE-UY 4263, FIN-UY 4903, MPAJZ-UE 1119, FMTV-UT 1777 — last is single AND after dropping descriptor + plan eligibility).
+- Single OR group (with possibly-unbracketed refs): 7 entries (ACE-UE 110, EN-UY 3814W, ECON-UA 9316, CSCI-UA 9480, MD-UY 2314G, PHYS-UA 9012, PSYCH-UA 9051).
+- Two AND-connected OR groups: 2 entries (CS-UY 4793G, PHIL-UA 9085).
+- Single 7-way OR (TCS Advanced Seminar boilerplate): 3 entries (CAM-UY 4504, STS-UY 4504, URB-UY 4504). Doc's original "5 AND + OR" reading was overruled after re-reading the parenthesized list.
+- Mixed admin + course → AND with `requiresPetition: true`: 1 entry (BMS-UY 4924).
+- OR group with `requiresPetition: true` for "OR equivalents" soft-allow trailing modifier: 1 entry (PHIL-UA 9085, first group).
+- Coreq from inline "AND CO-REQ ..." inside the prereq line: 1 entry (MPATC-UE 9343).
+- PHIL-UH 3410: bulletin exists (the doc's "missing entirely" claim was wrong). Bulletin Prerequisites line is purely a wildcard course range (PHIL-UH 2200-2799), which per the rules is dropped. No concrete course refs to encode → entry intentionally NOT added to prereqs.json.
+
+**Detector residuals (false positives):** The post-fix `Real silent failures remaining` syntactic detector (regex over bulletin Prerequisites lines) reports 7 hits: CHEM-UH 3011, 3013, 3016; CM-UY 1001, 1011; CS-UY 1113; MA-UY 914. All 7 are correctly empty in `prereqGroups` because the only course-reference in the bulletin Prerequisites line is a coreq (not a prereq) or a vague unparseable placement mention. Their entry-level `coreqs` field is correctly populated where applicable. This is a known limitation of the detector regex (it doesn't distinguish prereq vs coreq within the line); the entries themselves are correctly handled per schema rules.
 
 ---
 
