@@ -28,12 +28,12 @@ digits (e.g. `cwrg1_uc`, `bas01_dn`). The recognizer regex is therefore
 digit-tolerant:
 
 ```
-^[a-z][a-z0-9]*_(ua|ub|ue|uf|uh|ut|uy|shu)$
+^[a-z][a-z0-9]*_(ua|ub|ue|uf|ug|uh|ut|uy|shu)$
 ```
 
 ## Schools in scope
 
-The eight undergraduate schools below are the data substrate for NYU Path's
+The nine undergraduate schools below are the data substrate for NYU Path's
 forward planner and RAG layer. School slugs were curl-verified against
 `bulletins.nyu.edu/undergraduate/<slug>/` on 2026-05-02. Dept-prefix counts
 were produced by `verify_coverage.py` on the same date.
@@ -43,29 +43,52 @@ were produced by `verify_coverage.py` on the same date.
 | College of Arts and Science (CAS) | [`arts-science`](https://bulletins.nyu.edu/undergraduate/arts-science/) | `UA` | 51 | 51 |
 | Stern School of Business | [`business`](https://bulletins.nyu.edu/undergraduate/business/) | `UB` | 10 | 10 |
 | Steinhardt School of Culture, Education, and Human Development | [`culture-education-human-development`](https://bulletins.nyu.edu/undergraduate/culture-education-human-development/) | `UE` | 45 | 45 |
-| Gallatin School of Individualized Study | [`individualized-study`](https://bulletins.nyu.edu/undergraduate/individualized-study/) | `UF` | 29 | 29 |
+| Liberal Studies (pre-CAS pipeline) | [`liberal-studies`](https://bulletins.nyu.edu/undergraduate/liberal-studies/) | `UF` | 29 | 29 |
+| Gallatin School of Individualized Study | [`individualized-study`](https://bulletins.nyu.edu/undergraduate/individualized-study/) | `UG` | 5 | 5 |
 | NYU Abu Dhabi | [`abu-dhabi`](https://bulletins.nyu.edu/undergraduate/abu-dhabi/) | `UH` | 37 | 37 |
 | Tisch School of the Arts | [`arts`](https://bulletins.nyu.edu/undergraduate/arts/) | `UT` | 19 | 19 |
 | Tandon School of Engineering | [`engineering`](https://bulletins.nyu.edu/undergraduate/engineering/) | `UY` | 24 | 24 |
 | NYU Shanghai | [`shanghai`](https://bulletins.nyu.edu/undergraduate/shanghai/) | `SHU` | 43 | 43 |
 
+**Errata (2026-05-02):** the original revision of this file labeled UF as
+"Gallatin School of Individualized Study" with slug `individualized-study`,
+and listed UG as out-of-scope graduate. That was wrong on both counts.
+Bulletin titles + Postgres confirm UF = Liberal Studies (small pre-major
+CAS pipeline, 46 courses, slug `liberal-studies`) and UG = Gallatin (834
+courses including 515 IDSEM-UG interdisciplinary seminars, slug
+`individualized-study`). The corrected mapping is reflected above.
+
 Disk dept-dir counts shown above are post-stub-filter — only dept dirs whose
 `_index.md` contains at least one parseable course-heading line are counted.
-27 additional dept dirs exist on disk but contain stub `_index.md` pages
+29 additional dept dirs exist on disk but contain stub `_index.md` pages
 (header + title only, no courses); the verifier surfaces them under a
 `STUBS` section as informational. They represent depts the bulletin still
 indexes but no longer publishes course content for, and Phase 12.8 would
 parse zero courses from them — see "Coverage status" below.
+
+**Note on UF and UG data density.** Liberal Studies (UF) has zero internal
+prerequisite chains (the program is a 2-year sequence whose courses don't
+gate one another) but is referenced ~29× from other schools' prereq lines
+(e.g. `MGMT-UB 2`'s OR group includes `ECII-UF 102`). Gallatin (UG) has
+essentially no prereq structure — 1 prereq line in 834 courses, consistent
+with Gallatin's "no fixed schedule, no required courses" model. Phase 12.8
+Task 4 (the LLM prereq parser) therefore restricts its in-scope set to the
+seven schools where prereq data actually lives: `ua, ub, ue, uh, ut, uy,
+shu`. UF and UG remain in scope for the offerings extractor (Task 3) and
+for verifier coverage so cross-references resolve and the static catalog
+is complete.
 
 ## Out of scope
 
 The following are intentionally NOT covered by this data substrate:
 
 - **Graduate course-suffixes.** `_g*`, `_md`, `_ml`, `_dn`, `_lw`, `_ny`,
-  `_na`, `_ne`, `_ni`, `_uc`, `_ud`, `_ug`, `_cs`, `_un` etc. exist on disk
+  `_na`, `_ne`, `_ni`, `_uc`, `_ud`, `_cs`, `_un` etc. exist on disk
   (the bulletin scraper indiscriminately captured them) but they are not
   undergraduate-major-program data and the planner does not consume them.
-  Phase 12.8's parser must filter to the eight in-scope suffixes only.
+  Phase 12.8's parser must filter to the nine in-scope suffixes only.
+  (`_ug` was previously listed here in error — it is undergrad Gallatin and
+  is now in scope.)
 - **Standalone subdomain bulletins.** `stern.nyu.edu`'s separate bulletin
   duplicates content already in `bulletins.nyu.edu/undergraduate/business/`
   and is not re-scraped.
@@ -76,7 +99,7 @@ The following are intentionally NOT covered by this data substrate:
 
 ## Coverage status (as of 2026-05-02)
 
-**100% at dept-prefix granularity for all 8 schools.** Verified by:
+**100% at dept-prefix granularity for all 9 schools.** Verified by:
 
 ```
 python3 tools/bulletin-scraper/verify_coverage.py
@@ -92,12 +115,12 @@ The verifier reports two informational sections:
   Postgres has no live course rows. None at present: every dept that has a
   populated bulletin page is also live in Postgres.
 - **STUBS** — dept dirs whose `_index.md` exists but contains no course-
-  heading lines (header + title only). Currently 27 such dirs across UF,
-  UH, UT, UY, SHU. These are depts the bulletin still indexes but no longer
-  publishes course content for; Phase 12.8 would parse zero courses from
-  them. None overlap with Postgres today, so they are latent — but they are
-  surfaced explicitly so a future regression where an in-Postgres dept
-  lands as a stub would be debuggable in one place.
+  heading lines (header + title only). Currently 29 such dirs across UF,
+  UG, UH, UT, UY, SHU. These are depts the bulletin still indexes but no
+  longer publishes course content for; Phase 12.8 would parse zero courses
+  from them. None overlap with Postgres today, so they are latent — but
+  they are surfaced explicitly so a future regression where an in-Postgres
+  dept lands as a stub would be debuggable in one place.
 
 A dept counts as covered iff its `_index.md` exists AND contains at least
 one course-heading line. File presence alone is insufficient — that's what
@@ -108,8 +131,13 @@ this fix gates on.
 The Phase 12.8 parser must:
 
 1. Walk `data/bulletin-raw/courses/<dept>_<suffix>/_index.md`, filtered to
-   the eight in-scope suffixes (`ua`, `ub`, `ue`, `uf`, `uh`, `ut`, `uy`,
-   `shu`).
+   the nine in-scope suffixes (`ua`, `ub`, `ue`, `uf`, `ug`, `uh`, `ut`,
+   `uy`, `shu`). Task 3 (offerings extractor) covers all nine; Task 4 (LLM
+   prereq parser) restricts to seven (`ua, ub, ue, uh, ut, uy, shu`)
+   because UF (Liberal Studies) has no internal prereqs and UG (Gallatin)
+   has 1 prereq line in 834 courses — running the LLM on them is wasted
+   spend. Cross-references INTO UF/UG from the seven prereq-bearing
+   schools resolve cleanly because UF/UG offerings are in scope.
 2. Split each `_index.md` file into per-course chunks. Each course chunk is
    delimited by a heading line like:
 

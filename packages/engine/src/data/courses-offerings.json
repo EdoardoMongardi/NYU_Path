@@ -4045,6 +4045,827 @@
     "rawLine": "**Typically offered* Fall, Spring, and Summer terms*",
     "inferred": false
   },
+  "ARTS-UG 1007": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1011": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1012": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1014": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1024": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1027": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1029": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1031": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1032": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1037": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1042": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1043": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1045": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1050": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1054": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1058": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1065": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1066": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1080": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1105": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1110": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1115": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1204": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1207": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1210": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1211": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1212": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1220": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1221": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1230": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1251": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1275": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1305": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1306": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1316": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1320": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1325": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1326": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1340": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1341": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1345": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1360": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1408": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1411": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1412": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1420": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1425": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1432": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1437": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1444": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1461": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1462": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1463": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1470": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1480": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1481": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1485": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1486": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1494": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1496": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1515": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1560": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1568": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1570": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1571": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1572": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1573": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1575": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1576": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1577": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1595": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1596": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1599": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1600": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1602": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1609": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1614": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1619": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1621": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1623": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1635": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1636": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1637": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1642": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1643": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1644": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1647": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1649": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1652": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1655": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1656": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1660": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "ARTS-UG 1661": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1662": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "ARTS-UG 1663": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1664": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1700": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1800": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1801": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1802": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "ARTS-UG 1803": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall of even numbered years*",
+    "inferred": false
+  },
+  "ARTS-UG 1804": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall of even numbered years*",
+    "inferred": false
+  },
+  "ARTS-UG 9300": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
   "ARTT-UE 1010": {
     "termsOffered": [
       "fall",
@@ -23512,6 +24333,1469 @@
     "rawLine": "**Typically offered* Fall and Spring*",
     "inferred": false
   },
+  "FIRST-UG 24": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 32": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 42": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 49": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 69": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 70": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 71": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 74": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 77": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 82": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 83": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 85": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 89": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 92": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 94": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 96": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 100": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 103": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 104": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 105": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 106": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 108": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 111": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 113": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 115": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 116": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 117": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 118": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 119": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 120": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 121": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 122": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 123": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 124": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 125": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 126": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 127": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 128": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 129": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 130": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 131": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 134": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 135": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 137": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 138": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 139": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 140": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 141": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 142": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 143": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 145": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 146": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 147": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 149": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 150": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 151": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 152": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 153": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 154": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 155": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall of even numbered years*",
+    "inferred": false
+  },
+  "FIRST-UG 319": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 343": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 357": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 361": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 395": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 403": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 419": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 420": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 422": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 423": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 424": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 426": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 429": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 430": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 432": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 433": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 434": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 435": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 437": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 438": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 439": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 440": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 441": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 442": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 445": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 446": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 448": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 449": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 450": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 451": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 452": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 453": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 454": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 455": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 456": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 457": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 458": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 459": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 460": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 461": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 462": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 463": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 464": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 465": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 467": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 468": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 469": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 470": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 471": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 472": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 473": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 474": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 475": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 700": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 703": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 709": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 717": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 740": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 747": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 767": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 770": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 773": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 778": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "FIRST-UG 783": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 787": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 791": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 793": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 794": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 795": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 799": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 815": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 816": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 817": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 818": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 819": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 820": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 821": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 822": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 823": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 824": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 825": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 827": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 828": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 829": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 830": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 831": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 832": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 833": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 834": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 836": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 837": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 838": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 840": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 841": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 842": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 843": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 844": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 845": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 846": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 847": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 848": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 849": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 851": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 852": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 854": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 856": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 858": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 859": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 862": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1802": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1810": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1811": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1814": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1815": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1816": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1817": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1818": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1819": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1820": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1821": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1824": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1825": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "FIRST-UG 1826": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
   "FMTV-UT 4": {
     "termsOffered": [
       "fall",
@@ -32067,6 +34351,4099 @@
     "rawLine": "",
     "inferred": true
   },
+  "IDSEM-UG 1042": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1043": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1055": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1059": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1061": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1072": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1097": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1116": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1144": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1193": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1202": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1207": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1211": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1215": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1239": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1258": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1264": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1268": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1272": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1289": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1294": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1298": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1311": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1313": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1318": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1324": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1339": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1340": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1341": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1342": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1351": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1357": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1359": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1366": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1381": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1420": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1425": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1439": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1440": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1449": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1454": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1457": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1468": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1471": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1476": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1478": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1482": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1486": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1488": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1493": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1504": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1514": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1516": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1518": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1521": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1523": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1527": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1534": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1535": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1536": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1542": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1545": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1552": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1555": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1562": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1563": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1566": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1567": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1577": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1584": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1586": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1592": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1603": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1609": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1612": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1618": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1624": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1626": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1627": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1628": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1630": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1631": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1632": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1633": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1636": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1639": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1641": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1642": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1648": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1649": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1651": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1660": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1664": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1669": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1674": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1678": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1679": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1682": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1689": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1695": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1699": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1705": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1711": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1714": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1722": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1726": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1727": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1729": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1730": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1734": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1735": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1738": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1739": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1740": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1743": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1748": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1749": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1750": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1752": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1765": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1767": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1768": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1771": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1772": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1774": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1775": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1779": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1780": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1788": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1789": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1795": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1800": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1801": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1802": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1805": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1807": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1809": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1811": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1813": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1814": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1815": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1816": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1818": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1820": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1823": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1827": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1830": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1831": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1835": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1836": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1837": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1838": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1839": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1840": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1843": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1846": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1849": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1852": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1855": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1856": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1859": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1862": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1865": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1866": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1869": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1870": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1871": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1872": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1873": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "IDSEM-UG 1876": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1880": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1882": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1885": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1886": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1891": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1892": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1899": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1903": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1904": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1911": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1916": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1917": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1921": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1925": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1929": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1931": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1932": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1935": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1937": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1938": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1939": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1941": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1943": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1944": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1946": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1947": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1948": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1950": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1951": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1952": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1953": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* not typically offered*",
+    "inferred": true
+  },
+  "IDSEM-UG 1954": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1956": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1958": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1961": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 1964": {
+    "termsOffered": [
+      "january"
+    ],
+    "rawLine": "**Typically offered* January term*",
+    "inferred": false
+  },
+  "IDSEM-UG 1967": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1968": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1969": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1971": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1973": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1974": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1975": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1976": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1977": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1978": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1979": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1981": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1984": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1985": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1987": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1989": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1990": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1995": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1996": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 1998": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2002": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2003": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2004": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2006": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2012": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2013": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2014": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2016": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2017": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2018": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2021": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2022": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2024": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2025": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2026": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2027": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2028": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2029": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2031": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2032": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2033": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2034": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2035": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2036": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2038": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2039": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2040": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2041": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2045": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2046": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2047": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2048": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2050": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2051": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2052": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2053": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2054": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2055": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2056": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2057": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2059": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2060": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2061": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2062": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2063": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2065": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2066": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2067": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2068": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2069": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2070": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2071": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2073": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2074": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2075": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2076": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2077": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2078": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2080": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2082": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2083": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2085": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2086": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2087": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2088": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2089": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2090": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2091": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2092": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2093": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2094": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2095": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2096": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2097": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2098": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2099": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2100": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2101": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2102": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2103": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2104": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2105": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2107": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2108": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2110": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2111": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2113": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2114": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2115": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2116": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2117": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2119": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2120": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2121": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2122": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2123": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2124": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2125": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2126": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2127": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2128": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2129": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2130": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2131": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2132": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2133": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2134": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2135": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2136": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2137": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2138": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2139": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2141": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2142": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2143": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2144": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2145": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2146": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2147": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2148": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2149": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2150": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2151": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2152": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2153": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2154": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2155": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2157": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2158": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2160": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2161": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2162": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2164": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2165": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2167": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2168": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2169": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2170": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2171": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2173": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2174": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2176": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2177": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2178": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2179": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2180": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2183": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2184": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2185": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2186": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2188": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2189": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2190": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2192": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2193": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2195": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2196": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2198": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2199": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2200": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2201": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2202": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2203": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2204": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2205": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2206": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2207": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2208": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2209": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2210": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2211": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2212": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2213": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2214": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2216": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2217": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2219": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2220": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2221": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2222": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2223": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2224": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2225": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2226": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2227": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2228": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2229": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2231": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2232": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2233": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2234": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2235": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2237": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2242": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2243": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2244": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2245": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2246": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2248": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2249": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2250": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2251": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2254": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2255": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2256": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2257": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2258": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2259": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2260": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2261": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2262": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2263": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2265": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2266": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2267": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2268": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2269": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2270": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2271": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2272": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2273": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2274": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2275": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2276": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2280": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2282": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2284": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2285": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2286": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2287": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2288": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2290": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall of even numbered years*",
+    "inferred": false
+  },
+  "IDSEM-UG 2294": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2295": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2296": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 2298": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall of even numbered years*",
+    "inferred": false
+  },
+  "IDSEM-UG 2299": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall of even numbered years*",
+    "inferred": false
+  },
+  "IDSEM-UG 2303": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2304": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2305": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2309": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2902": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2904": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2914": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2915": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2916": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2917": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2918": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2919": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2920": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2921": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2922": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2923": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2924": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2925": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2927": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2929": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 2930": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9050": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9051": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9100": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9104": {
+    "termsOffered": [
+      "summer"
+    ],
+    "rawLine": "**Typically offered* Summer term*",
+    "inferred": false
+  },
+  "IDSEM-UG 9151": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9152": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9153": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9155": {
+    "termsOffered": [
+      "summer"
+    ],
+    "rawLine": "**Typically offered* Summer term*",
+    "inferred": false
+  },
+  "IDSEM-UG 9156": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 9200": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9205": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9206": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9207": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 9250": {
+    "termsOffered": [
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 9251": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9252": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9254": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9300": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 9308": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall*",
+    "inferred": false
+  },
+  "IDSEM-UG 9309": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 9351": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9353": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9357": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9500": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall*",
+    "inferred": false
+  },
+  "IDSEM-UG 9501": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 9550": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "IDSEM-UG 9650": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
+  "IDSEM-UG 9651": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall*",
+    "inferred": false
+  },
+  "IDSEM-UG 9652": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall of even numbered years*",
+    "inferred": false
+  },
+  "IDSEM-UG 9653": {
+    "termsOffered": [
+      "fall"
+    ],
+    "rawLine": "**Typically offered* Fall*",
+    "inferred": false
+  },
+  "IDSEM-UG 9700": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
   "IDWPG-UT 1049": {
     "termsOffered": [
       "fall",
@@ -33114,6 +39491,174 @@
     ],
     "rawLine": "",
     "inferred": true
+  },
+  "INDIV-UG 1701": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "INDIV-UG 1801": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "INDIV-UG 1901": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "INDIV-UG 1903": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 1905": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "INDIV-UG 1925": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "INDIV-UG 1926": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9050": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "INDIV-UG 9100": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9150": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9151": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9152": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
+  "INDIV-UG 9200": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
+  },
+  "INDIV-UG 9250": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9300": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9350": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9400": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9501": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9550": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9600": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "INDIV-UG 9700": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* Fall and Spring*",
+    "inferred": false
   },
   "INTE-UE 10": {
     "termsOffered": [
@@ -51897,6 +58442,102 @@
     "inferred": true
   },
   "PORT-UA 9700": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "PRACT-UG 1301": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "PRACT-UG 1350": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "PRACT-UG 1401": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "PRACT-UG 1460": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "PRACT-UG 1475": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "PRACT-UG 1480": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "PRACT-UG 1482": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "PRACT-UG 1550": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "**Typically offered* occasionally*",
+    "inferred": true
+  },
+  "PRACT-UG 1600": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "PRACT-UG 1701": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "PRACT-UG 9200": {
+    "termsOffered": [
+      "fall",
+      "spring"
+    ],
+    "rawLine": "",
+    "inferred": true
+  },
+  "PRACT-UG 9250": {
     "termsOffered": [
       "fall",
       "spring"

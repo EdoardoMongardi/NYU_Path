@@ -4,10 +4,10 @@ verify_coverage.py — Phase 12.7 / Phase 12.8 coverage gate.
 
 What this script verifies
 -------------------------
-For each of the 8 in-scope NYU undergraduate course-suffixes (UA, UB, UE, UF,
-UH, UT, UY, SHU), this script checks that every department-prefix appearing in
-the live Postgres course dump has a corresponding scraped bulletin page on
-disk. If yes, Phase 12.8's parser has a complete data substrate to work
+For each of the 9 in-scope NYU undergraduate course-suffixes (UA, UB, UE, UF,
+UG, UH, UT, UY, SHU), this script checks that every department-prefix
+appearing in the live Postgres course dump has a corresponding scraped
+bulletin page on disk. If yes, Phase 12.8's parser has a complete data substrate to work
 against. If no, the missing prefixes block Phase 12.8 and must be scraped
 first.
 
@@ -28,7 +28,7 @@ Directory names are lowercase, with the dept and suffix joined by a single
 underscore. Department names can contain digits (e.g. `cwrg1_uc`, `bas01_dn`).
 The regex that recognizes a valid dept-dir is therefore digit-tolerant:
 
-    ^[a-z][a-z0-9]*_(ua|ub|ue|uf|uh|ut|uy|shu)$
+    ^[a-z][a-z0-9]*_(ua|ub|ue|uf|ug|uh|ut|uy|shu)$
 
 What counts as covered
 ----------------------
@@ -56,7 +56,7 @@ Phase 12.8 — if it exits non-zero, the parser cannot proceed.
 Exit codes
 ----------
 0 — every Postgres dept-prefix has a scraped bulletin page (coverage complete
-    at dept-prefix granularity for all 8 suffixes). Phase 12.8 may proceed.
+    at dept-prefix granularity for all 9 suffixes). Phase 12.8 may proceed.
 1 — at least one suffix has missing dept-prefixes. Output lists exactly which
     ones. Re-scrape the missing pages before running Phase 12.8's parser.
 
@@ -80,10 +80,17 @@ REPO_ROOT = SCRIPT_DIR.parent.parent
 COURSES_DIR = REPO_ROOT / "data" / "bulletin-raw" / "courses"
 DUMP_PATH = REPO_ROOT / "data" / "course-catalog" / "course_descriptions.json"
 
-# Eight undergraduate course-suffixes in scope. Lowercase here for alignment
+# Nine undergraduate course-suffixes in scope. Lowercase here for alignment
 # with the on-disk directory naming convention; uppercase form is used when
 # matching Postgres courseCode strings.
-IN_SCOPE_SUFFIXES = ("ua", "ub", "ue", "uf", "uh", "ut", "uy", "shu")
+#
+# Errata (2026-05-02): an earlier revision listed only 8 suffixes and labeled
+# UF as "Gallatin" / UG as "out of scope (graduate)". That was wrong:
+# Postgres + bulletin titles confirm UF = Liberal Studies (46 courses, the
+# pre-major CAS pipeline) and UG = Gallatin (834 courses incl. 515 IDSEM-UG
+# seminars). UG is now in-scope; documentation in UNDERGRAD_SCHOOLS.md
+# reflects the corrected mapping.
+IN_SCOPE_SUFFIXES = ("ua", "ub", "ue", "uf", "ug", "uh", "ut", "uy", "shu")
 
 # Disk directory pattern: lowercase dept (digit-tolerant) + underscore +
 # in-scope suffix. Out-of-scope suffixes (graduate ones like _gx, _md, _lw
@@ -98,7 +105,7 @@ DISK_DIR_RE = re.compile(
 # correctly excluded — they are not real courses and must not contribute to
 # the dept-prefix set.
 PG_CODE_RE = re.compile(
-    r"^([A-Z][A-Z0-9]*)-(UA|UB|UE|UF|UH|UT|UY|SHU) [0-9]"
+    r"^([A-Z][A-Z0-9]*)-(UA|UB|UE|UF|UG|UH|UT|UY|SHU) [0-9]"
 )
 
 # Course-heading line in a bulletin `_index.md`. Real dept pages contain at
@@ -109,7 +116,7 @@ PG_CODE_RE = re.compile(
 # publishes courses for. Counting those as covered would mask a future
 # regression where an in-Postgres dept lands as a stub.
 COURSE_HEADING_RE = re.compile(
-    r"^\*\*[A-Z][A-Z0-9]*-(UA|UB|UE|UF|UH|UT|UY|SHU) ",
+    r"^\*\*[A-Z][A-Z0-9]*-(UA|UB|UE|UF|UG|UH|UT|UY|SHU) ",
     re.MULTILINE,
 )
 

@@ -5,8 +5,8 @@
 //
 // PURPOSE
 // -------
-// Walks data/bulletin-raw/courses/<dept>_<suffix>/_index.md for the 8
-// in-scope undergrad suffixes (ua, ub, ue, uf, uh, ut, uy, shu),
+// Walks data/bulletin-raw/courses/<dept>_<suffix>/_index.md for the 9
+// in-scope undergrad suffixes (ua, ub, ue, uf, ug, uh, ut, uy, shu),
 // regex-splits each dept page into per-course chunks at the bulletin's
 // heading pattern, extracts the "Typically offered" line and parses it
 // into a Term[]. Emits a structured map to:
@@ -67,14 +67,19 @@
 // bulletin is silent. The `inferred` flag lets downstream consumers (the
 // Phase 13 solver, eval pipelines) treat inferred rows differently.
 //
-// 27 STUB DEPT DIRS — SKIPPED
+// 29 STUB DEPT DIRS — SKIPPED
 // ----------------------------
-// Phase 12.7's verifier (verify_coverage.py) flagged 27 dept dirs whose
+// verify_coverage.py's STUBS section flagged 29 dept dirs whose
 // _index.md exists but contains no parseable course-heading lines
 // (header + title only). They are depts the bulletin still indexes but
 // no longer publishes course content for. We skip them so empty rows
 // don't dilute downstream coverage validation. The verifier's STUBS
 // section is the authoritative source for this list.
+//
+// Errata (2026-05-02): the original UF/UG label swap in Phase 12.7's
+// docs treated UG as "out of scope (graduate)". UG is in fact Gallatin
+// (the cli_ug + collq_ug stubs are Gallatin-program placeholders).
+// They've been added below alongside the original 27.
 
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,7 +116,8 @@ const IN_SCOPE_SUFFIXES = [
     "ua",
     "ub",
     "ue",
-    "uf",
+    "uf", // Liberal Studies (pre-CAS pipeline)
+    "ug", // Gallatin School of Individualized Study
     "uh",
     "ut",
     "uy",
@@ -123,9 +129,12 @@ const IN_SCOPE_SUFFIXES = [
 // SOURCE — do not edit by hand. If the bulletin gets re-scraped and the
 // stub set changes, re-run verify_coverage.py and update this list.
 const STUB_DEPT_DIRS = new Set<string>([
-    // UF (Gallatin)
+    // UF (Liberal Studies)
     "cwp_uf",
     "livn_uf",
+    // UG (Gallatin)
+    "cli_ug",
+    "collq_ug",
     // UH (Abu Dhabi)
     "afrst_uh",
     "ah_uh",
@@ -171,7 +180,7 @@ const DEPT_DIR_RE = new RegExp(
 // Multiline + global so we can iterate matches and use match.index for
 // chunk boundaries.
 const HEADING_RE =
-    /^\*\*([A-Z][A-Z0-9]*-(?:UA|UB|UE|UF|UH|UT|UY|SHU) \S+)\*\*/gm;
+    /^\*\*([A-Z][A-Z0-9]*-(?:UA|UB|UE|UF|UG|UH|UT|UY|SHU) \S+)\*\*/gm;
 
 // "Typically offered" line. The bulletin mixes bold+italic
 // (e.g. "**Typically offered* Fall, Spring, and Summer terms*"), and a
