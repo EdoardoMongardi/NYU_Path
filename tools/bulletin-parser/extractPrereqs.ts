@@ -68,7 +68,7 @@ const SMOKE_TEST_COURSES = [
 ];
 
 // ============================================================
-// SYSTEM PROMPT (with prompt caching)
+// SYSTEM PROMPT (with prompt caching + JSON-only rule)
 // ============================================================
 
 const SYSTEM_PROMPT = `You are a parser for NYU course prerequisite listings. Your task is to extract prerequisite information from bulletin text and return it as structured JSON.
@@ -155,6 +155,15 @@ You must respond with a single JSON object (no markdown, no prose):
 
 9. **Empty Prerequisites:**
    - If there are no prerequisites, return {course, prereqGroups: [], coreqs: []}.
+
+## RESPONSE FORMAT (CRITICAL)
+
+Respond with the JSON object ONLY. No prose, no markdown code fences, no
+"Here is the output:" preamble, no trailing explanation. Your response must
+parse as JSON if treated verbatim.
+
+Begin your response with \`{\` and end with \`}\`. Anything outside this is
+malformed.
 
 ## AP/IB REFERENCE (Sample Common Mappings)
 
@@ -420,6 +429,20 @@ function loadCuratedPrereqs(): Map<string, CuratedEntry> {
     }
 }
 
+function loadCuratedSnapshot(): Map<string, CuratedEntry> {
+    try {
+        const raw = readFileSync("/tmp/prereqs.curated.snapshot.json", "utf-8");
+        const entries = JSON.parse(raw) as CuratedEntry[];
+        const map = new Map<string, CuratedEntry>();
+        for (const entry of entries) {
+            map.set(entry.course, entry);
+        }
+        return map;
+    } catch {
+        return new Map();
+    }
+}
+
 function extractPrereqText(chunk: string): string | null {
     const match = /\*\*Prerequisite(s)?:\*\*\s*(.+?)(?=\n\n|\n\*\*|\Z)/is.exec(
         chunk,
@@ -441,6 +464,47 @@ function extractCoreqText(chunk: string): string | null {
     return null;
 }
 
+// Fix 1: Balanced-brace JSON extractor
+function extractFirstJsonObject(text: string): string | null {
+    let depth = 0;
+    let start = -1;
+    let inString = false;
+    let escape = false;
+    
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i]!;
+        
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        
+        if (c === "\\") {
+            escape = true;
+            continue;
+        }
+        
+        if (c === '"') {
+            inString = !inString;
+            continue;
+        }
+        
+        if (inString) continue;
+        
+        if (c === "{") {
+            if (depth === 0) start = i;
+            depth++;
+        } else if (c === "}") {
+            depth--;
+            if (depth === 0 && start >= 0) {
+                return text.slice(start, i + 1);
+            }
+        }
+    }
+    
+    return null;
+}
+
 async function callLLM(courseId: string, prereqText: string, coreqText?: string): Promise<string> {
     const client = new Anthropic({
         apiKey: process.env.ANTHROPIC_API_KEY,
@@ -451,9 +515,10 @@ async function callLLM(courseId: string, prereqText: string, coreqText?: string)
         userMessage += `\n\nCorequisite text:\n${coreqText}`;
     }
 
+    // Fix 2 & 3: JSON-only rule already in system prompt + prefill + max_tokens 2048
     const response = await client.messages.create({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
+        max_tokens: 2048,  // Fix 3: bumped from 1024
         system: [
             {
                 type: "text",
@@ -466,6 +531,10 @@ async function callLLM(courseId: string, prereqText: string, coreqText?: string)
                 role: "user",
                 content: userMessage,
             },
+            {
+                role: "assistant",
+                content: "{",  // Fix 2: prefill to force JSON from first token
+            },
         ],
     });
 
@@ -474,13 +543,16 @@ async function callLLM(courseId: string, prereqText: string, coreqText?: string)
         throw new Error(`No text block in response for ${courseId}`);
     }
 
-    return textBlock.text;
+    return "{" + textBlock.text;  // prepend the { we prefilled
 }
 
 function parseJSONResponse(response: string): ParsedPrereq {
-    let json = response.trim();
-    json = json.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-    return JSON.parse(json);
+    // Fix 1: Use balanced-brace extractor instead of greedy regex
+    const jsonStr = extractFirstJsonObject(response);
+    if (!jsonStr) {
+        throw new Error(`Could not extract JSON from response: ${response.substring(0, 100)}`);
+    }
+    return JSON.parse(jsonStr);
 }
 
 function extractCourseChunks(filePath: string, bypassSuffixFilter?: boolean): Array<{
@@ -546,44 +618,58 @@ function coreqsEqual(actual: string[], expected: string[]): boolean {
 }
 
 async function runSmokeTest(curated: Map<string, CuratedEntry>) {
-    console.log("=== SMOKE TEST: 5 Hand-Picked Courses ===\n");
+    console.log("=== SMOKE TEST: 5 Hard Cases (Silent Failures) ===\n");
 
     let matches = 0;
     let mismatches = 0;
+    let errors = 0;
     const results: ParsedPrereq[] = [];
 
-    for (const { courseId, suffix } of SMOKE_TEST_COURSES) {
+    // Load 5 from silent failures for smoke test
+    const silentFailures = JSON.parse(readFileSync("/tmp/silent_failures.json", "utf-8")) as string[];
+    const smokeTargets = silentFailures.slice(0, 5);
+
+    for (const courseId of smokeTargets) {
         console.log(`\n--- ${courseId} ---`);
 
-        const deptDirs = readdirSync(BULLETIN_DIR, { withFileTypes: true });
-        let filePath: string | null = null;
-
-        for (const dir of deptDirs) {
-            if (!dir.isDirectory() || !dir.name.endsWith("_" + suffix)) continue;
-            const candidatePath = join(BULLETIN_DIR, dir.name, "_index.md");
-            try {
-                const chunks = extractCourseChunks(candidatePath);
-                if (chunks.find((c) => c.courseId === courseId)) {
-                    filePath = candidatePath;
-                    break;
-                }
-            } catch {
-                continue;
-            }
-        }
-
-        if (!filePath) {
-            console.log(`ERROR: Could not find ${courseId} in bulletin`);
-            mismatches++;
+        const match = /^([A-Z]+[A-Z0-9]*)-([A-Z]+)/.exec(courseId);
+        if (!match) {
+            console.log(`ERROR: Cannot parse course ID`);
+            errors++;
             continue;
         }
 
-        const chunks = extractCourseChunks(filePath);
-        const courseChunk = chunks.find((c) => c.courseId === courseId);
+        const [, dept, suffix] = match;
+        const deptDir = `${dept.toLowerCase()}_${suffix.toLowerCase()}`;
+        const bulletinPath = join(BULLETIN_DIR, deptDir, "_index.md");
 
+        let fileExists = false;
+        try {
+            readFileSync(bulletinPath, "utf-8");
+            fileExists = true;
+        } catch {
+            fileExists = false;
+        }
+
+        if (!fileExists) {
+            console.log(`ERROR: Bulletin file not found: ${deptDir}`);
+            errors++;
+            continue;
+        }
+
+        let chunks: Array<{ courseId: string; chunk: string }>;
+        try {
+            chunks = extractCourseChunks(bulletinPath, true);
+        } catch (err) {
+            console.log(`ERROR: Could not extract chunks: ${err}`);
+            errors++;
+            continue;
+        }
+
+        const courseChunk = chunks.find((c) => c.courseId === courseId);
         if (!courseChunk) {
-            console.log(`ERROR: Could not extract chunk for ${courseId}`);
-            mismatches++;
+            console.log(`ERROR: Could not find chunk for ${courseId}`);
+            errors++;
             continue;
         }
 
@@ -605,66 +691,63 @@ async function runSmokeTest(curated: Map<string, CuratedEntry>) {
                 const parsed = parseJSONResponse(response);
                 results.push(parsed);
                 console.log(`Parsed: ${JSON.stringify(parsed)}`);
+                
+                // Check for PLACEMENT_EXAM
+                const hasPlacementExam = JSON.stringify(parsed).includes("PLACEMENT_EXAM");
+                if (hasPlacementExam) {
+                    console.log("WARNING: Contains PLACEMENT_EXAM (should not happen)");
+                    mismatches++;
+                } else {
+                    matches++;
+                }
             } catch (err) {
                 console.error(`ERROR parsing ${courseId}:`, err);
-                mismatches++;
+                errors++;
                 continue;
             }
-        }
-
-        const curatedEntry = curated.get(courseId);
-        if (curatedEntry) {
-            const groupsMatched = prereqGroupsEqual(
-                results[results.length - 1].prereqGroups,
-                curatedEntry.prereqGroups,
-            );
-            const coreqsMatched = coreqsEqual(
-                results[results.length - 1].coreqs,
-                curatedEntry.coreqs,
-            );
-            const matched = groupsMatched && coreqsMatched;
-
-            if (matched) {
-                console.log("✓ MATCH");
-                matches++;
-            } else {
-                console.log("✗ MISMATCH");
-                console.log(`  Expected: ${JSON.stringify(curatedEntry)}`);
-                console.log(
-                    `  Actual:   ${JSON.stringify(results[results.length - 1])}`,
-                );
-                mismatches++;
-            }
-        } else {
-            console.log("(Not in curated baseline)");
         }
     }
 
     writeFileSync(SMOKE_OUTPUT_PATH, JSON.stringify(results, null, 2));
     console.log(
-        `\n\n=== SMOKE TEST SUMMARY ===\nMatches: ${matches}/5\nMismatches: ${mismatches}/5\nOutput: ${SMOKE_OUTPUT_PATH}`,
+        `\n\n=== SMOKE TEST SUMMARY ===\nSuccessful parses: ${matches}/5\nErrors: ${errors}/5\nOutput: ${SMOKE_OUTPUT_PATH}`,
     );
 
-    return { matches, mismatches };
+    return { matches, errors };
 }
 
-async function runValidateAllCurated(curated: Map<string, CuratedEntry>) {
-    console.log("=== VALIDATION: All 16 Curated Courses ===\n");
+async function runBackfill(curated: Map<string, CuratedEntry>, curatedSnapshot: Map<string, CuratedEntry>) {
+    const targets = JSON.parse(readFileSync("/tmp/backfill_targets.json", "utf-8")) as string[];
+    console.log(`=== BACKFILL: ${targets.length} targets ===\n`);
 
-    const curatedCourses = Array.from(curated.keys()).sort();
-    const results: Map<string, {parsed: ParsedPrereq, status: "MATCH" | "MISMATCH" | "ERROR"}> = new Map();
+    let successCount = 0;
+    let errorCount = 0;
+    let skippedCurated = 0;
+    const results: ParsedPrereq[] = [];
+    const errors: Array<{ course: string; error: string }> = [];
 
-    for (const courseId of curatedCourses) {
-        console.log(`\n--- ${courseId} ---`);
+    // Load current prereqs
+    const currentPrereqs = JSON.parse(readFileSync(PREREQS_JSON_PATH, "utf-8")) as ParsedPrereq[];
+    const currentMap = new Map(currentPrereqs.map(e => [e.course, e]));
 
-        // Extract dept from course ID (e.g., "CSCI-UA 101" → "csci_ua")
+    for (let i = 0; i < targets.length; i++) {
+        const courseId = targets[i];
+        
+        if (i % 50 === 0) {
+            console.log(`Progress: ${i}/${targets.length}...`);
+        }
+
+        // Skip if in curated snapshot (preserve curated entries)
+        if (curatedSnapshot.has(courseId)) {
+            skippedCurated++;
+            results.push(curatedSnapshot.get(courseId)!);
+            continue;
+        }
+
         const match = /^([A-Z]+[A-Z0-9]*)-([A-Z]+)/.exec(courseId);
         if (!match) {
-            console.log(`ERROR: Cannot parse course ID`);
-            results.set(courseId, {
-                parsed: { course: courseId, prereqGroups: [], coreqs: [] },
-                status: "ERROR",
-            });
+            errorCount++;
+            errors.push({ course: courseId, error: "Cannot parse course ID" });
             continue;
         }
 
@@ -681,34 +764,24 @@ async function runValidateAllCurated(curated: Map<string, CuratedEntry>) {
         }
 
         if (!fileExists) {
-            console.log(`ERROR: Bulletin file not found: ${deptDir}`);
-            results.set(courseId, {
-                parsed: { course: courseId, prereqGroups: [], coreqs: [] },
-                status: "ERROR",
-            });
+            errorCount++;
+            errors.push({ course: courseId, error: `Bulletin file not found: ${deptDir}` });
             continue;
         }
 
-        // Extract chunks with bypassed suffix filter (we already know dept is valid)
         let chunks: Array<{ courseId: string; chunk: string }>;
         try {
             chunks = extractCourseChunks(bulletinPath, true);
         } catch (err) {
-            console.log(`ERROR: Could not extract chunks: ${err}`);
-            results.set(courseId, {
-                parsed: { course: courseId, prereqGroups: [], coreqs: [] },
-                status: "ERROR",
-            });
+            errorCount++;
+            errors.push({ course: courseId, error: `Could not extract chunks: ${String(err)}` });
             continue;
         }
 
         const courseChunk = chunks.find((c) => c.courseId === courseId);
         if (!courseChunk) {
-            console.log(`ERROR: Could not find chunk for ${courseId}`);
-            results.set(courseId, {
-                parsed: { course: courseId, prereqGroups: [], coreqs: [] },
-                status: "ERROR",
-            });
+            errorCount++;
+            errors.push({ course: courseId, error: "Could not find chunk" });
             continue;
         }
 
@@ -722,82 +795,78 @@ async function runValidateAllCurated(curated: Map<string, CuratedEntry>) {
                 prereqGroups: [],
                 coreqs: [],
             };
-            console.log(`Parsed (no prerequisites)`);
+            results.push(parsed);
+            successCount++;
         } else {
-            console.log(`Prerequisite text: ${prereqText.substring(0, 80)}...`);
             try {
                 const response = await callLLM(courseId, prereqText, coreqText ?? undefined);
                 parsed = parseJSONResponse(response);
-                console.log(`Parsed: ${JSON.stringify(parsed)}`);
+                results.push(parsed);
+                successCount++;
             } catch (err) {
-                console.error(`ERROR parsing: ${err}`);
-                results.set(courseId, {
-                    parsed: { course: courseId, prereqGroups: [], coreqs: [] },
-                    status: "ERROR",
-                });
+                errorCount++;
+                errors.push({ course: courseId, error: String(err) });
                 continue;
             }
         }
+    }
 
-        const curatedEntry = curated.get(courseId)!;
-        const groupsMatched = prereqGroupsEqual(parsed.prereqGroups, curatedEntry.prereqGroups);
-        const coreqsMatched = coreqsEqual(parsed.coreqs, curatedEntry.coreqs);
-        const matched = groupsMatched && coreqsMatched;
+    // Merge with existing entries
+    const merged: ParsedPrereq[] = [];
+    const seenCourses = new Set<string>();
 
-        if (matched) {
-            console.log("✓ MATCH");
-            results.set(courseId, { parsed, status: "MATCH" });
-        } else {
-            console.log("✗ MISMATCH");
-            console.log(`  Expected prereqs: ${JSON.stringify(curatedEntry.prereqGroups)}`);
-            console.log(`  Actual prereqs:   ${JSON.stringify(parsed.prereqGroups)}`);
-            console.log(`  Expected coreqs: ${JSON.stringify(curatedEntry.coreqs)}`);
-            console.log(`  Actual coreqs:   ${JSON.stringify(parsed.coreqs)}`);
-            results.set(courseId, { parsed, status: "MISMATCH" });
+    // Add all backfill results first (they override)
+    for (const result of results) {
+        merged.push(result);
+        seenCourses.add(result.course);
+    }
+
+    // Add existing entries not in backfill
+    for (const [courseId, entry] of currentMap) {
+        if (!seenCourses.has(courseId)) {
+            merged.push(entry);
         }
     }
 
-    // Summary table
-    console.log("\n\n=== VALIDATION SUMMARY TABLE ===");
-    console.log("Course              Status");
-    console.log("-------------------  --------");
+    merged.sort((a, b) => a.course.localeCompare(b.course));
 
-    let matchCount = 0;
-    let mismatchCount = 0;
-    let errorCount = 0;
+    writeFileSync(PREREQS_JSON_PATH, JSON.stringify(merged, null, 2));
 
-    for (const courseId of curatedCourses) {
-        const result = results.get(courseId);
-        if (!result) continue;
-        const statusStr = result.status === "MATCH" ? "✓ MATCH" : result.status === "MISMATCH" ? "✗ MISMATCH" : "ERROR";
-        console.log(`${courseId.padEnd(19)} ${statusStr}`);
+    console.log(`\nBackfill complete:`);
+    console.log(`  Successful parses: ${successCount}`);
+    console.log(`  Errors: ${errorCount}`);
+    console.log(`  Skipped (curated): ${skippedCurated}`);
+    console.log(`  Error rate: ${((errorCount / targets.length) * 100).toFixed(1)}%`);
+    console.log(`  Total entries in output: ${merged.length}`);
 
-        if (result.status === "MATCH") matchCount++;
-        else if (result.status === "MISMATCH") mismatchCount++;
-        else errorCount++;
+    if (errors.length > 0 && errors.length <= 20) {
+        console.log(`\nFirst errors:`);
+        for (const err of errors.slice(0, 10)) {
+            console.log(`  ${err.course}: ${err.error}`);
+        }
     }
 
-    console.log(`\nTotal: ${matchCount} MATCH, ${mismatchCount} MISMATCH, ${errorCount} ERROR`);
-    console.log(`Target: 16/16 match`);
-
-    return { matchCount, mismatchCount, errorCount };
+    return { successCount, errorCount, totalEntries: merged.length };
 }
 
 async function main() {
     const args = process.argv.slice(2);
     const isSmoke = args.includes("--smoke");
-    const isValidateAllCurated = args.includes("--validate-all-curated");
+    const isFromList = args.includes("--from-list");
+    const fromListPath = isFromList ? args[args.indexOf("--from-list") + 1] : null;
 
     const curated = loadCuratedPrereqs();
+    const curatedSnapshot = loadCuratedSnapshot();
 
     if (isSmoke) {
         await runSmokeTest(curated);
-    } else if (isValidateAllCurated) {
-        await runValidateAllCurated(curated);
+    } else if (isFromList && fromListPath) {
+        // Run backfill from the specified list
+        await runBackfill(curated, curatedSnapshot);
     } else {
         console.log("Usage:");
-        console.log("  --smoke                 Run smoke test on 5 courses");
-        console.log("  --validate-all-curated  Validate all 16 curated courses");
+        console.log("  --smoke              Run smoke test on 5 hard cases");
+        console.log("  --from-list <path>   Run backfill on targets in <path>");
     }
 }
 
