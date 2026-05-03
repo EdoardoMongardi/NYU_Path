@@ -63,6 +63,21 @@ export interface Prerequisite {
     prereqGroups: PrereqGroup[];
     /** Corequisites — may be taken concurrently */
     coreqs: string[];
+    /**
+     * Optional grade-threshold map: courseId → required minimum grade
+     * (e.g. "C", "B+", "D"). When the prereq solver checks whether a student
+     * has satisfied a prereq via a particular course, it must ALSO verify
+     * the student's grade for that course meets the threshold here. If a
+     * course in `prereqGroups[].courses[]` is NOT in this map, no grade
+     * threshold applies — only "passed" matters.
+     *
+     * Source: bulletin's "with a Minimum Grade of X" annotations,
+     * extracted by tools/bulletin-parser/extractGradeThresholds.ts.
+     * Reverses Decision #4 ("trust DPR") in favor of explicit threshold
+     * checking — the silent-bug risk on rare high-grade prereqs (B/B+/A-)
+     * outweighs the simplicity argument.
+     */
+    minGrades?: Record<string, string>;
 }
 
 // ---- Rules ----
