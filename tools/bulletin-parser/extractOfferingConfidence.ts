@@ -61,16 +61,16 @@ const OFFERINGS_PATH = join(
 
 type Season = "spring" | "summer" | "fall" | "winter";
 
-// Local 5-tier union. The canonical type lives in
-// packages/shared/src/types.ts as `ConfidenceTier`. The two restriction
-// tiers (`permission_only` / `restricted`) are added here for Task 3;
-// the shared type already includes them.
-type ConfidenceTier =
+// The canonical 6-tier union lives in packages/shared/src/types.ts as
+// `ConfidenceTier`. We narrow here to two subsets: `FrequencyTier` is
+// what the frequency pass can emit; `ConfidenceTier` adds the override
+// tiers from the restriction pass. (`confirmed` lives only in the
+// shared type and is set at runtime by Phase 15's FOSE materializer.)
+type FrequencyTier =
     | "historically_likely"
     | "historically_partial"
-    | "irregular"
-    | "permission_only"
-    | "restricted";
+    | "irregular";
+type ConfidenceTier = FrequencyTier | "permission_only" | "restricted";
 
 // Matches packages/shared/src/types.ts:664 (OfferingEntry). Defined
 // locally here to avoid a build dependency from a tool script.
@@ -139,7 +139,7 @@ function buildReferenceTerms(
 function classifyByFrequency(
     historicalTerms: string[],
     referenceTerms: Record<Season, string[]>,
-): ConfidenceTier {
+): FrequencyTier {
     if (historicalTerms.length === 0) return "irregular";
 
     const offeredSet = new Set(historicalTerms);
@@ -175,12 +175,12 @@ function classifyByFrequency(
 // Public API: builds the courseId → tier map
 // ----------------------------------------------------------------
 
-export function buildFrequencyMap(): Map<string, ConfidenceTier> {
+export function buildFrequencyMap(): Map<string, FrequencyTier> {
     const entries: FoseCatalogEntry[] = JSON.parse(
         readFileSync(FOSE_CATALOG_PATH, "utf-8"),
     );
     const referenceTerms = buildReferenceTerms(entries);
-    const out = new Map<string, ConfidenceTier>();
+    const out = new Map<string, FrequencyTier>();
     for (const e of entries) {
         out.set(e.courseId, classifyByFrequency(e.termsOffered, referenceTerms));
     }
@@ -303,7 +303,7 @@ function smokeTest(): void {
     }
 
     // Distribution summary
-    const dist: Record<ConfidenceTier, number> = {
+    const dist: Record<FrequencyTier, number> = {
         historically_likely: 0,
         historically_partial: 0,
         irregular: 0,
