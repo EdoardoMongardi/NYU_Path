@@ -6,6 +6,14 @@ import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import { formatPatterns } from "../../lib/formatMeetingPatterns";
 import styles from "./chat.module.css";
 
+// Phase 16 Task B — env-flag-gated Clear button. The flag is read at
+// render time (not module-eval) so a Vitest run that mutates the env
+// before the test fixture mounts the sidebar still sees the fresh
+// value.
+function isTestClearEnabled(): boolean {
+    return process.env.NEXT_PUBLIC_ENABLE_TEST_CLEAR === "1";
+}
+
 // Phase 14 Task 10 — load-style proposals
 const LOAD_STYLES: Array<{ value: "balanced" | "frontload" | "backload"; label: string; tooltip: string }> = [
     { value: "balanced", label: "Balanced", tooltip: "Propose a balanced credit load across all semesters" },
@@ -45,6 +53,18 @@ interface ScheduleSidebarProps {
      * `confirm_section_combination`.
      */
     onConfirmCombination?: (proposalId: string) => void;
+    /**
+     * Phase 16 Task B — Update-DPR file picker. Receives the
+     * selected PDF; the page POSTs to /api/onboard/refresh-dpr and
+     * updates `schedule` directly on success.
+     */
+    onRefreshDpr?: (file: File) => Promise<void>;
+    /**
+     * Phase 16 Task B — Clear-data button (test affordance).
+     * Visible only when `NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`. The page
+     * shows a confirm dialog before firing.
+     */
+    onClearAll?: () => Promise<void>;
 }
 
 export default function ScheduleSidebar({
@@ -55,6 +75,8 @@ export default function ScheduleSidebar({
     onProposeLoadStyle,
     onProposeSlotChange,
     onConfirmCombination,
+    onRefreshDpr,
+    onClearAll,
 }: ScheduleSidebarProps) {
     // Track which slot's popover is open. Key = "semIdx-slotIdx"
     const [openPopover, setOpenPopover] = useState<string | null>(null);
@@ -64,6 +86,12 @@ export default function ScheduleSidebar({
     const [selectedComboIdx, setSelectedComboIdx] = useState(0);
     // Ref for click-outside-to-close
     const sidebarRef = useRef<HTMLElement>(null);
+    // Phase 16 Task B — Update-DPR hidden-file-input ref.
+    const refreshDprInputRef = useRef<HTMLInputElement>(null);
+    // Phase 16 Task B — Update-DPR pending state. Disables the button
+    // while the network round-trip is in flight so the student can't
+    // double-fire.
+    const [refreshing, setRefreshing] = useState(false);
 
     // Reset combination selection whenever the underlying materialization
     // changes (new term, new agent run, etc.) so the picker doesn't
@@ -104,12 +132,52 @@ export default function ScheduleSidebar({
         onProposeSlotChange?.(slot, action);
     };
 
+    const handleRefreshDprPick = async (file: File) => {
+        if (!onRefreshDpr || refreshing) return;
+        setRefreshing(true);
+        try {
+            await onRefreshDpr(file);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    const testClearEnabled = isTestClearEnabled();
+
     return (
         <aside ref={sidebarRef} className={styles.scheduleSidebar} aria-label="Forward schedule">
             <div className={styles.scheduleSidebarHeader}>
                 <h2 className={styles.scheduleSidebarTitle}>Your Schedule</h2>
                 <button onClick={onClose} className={styles.scheduleSidebarClose} aria-label="Close schedule">✕</button>
             </div>
+            {/* Phase 16 Task B — Update DPR button at the top. Always
+                visible (even when no schedule has been computed yet)
+                so a returning student can refresh without first having
+                to ask the agent to plan something. */}
+            {onRefreshDpr && (
+                <div className={styles.sidebarToolbar}>
+                    <button
+                        type="button"
+                        className={styles.sidebarToolbarBtn}
+                        onClick={() => refreshDprInputRef.current?.click()}
+                        disabled={refreshing}
+                        title="Upload a fresh DPR PDF — re-plans your schedule if anything changed"
+                    >
+                        {refreshing ? "Updating…" : "↻ Update DPR"}
+                    </button>
+                    <input
+                        ref={refreshDprInputRef}
+                        type="file"
+                        accept=".pdf"
+                        className={styles.sidebarToolbarHiddenInput}
+                        onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) void handleRefreshDprPick(f);
+                            e.target.value = "";
+                        }}
+                    />
+                </div>
+            )}
             {!schedule ? (
                 <p className={styles.scheduleSidebarEmpty}>
                     No plan yet. Ask me what to take next semester to compute one.
@@ -254,6 +322,22 @@ export default function ScheduleSidebar({
                             );
                         });
                     })()}
+                </div>
+            )}
+            {/* Phase 16 Task B — Clear-data button at the bottom.
+                Test-only — env-gated. Sits below the schedule body so
+                it never competes with the primary affordances. The
+                page hosts the confirm dialog. */}
+            {testClearEnabled && onClearAll && (
+                <div className={styles.sidebarToolbarBottom}>
+                    <button
+                        type="button"
+                        className={styles.sidebarClearBtn}
+                        onClick={() => void onClearAll()}
+                        title="Wipe ALL data for this student (test affordance)"
+                    >
+                        ⚠ Clear all data
+                    </button>
                 </div>
             )}
         </aside>

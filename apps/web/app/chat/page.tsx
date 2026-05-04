@@ -6,6 +6,7 @@ import { streamChatV2, extractPendingMutationId, type ChatV2Event, type ForwardM
 import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
 import { formatDuration } from "../../lib/formatDuration";
 import type { ForwardSchedule } from "@nyupath/shared";
+import type { ChatMessageRecord, ToolInvocation } from "@nyupath/engine";
 import ScheduleSidebar from "./scheduleSidebar";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
@@ -178,6 +179,128 @@ export default function ChatPage() {
         };
         raf = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf);
+    }, []);
+
+    // ============================================================
+    // Phase 16 Task B — login restore on mount.
+    // ============================================================
+    // Hits /api/session/restore once. If the response carries a parsed
+    // DPR, the page skips onboarding entirely and lands the student
+    // back in their last conversation. Restored chat messages re-
+    // populate `messages[]` (replacing the WELCOME bubble) so the
+    // pending-mutation confirm buttons / tool-trace pills the student
+    // saw last session render again. When auth is missing or no DPR
+    // is stored we fall through to the existing onboarding flow.
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch("/api/session/restore", { credentials: "same-origin" });
+                if (!res.ok) return; // 401 (anonymous) or transient — skip silently
+                const data = await res.json() as {
+                    profile: unknown | null;
+                    dpr: unknown | null;
+                    forwardSchedule: ForwardSchedule | null;
+                    studentDraftPlan: ForwardSchedule | null;
+                    schedulePreferences: unknown | null;
+                    chatMessages: ChatMessageRecord[];
+                };
+                if (cancelled) return;
+                if (!data.dpr || !data.profile) {
+                    // New student (or pre-Phase-16 data): existing
+                    // onboarding flow handles them.
+                    return;
+                }
+                // ---- Hydrate full session ----
+                // Drop into the post-onboarding state machine immediately.
+                setOnboardingStep("complete");
+                // The v2 route requires `parsedData.kind === "dpr"`. We
+                // wrap the restored DPR in the same discriminated shape
+                // the live onboarding flow produces.
+                setParsedData({ kind: "dpr", report: data.dpr });
+                // Hydrate visa status from the persisted profile so the
+                // v2 route's per-turn body carries the right value
+                // (the profile is the source of truth, but the v2
+                // request shape still passes visaStatus separately).
+                const restoredProfile = data.profile as { visaStatus?: string };
+                if (restoredProfile.visaStatus === "f1" || restoredProfile.visaStatus === "domestic") {
+                    setVisaStatus(restoredProfile.visaStatus);
+                }
+                // Hydrate graduation target from the restored schedule
+                // when present; the v2 route uses it to populate the
+                // system prompt's "graduating in" hint.
+                const sched = data.forwardSchedule ?? data.studentDraftPlan;
+                if (sched?.graduationTerm) {
+                    setGraduationTarget(sched.graduationTerm);
+                }
+                // Hydrate the schedule slot per Decision #32 — the
+                // restore route routes draft plans to studentDraftPlan
+                // and valid plans to forwardSchedule. The sidebar reads
+                // `forwardSchedule` for the live render; surface either
+                // (the sidebar's 4-state banner keys off `state`).
+                if (data.forwardSchedule) {
+                    setForwardSchedule(data.forwardSchedule);
+                } else if (data.studentDraftPlan) {
+                    setForwardSchedule(data.studentDraftPlan);
+                }
+                // ---- Replay chat history ----
+                if (data.chatMessages.length > 0) {
+                    const restored: Message[] = data.chatMessages.map((m, i) => {
+                        // System messages (rare) get rendered as
+                        // assistant bubbles so the layout stays clean.
+                        const role: "user" | "assistant" = m.role === "user" ? "user" : "assistant";
+                        const id = `restored-${i}-${m.createdAt}`;
+                        const tool: ToolStatus[] = (m.toolInvocations ?? []).map((t: ToolInvocation) => ({
+                            toolName: t.toolName,
+                            // Past-tense state — these turns already
+                            // settled. error vs done is derived from
+                            // the invocation's `error` field.
+                            state: t.error ? ("error" as const) : ("done" as const),
+                            ...(t.summary !== undefined ? { summary: t.summary } : {}),
+                            ...(t.error?.message !== undefined ? { error: t.error.message } : {}),
+                        }));
+                        const created = Date.parse(m.createdAt);
+                        const ts = Number.isFinite(created) ? created : Date.now();
+                        const msg: Message = {
+                            id,
+                            role,
+                            content: m.content,
+                            timestamp: new Date(ts),
+                        };
+                        if (tool.length > 0) msg.toolStatuses = tool;
+                        if (m.validatorViolations && m.validatorViolations.length > 0) {
+                            msg.validatorViolations = m.validatorViolations.map((v) => ({
+                                kind: v.kind,
+                                detail: v.detail,
+                                ...(v.caveatId ? { caveatId: v.caveatId } : {}),
+                            }));
+                        }
+                        if (m.pendingMutationId) msg.pendingMutationId = m.pendingMutationId;
+                        if (role === "assistant") {
+                            // Mark as already settled so the typewriter
+                            // doesn't re-stream the restored content.
+                            msg.startedAt = ts;
+                            msg.completedAt = ts;
+                            if (m.thinkingText) {
+                                msg.thinkingText = m.thinkingText;
+                                msg.thinkingRevealed = m.thinkingText.length;
+                                msg.hasRealThinking = true;
+                            }
+                            msg.contentRevealed = m.content.length;
+                        }
+                        return msg;
+                    });
+                    setMessages(restored);
+                    // Scroll past the restored history.
+                    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "auto" }), 50);
+                }
+            } catch (err) {
+                // A failed restore must NOT break the page — fall back
+                // to the existing onboarding flow.
+                console.error("[chat page] /api/session/restore failed:", err);
+            }
+        })();
+        return () => { cancelled = true; };
     }, []);
 
     const addMessage = (role: "user" | "assistant", content: string): Message => {
@@ -512,6 +635,78 @@ export default function ChatPage() {
             setIsLoading(false);
         }
     };
+
+    /**
+     * Phase 16 Task B — Update-DPR sidebar affordance.
+     * POSTs the new PDF to /api/onboard/refresh-dpr; the route
+     * fingerprint-compares with the stored DPR. On match → toast
+     * "No changes detected"; on mismatch → schedule cleared +
+     * replanned and the new schedule is applied directly to
+     * `forwardSchedule` state. Surfaces parse / network errors as a
+     * chat-visible assistant message so the student knows what failed.
+     */
+    const handleRefreshDpr = useCallback(async (file: File): Promise<void> => {
+        if (!file.name.toLowerCase().endsWith(".pdf")) {
+            window.alert("DPR file must be a PDF.");
+            return;
+        }
+        const formData = new FormData();
+        formData.append("dpr", file);
+        try {
+            const res = await fetch("/api/onboard/refresh-dpr", {
+                method: "POST",
+                body: formData,
+                credentials: "same-origin",
+            });
+            const data = await res.json() as {
+                changed?: boolean;
+                schedule?: ForwardSchedule;
+                state?: string;
+                error?: string;
+            };
+            if (!res.ok) {
+                window.alert(`Update DPR failed: ${data.error ?? `HTTP ${res.status}`}`);
+                return;
+            }
+            if (data.changed === false) {
+                window.alert("No changes detected — your stored DPR matches this upload.");
+                return;
+            }
+            if (data.schedule) {
+                setForwardSchedule(data.schedule);
+            }
+            window.alert("Schedule updated to reflect your new DPR.");
+        } catch (err) {
+            window.alert(`Update DPR failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }, []);
+
+    /**
+     * Phase 16 Task B — Clear-data sidebar affordance.
+     * Test-only — gated server-side on NEXT_PUBLIC_ENABLE_TEST_CLEAR=1.
+     * Confirms via dialog before firing; on success reloads the page so
+     * the onboarding flow reruns from a clean slate.
+     */
+    const handleClearAll = useCallback(async (): Promise<void> => {
+        const ok = window.confirm("Wipe ALL data for this student? This cannot be undone.");
+        if (!ok) return;
+        try {
+            const res = await fetch("/api/session/clear", {
+                method: "DELETE",
+                credentials: "same-origin",
+            });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                window.alert(`Clear failed: ${(j as { error?: string }).error ?? `HTTP ${res.status}`}`);
+                return;
+            }
+            // Hard reload — re-runs the onboarding flow from a blank
+            // /api/session/restore.
+            window.location.reload();
+        } catch (err) {
+            window.alert(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }, []);
 
     const handleFileUpload = useCallback(async (file: File) => {
         if (!file.name.toLowerCase().endsWith(".pdf")) {
@@ -854,6 +1049,8 @@ export default function ChatPage() {
                 onProposeLoadStyle={handleProposeLoadStyle}
                 onProposeSlotChange={handleProposeSlotChange}
                 onConfirmCombination={handleConfirmSectionCombination}
+                onRefreshDpr={handleRefreshDpr}
+                onClearAll={handleClearAll}
             />
         </div>
     );

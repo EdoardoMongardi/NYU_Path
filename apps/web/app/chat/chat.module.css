@@ -703,6 +703,78 @@ button.reasoningHeader:focus-visible {
 }
 .slotPopover button:hover { background: var(--bg-secondary); }
 
+/* Phase 16 Task B — Update DPR + Clear sidebar buttons.
+   Both inherit the loadStylePill aesthetic (rounded pill, subtle
+   border, hover swap) so the new affordances feel native. The
+   Update DPR pill sits at the top of the sidebar above the body;
+   the Clear pill sits at the very bottom, slightly offset so it
+   reads as "destructive / test-only" rather than primary. */
+.sidebarToolbar {
+    padding: 12px 20px 0;
+    display: flex;
+    gap: 8px;
+}
+
+.sidebarToolbarBottom {
+    padding: 12px 20px 20px;
+    margin-top: 8px;
+    border-top: 1px dashed var(--border-light);
+    display: flex;
+    justify-content: center;
+}
+
+.sidebarToolbarHiddenInput {
+    display: none;
+}
+
+.sidebarToolbarBtn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    color: var(--text-primary);
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sidebarToolbarBtn:hover:not(:disabled) {
+    background: var(--bg-hover, var(--bg-secondary));
+    border-color: var(--nyu-violet);
+}
+
+.sidebarToolbarBtn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.sidebarToolbarBtn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+    border-color: var(--nyu-violet);
+}
+
+.sidebarClearBtn {
+    background: transparent;
+    border: 1px solid #f5c2c7;
+    color: #842029;
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    font-size: 0.8em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sidebarClearBtn:hover {
+    background: #f8d7da;
+    border-color: #842029;
+}
+
+.sidebarClearBtn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(132, 32, 41, 0.2);
+}
+
 /* Phase 15 Task 8 — Sections view (immediate term, when materialization is full) */
 .materializationBanner {
     background: #fff3cd;
