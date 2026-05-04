@@ -11,6 +11,8 @@ export default defineConfig({
             // The LLM-call runner inside is gated by ANTHROPIC_API_KEY.
             // The 2 inline unit tests (fixture-count + Dneg invariant) run unconditionally.
             "packages/*/tests/**/*.eval.ts",
+            // Phase 14 Task 9 — tools/bulletin-parser unit tests (no LLM calls).
+            "tools/bulletin-parser/**/*.test.ts",
         ],
     },
 });

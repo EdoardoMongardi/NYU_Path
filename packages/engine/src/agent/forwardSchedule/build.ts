@@ -108,12 +108,16 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
         candidateCourses: extractCandidateCourseIds(req),
     }));
 
-    // ---- 6. Build prereq map from session.prereqs ----
+    // ---- 6. Build prereq map + coreq map from session.prereqs ----
 
     const prereqs = new Map<string, import("@nyupath/shared").PrereqGroup[]>();
+    const coreqs = new Map<string, string[]>();
     if (session.prereqs) {
         for (const p of session.prereqs) {
             prereqs.set(p.course, p.prereqGroups);
+            if (p.coreqs && p.coreqs.length > 0) {
+                coreqs.set(p.course, p.coreqs);
+            }
         }
     }
 
@@ -168,6 +172,7 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
         dprCourseHistoryHash,
         dpr,
         programRules: programRules.solverRules,
+        ...(coreqs.size > 0 ? { coreqs } : {}),
     };
 
     // ---- 11. Call the solver ----
