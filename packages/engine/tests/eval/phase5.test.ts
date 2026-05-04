@@ -74,7 +74,7 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 20 NYU Path tools (§7.1 complete after Phase 14 Task 7)", () => {
+    it("buildDefaultRegistry exposes the 22 NYU Path tools (§7.1 complete after Phase 15 Task 7)", () => {
         // Phase 13 Task 6 added two new tools alongside the original 12:
         //   - plan_forward_degree  (replaces plan_semester for multi-term planning;
         //                            old tool kept registered for back-compat)
@@ -88,6 +88,9 @@ describe("buildTool + ToolRegistry", () => {
         //   - bind_pool_slot       (read-only preview of requirement-pool slot binding)
         // Phase 14 Task 7 adds one more:
         //   - compare_plan_alternatives (read-only Tier B fallback, Decision #42)
+        // Phase 15 Task 7 adds two more (two-step section-materialization pair):
+        //   - materialize_sections          (read-only — stages proposalIds)
+        //   - confirm_section_combination   (write — pins CRNs onto specific_planned slots)
         const reg = buildDefaultRegistry();
         const names = reg.list().map((t) => t.name).sort();
         expect(names).toEqual([
@@ -98,8 +101,10 @@ describe("buildTool + ToolRegistry", () => {
             "compare_plan_alternatives",
             "confirm_plan_change",
             "confirm_profile_update",
+            "confirm_section_combination",
             "get_academic_standing",
             "get_credit_caps",
+            "materialize_sections",
             "plan_forward_degree",
             "plan_semester",
             "propose_plan_change",
@@ -114,18 +119,26 @@ describe("buildTool + ToolRegistry", () => {
         ]);
     });
 
-    it("write tools are confirm_profile_update + plan_forward_degree + confirm_plan_change only", () => {
+    it("write tools are confirm_profile_update + plan_forward_degree + confirm_plan_change + confirm_section_combination only", () => {
         // Phase 13 Task 6 added plan_forward_degree as a state-mutating tool.
         // Phase 14 Task 5 adds confirm_plan_change (writes session.schedulePreferences
         // + schedule slot). propose_plan_change and simulate_alternatives are
         // isReadOnly:true.
         // Phase 14 Task 6: bind_free_elective and bind_pool_slot are both isReadOnly:true.
         // Phase 14 Task 7: compare_plan_alternatives is isReadOnly:true.
-        // So the non-read-only set stays at:
-        // {confirm_plan_change, confirm_profile_update, plan_forward_degree}.
+        // Phase 15 Task 7 adds confirm_section_combination (write — pins CRN +
+        // meeting times onto specific_planned slots in-place).
+        // materialize_sections itself is isReadOnly:true (stages proposalIds only).
+        // So the non-read-only set is now:
+        // {confirm_plan_change, confirm_profile_update, confirm_section_combination, plan_forward_degree}.
         const reg = buildDefaultRegistry();
         const writes = reg.list().filter((t) => !t.isReadOnly).map((t) => t.name).sort();
-        expect(writes).toEqual(["confirm_plan_change", "confirm_profile_update", "plan_forward_degree"]);
+        expect(writes).toEqual([
+            "confirm_plan_change",
+            "confirm_profile_update",
+            "confirm_section_combination",
+            "plan_forward_degree",
+        ]);
     });
 });
 
