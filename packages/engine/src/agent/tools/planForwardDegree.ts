@@ -12,6 +12,7 @@
 import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { buildForwardSchedule } from "../forwardSchedule/build.js";
+import { computeDprFingerprint } from "../../dpr/fingerprint.js";
 import type { ForwardSchedule } from "@nyupath/shared";
 
 // ---------------------------------------------------------------------------
@@ -100,6 +101,27 @@ export const planForwardDegreeTool = buildTool({
         } else {
             session.forwardSchedule = schedule;
             storedIn = "forwardSchedule";
+        }
+
+        // Phase 16 Task A — durable schedule persistence. The fingerprint
+        // is content-only (course history + cumulative + programs) so the
+        // Update-DPR route (Task 16.B) can detect meaningful re-uploads
+        // by comparing against the stored row's `dprFingerprint`. Failures
+        // do NOT throw — the in-memory write already landed and the live
+        // turn is the source of truth (mirrors confirm_profile_update's
+        // no-throw persistence pattern).
+        if (session.scheduleStore && session.student) {
+            try {
+                const fingerprint = computeDprFingerprint(dpr);
+                await session.scheduleStore.persistSchedule(
+                    session.student.id,
+                    schedule,
+                    fingerprint,
+                );
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.warn(`[plan_forward_degree] persistSchedule failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
         }
 
         const summary = buildSummary(schedule, storedIn);

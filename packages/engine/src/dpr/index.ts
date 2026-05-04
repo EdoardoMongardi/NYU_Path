@@ -53,3 +53,7 @@ export {
     normalizeGraduationTarget,
 } from "./temporalContext.js";
 export type { DprTemporalContext } from "./temporalContext.js";
+
+// Phase 16 Task A — content-only fingerprint used by the Update-DPR
+// route to detect meaningful re-uploads.
+export { computeDprFingerprint } from "./fingerprint.js";
