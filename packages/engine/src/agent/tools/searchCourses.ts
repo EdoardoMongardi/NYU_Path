@@ -47,9 +47,9 @@ export const searchCoursesTool = buildTool({
         "courses they HAVEN'T taken / could TAKE / NEW courses to consider. " +
         "When set AND the student's DPR is loaded, courses they've already " +
         "completed are filtered out of the result set.\n\n" +
-        "DO NOT call this for \"plan my next semester\" — that's `plan_semester`'s " +
-        "job. search_courses returns the broader catalog; plan_semester walks " +
-        "the student's specific not-yet-satisfied requirements.",
+        "DO NOT call this for \"plan my next semester\" — that's `plan_forward_degree`'s " +
+        "job. search_courses returns the broader catalog; plan_forward_degree walks " +
+        "the student's specific not-yet-satisfied requirements across every remaining term.",
     inputSchema: z.object({
         query: z.string().min(2).describe("Keyword to search for in course titles + ids."),
         departmentPrefix: z.string().optional().describe("e.g., 'CSCI-UA' to limit to CS"),

@@ -280,16 +280,14 @@ const INVOCATION_RULES: InvocationRule[] = [
             "Reply discusses remaining requirements; this requires `run_full_audit`.",
     },
     {
-        // Single-term planning trigger. `plan_forward_degree` (Phase 13)
-        // and `view_forward_plan` (its read-back companion) also satisfy
-        // this rule because they produce term-level recommendations
-        // grounded in the audit. Without this, the validator would force
-        // the agent back to `plan_semester` even when the user explicitly
-        // asked for the multi-term planner — see RC-2 in the May 2026
-        // post-mortem.
+        // Planning recommendation trigger. Since the May 2026 deprecation,
+        // `plan_semester` is no longer registered; `plan_forward_degree`
+        // (Phase 13) is the canonical entry point and `view_forward_plan`
+        // its read-back companion. Both satisfy the gate because they
+        // produce term-level recommendations grounded in the audit.
         triggers: [/\bnext semester\b.+\b(take|enroll|register)\b/i, /\bplan(?:ning)? .* (?:fall|spring|summer)\b/i],
-        requiresAnyOf: ["plan_semester", "plan_forward_degree", "view_forward_plan"],
-        description: "Reply makes a planning recommendation; this requires `plan_semester` or `plan_forward_degree`.",
+        requiresAnyOf: ["plan_forward_degree", "view_forward_plan"],
+        description: "Reply makes a planning recommendation; this requires `plan_forward_degree` (or `view_forward_plan` if the plan was built earlier this session).",
     },
     {
         triggers: [/\binternal[- ]transfer\b/i, /\btransfer to (?:cas|stern|tandon|tisch|steinhardt)\b/i, /\bswitch (?:my )?school\b/i],

@@ -74,10 +74,9 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 22 NYU Path tools (§7.1 complete after Phase 15 Task 7)", () => {
+    it("buildDefaultRegistry exposes the 21 LIVE NYU Path tools (plan_semester deprecated May 2026)", () => {
         // Phase 13 Task 6 added two new tools alongside the original 12:
-        //   - plan_forward_degree  (replaces plan_semester for multi-term planning;
-        //                            old tool kept registered for back-compat)
+        //   - plan_forward_degree  (canonical planner — replaced plan_semester)
         //   - view_forward_plan    (read-only inspection of session.forwardSchedule)
         // Phase 14 Task 5 adds three more:
         //   - propose_plan_change  (read-only preview of mutations)
@@ -91,6 +90,11 @@ describe("buildTool + ToolRegistry", () => {
         // Phase 15 Task 7 adds two more (two-step section-materialization pair):
         //   - materialize_sections          (read-only — stages proposalIds)
         //   - confirm_section_combination   (write — pins CRNs onto specific_planned slots)
+        // May 2026 post-mortem deprecation:
+        //   - plan_semester REMOVED from the live registry. The Phase 5 single-term
+        //     planner conflicted with `plan_forward_degree` for "what should I take
+        //     next semester" routing, leaving session.forwardSchedule unset and the
+        //     schedule sidebar empty. The tool's source file is kept for unit tests.
         const reg = buildDefaultRegistry();
         const names = reg.list().map((t) => t.name).sort();
         expect(names).toEqual([
@@ -106,7 +110,6 @@ describe("buildTool + ToolRegistry", () => {
             "get_credit_caps",
             "materialize_sections",
             "plan_forward_degree",
-            "plan_semester",
             "propose_plan_change",
             "run_full_audit",
             "search_availability",
@@ -484,7 +487,7 @@ describe("responseValidator", () => {
         expect(verdict.violations.some((v) => v.kind === "missing_invocation")).toBe(false);
     });
 
-    it("BLOCKS planning recommendation when neither plan_semester nor plan_forward_degree was invoked", () => {
+    it("BLOCKS planning recommendation when plan_forward_degree (or view_forward_plan) was not invoked", () => {
         // The planning trigger fires on "next semester … take/enroll/register"
         // or "plan(ning) … fall/spring/summer". The reply uses the first form.
         const verdict = validateResponse({

@@ -248,9 +248,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     const searchCoursesFn = getCourseSearchFn();
     const ragBundle = getPolicyRagBundle();
     // Phase 7-E reviewer-followup — load the home-school's config so
-    // get_credit_caps + plan_semester can answer cap/floor questions.
-    // Without this every tool that needs school-level data fell over
-    // with "School config not loaded".
+    // get_credit_caps + plan_forward_degree can answer cap/floor
+    // questions. Without this every tool that needs school-level data
+    // fell over with "School config not loaded".
     const schoolConfig = (() => {
         try {
             return loadSchoolConfig(student.homeSchool);
