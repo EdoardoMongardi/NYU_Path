@@ -1,0 +1,12 @@
+{
+  "query": {
+    "keyword": "CSCI-UA 101",
+    "year": 2028,
+    "term": "fall",
+    "label": "csci-ua-101_2028-fall"
+  },
+  "termCode": "1288",
+  "recordedAt": "2026-05-04T14:32:34.059Z",
+  "resultCount": 0,
+  "results": []
+}

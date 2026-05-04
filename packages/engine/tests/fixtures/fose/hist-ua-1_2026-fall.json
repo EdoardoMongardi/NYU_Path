@@ -1,0 +1,12 @@
+{
+  "query": {
+    "keyword": "HIST-UA 1",
+    "year": 2026,
+    "term": "fall",
+    "label": "hist-ua-1_2026-fall"
+  },
+  "termCode": "1268",
+  "recordedAt": "2026-05-04T14:32:28.387Z",
+  "resultCount": 0,
+  "results": []
+}
