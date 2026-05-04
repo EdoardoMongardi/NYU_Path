@@ -870,3 +870,63 @@ button.reasoningHeader:focus-visible {
     color: var(--text-tertiary, var(--text-secondary));
     font-style: italic;
 }
+
+/* ==========================================================
+   Phase 16 Task C — full-degree sidebar render
+   ----------------------------------------------------------
+   Prior Credits card (TE/AP/IB) + per-slot grade column +
+   locked-completed-row visual treatment. Task 16.D layers tier
+   colors / sticky headers / a summary card on top of these.
+   ========================================================== */
+
+.priorCreditsCard {
+    margin-bottom: 16px;
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: rgba(0, 123, 255, 0.04);
+}
+
+.priorCreditsRow {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 4px 6px;
+    font-size: 0.85em;
+    line-height: 1.4;
+    border-bottom: 1px dashed rgba(0, 0, 0, 0.04);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+
+.priorCreditsRow:last-child {
+    border-bottom: none;
+}
+
+/* Fixed-width final column appended to every slot row so the grade /
+   status text aligns vertically across history / IP / future cards. */
+.slotGradeCell {
+    flex: 0 0 36px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 0.78em;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Completed (history) rows: muted, non-interactive cursor, no hover
+   tint. The 🔒 icon at the row's right edge tells the student why. */
+.slotLocked {
+    cursor: default;
+    opacity: 0.78;
+}
+.slotLocked:hover {
+    background: inherit !important;
+}
+
+.slotLockIcon {
+    flex: 0 0 auto;
+    margin-left: 4px;
+    font-size: 0.78em;
+    opacity: 0.6;
+}

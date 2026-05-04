@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import styles from "./chat.module.css";
 import { streamChatV2, extractPendingMutationId, type ChatV2Event, type ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
 import { formatDuration } from "../../lib/formatDuration";
-import type { ForwardSchedule } from "@nyupath/shared";
-import type { ChatMessageRecord, ToolInvocation } from "@nyupath/engine";
+import type { ForwardSchedule, StudentProfile } from "@nyupath/shared";
+import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@nyupath/engine";
+import { buildStudentProfileFromDpr } from "../../lib/buildSession";
 import ScheduleSidebar from "./scheduleSidebar";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
@@ -758,6 +759,32 @@ export default function ChatPage() {
         if (file) handleFileUpload(file);
     };
 
+    // ============================================================
+    // Phase 16 Task C — derive sidebar inputs (raw DPR + built profile).
+    // ============================================================
+    // Both restore (`{ kind: "dpr", report }`) and the live onboarding
+    // route emit `parsedData` in the discriminated shape. Only the DPR
+    // variant carries the data the new full-degree sidebar needs; for
+    // a transcript-fallback session the page still has parsedData but
+    // not a DPR, so the sidebar gets `null` and falls through to its
+    // future-only render path. The build runs at most once per
+    // parsedData / visaStatus change.
+    const sidebarDpr = useMemo<DegreeProgressReport | null>(() => {
+        if (!parsedData || parsedData.kind !== "dpr") return null;
+        return (parsedData.report ?? null) as DegreeProgressReport | null;
+    }, [parsedData]);
+    const sidebarStudent = useMemo<StudentProfile | null>(() => {
+        if (!sidebarDpr) return null;
+        try {
+            return buildStudentProfileFromDpr(sidebarDpr, {
+                visaStatus: visaStatus === "f1" ? "f1" : "domestic",
+            });
+        } catch (err) {
+            console.error("[chat page] buildStudentProfileFromDpr failed:", err);
+            return null;
+        }
+    }, [sidebarDpr, visaStatus]);
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -1043,6 +1070,8 @@ export default function ChatPage() {
             </div>
             <ScheduleSidebar
                 schedule={forwardSchedule}
+                student={sidebarStudent}
+                dpr={sidebarDpr}
                 materialization={forwardMaterialization}
                 open={sidebarOpen}
                 onClose={() => setSidebarOpen(false)}
