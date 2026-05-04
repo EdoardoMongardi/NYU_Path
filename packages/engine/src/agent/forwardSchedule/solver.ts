@@ -972,8 +972,13 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             let coreqTermRejected = false;
             const coreqTermConstraintDetails: string[] = [];
             for (const coreqId of coreqIds) {
-                // If the coreq is already taken or already planned, no enforcement needed.
+                // If the coreq is already taken, in-progress, or already
+                // planned in some prior term, no enforcement is needed.
+                // (IP courses count as concurrent satisfaction per
+                // Decision #4's optimistic-forward-projection — same
+                // semantics as the prereq path's checkAllPrereqs handles.)
                 if (input.coursesTaken.has(coreqId)) continue;
+                if (input.coursesInProgress.has(coreqId)) continue;
                 if (plannedPlacements.has(coreqId)) continue;
                 // Coreq is unmet — it must be placeable in this same term.
                 const coreqMeta = input.courseCatalog.get(coreqId);
@@ -983,7 +988,13 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
                     coreqTermConstraintDetails.push(`${coreqId}:catalog-absent`);
                     continue;
                 }
-                // Check credit slack with coreq's credits included
+                // Check credit slack against the per-term effective target
+                // (which honors loadStylePerTerm "light"/"heavy" overrides
+                // and explicit creditTargetPerTerm). Falls back to the
+                // hard ceiling so a heavy-load term still has its real
+                // upper bound. Without this min(), preference-driven
+                // light terms would silently accept coreq bundles up to
+                // the hard ceiling, defeating the "light" intent.
                 const projectedCredits = (perTermCredits.get(term) ?? 0) + meta.credits + coreqMeta.credits;
                 const termTargetForCoreq = effectiveTermTarget(
                     term,
@@ -993,8 +1004,9 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
                     input.domesticPartTimeFloor,
                     input.creditCeiling,
                 );
-                if (projectedCredits > input.creditCeiling) {
-                    // Hard ceiling exceeded — can't fit both in this term
+                const coreqCap = Math.min(input.creditCeiling, termTargetForCoreq);
+                if (projectedCredits > coreqCap) {
+                    // Effective per-term cap exceeded — can't fit both in this term
                     coreqTermRejected = true;
                     coreqTermConstraintDetails.push(`${coreqId}:ceiling-exceeded`);
                     break;
