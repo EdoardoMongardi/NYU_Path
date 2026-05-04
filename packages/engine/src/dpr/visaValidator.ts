@@ -169,12 +169,18 @@ function deriveWarningLevel(axes: ValidationResult[]): "none" | "low" | "medium"
     if (axes.some(a => a.status === "fail")) return "high";
     if (axes.some(a => a.status === "requires-approval")) return "medium";
     if (axes.some(a => a.status === "assumed-pass")) return "low";
+    // "none" is reachable only after Phase 15 promotes the online/in-person
+    // axes from `assumed-pass` to verified `pass`/`fail` based on FOSE
+    // meetingPattern data. Pre-Phase-15, every call returns at most "low".
     return "none";
 }
 
 // ---- Citations derivation ----
 
-function deriveCitations(result: Omit<VisaValidationResult, "overallWarningLevel" | "citations">): string[] {
+function deriveCitations(
+    result: Omit<VisaValidationResult, "overallWarningLevel" | "citations">,
+    visaStatus: string | undefined,
+): string[] {
     const cites: string[] = [];
     if (result.rclEligible.status === "requires-approval") {
         cites.push("OGS Policy: Reduced Course Load (RCL) for F-1 students");
@@ -188,7 +194,13 @@ function deriveCitations(result: Omit<VisaValidationResult, "overallWarningLevel
     ) {
         cites.push("OGS Policy: F-1 Final-Term Enrollment Exception");
     }
-    if (result.onlineLimitSatisfied.status === "assumed-pass") {
+    // Online-cap citation is F-1-specific. The axis returns assumed-pass for
+    // every student pre-Phase-15, but only F-1 students are subject to the
+    // 3-credits-per-term limit, so domestic students must not see this cite.
+    if (
+        visaStatus === "f1" &&
+        result.onlineLimitSatisfied.status === "assumed-pass"
+    ) {
         cites.push("OGS Policy: F-1 Online Course Limit (3 credits per term)");
     }
     return cites;
@@ -228,6 +240,6 @@ export function visaValidator(ctx: VisaInputContext): VisaValidationResult {
     return {
         ...partialResult,
         overallWarningLevel: deriveWarningLevel(allAxes),
-        citations: deriveCitations(partialResult),
+        citations: deriveCitations(partialResult, ctx.profile.visaStatus),
     };
 }
