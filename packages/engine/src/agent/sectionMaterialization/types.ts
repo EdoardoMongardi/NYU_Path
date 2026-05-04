@@ -98,6 +98,23 @@ export interface MaterializedSemester {
 
 export type AvailabilityState = "full" | "partial" | "unavailable";
 
+/**
+ * Phase 15 Task 6 (Decision #43) — precomputed verdict surfaced from
+ * the orchestrator into the visa validator's
+ * `VisaInputContext.schedulingPreferenceCheck` axis. The shape mirrors
+ * the discriminated union defined in `visaValidator.ts:90-93`.
+ *
+ *   - "absent"    → no SchedulingPreferences supplied; visa axis returns assumed-pass.
+ *   - "satisfied" → preferences supplied AND ≥1 strict-passing combination exists post-cascade.
+ *   - "violated"  → a strict filter eliminated all sections of some course AND
+ *                   the swap cascade exhausted alternatives. `reason` names the
+ *                   eliminated course + filter type for downstream display.
+ */
+export type SchedulingPreferenceCheck =
+    | { kind: "absent" }
+    | { kind: "satisfied" }
+    | { kind: "violated"; reason: string };
+
 export interface MaterializationResult {
     state: AvailabilityState;
     /** Populated when state === "full". */
@@ -110,4 +127,14 @@ export interface MaterializationResult {
     partialCourses?: Array<{ courseId: string; title: string; sections: SectionView[] }>;
     /** Always populated: explanation for the student. */
     message: string;
+    /**
+     * Precomputed Decision-#43 verdict for the visa validator. Always
+     * present when the orchestrator runs to completion; the caller
+     * (Task 7's `materialize_sections` tool wrapper) feeds this verbatim
+     * into `VisaInputContext.schedulingPreferenceCheck`.
+     *
+     * Optional because callers that bypass the orchestrator (e.g. legacy
+     * structural-only flows) won't populate it.
+     */
+    schedulingPreferenceCheck?: SchedulingPreferenceCheck;
 }
