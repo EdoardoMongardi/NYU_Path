@@ -1,5 +1,5 @@
 // ============================================================
-// Default ToolRegistry — wires the 17 NYU Path tools (§7.1 + Phase 13 + Phase 14 Task 5)
+// Default ToolRegistry — wires the 19 NYU Path tools (§7.1 + Phase 13 + Phase 14)
 // ============================================================
 // All §7.1 tools shipped:
 //   run_full_audit, plan_semester, check_transfer_eligibility,
@@ -10,6 +10,8 @@
 //   plan_forward_degree, view_forward_plan
 // Phase 14 Task 5 additions:
 //   propose_plan_change, confirm_plan_change, simulate_alternatives
+// Phase 14 Task 6 additions:
+//   bind_free_elective, bind_pool_slot
 // ============================================================
 import { ToolRegistry, type Tool } from "./tool.js";
 import { runFullAuditTool } from "./tools/runFullAudit.js";
@@ -28,6 +30,8 @@ import { viewForwardPlanTool } from "./tools/viewForwardPlan.js";
 import { proposePlanChangeTool } from "./tools/proposePlanChange.js";
 import { confirmPlanChangeTool } from "./tools/confirmPlanChange.js";
 import { simulateAlternativesTool } from "./tools/simulateAlternatives.js";
+import { bindFreeElectiveTool } from "./tools/bindFreeElective.js";
+import { bindPoolSlotTool } from "./tools/bindPoolSlot.js";
 import type { ZodTypeAny } from "zod";
 
 export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
@@ -48,6 +52,8 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     proposePlanChangeTool as unknown as Tool<ZodTypeAny, unknown>,
     confirmPlanChangeTool as unknown as Tool<ZodTypeAny, unknown>,
     simulateAlternativesTool as unknown as Tool<ZodTypeAny, unknown>,
+    bindFreeElectiveTool as unknown as Tool<ZodTypeAny, unknown>,
+    bindPoolSlotTool as unknown as Tool<ZodTypeAny, unknown>,
 ];
 
 /**
@@ -76,4 +82,6 @@ export {
     proposePlanChangeTool,
     confirmPlanChangeTool,
     simulateAlternativesTool,
+    bindFreeElectiveTool,
+    bindPoolSlotTool,
 };

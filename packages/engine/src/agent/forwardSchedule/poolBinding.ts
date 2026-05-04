@@ -6,9 +6,11 @@
  * bindingState: "unbound" and bound: undefined.
  *
  * `promotePoolSlotToConcrete()` takes a pool slot + a candidate
- * courseId and produces a bound slot. Validates the courseId is in
- * poolBinding.candidates and emits the bound shape. Used by Stage 7
- * when prereq chains or feasibility require a specific courseId.
+ * courseId and produces a ScheduleSlotSpecificPlanned. The parent
+ * slot transitions from kind:"placeholder" to kind:"specific_planned"
+ * via confirm_plan_change — this helper returns the new concrete slot
+ * shape, and the caller (confirm_plan_change / bindPoolSlot) splices it
+ * into forwardSchedule.semesters[].slots[].
  *
  * Phase 14's `bindPoolSlot` tool is the student-facing entry point;
  * this module provides the solver-side mechanics.
@@ -16,7 +18,12 @@
  * Pure functions — no I/O, no module state.
  */
 
-import type { PoolBinding, RequirementPoolSlot } from "@nyupath/shared";
+import type {
+    PoolBinding,
+    RequirementPoolSlot,
+    ScheduleSlotSpecificPlanned,
+    ScheduleSlotPlaceholder,
+} from "@nyupath/shared";
 
 /**
  * Args for `placePoolSlot`.
@@ -52,34 +59,49 @@ export function placePoolSlot(args: PlacePoolSlotArgs): RequirementPoolSlot {
 }
 
 export interface PromotePoolSlotArgs {
+    /** The parent ScheduleSlotPlaceholder (for credits, rationale, etc.) */
+    parentSlot: ScheduleSlotPlaceholder;
+    /** The inner RequirementPoolSlot within the parent. */
     placeholder: RequirementPoolSlot;
     chosenCourseId: string;
+    /** Title for the concrete slot (lookup from session.courses). */
+    courseTitle: string;
 }
 
 export interface PromotePoolSlotResult {
     success: boolean;
     /**
-     * When success === true: the bound slot (RequirementPoolSlot with
-     * bindingState: "bound" and bound: chosenCourseId).
-     * Phase 14's binding tool then transitions the parent ScheduleSlot
-     * from kind:"placeholder" to kind:"specific_planned" — that transition
-     * is the binding tool's responsibility, not this helper's.
+     * When success === true: the new ScheduleSlotSpecificPlanned that
+     * replaces the parent placeholder slot in forwardSchedule.semesters[].slots[].
+     *
+     * Phase 14 Task 6 contract: the binding tool (bindPoolSlot) calls this,
+     * then confirm_plan_change splices the new slot into the schedule.
+     * The RequirementPoolSlot itself is never mutated to a "bound" state;
+     * the PARENT placeholder slot is replaced entirely.
      */
-    bound?: RequirementPoolSlot;
+    concreteSlot?: ScheduleSlotSpecificPlanned;
     /** Failure reason when success === false. */
-    rejectedBecause?: "not-in-candidates" | "already-bound";
+    rejectedBecause?: "not-in-candidates" | "already-promoted";
 }
 
 /**
- * Attempt to bind a pool slot to a specific courseId.
- * Returns failure if the courseId is not in candidates or slot is already bound.
+ * Attempt to promote a pool slot to a concrete ScheduleSlotSpecificPlanned.
+ * Returns failure if the courseId is not in candidates or the parent slot
+ * has already been promoted (bindingState is not "unbound" or "candidate-set").
+ *
+ * Phase 14 Task 6 — binding-tool contract:
+ * On success, the caller replaces the placeholder slot with concreteSlot
+ * in the ForwardSchedule. The RequirementPoolSlot's "bound" state variant
+ * has been removed from the type (Decision #38); this function reflects that
+ * by returning a fully-concrete ScheduleSlotSpecificPlanned instead.
  */
 export function promotePoolSlotToConcrete(args: PromotePoolSlotArgs): PromotePoolSlotResult {
-    const { placeholder, chosenCourseId } = args;
+    const { parentSlot, placeholder, chosenCourseId, courseTitle } = args;
 
-    // Guard: already bound
-    if (placeholder.bindingState === "bound") {
-        return { success: false, rejectedBecause: "already-bound" };
+    // Guard: parent slot already has a specific course (would only happen if
+    // the caller incorrectly passes a non-placeholder parent).
+    if (parentSlot.bindingState !== "placeholder-pending" && parentSlot.bindingState !== "placeholder-deferred") {
+        return { success: false, rejectedBecause: "already-promoted" };
     }
 
     // Guard: not in candidates
@@ -87,11 +109,25 @@ export function promotePoolSlotToConcrete(args: PromotePoolSlotArgs): PromotePoo
         return { success: false, rejectedBecause: "not-in-candidates" };
     }
 
-    const bound: RequirementPoolSlot = {
-        ...placeholder,
+    // Build the concrete ScheduleSlotSpecificPlanned from the parent placeholder's metadata.
+    const concreteSlot: ScheduleSlotSpecificPlanned = {
+        kind: "specific_planned",
+        courseId: chosenCourseId,
+        title: courseTitle,
+        credits: parentSlot.credits,
+        satisfiesRules: parentSlot.satisfiesRules,
+        reason: `Bound from pool: ${placeholder.ruleId}`,
+        rationale: parentSlot.rationale,
+        flexibility: parentSlot.flexibility,
+        downstreamImpact: parentSlot.downstreamImpact,
+        workloadTier: parentSlot.workloadTier,
+        workloadWeight: parentSlot.workloadWeight,
         bindingState: "bound",
-        bound: chosenCourseId,
+        confidence: parentSlot.confidence,
+        isCriticalPath: parentSlot.isCriticalPath,
+        ...(parentSlot.optionalReason ? { optionalReason: parentSlot.optionalReason } : {}),
+        ...(parentSlot.approvalAuthority ? { approvalAuthority: parentSlot.approvalAuthority } : {}),
     };
 
-    return { success: true, bound };
+    return { success: true, concreteSlot };
 }

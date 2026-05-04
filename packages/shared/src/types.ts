@@ -765,22 +765,50 @@ export interface RequirementPoolSlot {
     ruleId: string;
     candidates: string[];               // courseIds
     constraints: Array<{ kind: string; detail: string }>;
-    bindingState: "unbound" | "candidate-set" | "bound";
-    bound?: string;                     // courseId
+    /**
+     * Binding-tool contract (Phase 14 Task 6):
+     * - "unbound"       — initial state, no candidate selected
+     * - "candidate-set" — candidate narrowed but not yet committed
+     *
+     * NOTE: "bound" is intentionally absent. When the binding tool
+     * successfully selects a courseId, the PARENT ScheduleSlotPlaceholder
+     * transitions to kind:"specific_planned" via confirm_plan_change. The
+     * RequirementPoolSlot itself never reaches a "bound" state; the slot is
+     * replaced, not mutated. See Decision #38 + Phase 14 Task 6 contract.
+     */
+    bindingState: "unbound" | "candidate-set";
+    bound?: string;                     // courseId (set transiently for transition staging only)
 }
 
 export interface FreeCreditSlot {
     kind: "free-credit";
     defaultWeight: 0.3;                 // per Decision #37
-    bindingState: "placeholder-pending" | "placeholder-deferred" | "bound";
-    bound?: string;                     // courseId
+    /**
+     * Binding-tool contract (Phase 14 Task 6):
+     * - "placeholder-pending"  — awaiting student binding
+     * - "placeholder-deferred" — deferred to a later advising step
+     *
+     * NOTE: "bound" is intentionally absent. When bound, the parent slot
+     * transitions from kind:"placeholder" to kind:"specific_planned".
+     * A FreeCreditSlot in a "bound" state is unreachable by valid code paths.
+     * See Decision #37 + Phase 14 Task 6 contract.
+     */
+    bindingState: "placeholder-pending" | "placeholder-deferred";
 }
 
 export interface AdvisingPlaceholderSlot {
     kind: "advising-placeholder";
     advisingNote: string;
-    bindingState: "advisor-pending" | "bound";
-    bound?: string;                     // courseId
+    /**
+     * Binding-tool contract (Phase 14 Task 6):
+     * - "advisor-pending" — requires adviser decision before binding
+     *
+     * NOTE: "bound" is intentionally absent. When bound, the parent slot
+     * transitions from kind:"placeholder" to kind:"specific_planned".
+     * An AdvisingPlaceholderSlot in a "bound" state is unreachable.
+     * See Decision #38 + Phase 14 Task 6 contract.
+     */
+    bindingState: "advisor-pending";
 }
 
 /** Tagged union per Decision #38. The `kind` discriminator enables
