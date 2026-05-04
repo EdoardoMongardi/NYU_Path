@@ -67,10 +67,14 @@ export default function ScheduleSidebar({
 
     // Reset combination selection whenever the underlying materialization
     // changes (new term, new agent run, etc.) so the picker doesn't
-    // remember a tab index that may no longer exist.
+    // remember a tab index that may no longer exist. Depend on the
+    // stable `computedAt` timestamp rather than the object reference so
+    // no-op re-emits of the same materialization (e.g. an unrelated
+    // follow-up turn that re-streams the same SSE event) don't clobber
+    // the user's chosen combination tab.
     useEffect(() => {
         setSelectedComboIdx(0);
-    }, [materialization]);
+    }, [materialization?.computedAt]);
 
     // Close popover on outside click
     useEffect(() => {
@@ -348,7 +352,7 @@ function renderSectionsView(
             )}
             {semester?.combinationsTruncated && (
                 <p className={styles.truncatedNote}>
-                    {`and ${proposals.length === semester.combinations.length ? "more" : "additional"} conflict-free combinations not listed`}
+                    {`and more conflict-free combinations not listed (showing top ${proposals.length})`}
                 </p>
             )}
         </div>
