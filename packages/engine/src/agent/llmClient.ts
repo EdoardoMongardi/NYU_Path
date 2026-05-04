@@ -89,4 +89,5 @@ export interface LLMClient {
  */
 export type LLMStreamEvent =
     | { type: "text_delta"; text: string }
+    | { type: "thinking_delta"; text: string }
     | { type: "done"; completion: LLMCompletion };

@@ -66,7 +66,12 @@ export const searchPolicyTool = buildTool({
     inputSchema: z.object({
         query: z.string().min(2).describe("Natural-language policy question."),
     }),
-    maxResultChars: 2500,
+    // Phase 11.2 follow-up — bumped from 2500 to 6000 so program /
+    // minor / curriculum chunks (often 3KB+) reach the agent in
+    // full. The 240-char per-chunk truncation was the dominant
+    // reason agents kept saying "I don't have the specific course
+    // codes" even when retrieval found the right chunk.
+    maxResultChars: 6000,
     async validateInput(_input, { session }) {
         if (!session.rag) return { ok: false, userMessage: "RAG corpus not loaded." };
         if (!session.student) {
@@ -196,7 +201,13 @@ export const searchPolicyTool = buildTool({
                 lines.push(``);
                 lines.push(`-- ADDITIONAL RAG HITS (for context; not necessarily what the user asked) --`);
                 for (const h of ragHits) {
-                    const snippet = h.chunk.text.slice(0, 240).replace(/\s+/g, " ");
+                    // Phase 11.2 — bumped from 240 → 1400 so course-list
+                    // chunks (program / minor / curriculum pages, often
+                    // 2-3KB) reach the agent intact. 240 was hiding
+                    // the load-bearing course codes after the first
+                    // ~30 words of every chunk. Generic across all
+                    // program / minor / curriculum lookups.
+                    const snippet = h.chunk.text.slice(0, 1400).replace(/\s+/g, " ");
                     lines.push(`  [${h.chunk.meta.school}/${h.chunk.meta.section}] (rerank ${h.rerankScore.toFixed(2)})`);
                     lines.push(`    ${snippet}…`);
                     lines.push(`    Source: ${h.chunk.meta.source} (${h.chunk.meta.sourcePath}:${h.chunk.meta.sourceLine})`);
@@ -224,7 +235,8 @@ export const searchPolicyTool = buildTool({
         }
         lines.push(`RAG hits${transferTag} (confidence=${result.confidence}; scope=${result.scopedSchools.join(",")}; override=${result.overrideTriggered})`);
         for (const h of (result.hits ?? []).slice(0, 3)) {
-            const snippet = h.chunk.text.slice(0, 280).replace(/\s+/g, " ");
+            // Phase 11.2 — same expansion as the template-merged path above.
+            const snippet = h.chunk.text.slice(0, 1400).replace(/\s+/g, " ");
             lines.push(`  [${h.chunk.meta.school}/${h.chunk.meta.section}] (rerank ${h.rerankScore.toFixed(2)})`);
             lines.push(`    ${snippet}…`);
             lines.push(`    Source: ${h.chunk.meta.source} (${h.chunk.meta.sourcePath}:${h.chunk.meta.sourceLine})`);

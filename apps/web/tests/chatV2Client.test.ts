@@ -64,13 +64,14 @@ describe("streamChatV2 (Phase 6.5 P-1)", () => {
         expect(events[0]).toMatchObject({ kind: "token", text: "split" });
     });
 
-    it("yields all 7 event kinds end-to-end", async () => {
+    it("yields all 8 event kinds end-to-end", async () => {
         const all: ChatV2Event[] = [
             { kind: "template_match", templateId: "t", body: "b", source: "s" },
             { kind: "tool_invocation_start", toolName: "x", args: {} },
             { kind: "tool_invocation_done", toolName: "x", summary: "ok" },
-            { kind: "validator_block", violations: [{ kind: "ungrounded_number", detail: "..." }] },
+            { kind: "thinking", text: "let me think" },
             { kind: "token", text: "hi" },
+            { kind: "validator_block", violations: [{ kind: "ungrounded_number", detail: "..." }] },
             { kind: "done", finalText: "hi", modelUsedId: "m" },
             { kind: "error", message: "boom" },
         ];
@@ -117,6 +118,53 @@ describe("streamChatV2 (Phase 6.5 P-1)", () => {
         }
         expect(events).toHaveLength(1);
         expect(events[0]!.kind).toBe("token");
+    });
+
+    it("parses a thinking event and round-trips its text", async () => {
+        const chunks = [
+            "event: thinking\ndata: " + JSON.stringify({ kind: "thinking", text: "Let me think about this." }) + "\n\n",
+            "event: done\ndata: " + JSON.stringify({ kind: "done", finalText: "ok", modelUsedId: "claude-haiku-4-5-20251001" }) + "\n\n",
+        ];
+        installFetch(async () => fakeResponse(chunks));
+        const events: ChatV2Event[] = [];
+        for await (const ev of streamChatV2({ message: "hi", parsedData: {} })) {
+            events.push(ev);
+        }
+        expect(events).toEqual([
+            { kind: "thinking", text: "Let me think about this." },
+            { kind: "done", finalText: "ok", modelUsedId: "claude-haiku-4-5-20251001" },
+        ]);
+    });
+
+    it("parses a forward_schedule_update event and round-trips its payload", async () => {
+        const fakeSchedule = {
+            studentId: "t",
+            homeSchoolId: "cas",
+            graduationTerm: "2027-spring",
+            creditTargetPerSemester: 16,
+            f1Floor: 12,
+            domesticPartTimeFloor: 8,
+            graduationCreditMinimum: 128,
+            degreeCreditsMet: false,
+            semesters: [],
+            dprCourseHistoryHash: "abc",
+            computedAt: 0,
+            feasibility: { feasible: true, constraintViolations: [], placementRationale: {} },
+            state: "valid-clean",
+            balanceScore: 0.9,
+            assumptions: [],
+        } as const;
+        const chunks = [
+            "event: forward_schedule_update\ndata: " + JSON.stringify({ kind: "forward_schedule_update", schedule: fakeSchedule }) + "\n\n",
+            "event: done\ndata: " + JSON.stringify({ kind: "done", finalText: "ok", modelUsedId: "claude-haiku-4-5-20251001" }) + "\n\n",
+        ];
+        installFetch(async () => fakeResponse(chunks));
+        const events: ChatV2Event[] = [];
+        for await (const ev of streamChatV2({ message: "hi", parsedData: {} })) {
+            events.push(ev);
+        }
+        expect(events[0]).toEqual({ kind: "forward_schedule_update", schedule: fakeSchedule });
+        expect(events[1]!.kind).toBe("done");
     });
 });
 

@@ -33,6 +33,49 @@ import type {
     LLMToolDef,
 } from "../llmClient.js";
 
+// ============================================================
+// Extended thinking helpers (Phase 10 Task 1)
+// ============================================================
+// Anthropic contract:
+//   - `thinking: { type: "enabled", budget_tokens: N }` enables thinking.
+//   - `temperature` MUST be 1 when thinking is enabled.
+//   - `max_tokens` MUST be > `budget_tokens`.
+// Kill switch: NYUPATH_DISABLE_THINKING=1 disables thinking entirely
+// (useful for fallback debugging and to opt out of latency/cost).
+// ============================================================
+
+const THINKING_BUDGET_TOKENS = 4096;
+const THINKING_HEADROOM_TOKENS = 1024;
+
+// Truthy-string parser for the kill switch. We accept any of the
+// common shorthand values so an ops human flipping it in production
+// doesn't get bitten by `"true"` vs `"1"` confusion.
+function thinkingEnabled(): boolean {
+    const raw = (process.env.NYUPATH_DISABLE_THINKING ?? "").toLowerCase().trim();
+    const disabled = raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+    return !disabled;
+}
+
+/**
+ * Compute the params Anthropic needs when extended thinking is in
+ * play. Thinking is ONLY enabled for the streaming path, because
+ * the block-mode `complete()` discards thinking blocks (no consumer
+ * surfaces them). Burning a 4K-token thinking budget on a path
+ * that throws away the result is pure waste.
+ */
+function buildThinkingParams(maxTokens: number, temperature: number, streaming: boolean) {
+    if (!streaming || !thinkingEnabled()) {
+        return { thinking: undefined, max_tokens: maxTokens, temperature };
+    }
+    return {
+        thinking: { type: "enabled" as const, budget_tokens: THINKING_BUDGET_TOKENS },
+        // max_tokens must accommodate the thinking budget plus the actual reply.
+        max_tokens: Math.max(maxTokens, THINKING_BUDGET_TOKENS + THINKING_HEADROOM_TOKENS),
+        // Anthropic API contract: temperature MUST be 1 when thinking is on.
+        temperature: 1,
+    };
+}
+
 export interface AnthropicClientOptions {
     /** Anthropic model id, e.g., "claude-sonnet-4-6" */
     modelId: string;
@@ -68,13 +111,15 @@ export class AnthropicEngineClient implements LLMClient {
         const start = Date.now();
         const userAssistant = args.messages.map(toAnthropicMessage);
 
+        const tp = buildThinkingParams(args.maxTokens ?? 1024, args.temperature ?? 0, false);
         const response = await this.client.messages.create(
             {
                 model: this.model,
-                max_tokens: args.maxTokens ?? 1024,
-                temperature: args.temperature ?? 0,
+                max_tokens: tp.max_tokens,
+                temperature: tp.temperature,
                 system: args.system,
                 messages: userAssistant,
+                ...(tp.thinking ? { thinking: tp.thinking } : {}),
                 ...(args.tools && args.tools.length > 0
                     ? {
                         tools: args.tools.map((t) => ({
@@ -100,6 +145,9 @@ export class AnthropicEngineClient implements LLMClient {
                     name: block.name,
                     args: (block.input ?? {}) as Record<string, unknown>,
                 });
+            } else if (block.type === "thinking") {
+                // Block-mode callers (sync .complete()) don't surface thinking
+                // — only the streaming path forwards it as deltas.
             }
         }
 
@@ -127,13 +175,15 @@ export class AnthropicEngineClient implements LLMClient {
         const start = Date.now();
         const userAssistant = args.messages.map(toAnthropicMessage);
 
+        const stp = buildThinkingParams(args.maxTokens ?? 1024, args.temperature ?? 0, true);
         const stream = this.client.messages.stream(
             {
                 model: this.model,
-                max_tokens: args.maxTokens ?? 1024,
-                temperature: args.temperature ?? 0,
+                max_tokens: stp.max_tokens,
+                temperature: stp.temperature,
                 system: args.system,
                 messages: userAssistant,
+                ...(stp.thinking ? { thinking: stp.thinking } : {}),
                 ...(args.tools && args.tools.length > 0
                     ? {
                         tools: args.tools.map((t) => ({
@@ -150,8 +200,9 @@ export class AnthropicEngineClient implements LLMClient {
         // Buffer per content_block index. Anthropic emits
         // `content_block_start` (with type+id+name for tool_use, or
         // type=text), then `content_block_delta` events. We yield
-        // text_delta for text deltas, and accumulate tool_use
-        // partial_json deltas to JSON.parse at content_block_stop.
+        // text_delta for text deltas, thinking_delta for thinking
+        // deltas, and accumulate tool_use partial_json deltas to
+        // JSON.parse at content_block_stop.
         type Buf = { type: "text" | "tool_use"; text?: string; toolId?: string; toolName?: string; argsRaw?: string };
         const blocks = new Map<number, Buf>();
         let modelEcho: string | undefined;
@@ -173,12 +224,19 @@ export class AnthropicEngineClient implements LLMClient {
                         argsRaw: "",
                     });
                 }
+                // thinking blocks: no registration needed — the content_block_delta
+                // handler dispatches on delta.type directly, not on buf.type.
                 continue;
             }
             if (ev.type === "content_block_delta") {
+                const delta = ev.delta;
+                // thinking_delta does not require a registered buf — yield it directly.
+                if (delta.type === "thinking_delta") {
+                    yield { type: "thinking_delta", text: (delta as { type: "thinking_delta"; thinking: string }).thinking };
+                    continue;
+                }
                 const buf = blocks.get(ev.index);
                 if (!buf) continue;
-                const delta = ev.delta;
                 if (delta.type === "text_delta" && buf.type === "text") {
                     buf.text = (buf.text ?? "") + delta.text;
                     yield { type: "text_delta", text: delta.text };

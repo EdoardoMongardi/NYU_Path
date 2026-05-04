@@ -32,6 +32,11 @@ import {
     notSatisfiedRequirements,
     type DPRRequirement,
 } from "../../dpr/schema.js";
+import {
+    verifyPlanFeasibility,
+    type FeasibilityViolation,
+} from "../verifiers/planFeasibility.js";
+import { renderEnvelopeMeta, type Disclaimer } from "../toolEnvelope.js";
 
 /**
  * Phase 10 F1 — already-registered courses for the target term.
@@ -61,6 +66,23 @@ interface PlanSemesterOutput extends SemesterPlan {
      *  config with `f1FullTimeMinCredits`, surface the gap so the agent
      *  can answer "do I need more credits to keep my visa?". */
     remainingCreditsToReachF1Floor?: number | null;
+    /** Phase 11 follow-up — requirements the planner could have
+     *  suggested for this term but pruned because adding them would
+     *  push the plan past the school's per-semester ceiling. The
+     *  agent surfaces them as "deferred to a later term" so the
+     *  student knows the full picture. Generic across all programs. */
+    deferredToFutureTerms?: Array<{
+        courseId: string;
+        title: string;
+        credits: number;
+        reason: string;
+    }>;
+    /** Phase 11 S2 — deterministic feasibility-check disclaimers
+     *  derived from school config + DPR + prereq graph. The agent
+     *  surfaces these via the Phase 10 envelope-rendering posture. */
+    disclaimers?: Disclaimer[];
+    /** Phase 11 S2 — raw verifier violations for downstream debugging. */
+    feasibilityViolations?: FeasibilityViolation[];
 }
 
 /**
@@ -123,6 +145,22 @@ export const planSemesterTool = buildTool({
         "GPA + credits + remaining requirements. If the user asks for a\n" +
         "SPECIFIC term, pass that as targetSemester (use the `nextTerm`\n" +
         "from the temporal-context block when in doubt).\n\n" +
+        "WORKLOAD-BALANCED PLANNING (Phase 11.2):\n" +
+        "ALWAYS pass `graduationTerm` (from the temporal-context block) " +
+        "when the student has a stated graduation target. The planner then " +
+        "spreads remaining 'hard' requirements (school core, CAS Core " +
+        "Curriculum, major required, major electives) evenly across the " +
+        "semesters between targetSemester and graduationTerm so no single " +
+        "term is overloaded AND no last term is left empty. Free-elective " +
+        "slots fill the remaining schedule capacity. The student can ask " +
+        "for `loadStyle: 'frontload'` to take everything now or " +
+        "`'backload'` to defer; default 'balanced'.\n\n" +
+        "OFFERING-PATTERN CHECK (Phase 11.2):\n" +
+        "When `searchAvailabilityFn` is wired (production route), the " +
+        "planner verifies each candidate course against the target term " +
+        "via FOSE before adding it. Courses not offered that term are " +
+        "deferred. Courses offered ONLY once before graduation become " +
+        "MUST-take for that term — surface that constraint clearly.\n\n" +
         "DO NOT call this for elective discovery (\"suggest a CS elective " +
         "I haven't taken\"). plan_semester only surfaces courses that " +
         "satisfy not-yet-satisfied requirements; it doesn't enumerate " +
@@ -142,24 +180,68 @@ export const planSemesterTool = buildTool({
         maxCourses: z.number().int().positive().optional(),
         maxCredits: z.number().positive().optional(),
         programId: z.string().optional()
-            .describe("Optional: plan against a specific declared program."),
+            .describe(
+                "The student's program ID (e.g. 'computer_science_math'). " +
+                "If the student has exactly one declared program, omit this and validateInput will fill it in. " +
+                "If the student has multiple programs, this is REQUIRED — the planner will refuse without it.",
+            ),
+        graduationTerm: z.string().optional()
+            .describe(
+                "Optional: e.g. '2027-spring'. When set, the planner spreads " +
+                "remaining hard requirements (school core, major required, major " +
+                "electives) evenly across the semesters between targetSemester " +
+                "and graduationTerm so no single term is overloaded.",
+            ),
+        loadStyle: z.enum(["balanced", "frontload", "backload"]).optional()
+            .describe(
+                "Distribution style for hard requirements when graduationTerm is " +
+                "set. Default 'balanced' = equal split. 'frontload' = prefer " +
+                "this term. 'backload' = prefer later terms.",
+            ),
     }),
     maxResultChars: 3500,
     async validateInput(input, { session }) {
         if (!session.student) return { ok: false, userMessage: "I need your transcript or Degree Progress Report first." };
-        // DPR path: only needs DPR + student.
+
+        // Phase 12 Task 4 — programId auto-default + multi-program guard.
+        // Runs BEFORE the DPR-vs-authored split so both paths get the same
+        // behavior. When the student has exactly one declared program and
+        // the agent omitted programId, we fill it in so the DPR path can
+        // scope its requirement walk. When the student has multiple
+        // declared programs and no explicit programId was passed, we
+        // reject early — the agent must be explicit about which program
+        // to plan for, otherwise the DPR walk is ambiguous.
+        const declared = session.student.declaredPrograms ?? [];
+        if (!input.programId) {
+            if (declared.length === 0) {
+                return {
+                    ok: false,
+                    userMessage:
+                        "You haven't declared a program. Either declare one first or pass an explicit programId.",
+                };
+            }
+            if (declared.length === 1) {
+                // Auto-default to the single declared program. This
+                // makes the agent's life easier — it doesn't have to
+                // remember to pass programId for single-program
+                // students — while still failing loud on ambiguous
+                // multi-declared cases.
+                input.programId = declared[0]!.programId;
+            } else {
+                return {
+                    ok: false,
+                    userMessage:
+                        `Student has ${declared.length} declared programs (${declared.map(p => p.programId).join(", ")}) — ` +
+                        `pass programId explicitly to scope the plan.`,
+                };
+            }
+        }
+
+        // DPR path: only needs DPR + student (programId now guaranteed set above).
         if (session.degreeProgressReport) return { ok: true };
         // Authored-rules fallback: needs full data trio.
         if (!session.courses || !session.prereqs || !session.programs) {
             return { ok: false, userMessage: "Required engine data not loaded." };
-        }
-        const declared = session.student.declaredPrograms;
-        if (declared.length === 0 && !input.programId) {
-            return {
-                ok: false,
-                userMessage:
-                    "You haven't declared a program. Either declare one first or pass an explicit programId.",
-            };
         }
         return { ok: true };
     },
@@ -170,6 +252,7 @@ export const planSemesterTool = buildTool({
     async call(input, { session }): Promise<PlanSemesterOutput> {
         const maxCourses = input.maxCourses ?? 5;
         const maxCredits = input.maxCredits ?? 18;
+        const loadStyle = input.loadStyle ?? "balanced";
 
         // ---- DPR primary path ----
         if (session.degreeProgressReport && session.student) {
@@ -181,14 +264,106 @@ export const planSemesterTool = buildTool({
                     .map((c) => `${c.subject} ${c.catalogNbr}`),
             );
 
+            // Phase 11 follow-up — compute the credit budget BEFORE
+            // generating suggestions. The effective ceiling is the
+            // tighter of (input.maxCredits) and (school per-semester
+            // ceiling), reduced by what's already in the target term's
+            // IP rows. This prevents the planner from suggesting more
+            // courses than the student can actually register for.
+            // Generic: works for any school + any term + any major.
+            const targetDprTermPreview = normalizeToDprTerm(input.targetSemester);
+            const ipForTarget = targetDprTermPreview
+                ? dpr.courseHistory.filter((c) => c.type === "IP" && c.term === targetDprTermPreview)
+                : [];
+            const ipCreditsForTarget = ipForTarget.reduce((s, c) => s + c.units, 0);
+            const ceilingFromConfig = session.schoolConfig?.maxCreditsPerSemester ?? maxCredits;
+            const ceiling = Math.min(maxCredits, ceilingFromConfig);
+            const planBudget = Math.max(0, ceiling - ipCreditsForTarget);
+
+            // Phase 12 Task 4 — scope the DPR walk to the requested
+            // program. DPR requirements in this schema are school-level
+            // (DPRRequirement has no programId field — only rId, title,
+            // status, statusText, description, counter, coursesUsed).
+            // The filter is therefore a no-op; left as a placeholder so
+            // future DPR shapes with per-program scope wire through
+            // cleanly. If NYU's parser ever emits a programId field on
+            // leaf requirements, replace the `= ns` assignment with:
+            //   ns.filter(req => {
+            //       const rp = (req as { programId?: string }).programId;
+            //       if (!rp) return true; // school-level requirement
+            //       return rp === input.programId;
+            //   })
+            const scopedRequirements = ns;
+
+            // Phase 11.2 — workload-balanced quota computation.
+            // When `graduationTerm` is supplied, count the semesters
+            // remaining (target → graduation inclusive) and divide
+            // total hard-requirement courses across them. This stops
+            // the planner from frontloading a heavy term + leaving an
+            // empty senior semester (which is also bad: it forces the
+            // student into low-credit electives or violates F-1
+            // floor). Generic — works for any major and any
+            // graduation horizon.
+            const remainingHardRequirements = scopedRequirements.filter((req) => isHardRequirement(req));
+            const semestersUntilGrad = input.graduationTerm
+                ? countTermsBetween(input.targetSemester, input.graduationTerm)
+                : 1;
+            const hardQuotaForThisTerm = computeHardQuota(
+                remainingHardRequirements.length,
+                semestersUntilGrad,
+                loadStyle,
+                ipForTarget.filter((c) => isHardCourseId(`${c.subject} ${c.catalogNbr}`)).length,
+            );
+
             const suggestions: CourseSuggestion[] = [];
-            for (const req of ns) {
+            const deferredToFutureTerms: NonNullable<PlanSemesterOutput["deferredToFutureTerms"]> = [];
+            let suggestedCredits = 0;
+            let hardSuggested = 0;
+
+            // Phase 11.2 — offering-pattern check helper. When
+            // session.searchAvailabilityFn is wired (production
+            // route), this lets the planner verify a candidate
+            // course is offered in the target term BEFORE adding it
+            // to suggestions. Generic — works for any course/term;
+            // courses with a single offering window before
+            // graduation are flagged as MUST-take.
+            const sessionExt = session as unknown as { searchAvailabilityFn?: (termCode: string, keyword: string) => Promise<unknown[]> };
+            const targetTermCode = encodeTermCodeForFose(input.targetSemester);
+            async function isOfferedInTargetTerm(courseId: string): Promise<boolean | "unknown"> {
+                if (!sessionExt.searchAvailabilityFn || !targetTermCode) return "unknown";
+                try {
+                    const results = await sessionExt.searchAvailabilityFn(targetTermCode, courseId);
+                    return Array.isArray(results) && results.length > 0;
+                } catch {
+                    return "unknown";
+                }
+            }
+
+            for (const req of scopedRequirements) {
                 if (suggestions.length >= maxCourses) break;
+                const isHard = isHardRequirement(req);
+                // Phase 11.2 — respect the hard-quota cap. Once we
+                // have enough hard courses for THIS term per the
+                // balanced split, push the rest to deferred.
+                if (isHard && hardSuggested >= hardQuotaForThisTerm) {
+                    const candidates = extractCandidateCourseIds(req).filter((id) => !takenIds.has(id));
+                    for (const cid of candidates.slice(0, 1)) {
+                        deferredToFutureTerms.push({
+                            courseId: cid,
+                            title: req.title,
+                            credits: 4,
+                            reason:
+                                `Hard requirement spread: with ${remainingHardRequirements.length} hard course(s) ` +
+                                `across ${semestersUntilGrad} remaining term(s) (loadStyle=${loadStyle}), the balanced quota for ` +
+                                `${input.targetSemester} is ${hardQuotaForThisTerm}. Take ${cid} in a later term to keep ` +
+                                `the workload even and leave room for free electives this term.`,
+                        });
+                    }
+                    continue;
+                }
                 const candidates = extractCandidateCourseIds(req);
                 const fresh = candidates.filter((id) => !takenIds.has(id));
                 if (fresh.length === 0) {
-                    // Fall back to a guidance suggestion when the DPR
-                    // describes the pool in narrative form.
                     suggestions.push({
                         courseId: "(see search_courses)",
                         title: req.title,
@@ -205,15 +380,78 @@ export const planSemesterTool = buildTool({
                 }
                 for (const courseId of fresh.slice(0, 3)) {
                     if (suggestions.length >= maxCourses) break;
+                    const credits = 4;
+
+                    // Phase 11.2 — offering-pattern check. If the
+                    // FOSE search returns 0 sections for this
+                    // course in the target term, defer it.
+                    const offered = await isOfferedInTargetTerm(courseId);
+                    if (offered === false) {
+                        deferredToFutureTerms.push({
+                            courseId,
+                            title: req.title,
+                            credits,
+                            reason:
+                                `${courseId} is not offered in ${input.targetSemester} per the FOSE search. ` +
+                                `Plan it for a different term in which it is offered.`,
+                        });
+                        continue;
+                    }
+
+                    if (suggestedCredits + credits > planBudget) {
+                        deferredToFutureTerms.push({
+                            courseId,
+                            title: req.title,
+                            credits,
+                            reason:
+                                `Adding ${courseId} (${credits} cr) would push ${input.targetSemester} past the ` +
+                                `${ceiling}-credit ceiling (already-registered ${ipCreditsForTarget} cr + previously-suggested ${suggestedCredits} cr). ` +
+                                `Plan it for a later term instead.`,
+                        });
+                        continue;
+                    }
                     suggestions.push({
                         courseId,
                         title: req.title,
-                        credits: 4,
-                        priority: 1,
+                        credits,
+                        priority: isHard ? 1 : 3,
                         blockedCount: 0,
                         satisfiesRules: [req.rId],
                         category: "required",
                         reason: `Required for ${req.rId} (${req.title}). ${counterRemainingText(req)}`,
+                    });
+                    suggestedCredits += credits;
+                    if (isHard) hardSuggested++;
+                }
+            }
+
+            // Phase 11.2 — when the hard quota is filled but the
+            // ceiling has room left, suggest free-elective slots
+            // explicitly so the agent doesn't either (a) overload
+            // with another hard course or (b) leave the term short.
+            //
+            // Phase 12 Task 5 — drop the `semestersUntilGrad > 1` gate.
+            // The original Phase 11.2 fix added it to "keep room for free
+            // electives" but the gate did the opposite at the final term:
+            // it skipped the fill entirely. The user-facing intent is
+            // "fill remaining capacity with free electives" REGARDLESS of
+            // how many semesters remain.
+            const remainingBudget = planBudget - suggestedCredits;
+            if (remainingBudget >= 4 && hardSuggested >= hardQuotaForThisTerm) {
+                const slotsAvailable = Math.min(maxCourses - suggestions.length, Math.floor(remainingBudget / 4));
+                for (let i = 0; i < slotsAvailable; i++) {
+                    suggestions.push({
+                        courseId: "(free elective — your choice)",
+                        title: "Free elective",
+                        credits: 4,
+                        priority: 4,
+                        blockedCount: 0,
+                        satisfiesRules: [],
+                        category: "elective",
+                        reason:
+                            `Hard-requirement quota for ${input.targetSemester} is met (${hardSuggested} of ${hardQuotaForThisTerm}). ` +
+                            `Use this slot for a free elective — typically a lower-workload course you find interesting. ` +
+                            `Use search_courses to discover options.`,
                     });
                 }
             }
@@ -270,6 +508,53 @@ export const planSemesterTool = buildTool({
                 ? Math.max(0, f1Min - creditsAlreadyInTarget - plannedCredits)
                 : null;
 
+            // Phase 11 S2 — run the deterministic feasibility verifier
+            // and convert each violation into a Disclaimer that the
+            // agent surfaces via the Phase 10 envelope-rendering rule.
+            const feasibilityVerdict = verifyPlanFeasibility({
+                suggestions,
+                plannedCredits,
+                targetSemester: input.targetSemester,
+                creditsAlreadyInTarget,
+                alreadyRegisteredForTargetIds: alreadyRegisteredForTarget.map((c) => c.courseId),
+                schoolConfig: session.schoolConfig ?? null,
+                visaStatus: session.student.visaStatus,
+                dpr,
+                prereqs: session.prereqs,
+            });
+            const planDisclaimers: Disclaimer[] = feasibilityVerdict.violations.map((v) => ({
+                id: `plan_feasibility_${v.kind}${v.courseId ? `_${v.courseId.replace(/\s+/g, "_")}` : ""}`,
+                text: v.detail,
+                reason:
+                    `Plan-feasibility verifier flagged a ${v.kind.replace(/_/g, " ")} violation. ` +
+                    `Surface this verbatim — the student needs to know before acting.`,
+            }));
+
+            // Phase 12 Task 5 — emit a structured warning when the agent
+            // explicitly requested a credit target we couldn't fill.
+            // Only fires when `input.maxCredits` was explicitly passed
+            // (not the default-18 fallback) so the warning is meaningful:
+            // the agent said "plan for 16 credits" and we delivered less.
+            // Generic across all reasons the fill might fall short:
+            // unmet requirements exhausted, no eligible electives, schedule
+            // constraints, etc. The agent (and UI) consume this as a
+            // "did the planner satisfy the ask?" signal.
+            if (input.maxCredits !== undefined && plannedCredits < input.maxCredits) {
+                planDisclaimers.push({
+                    id: "plan_could_not_fill_credits",
+                    text:
+                        `Could not fill the requested ${input.maxCredits}-credit plan; ` +
+                        `delivered ${plannedCredits} credits across ${suggestions.length} ` +
+                        `course${suggestions.length === 1 ? "" : "s"}. The student should ` +
+                        `either accept the shorter plan or call search_courses to find ` +
+                        `additional electives.`,
+                    reason:
+                        `The planner reached the end of all available requirements and ` +
+                        `free-elective slots without filling ${input.maxCredits} credits. ` +
+                        `Surface this so the student knows the gap is real, not an error.`,
+                });
+            }
+
             return {
                 studentId: session.student.id,
                 targetSemester: input.targetSemester,
@@ -284,6 +569,9 @@ export const planSemesterTool = buildTool({
                 ...(alreadyRegisteredForTarget.length > 0 ? { alreadyRegisteredForTarget } : {}),
                 creditsAlreadyInTarget,
                 ...(remainingCreditsToReachF1Floor !== null ? { remainingCreditsToReachF1Floor } : {}),
+                ...(deferredToFutureTerms.length > 0 ? { deferredToFutureTerms } : {}),
+                ...(planDisclaimers.length > 0 ? { disclaimers: planDisclaimers } : {}),
+                ...(feasibilityVerdict.violations.length > 0 ? { feasibilityViolations: feasibilityVerdict.violations } : {}),
             };
         }
 
@@ -339,6 +627,27 @@ export const planSemesterTool = buildTool({
         if (plan.enrollmentWarnings.length > 0) {
             lines.push(`Enrollment warnings: ${plan.enrollmentWarnings.slice(0, 3).join(" | ")}`);
         }
+        // Phase 11 follow-up — deferred-to-future-term suggestions.
+        // Surfaces requirements that didn't fit this term so the
+        // agent doesn't simply hide them or recommend an overload.
+        if (plan.deferredToFutureTerms && plan.deferredToFutureTerms.length > 0) {
+            lines.push(`Deferred to a later term (would have exceeded the per-semester ceiling for ${plan.targetSemester}):`);
+            for (const d of plan.deferredToFutureTerms) {
+                lines.push(`  ${d.courseId} (${d.credits}cr): ${d.title}`);
+                lines.push(`    Reason: ${d.reason}`);
+            }
+        }
+
+        // Phase 11 S2 — render feasibility-verifier disclaimers via the
+        // shared envelope renderer so the agent surfaces them per the
+        // Phase 10 posture rule.
+        const env = renderEnvelopeMeta({
+            disclaimers: (plan as { disclaimers?: Disclaimer[] }).disclaimers,
+        });
+        if (env) {
+            lines.push("");
+            lines.push(env);
+        }
         return lines.join("\n");
     },
 });
@@ -371,4 +680,125 @@ function counterRemainingText(req: DPRRequirement): string {
     }
     const remaining = Math.max(0, c.required - c.used);
     return `Used ${c.used} of ${c.required}; ${remaining} remaining.`;
+}
+
+// ============================================================
+// Phase 11.2 — workload-balancing helpers
+// ============================================================
+// All deterministic. Generic across all majors / programs / schools.
+// "Hard" requirements = school-required + CAS Core (CORE-UA) + major
+// required + major electives. The signal is the requirement's title /
+// rId / description — we look for keywords that name the category in
+// any program. No per-major branching.
+
+const HARD_REQ_TITLE_RE = /\b(?:major|core curriculum|college core|required course|school requirement|university requirement|texts and ideas|cultures and contexts|expressive culture|societies and the social sciences|writing the essay|foreign language|natural science|quantitative reasoning)\b/i;
+const HARD_REQ_RID_RE = /\b(?:CORE|MAJOR|MJREQ|REQ|MIN)\b/i;
+const HARD_COURSE_PREFIX_RE = /^(?:CSCI-UA|MATH-UA|CORE-UA|EXPOS-UA|WRTG-UA|CHEM-UA|BIOL-UA|PHYS-UA|ECON-UA|FINC-UB|MGMT-UB)\s+/i;
+
+function isHardRequirement(req: { title?: string; rId?: string; description?: string }): boolean {
+    const blob = `${req.title ?? ""} ${req.rId ?? ""} ${req.description ?? ""}`;
+    return HARD_REQ_TITLE_RE.test(blob) || HARD_REQ_RID_RE.test(blob);
+}
+
+function isHardCourseId(courseId: string): boolean {
+    return HARD_COURSE_PREFIX_RE.test(courseId);
+}
+
+/**
+ * Count semesters between targetSemester and graduationTerm
+ * (inclusive of both endpoints). Generic for any term-format input
+ * the planner accepts.
+ */
+function countTermsBetween(targetSemester: string, graduationTerm: string): number {
+    const a = parseTermLoose(targetSemester);
+    const b = parseTermLoose(graduationTerm);
+    if (!a || !b) return 1;
+    // Map (year, season) → an ordinal integer. Spring < Summer < Fall.
+    const ord = (year: number, season: "spring" | "summer" | "fall") =>
+        year * 3 + (season === "spring" ? 0 : season === "summer" ? 1 : 2);
+    const diff = ord(b.year, b.season) - ord(a.year, a.season);
+    if (diff < 0) return 1;
+    // Ignore summer terms by default — most students don't take a
+    // full load in summer. Count spring + fall only.
+    let count = 0;
+    let yr = a.year;
+    let sn = a.season;
+    while (true) {
+        if (sn !== "summer") count++;
+        if (yr === b.year && sn === b.season) break;
+        if (sn === "spring") sn = "summer";
+        else if (sn === "summer") sn = "fall";
+        else { sn = "spring"; yr++; }
+        if (yr > b.year + 6) break; // sanity bound
+    }
+    return Math.max(1, count);
+}
+
+function parseTermLoose(input: string): { year: number; season: "spring" | "summer" | "fall" } | null {
+    const dprForm = normalizeToDprTerm(input);
+    if (!dprForm) return null;
+    const m = dprForm.match(/^(\d{4})\s+(Fall|Spring|Summer|J Term)$/);
+    if (!m) return null;
+    const yr = parseInt(m[1]!, 10);
+    const seasonRaw = m[2]!.toLowerCase();
+    const season =
+        seasonRaw.startsWith("fa") ? "fall" :
+        seasonRaw.startsWith("sp") ? "spring" :
+        seasonRaw.startsWith("su") ? "summer" :
+        null;
+    if (!season) return null;
+    return { year: yr, season };
+}
+
+/**
+ * Compute how many hard-requirement courses to schedule for THIS
+ * term given the total remaining + the semesters available + the
+ * requested loadStyle.
+ *
+ *   - balanced (default): ceil(total / semesters), minus any hard
+ *     courses already in this term's IP rows (we don't double-count).
+ *   - frontload: take as many as the ceiling allows, capped at
+ *     ceil(total / 1) for THIS term.
+ *   - backload: take floor(total / semesters); spillover goes to
+ *     later terms.
+ *
+ * Returns 0 when no hard requirements remain.
+ */
+function computeHardQuota(
+    totalHardRemaining: number,
+    semestersAvailable: number,
+    style: "balanced" | "frontload" | "backload",
+    hardAlreadyInTerm: number,
+): number {
+    if (totalHardRemaining <= 0) return 0;
+    const semesters = Math.max(1, semestersAvailable);
+    let target: number;
+    if (style === "frontload") {
+        target = totalHardRemaining; // try to take everything now
+    } else if (style === "backload") {
+        target = Math.floor(totalHardRemaining / semesters);
+    } else {
+        target = Math.ceil(totalHardRemaining / semesters);
+    }
+    // Subtract hard courses already in this term's IP rows so we
+    // don't suggest more than the balanced quota.
+    return Math.max(0, target - hardAlreadyInTerm);
+}
+
+/**
+ * Map the targetSemester input to a FOSE 4-digit term code so the
+ * offering-pattern check can call searchAvailability. Reuses the
+ * Phase 10 Stage 2 deterministic encoder. Returns null if the
+ * input shape is unrecognized — caller falls back to "unknown".
+ */
+function encodeTermCodeForFose(targetSemester: string): string | null {
+    const dprTerm = parseTermLoose(targetSemester);
+    if (!dprTerm) return null;
+    if (dprTerm.season === "summer") {
+        // FOSE summer codes ending in 6 — same encoding helper handles this.
+    }
+    if (dprTerm.season !== "spring" && dprTerm.season !== "summer" && dprTerm.season !== "fall") return null;
+    const lastTwo = dprTerm.year % 100;
+    const suffix = dprTerm.season === "spring" ? 4 : dprTerm.season === "summer" ? 6 : 8;
+    return `1${lastTwo}${suffix}`;
 }

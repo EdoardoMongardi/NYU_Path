@@ -23,9 +23,37 @@ export interface Course {
 
 // ---- Prerequisites ----
 
+/**
+ * A single prerequisite constraint group on a course.
+ *
+ * The semantics:
+ *   - "AND" → every entry in `courses` must be satisfied.
+ *   - "OR"  → at least one entry in `courses` must be satisfied.
+ *   - "NOT" → none of the entries in `notCourses` may have been taken
+ *             (Phase 13 enforces; e.g. "Not open to students who have
+ *             completed CSCI-UA 0002"). For a "NOT" group, `courses`
+ *             is empty and `notCourses` carries the excluded list.
+ *
+ * Optional fields:
+ *   - `requiresPetition` — true when the bulletin English mentions
+ *     "or instructor permission" / "or department approval". The
+ *     solver soft-allows the course (placement is permitted) but the
+ *     UI surfaces a yellow flag so the student knows a real-world
+ *     petition step is needed. Set on the group whose OR clause
+ *     contained the permission language.
+ *   - `notCourses` — populated only when type === "NOT". Listed
+ *     separately from `courses` because the polarity differs (NOT
+ *     excludes; AND/OR include).
+ *
+ * Note on coreqs: corequisites live at the `Prerequisite` entry
+ * level, not inside this group. A coreq applies to the whole
+ * dependent course, not to one particular constraint group.
+ */
 export interface PrereqGroup {
-    type: "AND" | "OR";
-    courses: string[]; // course IDs
+    type: "AND" | "OR" | "NOT";
+    courses: string[]; // course IDs (empty for "NOT" groups)
+    requiresPetition?: boolean;
+    notCourses?: string[];
 }
 
 export interface Prerequisite {
@@ -35,6 +63,21 @@ export interface Prerequisite {
     prereqGroups: PrereqGroup[];
     /** Corequisites — may be taken concurrently */
     coreqs: string[];
+    /**
+     * Optional grade-threshold map: courseId → required minimum grade
+     * (e.g. "C", "B+", "D"). When the prereq solver checks whether a student
+     * has satisfied a prereq via a particular course, it must ALSO verify
+     * the student's grade for that course meets the threshold here. If a
+     * course in `prereqGroups[].courses[]` is NOT in this map, no grade
+     * threshold applies — only "passed" matters.
+     *
+     * Source: bulletin's "with a Minimum Grade of X" annotations,
+     * extracted by tools/bulletin-parser/extractGradeThresholds.ts.
+     * Reverses Decision #4 ("trust DPR") in favor of explicit threshold
+     * checking — the silent-bug risk on rare high-grade prereqs (B/B+/A-)
+     * outweighs the simplicity argument.
+     */
+    minGrades?: Record<string, string>;
 }
 
 // ---- Rules ----
@@ -590,4 +633,499 @@ export interface SemesterPlan {
     freeSlots: number;
     /** Enrollment validation warnings (F-1 rules, half-time status) */
     enrollmentWarnings: string[];
+}
+
+// === Phase 12.9.5 — Offering Confidence ===
+
+/**
+ * Phase 12.9.5 — confidence tier for a course's term-offering pattern.
+ *
+ * Used by Phase 13's solver to penalize scheduling low-confidence courses
+ * into critical-path slots, and by the agent to honestly surface
+ * scheduling risk to students. Phase 15's FOSE materializer promotes
+ * courses to `confirmed` when their actual section lands in FOSE.
+ */
+export type ConfidenceTier =
+    | "historically_likely"
+    | "historically_partial"
+    | "irregular"
+    | "permission_only"
+    | "restricted"
+    | "confirmed";
+
+/**
+ * One entry in `packages/engine/src/data/courses-offerings.json`.
+ *
+ * Formally defined here in Phase 12.9.5; previously existed only as an
+ * inline interface in packages/engine/tests/data/parsedDataValidation.test.ts.
+ * That inline definition is left in place (duplicate-but-harmless) until a
+ * future cleanup task imports from shared instead.
+ */
+export interface OfferingEntry {
+    termsOffered: ("fall" | "spring" | "summer" | "january")[];
+    rawLine: string;
+    inferred: boolean;
+    /** Phase 12.9.5: classified confidence in this offering pattern. */
+    confidence?: ConfidenceTier;
+}
+
+// === Phase 13 — Forward Planner ===
+
+// ---- 1. ValidationResult + DataSource + ApprovalAuthority (Decision #40) ----
+
+export type DataSource = "DPR" | "FOSE" | "bulletin" | "program-rules" | "student-input";
+export type ApprovalAuthority = "instructor" | "department" | "advisor" | "registrar" | "OGS" | "school-dean";
+
+export type ValidationResult =
+    | { status: "pass"; verifiedFrom: DataSource }
+    | { status: "assumed-pass"; assumption: string; whatWouldFlipIt: string }
+    | { status: "requires-approval"; authority: ApprovalAuthority }
+    | { status: "fail"; reason: string };
+
+// ---- 2. WorkloadTier (Decision #24) + LoadRationale (Decisions #22d + #24) + Assumption (Decisions #30 + #42) ----
+
+export type WorkloadTier =
+    | "major-required"
+    | "major-elective"
+    | "school-core"
+    | "free-elective"
+    | "general-elective";
+
+export interface LoadRationale {
+    strategy: "balanced" | "frontload" | "backload" | "light" | "heavy";
+    creditsTarget: number;
+    slack: number;
+    weightedCredits: number;       // Σ slot.credits × slot.workloadWeight
+    hardCount: number;             // slots with workloadWeight ≥ 1.0
+    easyCount: number;             // slots with workloadWeight < 1.0
+    alternativeDistributionsConsidered: Array<{
+        distribution: number[];
+        rejectedBecause: string;
+    }>;
+}
+
+/**
+ * Discriminated union per Decisions #30 + #42. Three variants:
+ *  - IP_COURSE_COMPLETION  (#30; solver-emitted)
+ *  - LLM_RANKED_ALTERNATIVE (#42 Tier B; Phase-14-emitted)
+ *  - HEURISTIC_MAPPING      (#42 Tier D; Phase-14-emitted; SOFT ONLY —
+ *                            the `studentConstraintFraming: "soft"`
+ *                            literal type is the Layer-2 schema
+ *                            discriminator in the 3-layer Tier-D
+ *                            enforcement. A "hard" framing is a
+ *                            TypeScript compile-time error.)
+ */
+export type Assumption =
+    | {
+          type: "IP_COURSE_COMPLETION";
+          courseId: string;
+          requiredGrade?: string;
+          consequenceIfFalse: string;
+          cascadingSlots: string[];
+          contingencyPlanAvailable: boolean;
+      }
+    | {
+          type: "LLM_RANKED_ALTERNATIVE";
+          studentStatedFactor: string;
+          selectedPlanIndex: number;
+          reasoning: string;
+          dimensionsConsidered: string[];
+      }
+    | {
+          type: "HEURISTIC_MAPPING";
+          studentStatedFactor: string;
+          /** Layer-2 of Tier-D 3-layer enforcement. Literal "soft" —
+           *  hard-framed constraints CANNOT construct this variant. */
+          studentConstraintFraming: "soft";
+          /** Phase 14 will tighten this to PlanMutation once that type is defined
+           *  (Phase 14 Task 1). Typed as unknown for now per controller note 5. */
+          mappedToMutation: unknown;
+          confidence: "low" | "medium" | "high";
+          reasoning: string;
+          consequenceIfWrong: string;
+      };
+
+// ---- 3. ConfidenceTier is already defined at line 648 (Phase 12.9.5) — no redefinition needed ----
+
+// ---- 4. PoolBinding (Decision #28) + PlaceholderSlot tagged union (Decision #38) ----
+
+export interface PoolBinding {
+    poolId: string;
+    candidates: string[];   // courseIds
+    satisfiesRule: string;  // ruleId
+}
+
+export interface RequirementPoolSlot {
+    kind: "requirement-pool";
+    ruleId: string;
+    candidates: string[];               // courseIds
+    constraints: Array<{ kind: string; detail: string }>;
+    bindingState: "unbound" | "candidate-set" | "bound";
+    bound?: string;                     // courseId
+}
+
+export interface FreeCreditSlot {
+    kind: "free-credit";
+    defaultWeight: 0.3;                 // per Decision #37
+    bindingState: "placeholder-pending" | "placeholder-deferred" | "bound";
+    bound?: string;                     // courseId
+}
+
+export interface AdvisingPlaceholderSlot {
+    kind: "advising-placeholder";
+    advisingNote: string;
+    bindingState: "advisor-pending" | "bound";
+    bound?: string;                     // courseId
+}
+
+/** Tagged union per Decision #38. The `kind` discriminator enables
+ *  exhaustiveness checks across Phase 14's binding tools. */
+export type PlaceholderSlot =
+    | RequirementPoolSlot
+    | FreeCreditSlot
+    | AdvisingPlaceholderSlot;
+
+// ---- 5. SlotRationale + TermConstraint (Decision #22a) ----
+
+export type TermConstraintKind =
+    | "prereqChain"
+    | "offering"
+    | "creditCeiling"   // term is at or near the hard ceiling (input.creditCeiling)
+    | "creditSlack"     // term has tight remaining slack vs. creditTargetPerSemester
+    | "creditFloor"
+    | "visaFloor"
+    | "coreqSameTerm";
+
+export interface TermConstraint {
+    kind: TermConstraintKind;
+    detail: string;
+}
+
+export interface SlotRationale {
+    satisfiesRequirements: string[];     // ruleIds
+    termConstraints: TermConstraint[];
+    consideredAlternatives: Array<{
+        courseId: string;
+        rejectedBecause: string;
+    }>;
+    decisionsApplied: string[];          // e.g. "D4-IPProjection"
+    petitionTrigger?: { fromCourse: string; bulletinText: string };
+}
+
+export interface SlotFlexibility {
+    earliestPossibleTerm: string;        // term code
+    latestPossibleTerm: string;
+    alternativeCourses: string[];        // courseIds
+}
+
+export interface DownstreamImpact {
+    courseIds: string[];
+    graduationDelay: number;             // terms
+}
+
+// ---- 6. ScheduleSlot discriminated union (4 kinds) ----
+
+export type ScheduleSlotKind = "completed" | "in_progress" | "specific_planned" | "placeholder";
+
+export interface ScheduleSlotCompleted {
+    kind: "completed";
+    courseId: string;
+    title: string;
+    credits: number;
+    grade: string;
+}
+
+export interface ScheduleSlotInProgress {
+    kind: "in_progress";
+    courseId: string;
+    title: string;
+    credits: number;
+}
+
+/** specific_planned slot — carries full rationale per Decisions #22a-d, #24, #33, #37, #39, #40 */
+export interface ScheduleSlotSpecificPlanned {
+    kind: "specific_planned";
+    courseId: string;
+    title: string;
+    credits: number;
+    satisfiesRules: string[];
+    reason: string;
+    requiresPetition?: boolean;
+    // Decisions #22a-d, #24, #33, #37, #39, #40 fields:
+    rationale: SlotRationale;
+    flexibility: SlotFlexibility;
+    downstreamImpact: DownstreamImpact;
+    workloadTier: WorkloadTier;
+    workloadWeight: number;              // 0.3..~1.6 per #24 + #35
+    bindingState: "bound";               // specific_planned is always bound
+    confidence: ConfidenceTier;          // copied from OfferingEntry per #39
+    isCriticalPath: boolean;             // per #39
+    optionalReason?: {
+        droppable: boolean;
+        blockingConstraints?: string[];
+    };
+    approvalAuthority?: ApprovalAuthority;
+}
+
+/** placeholder slot — reserved credits with rich rationale, pending course binding */
+export interface ScheduleSlotPlaceholder {
+    kind: "placeholder";
+    category: string;                    // human-readable label
+    credits: number;
+    satisfiesRules: string[];
+    optional: boolean;                   // per Decision #8
+    reason: string;
+    // Phase 13 placeholder slots also carry the same rich fields,
+    // computed against the placeholder's reserved credits + tier:
+    rationale: SlotRationale;
+    flexibility: SlotFlexibility;
+    downstreamImpact: DownstreamImpact;
+    workloadTier: WorkloadTier;
+    workloadWeight: number;
+    bindingState: "placeholder-pending" | "placeholder-deferred";
+    placeholderId: string;
+    poolBinding?: PoolBinding;           // present for RequirementPoolSlot kind (#28)
+    optionalReason?: {
+        droppable: boolean;
+        blockingConstraints?: string[];
+    };
+    confidence: ConfidenceTier;
+    isCriticalPath: boolean;
+    approvalAuthority?: ApprovalAuthority;
+}
+
+export type ScheduleSlot =
+    | ScheduleSlotCompleted
+    | ScheduleSlotInProgress
+    | ScheduleSlotSpecificPlanned
+    | ScheduleSlotPlaceholder;
+
+// ---- 7. ForwardSemester (Decision #24 extended) ----
+
+export interface ForwardSemester {
+    term: string;                        // e.g. "2026-fall"
+    locked: boolean;                     // DPR-derived (completed/in-progress)
+    slots: ScheduleSlot[];
+    plannedCredits: number;
+    notes: string[];                     // visa/load advisories
+    loadRationale: LoadRationale;
+}
+
+// ---- 8. PlanState 4-state union (Decision #32) ----
+
+export type PlanState =
+    | "valid-clean"
+    | "valid-with-trade-offs"
+    | "infeasible-draft"
+    | "student-preferred-invalid-draft";
+
+// ---- 9.1. AlternativePlanSummary (Decision #44) ----
+
+/** Top-K alternative-plan summary from Stage 7. ≤5 per ForwardSchedule. */
+export interface AlternativePlanSummary {
+    planIndex: number;
+    balanceScore: number;
+    weightedCreditsByTerm: Record<string, number>;
+    hardCountByTerm: Record<string, number>;
+    easyCountByTerm: Record<string, number>;
+    subjectDistributionByTerm: Record<string, Record<string, number>>;
+    distinctSubjectsCount: number;
+    totalPetitionCount: number;
+    totalAssumptionCount: number;
+    graduationTerm: string;
+    topDiffsFromWinner: Array<{ aspect: string; change: string }>;
+}
+
+// ---- 10. FeasibilityReport + InfeasibilityReport (Decisions #10 / #31) ----
+
+export interface FeasibilityReport {
+    feasible: boolean;
+    infeasibilityReason?: string;
+    constraintViolations: Array<{
+        kind:
+            | "prereq_unsatisfiable"
+            | "offering_pattern"
+            | "credit_floor"
+            | "credit_ceiling"
+            | "graduation_total"
+            | "not_clause"
+            | "pass_fail_cap"
+            | "online_credit_cap"
+            | "outside_home_credit_cap"
+            | "gpa_floor"
+            | "other";
+        course?: string;
+        term?: string;
+        detail: string;
+    }>;
+    placementRationale: Record<string, string>;
+}
+
+export interface InfeasibilityReport {
+    conflictSource: "pin" | "exclusion" | "loadStyleOverride" | "schedulingPreference" | "other";
+    conflictDetail: string;
+    relaxationSuggestions: string[];
+    /** Decision #10 — the no-pin (or no-mutation) plan the solver would
+     *  have produced absent the conflicting input, so the agent can
+     *  surface "here's what works without your pin" cleanly. */
+    fallbackSchedule?: ForwardSchedule;
+}
+
+// ---- 9. ForwardSchedule (Decisions #25, #30, #32, #44) ----
+
+export interface ForwardSchedule {
+    studentId: string;
+    homeSchoolId: string;
+    graduationTerm: string;
+    creditTargetPerSemester: number;
+    f1Floor: number | null;
+    domesticPartTimeFloor: number | null;
+    graduationCreditMinimum: number;
+    degreeCreditsMet: boolean;
+    semesters: ForwardSemester[];
+    dprCourseHistoryHash: string;
+    computedAt: number;
+    feasibility: FeasibilityReport;
+    state: PlanState;                    // Decision #32
+    balanceScore: number;                // Decision #25
+    assumptions: Assumption[];           // Decision #30 (discriminated union per #42)
+    /** Decision #44 — top-K alternative-plan summaries from Stage 7. ≤5. */
+    alternativeCandidates?: AlternativePlanSummary[];
+}
+
+// === Phase 14 — Preferences + Mutation API ===
+
+// ---- 1. SchedulingPreferences (Decision #43 — defined Phase 14, consumed Phase 15) ----
+
+/**
+ * Phase 14-defined / Phase 15-consumed (Decision #43).
+ *
+ * Time/day filters as a first-class scheduling-preference factor.
+ * `strict: true` per entry → HARD filter (drops sections during
+ * Phase 15's section materialization). `strict: false` → soft
+ * deboost in section ranking.
+ *
+ * INDEPENDENT from Decision #42's hard-vs-soft constraint framing.
+ * `strict: true` says the FILTER is hard (drop the section), not
+ * that the student framed the preference as non-negotiable for
+ * Decision #42 tier-routing purposes — the two flags are usually
+ * correlated (childcare-driven Friday avoidance: strict=true AND
+ * framing=hard) but not coupled at the schema level.
+ */
+export type Day = "M" | "Tu" | "W" | "Th" | "F" | "Sa" | "Su";
+
+export interface SchedulingPreferences {
+    avoidDays?: Array<{ day: Day; strict: boolean }>;
+    avoidTimeWindows?: Array<{ days: Day[]; startMin: number; endMin: number; strict: boolean }>;
+    preferTimeWindows?: Array<{ days: Day[]; startMin: number; endMin: number; weight: number }>;
+    desiredFreeDay?: { day: "any" | Day; strict: boolean };
+    avoidConsecutiveLongBlocks?: boolean;
+}
+
+// ---- 2. SchedulePreferences (Phase 14 — per-student solver preferences) ----
+
+/**
+ * Phase 14 — Per-student preferences governing how the solver
+ * distributes credits and respects student-driven overrides. All
+ * fields are optional; absent fields use Phase 13 defaults.
+ */
+export interface SchedulePreferences {
+    loadStyle?: "balanced" | "frontload" | "backload";
+    loadStylePerTerm?: Record<string, "light" | "heavy" | "balanced">;
+    creditTargetPerTerm?: Record<string, number>;
+    pins?: Array<{ courseId: string; term: string }>;
+    exclusions?: Array<{ courseId: string; term?: string }>;
+    includeSummer?: boolean;
+    includeJTerm?: boolean;
+    allowBelowF1Floor?: boolean;
+    /** Phase 14 reserved-but-unused; Phase 15's materialize_sections consumes
+     *  this per Decision #43. The shape lands here so the mutation array
+     *  doesn't version-skew across phases. */
+    schedulingPreferences?: SchedulingPreferences;
+}
+
+// ---- 3. PlanChangeProposal + PlanChangeOutcome + AlternativeCandidate (Phase 14 literal spec) ----
+
+export interface PlanChangeProposal {
+    kind: "pin" | "exclude" | "load_style" | "credit_target" | "include_summer" | "include_jterm" | "allow_below_floor";
+    payload: Record<string, unknown>;
+}
+
+export interface PlanChangeOutcome {
+    feasible: boolean;
+    diff: {
+        added: Array<{ term: string; slot: ScheduleSlot }>;
+        removed: Array<{ term: string; slot: ScheduleSlot }>;
+    };
+    consequences: string[];
+    conflicts?: Array<{ kind: string; detail: string }>;
+}
+
+export interface AlternativeCandidate {
+    summary: string;
+    relaxation: "include_summer" | "include_jterm" | "extend_grad_one_term" | "extend_grad_one_year" | "lower_credit_target";
+    schedule: ForwardSchedule | null;
+    stillInfeasibleReason?: string;
+}
+
+// ---- 4. PlanMutation tagged union + PlanDiff (Decision #23) ----
+
+/**
+ * Phase 14 Decision #23 — Discriminated union over mutation kinds
+ * accepted by `propose_plan_change`. Multi-mutation enables compound
+ * counterfactuals in one call ("drop minor + swap Algorithms for
+ * Theory + add summer 2027").
+ *
+ * The `setSchedulingPreference` / `clearSchedulingPreference` kinds
+ * are defined-but-unused at Phase 14 — Phase 15's materialize_sections
+ * is the first reader. Defining them here keeps the mutation array
+ * shape stable across phases.
+ */
+export type PlanMutation =
+    | { kind: "pin"; courseId: string; term: string }
+    | { kind: "exclude"; courseId: string; term?: string }
+    | { kind: "swap"; drop: string; add: string; term: string }
+    | { kind: "addTerm"; term: string }
+    | { kind: "loadStyleOverride"; term?: string; style: "balanced" | "frontload" | "backload" | "light" | "heavy" }
+    | { kind: "bindFreeElective"; slotId: string; courseId: string }
+    | { kind: "unbindFreeElective"; slotId: string }
+    | { kind: "bindPoolSlot"; slotId: string; courseId: string }
+    | { kind: "setSchedulingPreference"; value: SchedulingPreferences }
+    | { kind: "clearSchedulingPreference" };
+
+/**
+ * Output of `propose_plan_change` per Decision #23. Carries
+ * structured deltas the agent surfaces to the student before
+ * confirmation. Multiple decision-flavored fields land here so the
+ * agent can read pre-computed verdicts rather than re-derive them.
+ */
+export interface PlanDiff {
+    creditsByTermDelta: Record<string, number>;
+    graduationTermShift: number;
+    newRequiresPetition: string[];
+    removedRequiresPetition: string[];
+    newUnmetRequirements: string[];
+    cascadedShifts: Array<{ courseId: string; fromTerm: string; toTerm: string; becauseOf: string }>;
+    /** Decision #24 — per-term workloadWeight delta. */
+    weightedCreditsByTermDelta: Record<string, number>;
+    /** Decision #24 — per-term hardCount/easyCount/weightedCredits before+after. */
+    workloadTierShifts: Array<{
+        term: string;
+        before: { hardCount: number; easyCount: number; weightedCredits: number };
+        after: { hardCount: number; easyCount: number; weightedCredits: number };
+    }>;
+    /** Decision #25 — pre-computed balance verdict. */
+    balanceImpact: {
+        before: number;
+        after: number;
+        delta: number;
+        classification: "improved" | "negligible" | "degraded-mild" | "degraded-significant";
+    };
+    /** Decision #30 — assumptions newly introduced by the proposed change. */
+    newAssumptions: Assumption[];
+    /** Decision #40 — per-axis ValidationResult transitions. Surfaces
+     *  "F-1 onlineLimit: assumed-pass → requires-approval" cleanly. */
+    validationResultsChanges: Record<string, { before: ValidationResult; after: ValidationResult }>;
+    /** Decision #32 — when the mutation flips PlanState. */
+    planStateChange?: { from: PlanState; to: PlanState };
 }

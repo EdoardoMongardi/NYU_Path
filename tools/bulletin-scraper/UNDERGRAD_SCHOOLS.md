@@ -1,0 +1,202 @@
+# NYU Path — Undergraduate Bulletin Coverage
+
+This file is the source of truth for which NYU schools' undergraduate
+bulletins are in scope for NYU Path's RAG / planner data layer, and it
+documents the on-disk layout that Phase 12.8's parser is committed to read
+against. Any future scrape, parse, or coverage-audit work should start here.
+
+## On-disk layout (LOCKED for Phase 12.8 parser)
+
+Bulletins live at:
+
+```
+data/bulletin-raw/courses/<dept>_<suffix>/_index.md
+data/bulletin-raw/courses/<dept>_<suffix>/_index.html
+```
+
+There is **ONE page per department**, and that page lists all courses for
+the department inline. There are **NO per-course subdirectories** anywhere
+in the tree. bulletins.nyu.edu does not publish per-course pages at the
+`/courses/` route — the per-dept page is the granular unit. (Richer
+per-course pages do exist at `/search/?P=…` but were deliberately skipped
+during scrape because BFS over them explodes into >247k URLs and adds no
+useful data not already on the dept page.)
+
+Directory names are lowercase, with the department code and the
+school-suffix joined by a single underscore. Department names can contain
+digits (e.g. `cwrg1_uc`, `bas01_dn`). The recognizer regex is therefore
+digit-tolerant:
+
+```
+^[a-z][a-z0-9]*_(ua|ub|ue|uf|ug|uh|ut|uy|shu)$
+```
+
+## Schools in scope
+
+The nine undergraduate schools below are the data substrate for NYU Path's
+forward planner and RAG layer. School slugs were curl-verified against
+`bulletins.nyu.edu/undergraduate/<slug>/` on 2026-05-02. Dept-prefix counts
+were produced by `verify_coverage.py` on the same date.
+
+| School | Bulletin slug (under `/undergraduate/`) | Course-suffix | Postgres dept-prefixes | Disk dept-dirs |
+|---|---|---|---|---|
+| College of Arts and Science (CAS) | [`arts-science`](https://bulletins.nyu.edu/undergraduate/arts-science/) | `UA` | 51 | 51 |
+| Stern School of Business | [`business`](https://bulletins.nyu.edu/undergraduate/business/) | `UB` | 10 | 10 |
+| Steinhardt School of Culture, Education, and Human Development | [`culture-education-human-development`](https://bulletins.nyu.edu/undergraduate/culture-education-human-development/) | `UE` | 45 | 45 |
+| Liberal Studies (pre-CAS pipeline) | [`liberal-studies`](https://bulletins.nyu.edu/undergraduate/liberal-studies/) | `UF` | 29 | 29 |
+| Gallatin School of Individualized Study | [`individualized-study`](https://bulletins.nyu.edu/undergraduate/individualized-study/) | `UG` | 5 | 5 |
+| NYU Abu Dhabi | [`abu-dhabi`](https://bulletins.nyu.edu/undergraduate/abu-dhabi/) | `UH` | 37 | 37 |
+| Tisch School of the Arts | [`arts`](https://bulletins.nyu.edu/undergraduate/arts/) | `UT` | 19 | 19 |
+| Tandon School of Engineering | [`engineering`](https://bulletins.nyu.edu/undergraduate/engineering/) | `UY` | 24 | 24 |
+| NYU Shanghai | [`shanghai`](https://bulletins.nyu.edu/undergraduate/shanghai/) | `SHU` | 43 | 43 |
+
+**Errata (2026-05-02):** the original revision of this file labeled UF as
+"Gallatin School of Individualized Study" with slug `individualized-study`,
+and listed UG as out-of-scope graduate. That was wrong on both counts.
+Bulletin titles + Postgres confirm UF = Liberal Studies (small pre-major
+CAS pipeline, 46 courses, slug `liberal-studies`) and UG = Gallatin (834
+courses including 515 IDSEM-UG interdisciplinary seminars, slug
+`individualized-study`). The corrected mapping is reflected above.
+
+Disk dept-dir counts shown above are post-stub-filter — only dept dirs whose
+`_index.md` contains at least one parseable course-heading line are counted.
+29 additional dept dirs exist on disk but contain stub `_index.md` pages
+(header + title only, no courses); the verifier surfaces them under a
+`STUBS` section as informational. They represent depts the bulletin still
+indexes but no longer publishes course content for, and Phase 12.8 would
+parse zero courses from them — see "Coverage status" below.
+
+**Note on UF and UG data density.** Liberal Studies (UF) has zero internal
+prerequisite chains (the program is a 2-year sequence whose courses don't
+gate one another) but is referenced ~29× from other schools' prereq lines
+(e.g. `MGMT-UB 2`'s OR group includes `ECII-UF 102`). Gallatin (UG) has
+essentially no prereq structure — 1 prereq line in 834 courses, consistent
+with Gallatin's "no fixed schedule, no required courses" model. Phase 12.8
+Task 4 (the LLM prereq parser) therefore restricts its in-scope set to the
+seven schools where prereq data actually lives: `ua, ub, ue, uh, ut, uy,
+shu`. UF and UG remain in scope for the offerings extractor (Task 3) and
+for verifier coverage so cross-references resolve and the static catalog
+is complete.
+
+## Out of scope
+
+The following are intentionally NOT covered by this data substrate:
+
+- **Graduate course-suffixes.** `_g*`, `_md`, `_ml`, `_dn`, `_lw`, `_ny`,
+  `_na`, `_ne`, `_ni`, `_uc`, `_ud`, `_cs`, `_un` etc. exist on disk
+  (the bulletin scraper indiscriminately captured them) but they are not
+  undergraduate-major-program data and the planner does not consume them.
+  Phase 12.8's parser must filter to the nine in-scope suffixes only.
+  (`_ug` was previously listed here in error — it is undergrad Gallatin and
+  is now in scope.)
+- **Standalone subdomain bulletins.** `stern.nyu.edu`'s separate bulletin
+  duplicates content already in `bulletins.nyu.edu/undergraduate/business/`
+  and is not re-scraped.
+- **Live registrar widgets.** `bulletins.nyu.edu/class-search/` and
+  `bulletins.nyu.edu/search/` provide live section data, not curriculum
+  structure. They're handled at runtime by the engine's `searchAvailability`
+  tool against FOSE; there is no offline scrape of them.
+
+## Coverage status (as of 2026-05-02)
+
+**100% at dept-prefix granularity for all 9 schools.** Verified by:
+
+```
+python3 tools/bulletin-scraper/verify_coverage.py
+```
+
+Exit code is 0; every Postgres dept-prefix has a corresponding scraped
+`<dept>_<suffix>/_index.md` page on disk that contains at least one
+parseable course heading. Phase 12.8 may proceed.
+
+The verifier reports two informational sections:
+
+- **EXTRAS** — bulletin pages on disk (with parseable courses) for which
+  Postgres has no live course rows. None at present: every dept that has a
+  populated bulletin page is also live in Postgres.
+- **STUBS** — dept dirs whose `_index.md` exists but contains no course-
+  heading lines (header + title only). Currently 29 such dirs across UF,
+  UG, UH, UT, UY, SHU. These are depts the bulletin still indexes but no
+  longer publishes course content for; Phase 12.8 would parse zero courses
+  from them. None overlap with Postgres today, so they are latent — but
+  they are surfaced explicitly so a future regression where an in-Postgres
+  dept lands as a stub would be debuggable in one place.
+
+A dept counts as covered iff its `_index.md` exists AND contains at least
+one course-heading line. File presence alone is insufficient — that's what
+this fix gates on.
+
+## Phase 12.8 parser instruction
+
+The Phase 12.8 parser must:
+
+1. Walk `data/bulletin-raw/courses/<dept>_<suffix>/_index.md`, filtered to
+   the nine in-scope suffixes (`ua`, `ub`, `ue`, `uf`, `ug`, `uh`, `ut`,
+   `uy`, `shu`). Task 3 (offerings extractor) covers all nine; Task 4 (LLM
+   prereq parser) restricts to seven (`ua, ub, ue, uh, ut, uy, shu`)
+   because UF (Liberal Studies) has no internal prereqs and UG (Gallatin)
+   has 1 prereq line in 834 courses — running the LLM on them is wasted
+   spend. Cross-references INTO UF/UG from the seven prereq-bearing
+   schools resolve cleanly because UF/UG offerings are in scope.
+2. Split each `_index.md` file into per-course chunks. Each course chunk is
+   delimited by a heading line like:
+
+   ```
+   **CSCI-UA 60**  **Database Design and Implementation**  **(4 Credits)**
+   ```
+
+   That bold-bold-bold pattern is consistent across the corpus and is the
+   safe split anchor.
+3. Within each chunk, extract inline metadata. The fields known to appear
+   inline (where present) include:
+   - `**Prerequisites:**` followed by free-form prose with course codes.
+   - `**Typically offered**` followed by term descriptors
+     (Fall, Spring, Summer, Annually, etc.).
+   - Free-text course description.
+
+The parser must NOT attempt to read per-course subdirectories — they do not
+exist. The dept page is the only granular source, and the heading-split is
+the only way to reach the per-course unit.
+
+## Re-running the scrape (only if needed)
+
+The scrape is currently fresh as of 2026-04-21. Phase 13 does not require
+fresher data than that, so a re-run is generally unnecessary.
+
+If a re-run is needed (e.g. to pick up new departments after a bulletin
+update):
+
+1. `tools/bulletin-scraper/scrape_bulletin.py` has `/courses/` listed in its
+   `SKIP_SUBSTRINGS` (around line 74) — added there once the initial scrape
+   was complete to prevent BFS from re-walking the entire tree on idempotent
+   re-runs. Remove that entry to allow re-scraping.
+2. `.scrape_progress.json` currently shows `queue=0` (scrape exhausted).
+   Delete or reset that file so the scraper restarts from the seed URLs.
+3. Run the scraper. It will re-fetch dept pages and update `_index.md` in
+   place.
+
+After any re-scrape, re-run `verify_coverage.py` and confirm exit 0 before
+proceeding to parsing.
+
+## History note
+
+The original `PHASE_12_7_PLAN.md` scoped four tasks: (1) audit, (2) build an
+allowlist of school+suffix combinations, (3) re-scrape under the expanded
+allowlist, (4) verify coverage. The audit (Task 1) found two surprises that
+re-scoped the rest of the work:
+
+- The plan assumed the on-disk layout was per-course subdirectories
+  (`<DEPT>_<SCHOOL>/<NUMBER>/index.md`). The actual layout is one page per
+  department (`<dept>_<suffix>/_index.md`), with all courses inline. No
+  per-course subdirectory has ever existed in this tree.
+- Coverage at the dept-prefix granularity was already 100% across all eight
+  in-scope schools. No additional scraping was needed.
+
+Tasks 2 and 3 were therefore obviated. Only Task 4 (the verifier) shipped,
+plus this layout-locking document and a pre-flight checklist row in
+`docs/PHASE_PLANS_README.md` so the next executor doesn't repeat the
+per-course-subdir assumption.
+
+The original `PHASE_12_7_PLAN.md` is left intact as a historical record per
+the project convention that plans drift from real repo state and the code
+adapts to the repo, not the other way around.
