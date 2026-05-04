@@ -140,6 +140,15 @@ export default function ScheduleSidebar({
 
     if (!open) return null;
 
+    // Phase 16 Task D — render-when-no-plan gap fix (Task C self-review
+    // carry). The sidebar previously bailed at `if (!schedule) return
+    // <empty state>`, which hid the student's history + IP cards even
+    // after onboarding. Now the body renders whenever the student is
+    // known; the no-plan empty-state line moves to the BOTTOM so the
+    // historical context stays visible. The pre-onboarding case
+    // (no student AND no schedule) still falls back to the empty state.
+    const hasBody = !!student || !!schedule;
+
     const handlePillClick = (style: "balanced" | "frontload" | "backload") => {
         onProposeLoadStyle?.(style);
     };
@@ -204,38 +213,51 @@ export default function ScheduleSidebar({
                     />
                 </div>
             )}
-            {!schedule ? (
+            {!hasBody ? (
                 <p className={styles.scheduleSidebarEmpty}>
                     No plan yet. Ask me what to take next semester to compute one.
                 </p>
             ) : (
                 <div className={styles.scheduleSidebarBody}>
-                    <p className={styles.scheduleSidebarMeta}>
-                        Targeting graduation in <strong>{formatTermLabel(schedule.graduationTerm)}</strong>
-                        {" · "}
-                        <strong>{schedule.creditTargetPerSemester} credits</strong> per semester
-                    </p>
+                    {/* Phase 16 Task D — summary card. Renders whenever
+                        we know the student (post-onboarding), independent
+                        of whether a forward schedule has been computed
+                        yet. Falls back gracefully when individual fields
+                        are missing on the DPR. */}
+                    {student && renderSummaryCard(student, dpr ?? null, schedule)}
+
+                    {schedule && (
+                        <p className={styles.scheduleSidebarMeta}>
+                            Targeting graduation in <strong>{formatTermLabel(schedule.graduationTerm)}</strong>
+                            {" · "}
+                            <strong>{schedule.creditTargetPerSemester} credits</strong> per semester
+                        </p>
+                    )}
 
                     {/* Phase 14 Task 10 — load-style pills row.
                         All three pills are equally styled — no "active" selection state
                         because the server is the source of truth for the current style.
-                        Clicking any pill injects a proposal message into the chat. */}
-                    <div className={styles.loadStylePills}>
-                        {LOAD_STYLES.map(s => (
-                            <button
-                                key={s.value}
-                                type="button"
-                                className={styles.loadStylePill}
-                                title={s.tooltip}
-                                onClick={() => handlePillClick(s.value)}
-                            >
-                                {s.label}
-                            </button>
-                        ))}
-                    </div>
+                        Clicking any pill injects a proposal message into the chat.
+                        Hidden when there's no schedule yet — pills propose CHANGES
+                        to a plan and are meaningless without one. */}
+                    {schedule && (
+                        <div className={styles.loadStylePills}>
+                            {LOAD_STYLES.map(s => (
+                                <button
+                                    key={s.value}
+                                    type="button"
+                                    className={styles.loadStylePill}
+                                    title={s.tooltip}
+                                    onClick={() => handlePillClick(s.value)}
+                                >
+                                    {s.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Decision #32 — 4-state banner */}
-                    {schedule.state === "valid-with-trade-offs" && schedule.assumptions.length > 0 && (
+                    {schedule && schedule.state === "valid-with-trade-offs" && schedule.assumptions.length > 0 && (
                         <div className={styles.scheduleTradeOffsBanner}>
                             ℹ Plan has trade-offs or assumptions:
                             <ul>
@@ -245,7 +267,7 @@ export default function ScheduleSidebar({
                             </ul>
                         </div>
                     )}
-                    {schedule.state === "infeasible-draft" && (
+                    {schedule && schedule.state === "infeasible-draft" && (
                         <div className={styles.scheduleInfeasibilityBanner}>
                             ⚠ Plan has constraint violations:
                             <ul>
@@ -255,7 +277,7 @@ export default function ScheduleSidebar({
                             </ul>
                         </div>
                     )}
-                    {schedule.state === "student-preferred-invalid-draft" && (
+                    {schedule && schedule.state === "student-preferred-invalid-draft" && (
                         <div className={styles.scheduleStudentPrefBanner}>
                             ⚠ Student-confirmed plan despite warnings
                         </div>
@@ -269,6 +291,10 @@ export default function ScheduleSidebar({
                         // and orders chronologically. Prior Credits
                         // (TE rows) render as a dedicated card BEFORE
                         // any term card.
+                        // Phase 16 Task D — also runs when `schedule`
+                        // is null but `student` is non-null, so a
+                        // returning student sees their history + IP
+                        // even before a forward plan exists.
                         const grouped = groupCoursesByTerm({
                             student: student ?? null,
                             forwardSchedule: schedule,
@@ -279,13 +305,13 @@ export default function ScheduleSidebar({
                         // semesters list. Section materialization still
                         // swaps the render for ONLY that one term; the
                         // history + current cards never participate.
-                        const immediateTerm = schedule.semesters.find(s => !s.locked)?.term;
+                        const immediateTerm = schedule?.semesters.find(s => !s.locked)?.term;
                         // Index forwardSchedule semesters by term so we
                         // can recover plannedCredits / notes / locked
                         // for future-card rendering. Historical + IP
                         // buckets don't have these (they're synthesized
                         // from the StudentProfile).
-                        const forwardByTerm = new Map(schedule.semesters.map(s => [s.term, s]));
+                        const forwardByTerm = new Map((schedule?.semesters ?? []).map(s => [s.term, s]));
                         return (
                             <>
                                 {grouped.priorCredits.length > 0 && (
@@ -339,6 +365,12 @@ export default function ScheduleSidebar({
                                                         const key = `${semIdx}-${slotIdx}`;
                                                         const isOpen = openPopover === key;
                                                         const isLocked = slot.kind === "completed";
+                                                        // Phase 16 Task D — workload-tier
+                                                        // tint classes. Only specific_planned
+                                                        // + placeholder slots carry the tier;
+                                                        // history (completed) and IP slots
+                                                        // intentionally render uncolored.
+                                                        const tierClass = slotTierClassName(slot);
                                                         return (
                                                             <li
                                                                 key={slotIdx}
@@ -346,15 +378,22 @@ export default function ScheduleSidebar({
                                                                     styles[`slot_${slot.kind}`],
                                                                     slot.kind === "placeholder" && slot.optional ? styles.slotOptional : "",
                                                                     isLocked ? styles.slotLocked : styles.slotClickable,
+                                                                    tierClass ? styles.slotTier : "",
+                                                                    tierClass ?? "",
                                                                 ].filter(Boolean).join(" ")}
                                                                 onClick={() => handleSlotClick(key, slot)}
                                                                 title={isLocked ? "Completed — locked" : "Click to propose a change"}
                                                             >
                                                                 {renderSlot(slot)}
                                                                 <span className={styles.slotGradeCell}>{slotGradeText(slot)}</span>
-                                                                {isLocked && (
-                                                                    <span className={styles.slotLockIcon} aria-label="locked" title="Completed — cannot edit">🔒</span>
-                                                                )}
+                                                                <span
+                                                                    className={styles.slotLockIcon}
+                                                                    aria-label={isLocked ? "locked" : ""}
+                                                                    title={isLocked ? "Completed — cannot edit" : ""}
+                                                                    aria-hidden={!isLocked}
+                                                                >
+                                                                    {isLocked ? "🔒" : ""}
+                                                                </span>
                                                                 {isOpen && !isLocked && (
                                                                     <div
                                                                         className={styles.slotPopover}
@@ -380,6 +419,17 @@ export default function ScheduleSidebar({
                                         </section>
                                     );
                                 })}
+                                {/* Phase 16 Task D — render-when-no-plan
+                                    fix. When the student has onboarded
+                                    but no forward plan exists yet, the
+                                    "Ask me what to take next semester"
+                                    nudge appears AFTER the historical /
+                                    IP cards rather than replacing them. */}
+                                {!schedule && (
+                                    <p className={styles.scheduleSidebarEmpty}>
+                                        No plan yet. Ask me what to take next semester to compute one.
+                                    </p>
+                                )}
                             </>
                         );
                     })()}
@@ -601,6 +651,127 @@ function slotGradeText(slot: ScheduleSlot): string {
         case "specific_planned":
         case "placeholder":
             return "—";
+    }
+}
+
+/**
+ * Phase 16 Task D — workload-tier left-border tint. Returns the
+ * CSS-module class for the slot's `workloadTier`, or `undefined`
+ * for slot kinds that don't carry a tier (history `completed` rows
+ * synthesized from `coursesTaken` and IP `in_progress` rows).
+ *
+ * The tier value is one of five strings (see `WorkloadTier` in
+ * `packages/shared/src/types.ts`). CSS-module class names are
+ * keyed identically (`.slotTier_major-required`, etc.).
+ */
+function slotTierClassName(slot: ScheduleSlot): string | undefined {
+    if (slot.kind !== "specific_planned" && slot.kind !== "placeholder") return undefined;
+    const cls = styles[`slotTier_${slot.workloadTier}`];
+    return cls || undefined;
+}
+
+// ============================================================
+// Phase 16 Task D — Summary card
+// ============================================================
+
+/**
+ * Render the top-of-sidebar identity card. Shows the student's name
+ * (from the parsed DPR header, falling back to the anonymized
+ * `student.id`), declared programs, home school, visa status, GPA,
+ * credits earned vs required (with a progress bar), and graduation
+ * term. Every field gracefully degrades when the underlying source
+ * is unavailable: missing GPA / credits drop their row entirely
+ * rather than showing "null" or "0".
+ *
+ * Cardinal Rule §2.1 — no fabrication: if a field can't be sourced
+ * from the StudentProfile or DPR, we omit it.
+ */
+function renderSummaryCard(
+    student: StudentProfile,
+    dpr: DegreeProgressReport | null,
+    schedule: ForwardSchedule | null,
+) {
+    // Name: prefer the DPR header (PeopleSoft surfaces "Mongardi,Edoardo"
+    // or similar), fall back to the anonymized student.id when no DPR
+    // is loaded yet.
+    const name = (dpr?.header.studentName || student.id || "").trim() || "Student";
+
+    // Programs: render as "BA cs_major_ba" / "Minor math_minor_ba" to
+    // keep the original programType + programId visible (the UI hasn't
+    // promoted programId → human label anywhere else yet).
+    const programs = student.declaredPrograms
+        .map((d) => `${d.programType} ${d.programId}`)
+        .join(", ");
+
+    const school = (student.homeSchool || "").toUpperCase();
+
+    // Visa: PeopleSoft uses lowercase "f1" / "domestic" / "other" but
+    // the UI renders "F-1" / "Domestic" — match the spec.
+    const visa = formatVisa(student.visaStatus);
+
+    const gpa = dpr?.cumulative.cumulativeGpa ?? null;
+    const creditsUsed = dpr?.cumulative.creditsUsed ?? null;
+    const creditsRequired = dpr?.cumulative.creditsRequired ?? null;
+    const progressPct = creditsUsed !== null && creditsRequired !== null && creditsRequired > 0
+        ? Math.min(100, Math.max(0, (creditsUsed / creditsRequired) * 100))
+        : null;
+
+    const graduationLabel = schedule?.graduationTerm
+        ? formatTermLabel(schedule.graduationTerm)
+        : "TBD";
+
+    // Build the meta line (programs · school · visa) defensively so
+    // missing fields don't leave dangling separators.
+    const metaParts: string[] = [];
+    if (programs) metaParts.push(programs);
+    if (school) metaParts.push(school);
+    if (visa) metaParts.push(visa);
+
+    return (
+        <section className={styles.summaryCard} aria-label="Student summary">
+            <h3 className={styles.summaryCardHeader}>{name}</h3>
+            {metaParts.length > 0 && (
+                <div className={styles.summaryCardRow}>{metaParts.join(" · ")}</div>
+            )}
+            {(gpa !== null || creditsUsed !== null) && (
+                <div className={styles.summaryCardRow}>
+                    {gpa !== null && (
+                        <>GPA <strong>{gpa.toFixed(3)}</strong></>
+                    )}
+                    {gpa !== null && creditsUsed !== null && creditsRequired !== null && " · "}
+                    {creditsUsed !== null && creditsRequired !== null && (
+                        <><strong>{creditsUsed} / {creditsRequired}</strong> credits</>
+                    )}
+                </div>
+            )}
+            <div className={styles.summaryCardRow}>
+                Graduating <strong>{graduationLabel}</strong>
+            </div>
+            {progressPct !== null && (
+                <div
+                    className={styles.summaryCardProgressBar}
+                    role="progressbar"
+                    aria-valuenow={Math.round(progressPct)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Degree progress: ${creditsUsed} of ${creditsRequired} credits`}
+                >
+                    <div
+                        className={styles.summaryCardProgressFill}
+                        style={{ width: `${progressPct}%` }}
+                    />
+                </div>
+            )}
+        </section>
+    );
+}
+
+function formatVisa(visaStatus?: "f1" | "domestic" | "other"): string {
+    switch (visaStatus) {
+        case "f1": return "F-1";
+        case "domestic": return "Domestic";
+        case "other": return "Other";
+        default: return "";
     }
 }
 
