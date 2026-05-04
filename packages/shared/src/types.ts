@@ -668,3 +668,326 @@ export interface OfferingEntry {
     /** Phase 12.9.5: classified confidence in this offering pattern. */
     confidence?: ConfidenceTier;
 }
+
+// === Phase 13 — Forward Planner ===
+
+// ---- 1. ValidationResult + DataSource + ApprovalAuthority (Decision #40) ----
+
+export type DataSource = "DPR" | "FOSE" | "bulletin" | "program-rules" | "student-input";
+export type ApprovalAuthority = "instructor" | "department" | "advisor" | "registrar" | "OGS" | "school-dean";
+
+export type ValidationResult =
+    | { status: "pass"; verifiedFrom: DataSource }
+    | { status: "assumed-pass"; assumption: string; whatWouldFlipIt: string }
+    | { status: "requires-approval"; authority: ApprovalAuthority }
+    | { status: "fail"; reason: string };
+
+// ---- 2. WorkloadTier (Decision #24) + LoadRationale (Decisions #22d + #24) + Assumption (Decisions #30 + #42) ----
+
+export type WorkloadTier =
+    | "major-required"
+    | "major-elective"
+    | "school-core"
+    | "free-elective"
+    | "general-elective";
+
+export interface LoadRationale {
+    strategy: "balanced" | "frontload" | "backload" | "light" | "heavy";
+    creditsTarget: number;
+    slack: number;
+    weightedCredits: number;       // Σ slot.credits × slot.workloadWeight
+    hardCount: number;             // slots with workloadWeight ≥ 1.0
+    easyCount: number;             // slots with workloadWeight < 1.0
+    alternativeDistributionsConsidered: Array<{
+        distribution: number[];
+        rejectedBecause: string;
+    }>;
+}
+
+/**
+ * Discriminated union per Decisions #30 + #42. Three variants:
+ *  - IP_COURSE_COMPLETION  (#30; solver-emitted)
+ *  - LLM_RANKED_ALTERNATIVE (#42 Tier B; Phase-14-emitted)
+ *  - HEURISTIC_MAPPING      (#42 Tier D; Phase-14-emitted; SOFT ONLY —
+ *                            the `studentConstraintFraming: "soft"`
+ *                            literal type is the Layer-2 schema
+ *                            discriminator in the 3-layer Tier-D
+ *                            enforcement. A "hard" framing is a
+ *                            TypeScript compile-time error.)
+ */
+export type Assumption =
+    | {
+          type: "IP_COURSE_COMPLETION";
+          courseId: string;
+          requiredGrade?: string;
+          consequenceIfFalse: string;
+          cascadingSlots: string[];
+          contingencyPlanAvailable: boolean;
+      }
+    | {
+          type: "LLM_RANKED_ALTERNATIVE";
+          studentStatedFactor: string;
+          selectedPlanIndex: number;
+          reasoning: string;
+          dimensionsConsidered: string[];
+      }
+    | {
+          type: "HEURISTIC_MAPPING";
+          studentStatedFactor: string;
+          /** Layer-2 of Tier-D 3-layer enforcement. Literal "soft" —
+           *  hard-framed constraints CANNOT construct this variant. */
+          studentConstraintFraming: "soft";
+          /** Phase 14 will tighten this to PlanMutation once that type is defined
+           *  (Phase 14 Task 1). Typed as unknown for now per controller note 5. */
+          mappedToMutation: unknown;
+          confidence: "low" | "medium" | "high";
+          reasoning: string;
+          consequenceIfWrong: string;
+      };
+
+// ---- 3. ConfidenceTier is already defined at line 648 (Phase 12.9.5) — no redefinition needed ----
+
+// ---- 4. PoolBinding (Decision #28) + PlaceholderSlot tagged union (Decision #38) ----
+
+export interface PoolBinding {
+    poolId: string;
+    candidates: string[];   // courseIds
+    satisfiesRule: string;  // ruleId
+}
+
+export interface RequirementPoolSlot {
+    kind: "requirement-pool";
+    ruleId: string;
+    candidates: string[];               // courseIds
+    constraints: Array<{ kind: string; detail: string }>;
+    bindingState: "unbound" | "candidate-set" | "bound";
+    bound?: string;                     // courseId
+}
+
+export interface FreeCreditSlot {
+    kind: "free-credit";
+    defaultWeight: 0.3;                 // per Decision #37
+    bindingState: "placeholder-pending" | "placeholder-deferred" | "bound";
+    bound?: string;                     // courseId
+}
+
+export interface AdvisingPlaceholderSlot {
+    kind: "advising-placeholder";
+    advisingNote: string;
+    bindingState: "advisor-pending" | "bound";
+    bound?: string;                     // courseId
+}
+
+/** Tagged union per Decision #38. The `kind` discriminator enables
+ *  exhaustiveness checks across Phase 14's binding tools. */
+export type PlaceholderSlot =
+    | RequirementPoolSlot
+    | FreeCreditSlot
+    | AdvisingPlaceholderSlot;
+
+// ---- 5. SlotRationale + TermConstraint (Decision #22a) ----
+
+export type TermConstraintKind =
+    | "prereqChain"
+    | "offering"
+    | "creditCeiling"
+    | "creditFloor"
+    | "visaFloor"
+    | "coreqSameTerm";
+
+export interface TermConstraint {
+    kind: TermConstraintKind;
+    detail: string;
+}
+
+export interface SlotRationale {
+    satisfiesRequirements: string[];     // ruleIds
+    termConstraints: TermConstraint[];
+    consideredAlternatives: Array<{
+        courseId: string;
+        rejectedBecause: string;
+    }>;
+    decisionsApplied: string[];          // e.g. "D4-IPProjection"
+    petitionTrigger?: { fromCourse: string; bulletinText: string };
+}
+
+export interface SlotFlexibility {
+    earliestPossibleTerm: string;        // term code
+    latestPossibleTerm: string;
+    alternativeCourses: string[];        // courseIds
+}
+
+export interface DownstreamImpact {
+    courseIds: string[];
+    graduationDelay: number;             // terms
+}
+
+// ---- 6. ScheduleSlot discriminated union (4 kinds) ----
+
+export type ScheduleSlotKind = "completed" | "in_progress" | "specific_planned" | "placeholder";
+
+export interface ScheduleSlotCompleted {
+    kind: "completed";
+    courseId: string;
+    title: string;
+    credits: number;
+    grade: string;
+}
+
+export interface ScheduleSlotInProgress {
+    kind: "in_progress";
+    courseId: string;
+    title: string;
+    credits: number;
+}
+
+/** specific_planned slot — carries full rationale per Decisions #22a-d, #24, #33, #37, #39, #40 */
+export interface ScheduleSlotSpecificPlanned {
+    kind: "specific_planned";
+    courseId: string;
+    title: string;
+    credits: number;
+    satisfiesRules: string[];
+    reason: string;
+    requiresPetition?: boolean;
+    // Decisions #22a-d, #24, #33, #37, #39, #40 fields:
+    rationale: SlotRationale;
+    flexibility: SlotFlexibility;
+    downstreamImpact: DownstreamImpact;
+    workloadTier: WorkloadTier;
+    workloadWeight: number;              // 0.3..~1.6 per #24 + #35
+    bindingState: "bound";               // specific_planned is always bound
+    confidence: ConfidenceTier;          // copied from OfferingEntry per #39
+    isCriticalPath: boolean;             // per #39
+    optionalReason?: {
+        droppable: boolean;
+        blockingConstraints?: string[];
+    };
+    approvalAuthority?: ApprovalAuthority;
+}
+
+/** placeholder slot — reserved credits with rich rationale, pending course binding */
+export interface ScheduleSlotPlaceholder {
+    kind: "placeholder";
+    category: string;                    // human-readable label
+    credits: number;
+    satisfiesRules: string[];
+    optional: boolean;                   // per Decision #8
+    reason: string;
+    // Phase 13 placeholder slots also carry the same rich fields,
+    // computed against the placeholder's reserved credits + tier:
+    rationale: SlotRationale;
+    flexibility: SlotFlexibility;
+    downstreamImpact: DownstreamImpact;
+    workloadTier: WorkloadTier;
+    workloadWeight: number;
+    bindingState: "placeholder-pending" | "placeholder-deferred";
+    placeholderId: string;
+    poolBinding?: PoolBinding;           // present for RequirementPoolSlot kind (#28)
+    optionalReason?: {
+        droppable: boolean;
+        blockingConstraints?: string[];
+    };
+    confidence: ConfidenceTier;
+    isCriticalPath: boolean;
+    approvalAuthority?: ApprovalAuthority;
+}
+
+export type ScheduleSlot =
+    | ScheduleSlotCompleted
+    | ScheduleSlotInProgress
+    | ScheduleSlotSpecificPlanned
+    | ScheduleSlotPlaceholder;
+
+// ---- 7. ForwardSemester (Decision #24 extended) ----
+
+export interface ForwardSemester {
+    term: string;                        // e.g. "2026-fall"
+    locked: boolean;                     // DPR-derived (completed/in-progress)
+    slots: ScheduleSlot[];
+    plannedCredits: number;
+    notes: string[];                     // visa/load advisories
+    loadRationale: LoadRationale;
+}
+
+// ---- 8. PlanState 4-state union (Decision #32) ----
+
+export type PlanState =
+    | "valid-clean"
+    | "valid-with-trade-offs"
+    | "infeasible-draft"
+    | "student-preferred-invalid-draft";
+
+// ---- 9.1. AlternativePlanSummary (Decision #44) ----
+
+/** Top-K alternative-plan summary from Stage 7. ≤5 per ForwardSchedule. */
+export interface AlternativePlanSummary {
+    planIndex: number;
+    balanceScore: number;
+    weightedCreditsByTerm: Record<string, number>;
+    hardCountByTerm: Record<string, number>;
+    easyCountByTerm: Record<string, number>;
+    subjectDistributionByTerm: Record<string, Record<string, number>>;
+    distinctSubjectsCount: number;
+    totalPetitionCount: number;
+    totalAssumptionCount: number;
+    graduationTerm: string;
+    topDiffsFromWinner: Array<{ aspect: string; change: string }>;
+}
+
+// ---- 10. FeasibilityReport + InfeasibilityReport (Decisions #10 / #31) ----
+
+export interface FeasibilityReport {
+    feasible: boolean;
+    infeasibilityReason?: string;
+    constraintViolations: Array<{
+        kind:
+            | "prereq_unsatisfiable"
+            | "offering_pattern"
+            | "credit_floor"
+            | "credit_ceiling"
+            | "graduation_total"
+            | "not_clause"
+            | "pass_fail_cap"
+            | "online_credit_cap"
+            | "outside_home_credit_cap"
+            | "gpa_floor"
+            | "other";
+        course?: string;
+        term?: string;
+        detail: string;
+    }>;
+    placementRationale: Record<string, string>;
+}
+
+export interface InfeasibilityReport {
+    conflictSource: "pin" | "exclusion" | "loadStyleOverride" | "schedulingPreference" | "other";
+    conflictDetail: string;
+    relaxationSuggestions: string[];
+    /** Decision #10 — the no-pin (or no-mutation) plan the solver would
+     *  have produced absent the conflicting input, so the agent can
+     *  surface "here's what works without your pin" cleanly. */
+    fallbackSchedule?: ForwardSchedule;
+}
+
+// ---- 9. ForwardSchedule (Decisions #25, #30, #32, #44) ----
+
+export interface ForwardSchedule {
+    studentId: string;
+    homeSchoolId: string;
+    graduationTerm: string;
+    creditTargetPerSemester: number;
+    f1Floor: number | null;
+    domesticPartTimeFloor: number | null;
+    graduationCreditMinimum: number;
+    degreeCreditsMet: boolean;
+    semesters: ForwardSemester[];
+    dprCourseHistoryHash: string;
+    computedAt: number;
+    feasibility: FeasibilityReport;
+    state: PlanState;                    // Decision #32
+    balanceScore: number;                // Decision #25
+    assumptions: Assumption[];           // Decision #30 (discriminated union per #42)
+    /** Decision #44 — top-K alternative-plan summaries from Stage 7. ≤5. */
+    alternativeCandidates?: AlternativePlanSummary[];
+}
