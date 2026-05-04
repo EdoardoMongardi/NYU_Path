@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { Assumption, ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
+import type { Assumption, ForwardSchedule, ScheduleSlot, StudentProfile } from "@nyupath/shared";
+import type { DegreeProgressReport } from "@nyupath/engine";
 import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import { formatPatterns } from "../../lib/formatMeetingPatterns";
+import { groupCoursesByTerm, type PriorCreditEntry } from "../../lib/groupCoursesByTerm";
 import styles from "./chat.module.css";
 
 // Phase 16 Task B — env-flag-gated Clear button. The flag is read at
@@ -32,6 +34,23 @@ const SLOT_ACTIONS: Array<{ action: SlotAction; label: string }> = [
 
 interface ScheduleSidebarProps {
     schedule: ForwardSchedule | null;
+    /**
+     * Phase 16 Task C — built StudentProfile (post-buildStudentProfileFromDpr).
+     * The sidebar now consumes the profile to render historical term
+     * cards (from `coursesTaken`) + the IP card (from `currentSemester`).
+     * Optional because the page wires it in only after onboarding /
+     * restore completes; pre-onboarding the sidebar only has a forward
+     * schedule (or nothing) to draw.
+     */
+    student?: StudentProfile | null;
+    /**
+     * Phase 16 Task C — raw DegreeProgressReport. Source of truth for
+     * the Prior Credits card (TE rows live on `dpr.courseHistory`; the
+     * StudentProfile keeps them in `coursesTaken` with grade="TE" but
+     * the `subject="ELECTIVE"` rows are filtered out at build time, so
+     * the DPR is the only place to recover the AP/IB labels).
+     */
+    dpr?: DegreeProgressReport | null;
     /**
      * Phase 15 Task 8 — most recent `materialize_sections` output for
      * this session. When `state === "full"` AND its semester matches the
@@ -69,6 +88,8 @@ interface ScheduleSidebarProps {
 
 export default function ScheduleSidebar({
     schedule,
+    student,
+    dpr,
     materialization,
     open,
     onClose,
@@ -123,7 +144,12 @@ export default function ScheduleSidebar({
         onProposeLoadStyle?.(style);
     };
 
-    const handleSlotClick = (key: string) => {
+    // Phase 16 Task C — Decision #16.4 edit gating. Completed (history)
+    // slots are read-only; clicking them must NOT open the popover.
+    // Other kinds (in_progress / specific_planned / placeholder) keep the
+    // existing toggle behavior.
+    const handleSlotClick = (key: string, slot: ScheduleSlot) => {
+        if (slot.kind === "completed") return;
         setOpenPopover(prev => (prev === key ? null : key));
     };
 
@@ -236,91 +262,126 @@ export default function ScheduleSidebar({
                     )}
 
                     {(() => {
-                        // Phase 15 Task 8 — IMMEDIATE term = the first
-                        // non-locked semester. Section materialization
-                        // only swaps the render for THIS term; locked
-                        // and later non-locked semesters keep their
-                        // structural-slot list. When materialization
-                        // is absent or targets a different term, every
-                        // semester falls through to the structural path.
-                        const immediateTerm = schedule.semesters.find(s => !s.locked)?.term;
-                        return schedule.semesters.map((sem, semIdx) => {
-                            const isImmediate = sem.term === immediateTerm;
-                            const matApplies = isImmediate && materialization
-                                && (
-                                    materialization.targetTerm === sem.term
-                                    || materialization.semester?.term === sem.term
-                                );
-                            const showSectionsView = matApplies
-                                && materialization!.state === "full"
-                                && materialization!.semester !== undefined;
-                            const showBanner = matApplies
-                                && (materialization!.state === "partial" || materialization!.state === "unavailable");
-                            return (
-                                <section key={sem.term} className={`${styles.semesterCard} ${sem.locked ? styles.locked : ""}`}>
-                                    <header className={styles.semesterCardHeader}>
-                                        <h3>{formatTermLabel(sem.term)}</h3>
-                                        <span className={styles.semesterCredits}>{sem.plannedCredits} cr</span>
-                                    </header>
-                                    {sem.notes.length > 0 && (
-                                        <ul className={styles.semesterNotes}>
-                                            {sem.notes.map((n, i) => <li key={i}>{n}</li>)}
-                                        </ul>
-                                    )}
-                                    {showBanner && (
-                                        <div className={styles.materializationBanner}>
-                                            {materialization!.message}
-                                        </div>
-                                    )}
-                                    {showSectionsView ? (
-                                        renderSectionsView(
-                                            materialization!,
-                                            selectedComboIdx,
-                                            setSelectedComboIdx,
-                                            onConfirmCombination,
-                                        )
-                                    ) : (
-                                        <ul className={styles.slotList}>
-                                            {sem.slots.map((slot, slotIdx) => {
-                                                const key = `${semIdx}-${slotIdx}`;
-                                                const isOpen = openPopover === key;
-                                                return (
-                                                    <li
-                                                        key={slotIdx}
-                                                        className={[
-                                                            styles[`slot_${slot.kind}`],
-                                                            slot.kind === "placeholder" && slot.optional ? styles.slotOptional : "",
-                                                            styles.slotClickable,
-                                                        ].filter(Boolean).join(" ")}
-                                                        onClick={() => handleSlotClick(key)}
-                                                        title="Click to propose a change"
-                                                    >
-                                                        {renderSlot(slot)}
-                                                        {isOpen && (
-                                                            <div
-                                                                className={styles.slotPopover}
-                                                                // Stop click from bubbling to the li
-                                                                onClick={e => e.stopPropagation()}
-                                                            >
-                                                                {SLOT_ACTIONS.map(a => (
-                                                                    <button
-                                                                        key={a.action}
-                                                                        type="button"
-                                                                        onClick={() => handleSlotAction(slot, a.action)}
-                                                                    >
-                                                                        {a.label}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    )}
-                                </section>
-                            );
+                        // Phase 16 Task C — full-degree render. The
+                        // sidebar now spans history (locked) → current
+                        // (IP, editable) → future (planner, editable).
+                        // The grouped helper de-dups overlapping terms
+                        // and orders chronologically. Prior Credits
+                        // (TE rows) render as a dedicated card BEFORE
+                        // any term card.
+                        const grouped = groupCoursesByTerm({
+                            student: student ?? null,
+                            forwardSchedule: schedule,
+                            dpr: dpr ?? null,
                         });
+                        // Phase 15 Task 8 — IMMEDIATE term = the first
+                        // non-locked future term in the planner's own
+                        // semesters list. Section materialization still
+                        // swaps the render for ONLY that one term; the
+                        // history + current cards never participate.
+                        const immediateTerm = schedule.semesters.find(s => !s.locked)?.term;
+                        // Index forwardSchedule semesters by term so we
+                        // can recover plannedCredits / notes / locked
+                        // for future-card rendering. Historical + IP
+                        // buckets don't have these (they're synthesized
+                        // from the StudentProfile).
+                        const forwardByTerm = new Map(schedule.semesters.map(s => [s.term, s]));
+                        return (
+                            <>
+                                {grouped.priorCredits.length > 0 && (
+                                    renderPriorCreditsCard(grouped.priorCredits)
+                                )}
+                                {grouped.terms.map((bucket, semIdx) => {
+                                    const fwd = forwardByTerm.get(bucket.term);
+                                    const isImmediate = bucket.term === immediateTerm;
+                                    const matApplies = isImmediate && materialization
+                                        && (
+                                            materialization.targetTerm === bucket.term
+                                            || materialization.semester?.term === bucket.term
+                                        );
+                                    const showSectionsView = matApplies
+                                        && materialization!.state === "full"
+                                        && materialization!.semester !== undefined;
+                                    const showBanner = matApplies
+                                        && (materialization!.state === "partial" || materialization!.state === "unavailable");
+                                    const headerCredits = fwd
+                                        ? fwd.plannedCredits
+                                        : bucket.slots.reduce((sum, s) => sum + (slotCredits(s)), 0);
+                                    return (
+                                        <section
+                                            key={bucket.term}
+                                            className={`${styles.semesterCard} ${bucket.locked ? styles.locked : ""}`}
+                                        >
+                                            <header className={styles.semesterCardHeader}>
+                                                <h3>{formatTermLabel(bucket.term)}</h3>
+                                                <span className={styles.semesterCredits}>{headerCredits} cr</span>
+                                            </header>
+                                            {fwd && fwd.notes.length > 0 && (
+                                                <ul className={styles.semesterNotes}>
+                                                    {fwd.notes.map((n, i) => <li key={i}>{n}</li>)}
+                                                </ul>
+                                            )}
+                                            {showBanner && (
+                                                <div className={styles.materializationBanner}>
+                                                    {materialization!.message}
+                                                </div>
+                                            )}
+                                            {showSectionsView ? (
+                                                renderSectionsView(
+                                                    materialization!,
+                                                    selectedComboIdx,
+                                                    setSelectedComboIdx,
+                                                    onConfirmCombination,
+                                                )
+                                            ) : (
+                                                <ul className={styles.slotList}>
+                                                    {bucket.slots.map((slot, slotIdx) => {
+                                                        const key = `${semIdx}-${slotIdx}`;
+                                                        const isOpen = openPopover === key;
+                                                        const isLocked = slot.kind === "completed";
+                                                        return (
+                                                            <li
+                                                                key={slotIdx}
+                                                                className={[
+                                                                    styles[`slot_${slot.kind}`],
+                                                                    slot.kind === "placeholder" && slot.optional ? styles.slotOptional : "",
+                                                                    isLocked ? styles.slotLocked : styles.slotClickable,
+                                                                ].filter(Boolean).join(" ")}
+                                                                onClick={() => handleSlotClick(key, slot)}
+                                                                title={isLocked ? "Completed — locked" : "Click to propose a change"}
+                                                            >
+                                                                {renderSlot(slot)}
+                                                                <span className={styles.slotGradeCell}>{slotGradeText(slot)}</span>
+                                                                {isLocked && (
+                                                                    <span className={styles.slotLockIcon} aria-label="locked" title="Completed — cannot edit">🔒</span>
+                                                                )}
+                                                                {isOpen && !isLocked && (
+                                                                    <div
+                                                                        className={styles.slotPopover}
+                                                                        // Stop click from bubbling to the li
+                                                                        onClick={e => e.stopPropagation()}
+                                                                    >
+                                                                        {SLOT_ACTIONS.map(a => (
+                                                                            <button
+                                                                                key={a.action}
+                                                                                type="button"
+                                                                                onClick={() => handleSlotAction(slot, a.action)}
+                                                                            >
+                                                                                {a.label}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ul>
+                                            )}
+                                        </section>
+                                    );
+                                })}
+                            </>
+                        );
                     })()}
                 </div>
             )}
@@ -447,12 +508,15 @@ function renderSectionsView(
 function renderSlot(slot: ScheduleSlot) {
     switch (slot.kind) {
         case "completed":
+            // Phase 16 Task C — grade moved into the dedicated grade
+            // cell appended by the row layout; the meta cell now holds
+            // ONLY credits to keep alignment with the other slot kinds.
             return (
                 <>
                     <span className={styles.slotIcon}>✓</span>
                     <span className={styles.slotCourseId}>{slot.courseId}</span>
                     <span className={styles.slotTitle}>{slot.title}</span>
-                    <span className={styles.slotMeta}>{slot.credits}cr · {slot.grade}</span>
+                    <span className={styles.slotMeta}>{slot.credits}cr</span>
                 </>
             );
         case "in_progress":
@@ -486,6 +550,65 @@ function renderSlot(slot: ScheduleSlot) {
                 </>
             );
     }
+}
+
+// ============================================================
+// Phase 16 Task C — Prior Credits card + grade column helpers
+// ============================================================
+
+/**
+ * Render the dedicated Prior Credits card. Sits ABOVE all term cards
+ * in the body, listing every TE row from the DPR (AP/IB/transfer
+ * credits) with credits but no grade column — TE rows in PeopleSoft
+ * carry "TE" as the grade and there's no letter grade to surface.
+ */
+function renderPriorCreditsCard(entries: PriorCreditEntry[]) {
+    const total = entries.reduce((sum, e) => sum + e.credits, 0);
+    return (
+        <section className={styles.priorCreditsCard}>
+            <header className={styles.semesterCardHeader}>
+                <h3>Prior Credits</h3>
+                <span className={styles.semesterCredits}>{total} cr</span>
+            </header>
+            <ul className={styles.slotList}>
+                {entries.map((e, i) => (
+                    <li
+                        key={`${e.courseId}-${i}`}
+                        className={styles.priorCreditsRow}
+                        title={e.source ?? undefined}
+                    >
+                        <span className={styles.slotIcon}>★</span>
+                        <span className={styles.slotCourseId}>{e.courseId}</span>
+                        {e.source && e.source !== e.courseId && (
+                            <span className={styles.slotTitle}>{e.source}</span>
+                        )}
+                        <span className={styles.slotMeta}>{e.credits}cr</span>
+                    </li>
+                ))}
+            </ul>
+        </section>
+    );
+}
+
+/** Per-slot grade-column text. completed → letter grade; IP → "IP";
+ *  specific_planned / placeholder → em-dash. */
+function slotGradeText(slot: ScheduleSlot): string {
+    switch (slot.kind) {
+        case "completed":
+            return slot.grade;
+        case "in_progress":
+            return "IP";
+        case "specific_planned":
+        case "placeholder":
+            return "—";
+    }
+}
+
+/** Slot-level credit accessor used to compute a per-bucket header
+ *  total when the bucket has no matching ForwardSemester (history /
+ *  IP cards). All four slot kinds carry `credits` directly. */
+function slotCredits(slot: ScheduleSlot): number {
+    return slot.credits;
 }
 
 function formatTermLabel(term: string): string {
