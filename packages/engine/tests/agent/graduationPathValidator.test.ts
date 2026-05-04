@@ -739,6 +739,109 @@ describe("Axis 6 — assumptionsExplicit: IP assumption handling", () => {
         const result = runGraduationPathValidator(args);
         expect(result.axisResults.assumptionsExplicit.status).toBe("pass");
     });
+
+    // Regression for the per-IP-course `isReliedOn` correlation bug:
+    // before the fix, an assumption for course A (whose cascadingSlots
+    // are in the plan) made the loop iteration for course B (no
+    // assumption, no real dependent in the plan) falsely conclude B was
+    // relied-on, and Axis 6 returned `fail`. The strict scoping
+    // (assumption.courseId === ipCourseId) ensures B's iteration only
+    // looks at assumptions FOR B.
+    it("does NOT cross-contaminate: a second IP course without an assumption is not flagged when only the first IP course has cascading slots in plan", () => {
+        // IP course A is properly covered by an assumption with cascading slots.
+        const ipAssumptionForA: Assumption = {
+            type: "IP_COURSE_COMPLETION",
+            courseId: "CSCI-UA 201",
+            consequenceIfFalse: "downstream slots must move",
+            cascadingSlots: ["CSCI-UA 202"],   // CSCI-UA 202 IS in the plan
+            contingencyPlanAvailable: false,
+        };
+        // IP course B (CHEM-UA 125) is in DPR history as IP but has NO
+        // assumption AND no cascading planned slot — Axis 6 must not flag it.
+        const dpr = makeDpr({
+            courseHistory: [
+                {
+                    term: "2026 Fall",
+                    subject: "CSCI-UA",
+                    catalogNbr: "201",
+                    courseTitle: "Computer Organization",
+                    grade: null,
+                    units: 4,
+                    type: "IP",
+                },
+                {
+                    term: "2026 Fall",
+                    subject: "CHEM-UA",
+                    catalogNbr: "125",
+                    courseTitle: "General Chemistry I",
+                    grade: null,
+                    units: 4,
+                    type: "IP",
+                },
+            ],
+        });
+        // Plan includes only a slot whose courseId matches A's cascadingSlots.
+        const plan = makeEmptyPlan({
+            assumptions: [ipAssumptionForA],
+            semesters: [
+                {
+                    term: "2027-spring",
+                    locked: false,
+                    plannedCredits: 4,
+                    notes: [],
+                    loadRationale: {
+                        strategy: "balanced",
+                        creditsTarget: 4,
+                        slack: 0,
+                        weightedCredits: 4,
+                        hardCount: 1,
+                        easyCount: 0,
+                        alternativeDistributionsConsidered: [],
+                    },
+                    slots: [
+                        {
+                            kind: "specific_planned",
+                            courseId: "CSCI-UA 202",
+                            title: "Data Structures",
+                            credits: 4,
+                            satisfiesRules: ["r-202"],
+                            reason: "Required",
+                            rationale: {
+                                satisfiesRequirements: ["r-202"],
+                                termConstraints: [],
+                                consideredAlternatives: [],
+                                decisionsApplied: [],
+                            },
+                            flexibility: {
+                                earliestPossibleTerm: "2027-spring",
+                                latestPossibleTerm: "2027-spring",
+                                alternativeCourses: [],
+                            },
+                            downstreamImpact: {
+                                courseIds: [],
+                                graduationDelay: 0,
+                            },
+                            workloadTier: "major-required",
+                            workloadWeight: 1.0,
+                            bindingState: "bound",
+                            confidence: "historically_likely",
+                            isCriticalPath: false,
+                        },
+                    ],
+                },
+            ],
+        });
+        const args: GraduationPathValidatorArgs = {
+            plan,
+            dpr,
+            programRules: makeProgramRules(),
+        };
+        const result = runGraduationPathValidator(args);
+        // Axis 6 must PASS — CHEM-UA 125 has no real dependents in the
+        // plan, so even though it lacks an assumption, the validator
+        // shouldn't flag it.
+        expect(result.axisResults.assumptionsExplicit.status).toBe("pass");
+    });
 });
 
 // ---------------------------------------------------------------------------

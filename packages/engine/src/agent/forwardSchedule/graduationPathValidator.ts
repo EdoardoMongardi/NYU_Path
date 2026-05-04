@@ -308,7 +308,10 @@ function checkVisaAxesPass(plan: ForwardSchedule): ValidationResult {
         }
     }
 
-    return { status: "pass", verifiedFrom: "DPR" };
+    // Axis 5 verifies via plan metadata (constraintViolations + per-term
+    // notes), not by re-reading the DPR — `program-rules` is the more
+    // accurate DataSource label here.
+    return { status: "pass", verifiedFrom: "program-rules" };
 }
 
 // ---------------------------------------------------------------------------
@@ -375,18 +378,19 @@ function checkAssumptionsExplicit(
     // have assumptions mapping them → verified as explicit.
 
     for (const ipCourseId of ipCoursesInDpr) {
-        // Only flag if this IP course is relied on (i.e., some planned slot
-        // has it in their cascadingSlots or it's a prereq source).
-        // Conservative: check if the IP course ID appears as courseId in any
-        // assumption's cascadingSlots — if something depends on it, it must
-        // be in assumptions.
+        // Decide whether THIS specific ipCourseId is relied on by the plan.
+        // The check must scope to assumptions whose own courseId matches
+        // ipCourseId — without that scoping, an assumption for course A
+        // (with cascading slots in the plan) would falsely mark course B
+        // (no assumption) as "relied on", flagging a fail that never fired
+        // a real dependency.
         let isReliedOn = false;
         for (const assumption of plan.assumptions) {
             if (
                 assumption.type === "IP_COURSE_COMPLETION" &&
+                assumption.courseId === ipCourseId &&
                 assumption.cascadingSlots.some(s => plannedCourseIds.has(s))
             ) {
-                // This IP assumption has cascading slots in the plan — it IS relied on
                 isReliedOn = true;
                 break;
             }
