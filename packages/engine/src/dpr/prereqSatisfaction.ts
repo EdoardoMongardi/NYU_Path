@@ -31,20 +31,25 @@ import { meetsGradeThreshold } from "./gradeComparison.js";
 
 // ---- Types ----
 
+/** The set of rule-identifiers `isPrereqSatisfied` may emit. Locking
+ *  this as a string-literal union (rather than a bare `string`) gives
+ *  call sites exhaustiveness checking and prevents future contributors
+ *  from emitting a non-canonical token. */
+export type PrereqSatisfactionReason =
+    | "dpr-satisfiedBy"            // Step 1: coursesUsed[] in any leaf req
+    | "ip-attempt"                 // Step 2: IP row in courseHistory
+    | "future-placement"           // Step 3: solver placement before T (or ≤T for coreq)
+    | "dpr-satisfiedBy-implicit"   // Step 4: EN/TE attempt meets explicit minGrade threshold
+    | "fail-grade-threshold"       // hard-reject: most-recent attempt below minGrades threshold
+    | "fail-no-attempt"            // hard-reject: course never taken, no IP, no future-plan
+    | "fail-no-implicit-acceptance"; // hard-reject: EN/TE attempt exists but DPR never
+                                     // recorded it in coursesUsed (no minGrades set)
+
 export interface PrereqSatisfactionResult {
     satisfied: boolean;
-    /** Short descriptor of which rule fired.
-     *  Possible values:
-     *    "dpr-satisfiedBy"           — Step 1: coursesUsed[] in any leaf req
-     *    "ip-attempt"                — Step 2: IP row in courseHistory
-     *    "future-placement"          — Step 3: solver placement before T (or ≤T for coreq)
-     *    "dpr-satisfiedBy-implicit"  — Step 4: EN/TE attempt meets explicit minGrade threshold
-     *    "fail-grade-threshold"      — hard-reject: most-recent attempt below minGrades threshold
-     *    "fail-no-attempt"           — hard-reject: course never taken, no IP, no future-plan
-     *    "fail-no-implicit-acceptance" — hard-reject: EN/TE attempt exists but DPR never
-     *                                    recorded it in coursesUsed (no minGrades set)
-     */
-    reason: string;
+    /** Which rule fired. See `PrereqSatisfactionReason` for the
+     *  full set of possible values. */
+    reason: PrereqSatisfactionReason;
 }
 
 // ---- Private term comparator (solver format: "2026-fall", "2027-spring") ----
