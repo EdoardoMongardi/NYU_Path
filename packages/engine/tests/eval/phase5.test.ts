@@ -74,7 +74,7 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 17 NYU Path tools (§7.1 complete after Phase 14 Task 5)", () => {
+    it("buildDefaultRegistry exposes the 19 NYU Path tools (§7.1 complete after Phase 14 Task 6)", () => {
         // Phase 13 Task 6 added two new tools alongside the original 12:
         //   - plan_forward_degree  (replaces plan_semester for multi-term planning;
         //                            old tool kept registered for back-compat)
@@ -83,9 +83,14 @@ describe("buildTool + ToolRegistry", () => {
         //   - propose_plan_change  (read-only preview of mutations)
         //   - confirm_plan_change  (write — applies mutations)
         //   - simulate_alternatives (read-only — failure-mode candidates)
+        // Phase 14 Task 6 adds two more:
+        //   - bind_free_elective   (read-only preview of free-credit slot binding)
+        //   - bind_pool_slot       (read-only preview of requirement-pool slot binding)
         const reg = buildDefaultRegistry();
         const names = reg.list().map((t) => t.name).sort();
         expect(names).toEqual([
+            "bind_free_elective",
+            "bind_pool_slot",
             "check_overlap",
             "check_transfer_eligibility",
             "confirm_plan_change",
@@ -110,7 +115,9 @@ describe("buildTool + ToolRegistry", () => {
         // Phase 13 Task 6 added plan_forward_degree as a state-mutating tool.
         // Phase 14 Task 5 adds confirm_plan_change (writes session.schedulePreferences
         // + schedule slot). propose_plan_change and simulate_alternatives are
-        // isReadOnly:true. So the non-read-only set is now:
+        // isReadOnly:true.
+        // Phase 14 Task 6: bind_free_elective and bind_pool_slot are both isReadOnly:true.
+        // So the non-read-only set stays at:
         // {confirm_plan_change, confirm_profile_update, plan_forward_degree}.
         const reg = buildDefaultRegistry();
         const writes = reg.list().filter((t) => !t.isReadOnly).map((t) => t.name).sort();
