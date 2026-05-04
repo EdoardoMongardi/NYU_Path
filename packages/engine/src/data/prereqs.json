@@ -2145,7 +2145,9 @@
   {
     "course": "ART-UE 1905",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "ART-UE 1901"
+    ]
   },
   {
     "course": "ART-UE 1982",
@@ -3785,7 +3787,10 @@
   {
     "course": "BIOL-SHU 21",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "MATH-SHU 0121",
+      "MATH-SHU 0201"
+    ]
   },
   {
     "course": "BIOL-SHU 22",
@@ -3800,7 +3805,12 @@
   {
     "course": "BIOL-SHU 261",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "NEUR-SHU 0100",
+      "MATH-SHU 0235",
+      "MATH-SHU 0234",
+      "BUSF-SHU 0101"
+    ]
   },
   {
     "course": "BIOL-SHU 263",
@@ -3820,7 +3830,10 @@
   {
     "course": "BIOL-SHU 31",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "BIOL-SHU 0030",
+      "BIOL-UA 0030"
+    ]
   },
   {
     "course": "BIOL-SHU 314",
@@ -3860,7 +3873,9 @@
   {
     "course": "BIOL-UA 100",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "BIOL-UA 0012"
+    ]
   },
   {
     "course": "BIOL-UA 103",
@@ -4026,7 +4041,9 @@
   {
     "course": "BIOL-UA 223",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "BIOL-UA 0021"
+    ]
   },
   {
     "course": "BIOL-UA 23",
@@ -5019,7 +5036,9 @@
   {
     "course": "BMS-UY 1001",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "BMS-UY 1003"
+    ]
   },
   {
     "course": "BMS-UY 1003",
@@ -5928,7 +5947,11 @@
   {
     "course": "BUSOR-UH 2004",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "SOCSC-UH 1010Q",
+      "PSYCH-UH 1004Q",
+      "MATH-UH 2011Q"
+    ]
   },
   {
     "course": "BUSOR-UH 2005",
@@ -7294,7 +7317,9 @@
   {
     "course": "CCEX-SHU 1",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CCEX-SHU 0003"
+    ]
   },
   {
     "course": "CCEX-SHU 115",
@@ -7319,7 +7344,9 @@
   {
     "course": "CCEX-SHU 137",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CCEX-SHU 136"
+    ]
   },
   {
     "course": "CCEX-SHU 170",
@@ -7339,7 +7366,9 @@
   {
     "course": "CCEX-SHU 3",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CCEX-SHU 0001"
+    ]
   },
   {
     "course": "CCOL-UH 1000",
@@ -10481,22 +10510,32 @@
   {
     "course": "CHEM-SHU 125",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "MATH-SHU 0121",
+      "MATH-SHU 0201"
+    ]
   },
   {
     "course": "CHEM-SHU 126",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "MATH-SHU 0131",
+      "MATH-SHU 0201"
+    ]
   },
   {
     "course": "CHEM-SHU 127",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-SHU 0125"
+    ]
   },
   {
     "course": "CHEM-SHU 128",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-SHU 126"
+    ]
   },
   {
     "course": "CHEM-SHU 225",
@@ -10506,7 +10545,9 @@
   {
     "course": "CHEM-SHU 225L",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-SHU 0225"
+    ]
   },
   {
     "course": "CHEM-SHU 226",
@@ -10516,7 +10557,9 @@
   {
     "course": "CHEM-SHU 226L",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-SHU 226"
+    ]
   },
   {
     "course": "CHEM-SHU 312",
@@ -10774,7 +10817,10 @@
   {
     "course": "CHEM-UA 752",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-UA 0651",
+      "CHEM-UA 0652"
+    ]
   },
   {
     "course": "CHEM-UA 828",
@@ -10939,7 +10985,9 @@
   {
     "course": "CHEM-UA 890",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-UA 0652"
+    ]
   },
   {
     "course": "CHEM-UA 911",
@@ -11102,7 +11150,9 @@
   {
     "course": "CHEM-UH 3012",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-UH 3011"
+    ]
   },
   {
     "course": "CHEM-UH 3013",
@@ -11114,7 +11164,9 @@
   {
     "course": "CHEM-UH 3014",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-UH 3013"
+    ]
   },
   {
     "course": "CHEM-UH 3015",
@@ -11148,12 +11200,16 @@
   {
     "course": "CHEM-UH 3022",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-UH 3020"
+    ]
   },
   {
     "course": "CHEM-UH 3050",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHEM-UH 3010"
+    ]
   },
   {
     "course": "CHEM-UH 3090",
@@ -11266,12 +11322,16 @@
   {
     "course": "CHIN-SHU 121",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 0122"
+    ]
   },
   {
     "course": "CHIN-SHU 122",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 0121"
+    ]
   },
   {
     "course": "CHIN-SHU 150",
@@ -11291,7 +11351,9 @@
   {
     "course": "CHIN-SHU 201A",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 202A"
+    ]
   },
   {
     "course": "CHIN-SHU 202",
@@ -11301,12 +11363,18 @@
   {
     "course": "CHIN-SHU 202A",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 201A"
+    ]
   },
   {
     "course": "CHIN-SHU 203",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 202",
+      "CHIN-SHU 202A",
+      "CHIN-SHU 211"
+    ]
   },
   {
     "course": "CHIN-SHU 204",
@@ -11321,12 +11389,16 @@
   {
     "course": "CHIN-SHU 221",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 222"
+    ]
   },
   {
     "course": "CHIN-SHU 222",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 221"
+    ]
   },
   {
     "course": "CHIN-SHU 301",
@@ -11356,22 +11428,30 @@
   {
     "course": "CHIN-SHU 321",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 322"
+    ]
   },
   {
     "course": "CHIN-SHU 321A",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 322A"
+    ]
   },
   {
     "course": "CHIN-SHU 322",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 321"
+    ]
   },
   {
     "course": "CHIN-SHU 322A",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CHIN-SHU 321A"
+    ]
   },
   {
     "course": "CHIN-SHU 401",
@@ -12302,7 +12382,9 @@
   {
     "course": "CM-UY 1003",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "EX-UY 0001"
+    ]
   },
   {
     "course": "CM-UY 1011",
@@ -12314,7 +12396,9 @@
   {
     "course": "CM-UY 1013",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "EX-UY 0001"
+    ]
   },
   {
     "course": "CM-UY 1021",
@@ -12399,7 +12483,9 @@
         ]
       }
     ],
-    "coreqs": [],
+    "coreqs": [
+      "EX-UY 0001"
+    ],
     "minGrades": {
       "CM-UY 2213": "D",
       "CM-UY 2214": "D"
@@ -14410,7 +14496,15 @@
   {
     "course": "CS-UH 3210",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CS-UH 3010",
+      "CSCI-UA 202",
+      "CSCI-SHU 215",
+      "CS-UY 2214",
+      "CS-UH 3012",
+      "CSCI-SHU 308",
+      "CS-UY 4793"
+    ]
   },
   {
     "course": "CS-UH 3211",
@@ -14512,7 +14606,9 @@
   {
     "course": "CS-UY 1114",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "EX-UY 0001"
+    ]
   },
   {
     "course": "CS-UY 1121",
@@ -14557,7 +14653,9 @@
   {
     "course": "CS-UY 1133",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "EX-UY 0001"
+    ]
   },
   {
     "course": "CS-UY 1134",
@@ -14587,7 +14685,9 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [
+      "EX-UY 0001"
+    ]
   },
   {
     "course": "CS-UY 2124",
@@ -14656,7 +14756,9 @@
   {
     "course": "CS-UY 2413",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "EX-UY 0001"
+    ]
   },
   {
     "course": "CS-UY 3083",
@@ -14796,7 +14898,9 @@
   {
     "course": "CS-UY 3923",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CS-UY 3224"
+    ]
   },
   {
     "course": "CS-UY 3933",
@@ -15151,7 +15255,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [
+      "MATH-SHU 0131",
+      "MATH-SHU 0201"
+    ]
   },
   {
     "course": "CSCI-SHU 254",
@@ -15181,7 +15288,9 @@
   {
     "course": "CSCI-SHU 361",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "CSCI-SHU 0215"
+    ]
   },
   {
     "course": "CSCI-SHU 370",
@@ -18441,7 +18550,11 @@
   {
     "course": "ECE-UY 2004",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "MA-UY 1044",
+      "MA-UY 2034",
+      "PH-UY 2023"
+    ]
   },
   {
     "course": "ECE-UY 2204",
@@ -18562,7 +18675,11 @@
   {
     "course": "ECE-UY 3613",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "ECE-UY 2233",
+      "MA-UY 2224",
+      "MA-UY 3113"
+    ]
   },
   {
     "course": "ECE-UY 371",
@@ -18592,7 +18709,9 @@
   {
     "course": "ECE-UY 3824",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "EE-UY 3604"
+    ]
   },
   {
     "course": "ECE-UY 4001",
@@ -18629,7 +18748,9 @@
   {
     "course": "ECE-UY 4133",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "ECE-UY 3604"
+    ]
   },
   {
     "course": "ECE-UY 4144",
@@ -21175,7 +21296,9 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [
+      "ENGL-UA 0200"
+    ]
   },
   {
     "course": "ENGL-UA 240",
@@ -22543,7 +22666,10 @@
   {
     "course": "ENGR-UH 4142",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "ENGR-UH 3110",
+      "ENGR-UH 3530"
+    ]
   },
   {
     "course": "ENGR-UH 4143",
@@ -23687,7 +23813,9 @@
   {
     "course": "FILMM-UH 1510",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "FILMM-UH 1010"
+    ]
   },
   {
     "course": "FILMM-UH 1513",
@@ -34159,7 +34287,10 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [
+      "SPAN-UA 9050",
+      "SPAN-UA 9051"
+    ]
   },
   {
     "course": "LATC-UA 9606",
@@ -38542,7 +38673,9 @@
   {
     "course": "ME-UY 3311",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "ME-UY 3313"
+    ]
   },
   {
     "course": "ME-UY 3313",
@@ -38625,12 +38758,16 @@
   {
     "course": "ME-UY 3511",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "ME-UY 3513"
+    ]
   },
   {
     "course": "ME-UY 3513",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "ME-UY 3511"
+    ]
   },
   {
     "course": "ME-UY 3811",
@@ -38691,7 +38828,9 @@
   {
     "course": "ME-UY 4311",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "ME-UY 4313"
+    ]
   },
   {
     "course": "ME-UY 4312",
@@ -41873,7 +42012,9 @@
   {
     "course": "MPATC-UE 35",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "MPATC-UE 0006"
+    ]
   },
   {
     "course": "MPATC-UE 9007",
@@ -42015,7 +42156,9 @@
   {
     "course": "MPATC-UE 9341",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "MPATC-UE 1331"
+    ]
   },
   {
     "course": "MPATC-UE 9342",
@@ -43932,12 +44075,16 @@
   {
     "course": "NEUR-SHU 251",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "NEUR-SHU 201"
+    ]
   },
   {
     "course": "NEUR-SHU 261",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "NEUR-SHU 201"
+    ]
   },
   {
     "course": "NEUR-SHU 270",
@@ -43988,7 +44135,10 @@
   {
     "course": "NEURL-UA 210",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "BIOL-UA 0021",
+      "NEUR-SHU 201"
+    ]
   },
   {
     "course": "NEURL-UA 211",
@@ -44115,7 +44265,9 @@
   {
     "course": "NEURL-UA 313",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "NEURL-UA 0210"
+    ]
   },
   {
     "course": "NEURL-UA 998",
@@ -45609,7 +45761,9 @@
         ]
       }
     ],
-    "coreqs": []
+    "coreqs": [
+      "EX-UY 0001"
+    ]
   },
   {
     "course": "PH-UY 2104",
@@ -48457,7 +48611,10 @@
   {
     "course": "PHYS-SHU 11",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "MATH-SHU 0131",
+      "MATH-SHU 0201"
+    ]
   },
   {
     "course": "PHYS-SHU 12",
@@ -48507,7 +48664,10 @@
   {
     "course": "PHYS-SHU 91",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "MATH-SHU 0131",
+      "MATH-SHU 0201"
+    ]
   },
   {
     "course": "PHYS-SHU 93",
@@ -48517,7 +48677,9 @@
   {
     "course": "PHYS-SHU 94",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "PHYS-SHU 0093"
+    ]
   },
   {
     "course": "PHYS-SHU 95",
@@ -50528,7 +50690,9 @@
   {
     "course": "PSYC-SHU 337",
     "prereqGroups": [],
-    "coreqs": []
+    "coreqs": [
+      "PSYC-SHU 234"
+    ]
   },
   {
     "course": "PSYC-SHU 344",

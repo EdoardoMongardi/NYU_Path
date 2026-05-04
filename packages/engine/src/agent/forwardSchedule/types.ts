@@ -138,6 +138,15 @@ export interface SolverInput {
     /** Phase 14 — load-style, pins, exclusions and per-term overrides.
      *  All fields optional; absent → Phase 13 defaults. */
     preferences?: SchedulePreferences;
+
+    // ---- Phase 14 Task 9 — co-requisite same-term enforcement ----
+    /**
+     * Phase 14 Task 9 — Decision #14.
+     * courseId → list of coreq courseIds that must be placed in the SAME term.
+     * Populated by build.ts from prereqs.json's `coreqs` field per course.
+     * When undefined or empty for a given courseId, no coreq constraint applies.
+     */
+    coreqs?: Map<string, string[]>;
 }
 
 // ---------------------------------------------------------------------------

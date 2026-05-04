@@ -963,6 +963,58 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
                 continue;
             }
 
+            // Phase 14 Task 9 — Decision #14: co-requisite same-term enforcement.
+            // If course C has coreqs [X, Y, ...] that are still unmet (not in
+            // coursesTaken and not yet placed), all of them must fit in this same
+            // term (slack + offering pattern).  If any cannot fit, reject this term
+            // and try the next one.
+            const coreqIds = input.coreqs?.get(courseId) ?? [];
+            let coreqTermRejected = false;
+            const coreqTermConstraintDetails: string[] = [];
+            for (const coreqId of coreqIds) {
+                // If the coreq is already taken or already planned, no enforcement needed.
+                if (input.coursesTaken.has(coreqId)) continue;
+                if (plannedPlacements.has(coreqId)) continue;
+                // Coreq is unmet — it must be placeable in this same term.
+                const coreqMeta = input.courseCatalog.get(coreqId);
+                if (!coreqMeta) {
+                    // Catalog absent — coreq can't be confirmed; treat as unsatisfiable
+                    // and record it, but do not hard-reject (catalog gaps are lenient).
+                    coreqTermConstraintDetails.push(`${coreqId}:catalog-absent`);
+                    continue;
+                }
+                // Check credit slack with coreq's credits included
+                const projectedCredits = (perTermCredits.get(term) ?? 0) + meta.credits + coreqMeta.credits;
+                const termTargetForCoreq = effectiveTermTarget(
+                    term,
+                    input.creditTargetPerSemester,
+                    input.preferences,
+                    input.f1Floor,
+                    input.domesticPartTimeFloor,
+                    input.creditCeiling,
+                );
+                if (projectedCredits > input.creditCeiling) {
+                    // Hard ceiling exceeded — can't fit both in this term
+                    coreqTermRejected = true;
+                    coreqTermConstraintDetails.push(`${coreqId}:ceiling-exceeded`);
+                    break;
+                }
+                // Check offering pattern for coreq
+                const coreqOffered = input.offerings.get(coreqId);
+                if (coreqOffered && coreqOffered.length > 0 && !coreqOffered.includes(seasonOnly)) {
+                    // Coreq not offered this season — can't place together
+                    coreqTermRejected = true;
+                    coreqTermConstraintDetails.push(`${coreqId}:offering-mismatch`);
+                    break;
+                }
+                // Passes: coreq fits offering and credit ceiling
+                coreqTermConstraintDetails.push(`${coreqId}:ok`);
+            }
+            if (coreqTermRejected) {
+                // This term can't accommodate all coreqs — try next term
+                continue;
+            }
+
             // Decision #27: forward-feasibility screen after trial placement
             const trialCredits = new Map(perTermCredits);
             trialCredits.set(term, (trialCredits.get(term) ?? 0) + meta.credits);
@@ -1022,6 +1074,16 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
                 termConstraints.push({
                     kind: "prereqChain",
                     detail: `Prereq chain: ${prereqResult.decisionsApplied.join(", ")}`,
+                });
+            }
+            // Phase 14 Task 9 — record coreq constraint in rationale when coreqs were enforced
+            const satisfiedCoreqIds = coreqIds.filter(
+                c => !input.coursesTaken.has(c) && !plannedPlacements.has(c),
+            );
+            if (satisfiedCoreqIds.length > 0) {
+                termConstraints.push({
+                    kind: "coreqSameTerm",
+                    detail: `Coreqs [${satisfiedCoreqIds.join(", ")}] must be taken same term as ${courseId} (Decision #14).`,
                 });
             }
 
@@ -1103,10 +1165,13 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
         }
 
         if (!placed) {
+            const coreqHint = (input.coreqs?.get(courseId) ?? []).length > 0
+                ? ` Co-requisites [${(input.coreqs!.get(courseId)!).join(", ")}] may have prevented placement (Decision #14).`
+                : "";
             violations.push({
-                kind: "offering_pattern",
+                kind: "prereq_unsatisfiable",
                 course: courseId,
-                detail: `Could not place ${courseId} — no future term has sufficient slack, matching offering pattern, and satisfied prereqs.`,
+                detail: `Could not place ${courseId} — no future term has sufficient slack, matching offering pattern, and satisfied prereqs.${coreqHint}`,
             });
             // Still add placeholder so the plan is visible
             placeholderRequirements.push(req);
