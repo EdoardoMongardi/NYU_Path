@@ -126,6 +126,33 @@ export interface ToolSession {
             sections: import("./sectionMaterialization/types.js").SectionView[];
         }
     >;
+
+    /**
+     * Phase 15 Task 8 — side-channel for the SSE route to detect when
+     * a `materialize_sections` invocation produced a fresh result this
+     * turn. Populated by the tool's `call()` as a side-effect of
+     * staging proposals; read by `/api/chat/v2/route.ts` after the
+     * agent loop to emit `forward_materialization_update`. The
+     * `computedAt` timestamp is checked against a snapshot taken
+     * before the turn ran, mirroring the staleness-detection pattern
+     * `forwardSchedule.computedAt` uses for `forward_schedule_update`.
+     *
+     * Carries the `targetTerm` + `proposals` (one per conflict-free
+     * combination) alongside the orchestrator's `MaterializationResult`
+     * so the sidebar's combination picker can address each proposal
+     * by its stable id.
+     */
+    lastMaterializationResult?:
+        & import("./sectionMaterialization/types.js").MaterializationResult
+        & {
+            targetTerm: string;
+            proposals?: Array<{
+                proposalId: string;
+                sections: import("./sectionMaterialization/types.js").SectionView[];
+                weeklyHours: number;
+            }>;
+            computedAt: number;
+        };
 }
 
 export type ValidationResult =

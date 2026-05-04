@@ -158,7 +158,7 @@ export const materializeSectionsTool = buildTool({
             // No concrete courses to look up — return an "unavailable"
             // result with a clear message and stage nothing. We do NOT
             // touch session.pendingMaterializations in this branch.
-            return {
+            const out: MaterializeSectionsOutput = {
                 state: "unavailable",
                 message:
                     `No concrete courses are scheduled in ${input.targetTerm} ` +
@@ -168,6 +168,11 @@ export const materializeSectionsTool = buildTool({
                 schedulingPreferenceCheck: { kind: "absent" },
                 targetTerm: input.targetTerm,
             };
+            // Phase 15 Task 8 side-channel — let the SSE route detect
+            // that materialization ran this turn even when the result
+            // is "unavailable" (the sidebar still shows the banner).
+            session.lastMaterializationResult = { ...out, computedAt: Date.now() };
+            return out;
         }
 
         // Phase 15 Task 7 stub for Decision #19 — the structural-solver
@@ -194,7 +199,12 @@ export const materializeSectionsTool = buildTool({
         // For non-"full" states (unavailable / partial) the orchestrator
         // has nothing to stage — pass the result through verbatim.
         if (result.state !== "full" || !result.semester) {
-            return { ...result, targetTerm: input.targetTerm };
+            const out: MaterializeSectionsOutput = { ...result, targetTerm: input.targetTerm };
+            // Phase 15 Task 8 side-channel — populate even in non-full
+            // states so the sidebar can render the partial / unavailable
+            // banner with the orchestrator's message verbatim.
+            session.lastMaterializationResult = { ...out, computedAt: Date.now() };
+            return out;
         }
 
         // Stage every combination in `pendingMaterializations`. We use a
@@ -221,11 +231,16 @@ export const materializeSectionsTool = buildTool({
             });
         }
 
-        return {
+        const out: MaterializeSectionsOutput = {
             ...result,
             proposals,
             targetTerm: input.targetTerm,
         };
+        // Phase 15 Task 8 side-channel — full-state path. The SSE route
+        // reads this to emit `forward_materialization_update` so the
+        // sidebar can render the Sections view with the picker.
+        session.lastMaterializationResult = { ...out, computedAt: Date.now() };
+        return out;
     },
     summarizeResult(out) {
         const lines: string[] = [];

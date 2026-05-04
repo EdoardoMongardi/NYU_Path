@@ -129,6 +129,12 @@ export type {
     PreLoopResult,
     PreLoopOptions,
     SystemPromptOptions,
+    // Phase 15 Task 8 — section-materialization types surfaced for
+    // the apps/web sidebar (forward_materialization_update payload).
+    AvailabilityState,
+    MaterializationResult,
+    MaterializedSemester,
+    SchedulingPreferenceCheck,
 } from "./agent/index.js";
 
 // Phase 7-E: Degree Progress Report (DPR) module — the canonical

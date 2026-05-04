@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import styles from "./chat.module.css";
-import { streamChatV2, extractPendingMutationId, type ChatV2Event } from "../../lib/chatV2Client";
+import { streamChatV2, extractPendingMutationId, type ChatV2Event, type ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
 import { formatDuration } from "../../lib/formatDuration";
 import type { ForwardSchedule } from "@nyupath/shared";
@@ -110,6 +110,12 @@ export default function ChatPage() {
     const [visaStatus, setVisaStatus] = useState<string | null>(null);
     const [graduationTarget, setGraduationTarget] = useState<string | null>(null);
     const [forwardSchedule, setForwardSchedule] = useState<ForwardSchedule | null>(null);
+    // Phase 15 Task 8 — captured from the `forward_materialization_update`
+    // SSE event when the agent runs `materialize_sections`. Drives the
+    // sidebar's IMMEDIATE-term render: full → Sections view with
+    // combination picker; partial / unavailable → structural slots +
+    // explanatory banner. Reset on any flow that resets the schedule.
+    const [forwardMaterialization, setForwardMaterialization] = useState<ForwardMaterializationPayload | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -305,6 +311,14 @@ export default function ChatPage() {
             case "forward_schedule_update":
                 setForwardSchedule(ev.schedule);
                 break;
+            case "forward_materialization_update":
+                // Phase 15 Task 8 — `materialize_sections` produced a
+                // result this turn. Hold it in state so the sidebar
+                // can switch the IMMEDIATE term to the Sections view
+                // (or render a partial/unavailable banner). Cleared
+                // alongside `forwardSchedule` when a new chat starts.
+                setForwardMaterialization(ev.result);
+                break;
             case "validator_block":
                 updateMessage(assistantId, {
                     validatorViolations: ev.violations.map(v => ({
@@ -459,6 +473,31 @@ export default function ChatPage() {
             await handleSendV2(text);
         } catch (err) {
             addMessage("assistant", err instanceof Error ? err.message : "Could not confirm the update.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * Phase 15 Task 8 — section-combination confirm affordance (§7.2's
+     * two-step contract for `materialize_sections` →
+     * `confirm_section_combination`). The sidebar invokes this when the
+     * student clicks "Apply combination" on a picked combination tab.
+     * Mirrors `handleConfirmPending` exactly: inject a chat-visible
+     * user message naming the staged proposalId, then drop into the
+     * agent's tool-use loop.
+     */
+    const handleConfirmSectionCombination = async (proposalId: string) => {
+        if (isLoading) return;
+        const text =
+            `Yes, please apply section combination ${proposalId} — call ` +
+            `confirm_section_combination with proposalId="${proposalId}".`;
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage("assistant", err instanceof Error ? err.message : "Could not confirm the section combination.");
         } finally {
             setIsLoading(false);
         }
@@ -799,10 +838,12 @@ export default function ChatPage() {
             </div>
             <ScheduleSidebar
                 schedule={forwardSchedule}
+                materialization={forwardMaterialization}
                 open={sidebarOpen}
                 onClose={() => setSidebarOpen(false)}
                 onProposeLoadStyle={handleProposeLoadStyle}
                 onProposeSlotChange={handleProposeSlotChange}
+                onConfirmCombination={handleConfirmSectionCombination}
             />
         </div>
     );

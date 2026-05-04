@@ -702,3 +702,99 @@ button.reasoningHeader:focus-visible {
     color: var(--text-primary);
 }
 .slotPopover button:hover { background: var(--bg-secondary); }
+
+/* Phase 15 Task 8 — Sections view (immediate term, when materialization is full) */
+.materializationBanner {
+    background: #fff3cd;
+    border: 1px solid #ffe69c;
+    color: #664d03;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    margin-bottom: 8px;
+}
+.sectionsView {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 4px;
+}
+.sectionsViewHeader {
+    margin: 0 0 4px 0;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.combinationPicker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+.combinationTab {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    color: var(--text-primary);
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.8em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    min-width: 28px;
+}
+.combinationTab:hover {
+    background: var(--bg-hover, var(--bg-secondary));
+    border-color: var(--nyu-violet);
+}
+.combinationTabActive {
+    background: var(--nyu-violet);
+    color: #fff;
+    border-color: var(--nyu-violet);
+}
+.sectionCard {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    background: rgba(13, 110, 253, 0.04);
+    font-size: 0.85em;
+    line-height: 1.4;
+}
+.sectionMeta {
+    font-family: var(--font-mono);
+    font-size: 0.78em;
+    color: var(--text-secondary);
+}
+.sectionPatterns {
+    font-size: 0.82em;
+    color: var(--text-primary);
+}
+.sectionInstructor {
+    font-size: 0.78em;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+.applyCombinationBtn {
+    margin-top: 4px;
+    background: var(--nyu-violet);
+    color: #fff;
+    border: 1px solid var(--nyu-violet);
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.applyCombinationBtn:hover {
+    opacity: 0.92;
+}
+.truncatedNote {
+    margin: 4px 0 0 0;
+    font-size: 0.78em;
+    color: var(--text-tertiary, var(--text-secondary));
+    font-style: italic;
+}

@@ -12,6 +12,37 @@
 // ============================================================
 
 import type { ForwardSchedule } from "@nyupath/shared";
+import type { MaterializationResult, MaterializedSemester } from "@nyupath/engine";
+
+/**
+ * Phase 15 Task 8 — section shape carried by the materialization
+ * payload. Derived from `MaterializedSemester["courses"][number]["sections"][number]`
+ * so the UI doesn't need a deep import into engine internals (the
+ * engine barrel does not re-export `SectionView` directly because it
+ * collides with the search-availability `SectionView` shape).
+ */
+export type MaterializationSectionView =
+    MaterializedSemester["courses"][number]["sections"][number];
+
+/**
+ * Phase 15 Task 8 — payload of the `forward_materialization_update`
+ * SSE event. Mirrors `session.lastMaterializationResult` (the engine
+ * side-channel populated by `materialize_sections.call()`): the
+ * orchestrator's `MaterializationResult` plus the `targetTerm` and
+ * `proposals` array (one entry per conflict-free combination, ordered
+ * to match `result.semester.combinations`).
+ */
+export type ForwardMaterializationPayload =
+    & MaterializationResult
+    & {
+        targetTerm: string;
+        proposals?: Array<{
+            proposalId: string;
+            sections: MaterializationSectionView[];
+            weeklyHours: number;
+        }>;
+        computedAt: number;
+    };
 
 export type ChatV2Event =
     | { kind: "template_match"; templateId: string; body: string; source: string }
@@ -21,6 +52,7 @@ export type ChatV2Event =
     | { kind: "thinking"; text: string }
     | { kind: "validator_block"; violations: Array<{ kind: string; detail: string; caveatId?: string; number?: string }> }
     | { kind: "forward_schedule_update"; schedule: ForwardSchedule }
+    | { kind: "forward_materialization_update"; result: ForwardMaterializationPayload }
     | { kind: "done"; finalText: string; modelUsedId: string }
     | { kind: "error"; message: string };
 
