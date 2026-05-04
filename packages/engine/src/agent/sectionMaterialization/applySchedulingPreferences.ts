@@ -184,8 +184,13 @@ function formatPattern(p: MeetingPattern): string {
 /**
  * True iff `prefs` has no consequential entry. Treats the
  * undefined and `{}` cases identically.
+ *
+ * Exported so the orchestrator (`materialize.ts`) can reuse this
+ * check when computing the Decision-#43 verdict — the discriminator
+ * MUST treat `prefs={}` the same way `applySchedulingPreferences`
+ * does, otherwise the verdict and the filter behavior diverge.
  */
-function isPrefsEmpty(prefs: SchedulingPreferences): boolean {
+export function isPrefsEmpty(prefs: SchedulingPreferences): boolean {
     return (
         (prefs.avoidDays === undefined || prefs.avoidDays.length === 0) &&
         (prefs.avoidTimeWindows === undefined || prefs.avoidTimeWindows.length === 0) &&

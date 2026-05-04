@@ -429,6 +429,26 @@ describe("materializeSections — (i) schedulingPreferenceCheck output", () => {
         expect(r.schedulingPreferenceCheck).toEqual({ kind: "absent" });
     });
 
+    it("empty-but-defined prefs ({}) → kind: absent (matches isPrefsEmpty short-circuit)", async () => {
+        // I-2: `prefs = {}` is logically equivalent to `prefs = undefined`
+        // for `applySchedulingPreferences` (both short-circuit via
+        // `isPrefsEmpty`). The discriminator must agree.
+        const map: Record<string, RawRow[]> = {
+            "A": [row("A", "a1", "MW 9-10:15a", MW_9_1015_JSON)],
+            "B": [row("B", "b1", "TR 8-9:15a", TR_8_915_JSON)],
+        };
+        const { fn } = searchFromMap(map);
+        const r = await materializeSections({
+            termCode: "1268",
+            courseIds: ["A", "B"],
+            swapHook: async () => null,
+            schedulingPreferences: {} as SchedulingPreferences,
+            searchFn: fn,
+            cache: new FoseCache<unknown[]>(),
+        });
+        expect(r.schedulingPreferenceCheck).toEqual({ kind: "absent" });
+    });
+
     it("prefs supplied + satisfiable → kind: satisfied", async () => {
         const map: Record<string, RawRow[]> = {
             "A": [row("A", "a1", "MW 9-10:15a", MW_9_1015_JSON)],
@@ -492,10 +512,14 @@ describe("materializeSections — (j) cache integration", () => {
             searchFn: fn,
             cache,
         };
-        await materializeSections(baseArgs);
-        await materializeSections(baseArgs);
+        const r1 = await materializeSections(baseArgs);
+        const r2 = await materializeSections(baseArgs);
         expect(counts.get("A")).toBe(1);
         expect(counts.get("B")).toBe(1);
+        // Cache must return semantically identical combinations on the
+        // second call — guards against a regression where a stale cache
+        // value mutates between calls.
+        expect(r2.semester?.combinations).toEqual(r1.semester?.combinations);
     });
 });
 

@@ -104,7 +104,9 @@ export type AvailabilityState = "full" | "partial" | "unavailable";
  * `VisaInputContext.schedulingPreferenceCheck` axis. The shape mirrors
  * the discriminated union defined in `visaValidator.ts:90-93`.
  *
- *   - "absent"    → no SchedulingPreferences supplied; visa axis returns assumed-pass.
+ *   - "absent"    → no prefs supplied (or supplied but empty per `isPrefsEmpty`)
+ *                   OR FOSE state is unavailable/partial (no data to verify
+ *                   against); visa axis returns assumed-pass.
  *   - "satisfied" → preferences supplied AND ≥1 strict-passing combination exists post-cascade.
  *   - "violated"  → a strict filter eliminated all sections of some course AND
  *                   the swap cascade exhausted alternatives. `reason` names the
