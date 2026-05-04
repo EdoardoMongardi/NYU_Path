@@ -490,6 +490,14 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         // the agent runs so we can detect when plan_forward_degree (or
         // any tool) writes a new schedule to session.forwardSchedule.
         const beforeComputedAt = session.forwardSchedule?.computedAt;
+        // RC-5 (May 2026 post-mortem) — same snapshot for the
+        // infeasible-draft slot per Decision #32. When the solver
+        // produces an infeasible plan it lands in `session.studentDraftPlan`,
+        // not `session.forwardSchedule`. Without this snapshot the UI never
+        // surfaces the draft and the student has no way to inspect why
+        // their plan failed feasibility (e.g. credit-cap overflow). Sidebar
+        // already renders the infeasible-draft banner from `state`.
+        const beforeDraftComputedAt = session.studentDraftPlan?.computedAt;
         // Phase 15 Task 8 — same pattern for the materialization
         // side-channel. `materialize_sections.call()` writes to
         // `session.lastMaterializationResult` as a side-effect of
@@ -578,14 +586,31 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         // written to session.forwardSchedule by plan_forward_degree /
         // reconcile tools. Emit before the done/error path so the UI
         // sidebar can display the plan before the final text is written.
+        //
+        // RC-5: when only the infeasible-draft slot changed (Decision #32),
+        // emit the draft so the student can still inspect what went wrong.
+        // The sidebar's existing 4-state banner (valid-clean /
+        // valid-with-trade-offs / infeasible-draft / student-preferred-
+        // invalid-draft) keys off `schedule.state`, so the same event
+        // shape works for both slots. Prefer the valid plan when both
+        // changed in the same turn (rare but possible with reconcile).
         const afterComputedAt = session.forwardSchedule?.computedAt;
         const scheduleChanged =
             session.forwardSchedule !== undefined
             && (beforeComputedAt === undefined || beforeComputedAt !== afterComputedAt);
+        const afterDraftComputedAt = session.studentDraftPlan?.computedAt;
+        const draftChanged =
+            session.studentDraftPlan !== undefined
+            && (beforeDraftComputedAt === undefined || beforeDraftComputedAt !== afterDraftComputedAt);
         if (scheduleChanged) {
             writer.write({
                 kind: "forward_schedule_update",
                 schedule: session.forwardSchedule!,
+            });
+        } else if (draftChanged) {
+            writer.write({
+                kind: "forward_schedule_update",
+                schedule: session.studentDraftPlan!,
             });
         }
 

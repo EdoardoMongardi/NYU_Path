@@ -459,6 +459,53 @@ describe("responseValidator", () => {
         expect(verdict.violations.some((v) => v.caveatId === "low_confidence_consult_adviser")).toBe(false);
     });
 
+    // RC-2 regression: planning-recommendation rule must accept the Phase 13
+    // forward planner as well, not just the Phase 5 single-term planner.
+    // See May 2026 post-mortem: when the user explicitly asked for
+    // `plan_forward_degree`, the validator forced a retry that called
+    // `plan_semester` instead, and the schedule sidebar never appeared.
+    it("ALLOWS planning recommendation when plan_forward_degree was invoked", () => {
+        const verdict = validateResponse({
+            assistantText: "Next semester you should take CSCI-UA 421 (4 cr) and CORE-UA 400 (4 cr).",
+            invocations: [
+                { toolName: "plan_forward_degree", args: {}, summary: "schedule built" },
+            ],
+        });
+        expect(verdict.violations.some((v) => v.kind === "missing_invocation")).toBe(false);
+    });
+
+    it("ALLOWS planning recommendation when view_forward_plan was invoked", () => {
+        const verdict = validateResponse({
+            assistantText: "Next semester you should take CSCI-UA 421 (4 cr) and CORE-UA 400 (4 cr).",
+            invocations: [
+                { toolName: "view_forward_plan", args: {}, summary: "schedule recap" },
+            ],
+        });
+        expect(verdict.violations.some((v) => v.kind === "missing_invocation")).toBe(false);
+    });
+
+    it("BLOCKS planning recommendation when neither plan_semester nor plan_forward_degree was invoked", () => {
+        // The planning trigger fires on "next semester … take/enroll/register"
+        // or "plan(ning) … fall/spring/summer". The reply uses the first form.
+        const verdict = validateResponse({
+            assistantText: "Next semester you should take CSCI-UA 421 (4 cr) and CORE-UA 400 (4 cr).",
+            invocations: [
+                { toolName: "search_policy", args: { query: "anything" }, summary: "irrelevant" },
+            ],
+        });
+        expect(verdict.violations.some((v) => v.kind === "missing_invocation")).toBe(true);
+    });
+
+    it("ALLOWS what-if reply when propose_plan_change was invoked", () => {
+        const verdict = validateResponse({
+            assistantText: "What if you skipped Texts & Ideas? You'd defer 4 credits to Summer 2027.",
+            invocations: [
+                { toolName: "propose_plan_change", args: {}, summary: "swap modeled" },
+            ],
+        });
+        expect(verdict.violations.some((v) => v.kind === "missing_invocation")).toBe(false);
+    });
+
     it("flags BOTH F-1 and internal-transfer caveats when both apply", () => {
         const verdict = validateResponse({
             assistantText:

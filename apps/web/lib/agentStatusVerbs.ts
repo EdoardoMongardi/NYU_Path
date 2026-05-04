@@ -1,17 +1,20 @@
 /**
- * User-facing verbs for the 12 tools in the engine registry.
+ * User-facing verbs for every tool in the engine registry (currently 22).
  * The active form is shown while the tool is running (the chat UI
  * appends "…" at render time). The past form is shown in the
  * post-completion expandable trace.
  *
- * If a tool name is not in this map (e.g. a newly-added tool the
- * UI has not been updated for, or a `template:*` pseudo-tool that
- * surfaces template-match events), getActiveVerb / getPastVerb
- * fall back to a generic verb so the UI never crashes.
+ * The map MUST stay in lock-step with `packages/engine/src/agent/registry.ts`
+ * — when a new tool ships, add an entry here. The unit test
+ * `apps/web/tests/agentStatusVerbs.test.ts` enforces parity. If a tool name
+ * is somehow not in this map (e.g. a `template:*` pseudo-tool that surfaces
+ * template-match events), getActiveVerb / getPastVerb fall back to a
+ * generic verb so the UI never crashes.
  */
 export type ToolVerb = { active: string; past: string };
 
 export const TOOL_VERBS: Record<string, ToolVerb> = {
+    // Phase 0–11 (legacy 12-tool surface)
     run_full_audit:             { active: "Running your degree audit",        past: "Ran your degree audit" },
     plan_semester:              { active: "Planning your semester",           past: "Planned a semester" },
     check_transfer_eligibility: { active: "Checking transfer eligibility",    past: "Checked transfer eligibility" },
@@ -24,6 +27,19 @@ export const TOOL_VERBS: Record<string, ToolVerb> = {
     get_academic_standing:      { active: "Reading your academic standing",   past: "Read your academic standing" },
     check_overlap:              { active: "Checking course overlap",          past: "Checked course overlap" },
     search_courses:             { active: "Searching the course catalog",     past: "Searched the course catalog" },
+    // Phase 13 — forward planner
+    plan_forward_degree:        { active: "Planning your full degree",        past: "Planned your full degree" },
+    view_forward_plan:          { active: "Reading your forward plan",        past: "Read your forward plan" },
+    // Phase 14 — plan-change tooling
+    propose_plan_change:        { active: "Proposing a plan change",          past: "Proposed a plan change" },
+    confirm_plan_change:        { active: "Applying the plan change",         past: "Applied the plan change" },
+    simulate_alternatives:      { active: "Simulating alternative plans",     past: "Simulated alternative plans" },
+    bind_free_elective:         { active: "Binding a free elective",          past: "Bound a free elective" },
+    bind_pool_slot:             { active: "Binding a pool slot",              past: "Bound a pool slot" },
+    compare_plan_alternatives:  { active: "Comparing plan alternatives",      past: "Compared plan alternatives" },
+    // Phase 15 — section materialization
+    materialize_sections:       { active: "Materializing sections",           past: "Materialized sections" },
+    confirm_section_combination:{ active: "Applying the section combination", past: "Applied the section combination" },
 };
 
 const TEMPLATE_VERB: ToolVerb = { active: "Checking a known answer", past: "Matched a known answer" };
@@ -51,6 +67,7 @@ export function getPastVerb(toolName: string): string {
  * gets a human-readable narration of what the agent is doing.
  */
 export const TOOL_THOUGHT_SENTENCES: Record<string, string> = {
+    // Phase 0–11
     run_full_audit:             "Let me pull up your degree audit so I'm working from your actual progress, not assumptions.",
     plan_semester:              "Now I'll sketch a semester plan based on what's still unmet and how the workload should balance.",
     check_transfer_eligibility: "I should check the transfer eligibility rules first — there are credit and GPA thresholds to verify.",
@@ -63,6 +80,19 @@ export const TOOL_THOUGHT_SENTENCES: Record<string, string> = {
     get_academic_standing:      "Let me check your current academic standing — cumulative GPA and per-semester history.",
     check_overlap:              "I need to check whether any of these courses count toward more than one of your declared programs.",
     search_courses:             "Searching the course catalog for matches so I can pull real course IDs and titles.",
+    // Phase 13 — forward planner
+    plan_forward_degree:        "Let me build out your full forward plan — every remaining semester through graduation, with credit balance and prerequisite ordering.",
+    view_forward_plan:          "Let me pull up the forward plan I built earlier so I can read off the exact terms and slots.",
+    // Phase 14 — plan-change tooling
+    propose_plan_change:        "Let me model that change against your forward plan so I can show the actual impact before anything is applied.",
+    confirm_plan_change:        "Applying the proposed plan change now.",
+    simulate_alternatives:      "Let me simulate a few alternatives — different load styles, swaps, or term distributions — to see how they compare.",
+    bind_free_elective:         "Binding a specific course into the free-elective slot so the plan can finalize that placement.",
+    bind_pool_slot:             "Binding a course into the requirement pool slot — that locks the choice in for downstream checks.",
+    compare_plan_alternatives:  "Let me line the alternative plans up side-by-side so the trade-offs are visible at a glance.",
+    // Phase 15 — section materialization
+    materialize_sections:       "Let me pull live FOSE section data and find conflict-free meeting-time combinations for that term.",
+    confirm_section_combination:"Applying the chosen section combination — pinning the CRNs into your schedule.",
 };
 
 const TEMPLATE_THOUGHT = "This looks like a question I have a verified canned answer for. Let me grab that.";
