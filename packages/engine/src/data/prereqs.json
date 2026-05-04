@@ -15247,10 +15247,7 @@
         ]
       }
     ],
-    "coreqs": [
-      "MATH-SHU 0131",
-      "MATH-SHU 0201"
-    ]
+    "coreqs": []
   },
   {
     "course": "CSCI-SHU 254",
