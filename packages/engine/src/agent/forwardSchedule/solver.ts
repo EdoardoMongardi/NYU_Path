@@ -41,6 +41,7 @@ import type {
     ConfidenceTier,
     WorkloadTier,
     TermConstraint,
+    PrereqGroup,
 } from "@nyupath/shared";
 import type { SolverInput, SolverOutput } from "./types.js";
 import { isPrereqSatisfied } from "../../dpr/prereqSatisfaction.js";
@@ -308,21 +309,39 @@ function computeDownstreamImpact(
 
 function isCriticalPath(
     courseId: string,
-    rId: string,
+    _rId: string,
     allCandidateCourses: string[],
     dependentsIndex: Map<string, string[]>,
+    prereqMap: Map<string, PrereqGroup[]>,
 ): boolean {
-    // True if:
-    // 1. This is the only satisfier of its requirement (single candidate), OR
-    // 2. This course is the sole prereq for ≥2 downstream slots
-    const directDeps = dependentsIndex.get(courseId) ?? [];
-    if (directDeps.length >= 2) return true;
-
-    // Count how many candidates satisfy the same rId requirement
-    // We track this via the unmet requirement candidateCourses.length === 1 signal
-    // (allCandidateCourses is already the candidateCourses[] for this rId)
+    // Decision #39 — true if EITHER:
+    //   1. This is the only satisfier of its requirement (single candidate), OR
+    //   2. This course is the SOLE prereq for ≥2 downstream slots in the plan.
+    //
+    // "Sole prereq" check (rule 2): for each direct dependent Y, count the
+    // distinct courses Y depends on across all its prereq groups; courseId is
+    // the sole prereq iff that distinct-set is exactly {courseId}. Counting
+    // dependents only (without the sole-prereq filter) over-flags any course
+    // with ≥2 dependents whose dependents have multiple prereqs — which would
+    // mislead Phase 14's mutation logic into treating common low-stakes
+    // satisfactions as critical-path. The strict reading matches the spec.
     if (allCandidateCourses.length === 1) return true;
 
+    const directDeps = dependentsIndex.get(courseId) ?? [];
+    let soleCount = 0;
+    for (const dep of directDeps) {
+        const groups = prereqMap.get(dep);
+        if (!groups || groups.length === 0) continue;
+        // Collect every distinct course-id referenced across all groups
+        // (excluding NOT-clause exclusions, which are filters, not satisfiers).
+        const referenced = new Set<string>();
+        for (const g of groups) {
+            if (g.type === "NOT") continue;
+            for (const c of g.courses) referenced.add(c);
+        }
+        if (referenced.size === 1 && referenced.has(courseId)) soleCount++;
+        if (soleCount >= 2) return true;
+    }
     return false;
 }
 
@@ -458,11 +477,19 @@ function buildAlternativeCandidates(
             distinctSubjectsCount: Object.values(subjectDistributionByTerm)
                 .flatMap(d => Object.keys(d))
                 .filter((v, idx, arr) => arr.indexOf(v) === idx).length,
+            // totalPetitionCount uses the WINNER's slots — alternative
+            // distributions in this Phase-13 stub are credit-redistribution
+            // probes, not full re-solves, so the same petition slots persist
+            // across all candidates. Per-variant counts require Phase 15
+            // re-solve.
             totalPetitionCount: semesters
                 .flatMap(s => s.slots)
                 .filter(s => s.kind === "specific_planned" && s.requiresPetition === true)
                 .length,
-            totalAssumptionCount: 0, // backfilled in solveForwardSchedule's post-pass after buildIpAssumptions runs
+            // totalAssumptionCount is backfilled in solveForwardSchedule's
+            // post-pass after buildIpAssumptions runs (also winner-derived;
+            // see Phase 15 for per-variant re-solve).
+            totalAssumptionCount: 0,
             graduationTerm: semesters[semesters.length - 1]?.term ?? "",
             topDiffsFromWinner: topDiffs,
         });
@@ -508,6 +535,10 @@ function derivePlanState(
     feasibility: FeasibilityReport,
     assumptions: Assumption[],
 ): import("@nyupath/shared").PlanState {
+    // Returns 3 of the 4 PlanState members. The fourth state
+    // ("student-preferred-invalid-draft") is set by Phase 14's mutation
+    // layer when a student confirms a plan despite hard violations — that
+    // input is not available to the solver, so it is not emittable here.
     if (!feasibility.feasible) return "infeasible-draft";
 
     // Check for trade-off signals
@@ -772,8 +803,12 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
                 });
             }
             if (slack < meta.credits + 4) {
+                // "creditSlack" — slack against creditTargetPerSemester, NOT the
+                // hard ceiling input.creditCeiling. Used for the rationale UI to
+                // explain "this term filled up the target before another candidate
+                // could land here."
                 termConstraints.push({
-                    kind: "creditCeiling",
+                    kind: "creditSlack",
                     detail: `Slack ${slack} cr constrained placement to term ${term}.`,
                 });
             }
@@ -830,6 +865,7 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
                 req.rId,
                 req.candidateCourses,
                 dependentsIndex,
+                input.prereqs,
             );
 
             const slot: ScheduleSlotSpecificPlanned = {
