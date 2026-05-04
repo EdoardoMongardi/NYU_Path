@@ -180,6 +180,29 @@ describe("solveForwardSchedule — load styles", () => {
         // With heavy load the fill loop should go up to 18 (ceiling).
         expect(spring.plannedCredits).toBe(18);
     });
+
+    // Regression: a non-F-1 student with f1Floor=null + domesticPartTimeFloor=8
+    // should fall back to domesticPartTimeFloor when "light" is requested,
+    // NOT to defaultTarget. Pre-fix, the chain was f1Floor ?? defaultTarget,
+    // which silently rendered "light" indistinguishable from "balanced" for
+    // domestic part-time students. Post-fix:
+    //   f1Floor ?? domesticPartTimeFloor ?? defaultTarget
+    it("loadStylePerTerm 'light' falls back to domesticPartTimeFloor when student is non-F-1 (f1Floor=null)", () => {
+        const input = makeInput(
+            { loadStylePerTerm: { "2027-spring": "light" } },
+            {
+                visaStatus: "domestic",
+                f1Floor: null,
+                domesticPartTimeFloor: 8,
+                unmetRequirements: [],
+            },
+        );
+        const out = solveForwardSchedule(input);
+        const spring = out.semesters.find(s => s.term === "2027-spring")!;
+        // With f1Floor=null, light should pull credit target down to the
+        // domestic part-time floor (8), not the 16-credit default.
+        expect(spring.plannedCredits).toBe(8);
+    });
 });
 
 // ---------------------------------------------------------------------------
