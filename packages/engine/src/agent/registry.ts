@@ -1,11 +1,13 @@
 // ============================================================
-// Default ToolRegistry — wires the 12 NYU Path tools (§7.1 complete)
+// Default ToolRegistry — wires the 14 NYU Path tools (§7.1 + Phase 13)
 // ============================================================
 // All §7.1 tools shipped:
 //   run_full_audit, plan_semester, check_transfer_eligibility,
 //   what_if_audit, search_policy, update_profile, confirm_profile_update,
 //   get_credit_caps, search_availability, get_academic_standing,
 //   check_overlap, search_courses
+// Phase 13 Task 6 additions:
+//   plan_forward_degree, view_forward_plan
 // ============================================================
 import { ToolRegistry, type Tool } from "./tool.js";
 import { runFullAuditTool } from "./tools/runFullAudit.js";
@@ -19,6 +21,8 @@ import { searchAvailabilityTool } from "./tools/searchAvailability.js";
 import { getAcademicStandingTool } from "./tools/getAcademicStanding.js";
 import { checkOverlapTool } from "./tools/checkOverlap.js";
 import { searchCoursesTool } from "./tools/searchCourses.js";
+import { planForwardDegreeTool } from "./tools/planForwardDegree.js";
+import { viewForwardPlanTool } from "./tools/viewForwardPlan.js";
 import type { ZodTypeAny } from "zod";
 
 export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
@@ -34,6 +38,8 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     getAcademicStandingTool as unknown as Tool<ZodTypeAny, unknown>,
     checkOverlapTool as unknown as Tool<ZodTypeAny, unknown>,
     searchCoursesTool as unknown as Tool<ZodTypeAny, unknown>,
+    planForwardDegreeTool as unknown as Tool<ZodTypeAny, unknown>,
+    viewForwardPlanTool as unknown as Tool<ZodTypeAny, unknown>,
 ];
 
 /**
@@ -57,4 +63,6 @@ export {
     getAcademicStandingTool,
     checkOverlapTool,
     searchCoursesTool,
+    planForwardDegreeTool,
+    viewForwardPlanTool,
 };
