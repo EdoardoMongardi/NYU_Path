@@ -27,6 +27,7 @@ import type {
     PlanState,
     ConfidenceTier,
     WorkloadTier,
+    SchedulePreferences,
 } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 
@@ -132,6 +133,11 @@ export interface SolverInput {
     courseTitles?: Map<string, string>;
     /** Bulletin keyword tags per courseId for #35 modifiers (optional). */
     courseBulletinKeywords?: Map<string, string[]>;
+
+    // ---- Phase 14 Task 3 — per-student solver preferences ----
+    /** Phase 14 — load-style, pins, exclusions and per-term overrides.
+     *  All fields optional; absent → Phase 13 defaults. */
+    preferences?: SchedulePreferences;
 }
 
 // ---------------------------------------------------------------------------
