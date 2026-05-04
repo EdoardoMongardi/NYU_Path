@@ -18,17 +18,26 @@
 
 import type { PoolBinding, RequirementPoolSlot } from "@nyupath/shared";
 
+/**
+ * Args for `placePoolSlot`.
+ *
+ * NOTE: credits / term / placeholderId are NOT consumed by this helper —
+ * they live on the parent `ScheduleSlotPlaceholder` that wraps the
+ * `RequirementPoolSlot` (the wrapping happens in the caller's
+ * placement code, e.g. the Stage 6c solver). Keeping the args interface
+ * minimal here prevents callers from passing fields that are silently
+ * dropped.
+ */
 export interface PlacePoolSlotArgs {
     poolBinding: PoolBinding;
-    credits: number;
-    /** Term where the placeholder is reserved. */
-    term: string;
-    placeholderId: string;
 }
 
 /**
  * Reserve a pool slot without committing to a specific courseId.
  * The returned slot has bindingState: "unbound" and bound: undefined.
+ *
+ * Caller wraps the result in a parent `ScheduleSlotPlaceholder`
+ * carrying credits / term / placeholderId metadata.
  */
 export function placePoolSlot(args: PlacePoolSlotArgs): RequirementPoolSlot {
     const { poolBinding } = args;
