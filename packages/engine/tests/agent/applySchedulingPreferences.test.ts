@@ -295,6 +295,27 @@ describe("applySchedulingPreferences — avoidConsecutiveLongBlocks", () => {
         expect(longWeight).toBeLessThan(1);
         expect(shortWeight).toBe(1);
     });
+
+    it("does NOT deboost a single 180-min meeting (one-shot 3-hour studio); DOES deboost two back-to-back 90-min meetings", () => {
+        // Single 180-min meeting (e.g. a 3-hour studio class): chain length = 1, no flag.
+        const oneShot = makeSection("ONE", "ONE-1", [
+            { day: "M", startMin: 540, endMin: 720 }, // M 9:00–12:00 (180 min, single pattern)
+        ]);
+        // Two back-to-back 90-min meetings on the same day → chain length = 2, total 180 min ≥ 180 → flag.
+        const paired = makeSection("PAIR", "PAIR-1", [
+            { day: "M", startMin: 540, endMin: 630 },  // M 9:00–10:30
+            { day: "M", startMin: 630, endMin: 720 },  // M 10:30–12:00 (boundary touch = back-to-back)
+        ]);
+
+        const prefs: SchedulingPreferences = { avoidConsecutiveLongBlocks: true };
+        const result = applySchedulingPreferences([oneShot, paired], prefs);
+
+        // Single long meeting: NOT flagged → no entry in rerankWeights (default 1.0 implicit).
+        expect(result.rerankWeights.has("ONE-1")).toBe(false);
+        // Two back-to-back patterns spanning ≥180 min: flagged → multiplier < 1.
+        const pairedWeight = result.rerankWeights.get("PAIR-1") ?? 1;
+        expect(pairedWeight).toBeLessThan(1);
+    });
 });
 
 // ---- (i) Undefined / empty prefs identity ----

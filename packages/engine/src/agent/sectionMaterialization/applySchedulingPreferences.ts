@@ -30,9 +30,12 @@ export interface ApplyResult {
     /** Sections that survive every strict filter, in the input order. */
     surviving: SectionView[];
     /**
-     * sectionId (= section.crn) → soft-rank multiplier in (0, ~2].
+     * sectionId (= section.crn) → soft-rank multiplier in (0, ∞).
+     * Typical range is (0, ~2] for a single matched preferTimeWindow,
+     * but stacking multiple `preferTimeWindows` matches (each contributes
+     * a `1 + 0.5*weight` factor) can push the multiplier above 2.
      * Sections with no soft contribution are OMITTED (default = 1.0
-     * is implicit). Sections without a `crn` are never added.
+     * is implicit).
      */
     rerankWeights: Map<string, number>;
     /**
@@ -50,12 +53,23 @@ export interface ApplyResult {
 // shape-defining heuristic weights, not a domain configuration
 // surface. If a future phase needs to tune these, expose them
 // through SchedulingPreferences itself rather than via a global.
-const AVOID_DAYS_SOFT_PENALTY = 0.7;          // multiply by 0.7 per soft avoidDay match
-const AVOID_TIMEWINDOW_SOFT_PENALTY = 0.7;    // same for soft avoidTimeWindows
-const LONG_BLOCK_SOFT_PENALTY = 0.7;          // soft penalty for ≥3h consecutive blocks
-const PREFER_BOOST_BASE = 1.0;                // PREFER_BOOST_BASE + (weight × 0.5) per match
-const PREFER_BOOST_PER_WEIGHT = 0.5;
-const LONG_BLOCK_THRESHOLD_MIN = 180;         // ≥ 3 hours back-to-back
+//
+// Rationale for the chosen magnitudes:
+//   • The penalties leave headroom for stacking 2–3 mismatches
+//     before a section is effectively dropped from the top of
+//     rerank (0.7^3 ≈ 0.34 — still visible to the ranker, not zero).
+//   • The boost is significant but bounded — a single max-weight
+//     preferTimeWindow yields a 1.5× multiplier, which is enough
+//     to pull a matching section above an otherwise-equal rival
+//     without flattening the rest of the pool.
+//   • The 180-min long-block floor is taken directly from the
+//     Decision #43 spec phrase "≥3-hour back-to-back blocks".
+const AVOID_DAYS_SOFT_PENALTY = 0.7;          // ~30% downweight per soft avoidDay match — see headroom rationale above
+const AVOID_TIMEWINDOW_SOFT_PENALTY = 0.7;    // same ~30% downweight applies to soft avoidTimeWindows for symmetry
+const LONG_BLOCK_SOFT_PENALTY = 0.7;          // same ~30% downweight when a ≥3h consecutive block is detected (always soft per Decision #43)
+const PREFER_BOOST_BASE = 1.0;                // multiplier baseline; final = BASE + PER_WEIGHT * weight
+const PREFER_BOOST_PER_WEIGHT = 0.5;          // max user weight=1.0 → 1.5× multiplier — significant but not flattening; multiple stacking matches still bounded
+const LONG_BLOCK_THRESHOLD_MIN = 180;         // ≥3-hour back-to-back blocks (Decision #43 spec phrase)
 const ALL_WEEKDAYS: Day[] = ["M", "Tu", "W", "Th", "F"];
 
 // ---- Time / day helpers ----
@@ -105,8 +119,12 @@ function firstWindowMatch(
  *
  * Definition: "back-to-back" means same day AND patternA ends at
  * the same minute or later than patternB starts (exact boundary
- * touch is a back-to-back link). The total length of a chain of
- * ≥1 such links is considered.
+ * touch is a back-to-back link). A "chain" must contain ≥2
+ * patterns to qualify — a single long meeting (e.g. a one-shot
+ * 3-hour studio class) is NOT flagged here, matching the function
+ * name `hasLongConsecutiveBlock` and the Decision #43 spec phrase
+ * "≥3-hour back-to-back blocks" (which implies stitching ≥2
+ * meetings together).
  *
  * This is a heuristic interpretation of `avoidConsecutiveLongBlocks`
  * — the schema doesn't pin a numeric threshold, but the spec says
@@ -124,20 +142,31 @@ function hasLongConsecutiveBlock(section: SectionView): boolean {
         patterns.sort((a, b) => a.startMin - b.startMin);
         let chainStart = -1;
         let chainEnd = -1;
+        let chainCount = 0;        // # of patterns currently stitched into the chain
         for (const p of patterns) {
             if (chainEnd >= 0 && p.startMin <= chainEnd) {
                 // Back-to-back (or overlap): extend the chain
                 chainEnd = Math.max(chainEnd, p.endMin);
+                chainCount += 1;
             } else {
-                // Close out previous chain, start a new one
-                if (chainStart >= 0 && chainEnd - chainStart >= LONG_BLOCK_THRESHOLD_MIN) {
+                // Close out previous chain, start a new one. Only flag
+                // chains of ≥2 patterns — a single long meeting is not
+                // a "consecutive" block.
+                if (
+                    chainCount >= 2 &&
+                    chainEnd - chainStart >= LONG_BLOCK_THRESHOLD_MIN
+                ) {
                     return true;
                 }
                 chainStart = p.startMin;
                 chainEnd = p.endMin;
+                chainCount = 1;
             }
         }
-        if (chainStart >= 0 && chainEnd - chainStart >= LONG_BLOCK_THRESHOLD_MIN) {
+        if (
+            chainCount >= 2 &&
+            chainEnd - chainStart >= LONG_BLOCK_THRESHOLD_MIN
+        ) {
             return true;
         }
     }
@@ -337,7 +366,6 @@ export function applySchedulingPreferences(
     // ---- Soft pass ----
     const rerankWeights = new Map<string, number>();
     for (const section of surviving) {
-        if (!section.crn) continue;            // sections without crn are skipped from rerankWeights
         const m = computeSoftMultiplier(section, prefs);
         if (m !== 1.0) {
             rerankWeights.set(section.crn, m);
