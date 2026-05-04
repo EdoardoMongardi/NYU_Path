@@ -78,6 +78,50 @@ describe("buildStudentProfileFromDpr (Phase 7-E W2.4)", () => {
         expect(codes).toContain("MATH-UA 343");
     });
 
+    // Regression test for the May 2026 post-mortem "7 courses for Fall
+    // 2026" bug: when the DPR carries IP rows for BOTH the in-progress
+    // term AND the pre-registered next term, `currentSemester.courses`
+    // must list ONLY the rows whose term matches `currentSemester.term`.
+    // The old loop pushed every IP row into `pendingCourses` regardless,
+    // so a student mid-Spring with Fall pre-registered ended up with a
+    // 7-course `currentSemester` mixing both terms — and the agent
+    // surfaced "you have 7 courses for Fall 2026."
+    it("does NOT mix IP rows from earlier terms into currentSemester", () => {
+        const p = buildStudentProfileFromDpr(loadDpr());
+        const fixtureTerm = p.currentSemester!.term;
+        // Sanity: the SAA_STD_DS fixture has IP rows in both Spring 2026
+        // (4 rows) and Fall 2026 (3 rows). Per latest-term selection,
+        // currentSemester.term should be "2026 Fall" with 3 courses.
+        expect(fixtureTerm).toBe("2026 Fall");
+        expect(p.currentSemester!.courses).toHaveLength(3);
+        const codes = p.currentSemester!.courses.map((c) => c.courseId);
+        // Spring 2026 IP rows that must NOT appear here.
+        expect(codes).not.toContain("CSCI-UA 4");
+        expect(codes).not.toContain("CSCI-UA 473");
+        expect(codes).not.toContain("MATH-UA 334");
+        expect(codes).not.toContain("MPAJZ-UE 71");
+        // Fall 2026 IP rows that MUST appear.
+        expect(codes).toContain("CORE-UA 700");
+        expect(codes).toContain("MATH-UA 251");
+        expect(codes).toContain("MATH-UA 343");
+    });
+
+    it("coursesTaken still includes EVERY IP row across all terms (audit needs them)", () => {
+        const p = buildStudentProfileFromDpr(loadDpr());
+        const ipCodes = p.coursesTaken
+            .filter((c) => c.semester.includes("2026"))
+            .map((c) => c.courseId);
+        // All 7 IP rows from 2026 Spr + 2026 Fall must remain in
+        // coursesTaken so the audit / prereq checker can see them.
+        expect(ipCodes).toContain("CSCI-UA 4");
+        expect(ipCodes).toContain("CSCI-UA 473");
+        expect(ipCodes).toContain("MATH-UA 334");
+        expect(ipCodes).toContain("MPAJZ-UE 71");
+        expect(ipCodes).toContain("CORE-UA 700");
+        expect(ipCodes).toContain("MATH-UA 251");
+        expect(ipCodes).toContain("MATH-UA 343");
+    });
+
     it("respects opts.visaStatus override", () => {
         const p = buildStudentProfileFromDpr(loadDpr(), { visaStatus: "f1" });
         expect(p.visaStatus).toBe("f1");

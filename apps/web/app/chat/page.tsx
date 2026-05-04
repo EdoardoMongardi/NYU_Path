@@ -251,10 +251,20 @@ export default function ChatPage() {
                     if (m.hasRealThinking) {
                         return { ...m, toolStatuses: [...toolStatuses] };
                     }
+                    // Drop a duplicate sentence (e.g. the model called
+                    // `search_policy` twice in a row — render the canned
+                    // sentence ONCE, not twice) and connect distinct
+                    // sentences with a single space so they read as one
+                    // flowing paragraph instead of a bullet list of
+                    // identical lines.
+                    const existing = m.thinkingText ?? "";
+                    if (existing.endsWith(sentence)) {
+                        return { ...m, toolStatuses: [...toolStatuses] };
+                    }
                     return {
                         ...m,
                         toolStatuses: [...toolStatuses],
-                        thinkingText: ((m.thinkingText ?? "") + (m.thinkingText ? "\n\n" : "") + sentence),
+                        thinkingText: existing + (existing ? " " : "") + sentence,
                     };
                 }));
                 break;
