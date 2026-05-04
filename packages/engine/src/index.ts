@@ -47,16 +47,12 @@ export {
     type DepartmentConfig,
 } from "./data/departmentLoader.js";
 
-// Phase 0: Tool registry + first tool
+// Tool registry types (legacy Phase 0 surface, still consumed downstream)
 export {
     buildTool,
     getTool,
     listTools,
     registerTool,
-    searchAvailability,
-    type SearchAvailabilityInput,
-    type SearchAvailabilityOutput,
-    type SectionView,
     type Tool,
     type ToolContext,
     type ToolDef,
