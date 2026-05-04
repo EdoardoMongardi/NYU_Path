@@ -8,6 +8,7 @@
 // ============================================================
 
 import type { ForwardSchedule } from "@nyupath/shared";
+import type { ForwardMaterializationPayload } from "./chatV2Client";
 
 export type SseEvent =
     | { kind: "template_match"; templateId: string; body: string; source: string }
@@ -17,6 +18,14 @@ export type SseEvent =
     | { kind: "thinking"; text: string }
     | { kind: "validator_block"; violations: Array<{ kind: string; detail: string; caveatId?: string; number?: string }> }
     | { kind: "forward_schedule_update"; schedule: ForwardSchedule }
+    /**
+     * Phase 15 Task 8 — emitted after the agent loop completes if
+     * `materialize_sections` produced a fresh result this turn (detected
+     * via `session.lastMaterializationResult.computedAt` snapshot).
+     * Sidebar reads this to switch the IMMEDIATE term's render between
+     * the structural slot list and the Sections-with-picker view.
+     */
+    | { kind: "forward_materialization_update"; result: ForwardMaterializationPayload }
     | { kind: "done"; finalText: string; modelUsedId: string }
     | { kind: "error"; message: string };
 

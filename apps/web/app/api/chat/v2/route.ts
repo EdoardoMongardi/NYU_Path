@@ -490,6 +490,12 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         // the agent runs so we can detect when plan_forward_degree (or
         // any tool) writes a new schedule to session.forwardSchedule.
         const beforeComputedAt = session.forwardSchedule?.computedAt;
+        // Phase 15 Task 8 — same pattern for the materialization
+        // side-channel. `materialize_sections.call()` writes to
+        // `session.lastMaterializationResult` as a side-effect of
+        // staging proposals. Capture the timestamp now so we can detect
+        // when the agent ran the tool this turn.
+        const beforeMaterializationComputedAt = session.lastMaterializationResult?.computedAt;
 
         for await (const ev of runAgentTurnStreaming(
             primary,
@@ -580,6 +586,25 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             writer.write({
                 kind: "forward_schedule_update",
                 schedule: session.forwardSchedule!,
+            });
+        }
+
+        // Phase 15 Task 8 — emit forward_materialization_update when
+        // materialize_sections ran this turn. The tool writes its
+        // result (full / partial / unavailable) to
+        // session.lastMaterializationResult so the route doesn't have
+        // to inspect each invocation's args/result manually. The page's
+        // sidebar reads the event into `forwardMaterialization` state
+        // and switches the immediate term's render path accordingly.
+        const afterMaterializationComputedAt = session.lastMaterializationResult?.computedAt;
+        const materializationChanged =
+            session.lastMaterializationResult !== undefined
+            && (beforeMaterializationComputedAt === undefined
+                || beforeMaterializationComputedAt !== afterMaterializationComputedAt);
+        if (materializationChanged) {
+            writer.write({
+                kind: "forward_materialization_update",
+                result: session.lastMaterializationResult!,
             });
         }
 

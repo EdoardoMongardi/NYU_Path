@@ -120,6 +120,24 @@ export { RecordingLLMClient } from "./recordingClient.js";
 export { RecorderLLMClient } from "./recorderClient.js";
 export type { RecorderOptions, RecorderMatchStrategy } from "./recorderClient.js";
 
+// Phase 15 Task 8 — surface the section-materialization domain types
+// so the apps/web sidebar can type the SSE `forward_materialization_update`
+// payload without reaching deep into engine internals.
+//
+// NOTE: `SectionView` is intentionally NOT re-exported here — there is
+// already an unrelated `SectionView` shape exported via
+// `tools/searchAvailability.ts` and adding both would create a name
+// collision in the `@nyupath/engine` barrel. The materialization-type
+// `SectionView` is referenced through `MaterializedSemester["courses"]`
+// for the UI use case; consumers needing the bare shape can import it
+// directly from the `sectionMaterialization/types.js` module.
+export type {
+    AvailabilityState,
+    MaterializationResult,
+    MaterializedSemester,
+    SchedulingPreferenceCheck,
+} from "./sectionMaterialization/types.js";
+
 export { OpenAIEngineClient, toOpenAIMessage } from "./clients/openaiClient.js";
 export type { OpenAIClientOptions } from "./clients/openaiClient.js";
 export { AnthropicEngineClient, toAnthropicMessage } from "./clients/anthropicClient.js";
