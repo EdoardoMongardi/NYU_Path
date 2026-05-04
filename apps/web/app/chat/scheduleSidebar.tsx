@@ -1,6 +1,6 @@
 "use client";
 
-import type { ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
+import type { Assumption, ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
 import styles from "./chat.module.css";
 
 interface ScheduleSidebarProps {
@@ -140,7 +140,7 @@ function formatTermLabel(term: string): string {
     return `${season} ${m[1]}`;
 }
 
-function assumptionLabel(a: import("@nyupath/shared").Assumption): string {
+function assumptionLabel(a: Assumption): string {
     switch (a.type) {
         case "IP_COURSE_COMPLETION":
             return `Assumes ${a.courseId} completes successfully`;

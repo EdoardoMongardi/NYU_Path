@@ -487,15 +487,20 @@ export default function ChatPage() {
             <header className={styles.header}>
                 <a href="/" className={styles.headerLogo}>🎓 NYU Path</a>
                 <span className={styles.headerBadge}>AI Advisor</span>
-                <button
-                    type="button"
-                    className={styles.scheduleToggle}
-                    onClick={() => setSidebarOpen(o => !o)}
-                    aria-label="Toggle schedule sidebar"
-                    aria-expanded={sidebarOpen}
-                >
-                    📅 Schedule
-                </button>
+                {/* Phase 13 Task 9 — show the schedule toggle only after the
+                    solver has produced a forward plan; before that there's
+                    nothing to reveal and the affordance would be confusing. */}
+                {forwardSchedule !== null && (
+                    <button
+                        type="button"
+                        className={styles.scheduleToggle}
+                        onClick={() => setSidebarOpen(o => !o)}
+                        aria-label="Toggle schedule sidebar"
+                        aria-expanded={sidebarOpen}
+                    >
+                        📅 Schedule
+                    </button>
+                )}
             </header>
 
             {/* Phase 7-E W10.3 — persistent disclaimer banner.
