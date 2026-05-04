@@ -258,3 +258,16 @@ export type {
     ProfileStore,
     ProfileMutationAuditEntry,
 } from "./persistence/profileStore.js";
+
+// Phase 16 Task A: schedule + chat-history persistence + DPR fingerprint
+export {
+    InMemoryScheduleStore,
+    pruneCompletedPins,
+} from "./persistence/scheduleStore.js";
+export type { ScheduleStore } from "./persistence/scheduleStore.js";
+export { InMemoryChatHistoryStore } from "./persistence/chatHistoryStore.js";
+export type {
+    ChatHistoryStore,
+    ChatMessageRecord,
+} from "./persistence/chatHistoryStore.js";
+export { computeDprFingerprint } from "./dpr/fingerprint.js";

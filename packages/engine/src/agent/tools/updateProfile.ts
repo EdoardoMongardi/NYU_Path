@@ -251,15 +251,30 @@ export const confirmProfileUpdateTool = buildTool({
         // session. Persistence failures must NOT throw — the in-memory
         // mutation already landed and the live turn is the source of
         // truth.
+        //
+        // Phase 16 Task A — co-persist the parsed DPR onto
+        // `students.parsed_dpr` when one is loaded into the session.
+        // The Postgres store accepts the optional `parsedDpr` arg and
+        // writes both columns in the same transaction. Subsequent
+        // `update_profile` calls (e.g., the student later switches
+        // major) will overwrite the column with the latest DPR each
+        // time — this is intentional: the column is "the most-recent
+        // parsed DPR per student", not an audit trail (the
+        // forward_schedules table carries dprFingerprint per row for
+        // that purpose).
         if (session.profileStore) {
             try {
-                await session.profileStore.persistMutation(student, {
-                    pendingMutationId: input.pendingMutationId,
-                    field: mutation.field,
-                    before: mutation.before,
-                    after: mutation.after,
-                    confirmedAt: new Date().toISOString(),
-                });
+                await session.profileStore.persistMutation(
+                    student,
+                    {
+                        pendingMutationId: input.pendingMutationId,
+                        field: mutation.field,
+                        before: mutation.before,
+                        after: mutation.after,
+                        confirmedAt: new Date().toISOString(),
+                    },
+                    session.degreeProgressReport,
+                );
             } catch (err) {
                 // eslint-disable-next-line no-console
                 console.warn(`[confirm_profile_update] persistMutation failed: ${err instanceof Error ? err.message : String(err)}`);

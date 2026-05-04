@@ -9,9 +9,13 @@
 import {
     InMemoryProfileStore,
     InMemorySessionStore,
+    InMemoryScheduleStore,
+    InMemoryChatHistoryStore,
     FileBackedSessionStore,
     type ProfileStore,
     type SessionStore,
+    type ScheduleStore,
+    type ChatHistoryStore,
     type Cohort,
     userInCohort as userInCohortInMemory,
 } from "@nyupath/engine";
@@ -19,10 +23,16 @@ import { getDb } from "./client.js";
 import { PostgresSessionStore } from "./sessionStorePostgres.js";
 import { PostgresProfileStore } from "./profileStorePostgres.js";
 import { PostgresCohortStore } from "./cohortStorePostgres.js";
+import { PostgresScheduleStore } from "./scheduleStorePostgres.js";
+import { PostgresChatHistoryStore } from "./chatHistoryStorePostgres.js";
 
 interface StoreBundle {
     sessionStore: SessionStore;
     profileStore: ProfileStore;
+    /** Phase 16 Task A — durable forward-schedule + preferences. */
+    scheduleStore: ScheduleStore;
+    /** Phase 16 Task A — append-only chat transcript. */
+    chatHistoryStore: ChatHistoryStore;
     cohortLookup: (userId: string) => Promise<Cohort>;
 }
 
@@ -37,6 +47,8 @@ export function getStores(env: Record<string, string | undefined> = process.env)
         cached = {
             sessionStore: new PostgresSessionStore(db),
             profileStore: new PostgresProfileStore(db),
+            scheduleStore: new PostgresScheduleStore(db),
+            chatHistoryStore: new PostgresChatHistoryStore(db),
             cohortLookup: async (userId) => {
                 const persisted = await cohortStore.lookup(userId);
                 // DB hit wins; otherwise fall through to the engine's
@@ -56,6 +68,8 @@ export function getStores(env: Record<string, string | undefined> = process.env)
     cached = {
         sessionStore,
         profileStore: new InMemoryProfileStore(),
+        scheduleStore: new InMemoryScheduleStore(),
+        chatHistoryStore: new InMemoryChatHistoryStore(),
         cohortLookup: async (userId) => userInCohortInMemory(userId),
     };
     return cached;

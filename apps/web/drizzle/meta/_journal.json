@@ -8,6 +8,13 @@
       "when": 1777305849215,
       "tag": "0000_strong_riptide",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777935301503,
+      "tag": "0001_phase16_persistence",
+      "breakpoints": true
     }
   ]
 }

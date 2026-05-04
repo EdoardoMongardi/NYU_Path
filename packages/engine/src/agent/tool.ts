@@ -91,6 +91,27 @@ export interface ToolSession {
      */
     profileStore?: import("../persistence/profileStore.js").ProfileStore;
 
+    /**
+     * Phase 16 Task A — durable schedule + preferences storage. When
+     * present, `plan_forward_degree` and `confirm_plan_change` persist
+     * the schedule (and any pref mutation) through this store after a
+     * successful tool call. The route layer reads `loadLatestSchedule`
+     * + `loadPreferences` on session bootstrap so a returning student
+     * lands back in their last plan. Failures are swallowed.
+     */
+    scheduleStore?: import("../persistence/scheduleStore.js").ScheduleStore;
+
+    /**
+     * Phase 16 Task A — append-only chat history. The route layer
+     * calls `appendMessage` after each chat turn finishes; the page
+     * loads the most-recent N messages on mount via `/api/session/restore`.
+     * Tool implementations DO NOT write here (the route owns the
+     * write because it has the assistant's final text); the field is
+     * exposed on `ToolSession` so future tools that want to retrieve
+     * prior turns can read through `loadRecentMessages`.
+     */
+    chatHistoryStore?: import("../persistence/chatHistoryStore.js").ChatHistoryStore;
+
     /** Phase 13 — solved forward schedule. Set by `plan_forward_degree`
      *  when state ∈ { "valid-clean", "valid-with-trade-offs" }. Read by
      *  `view_forward_plan`, the SSE route, and the chat sidebar. */

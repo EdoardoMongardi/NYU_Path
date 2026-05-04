@@ -66,6 +66,7 @@ import { getStores } from "../../../../lib/db/store";
 import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
 import { consumeRequest } from "../../../../lib/rateLimit";
 import { readSessionFromRequest } from "../../../../lib/auth/session";
+import { extractPendingMutationId } from "../../../../lib/chatV2Client";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -261,6 +262,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
+        // Phase 16 Task A — durable schedule + chat-history. The
+        // schedule store is read by plan_forward_degree +
+        // confirm_plan_change after a successful tool call (no-throw
+        // persistence). The chat-history store is written by this
+        // route AFTER the agent loop finishes (post-`done` event)
+        // — tools never write to it directly.
+        scheduleStore: stores.scheduleStore,
+        chatHistoryStore: stores.chatHistoryStore,
         // Phase 11 follow-up — thread the latest user message so
         // tool validateInput hooks can apply scope guards (e.g.,
         // reject check_transfer_eligibility when the message keys
@@ -485,6 +494,11 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         // and the terminal `done` event yields the full ChatTurnResult.
         const invocationsSoFar: ToolInvocation[] = [];
         let finalResult: import("@nyupath/engine").ChatTurnResult | null = null;
+        // Phase 16 Task A — accumulate thinking-delta text so it can be
+        // persisted alongside the assistant turn. The stream emits
+        // thinking_delta events inline; we only need the joined string
+        // for the chat_messages.thinking_text column.
+        const thinkingChunks: string[] = [];
 
         // Phase 13 Task 9 — capture forwardSchedule.computedAt before
         // the agent runs so we can detect when plan_forward_degree (or
@@ -571,6 +585,7 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                     break;
                 case "thinking_delta":
                     writer.write({ kind: "thinking", text: ev.text });
+                    thinkingChunks.push(ev.text);
                     break;
                 case "text_delta":
                     writer.write({ kind: "token", text: ev.text });
@@ -718,6 +733,67 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             finalText: finalTextOut,
             modelUsedId: finalResult.modelUsedId,
         });
+
+        // Phase 16 Task A — append the user message + assistant
+        // response (plus tool invocations + validator violations +
+        // thinking text) to the durable chat-history store so a
+        // returning student sees the same transcript next session.
+        // Authenticated user only — anonymous "userId === 'anonymous'"
+        // should not write to shared storage. Failures must NOT break
+        // the live turn.
+        if (userId !== "anonymous" && session.chatHistoryStore) {
+            try {
+                const nowIso = new Date().toISOString();
+                // Persist the user's message first so the timeline
+                // ordering (user → assistant) is preserved on restore.
+                await session.chatHistoryStore.appendMessage(userId, {
+                    role: "user",
+                    content: userMessage,
+                    createdAt: nowIso,
+                });
+                // pendingMutationId — surfaced by `update_profile`. Mirror
+                // the client-side extractor in chatV2Client so the page's
+                // restore path sees the same id and can re-render the
+                // confirm button without recomputing.
+                const updateProfileInvocation = finalResult.invocations.find(
+                    (i) => i.toolName === "update_profile",
+                );
+                const pendingMutationId = updateProfileInvocation
+                    ? extractPendingMutationId(updateProfileInvocation.summary)
+                    : null;
+                const assistantRecord: import("@nyupath/engine").ChatMessageRecord = {
+                    role: "assistant",
+                    content: finalTextOut,
+                    createdAt: new Date().toISOString(),
+                };
+                const thinkingText = thinkingChunks.join("");
+                if (thinkingText.length > 0) {
+                    assistantRecord.thinkingText = thinkingText;
+                }
+                if (finalResult.invocations.length > 0) {
+                    assistantRecord.toolInvocations = finalResult.invocations;
+                }
+                if (allViolations.length > 0) {
+                    assistantRecord.validatorViolations = allViolations.map((v) => {
+                        const out: { kind: string; detail: string; caveatId?: string } = {
+                            kind: v.kind,
+                            detail: v.detail,
+                        };
+                        if ("caveatId" in v && typeof v.caveatId === "string") {
+                            out.caveatId = v.caveatId;
+                        }
+                        return out;
+                    });
+                }
+                if (pendingMutationId) {
+                    assistantRecord.pendingMutationId = pendingMutationId;
+                }
+                await session.chatHistoryStore.appendMessage(userId, assistantRecord);
+            } catch (e) {
+                // A failed transcript write must NOT break the live turn.
+                console.error("[v2 route] chatHistoryStore.appendMessage failed:", e);
+            }
+        }
 
         // Phase 7-E W12.5 — persist a short rolling session summary so
         // the next chat sees minimal cross-session context. We DON'T
