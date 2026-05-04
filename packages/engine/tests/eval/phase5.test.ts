@@ -74,7 +74,7 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 19 NYU Path tools (§7.1 complete after Phase 14 Task 6)", () => {
+    it("buildDefaultRegistry exposes the 20 NYU Path tools (§7.1 complete after Phase 14 Task 7)", () => {
         // Phase 13 Task 6 added two new tools alongside the original 12:
         //   - plan_forward_degree  (replaces plan_semester for multi-term planning;
         //                            old tool kept registered for back-compat)
@@ -86,6 +86,8 @@ describe("buildTool + ToolRegistry", () => {
         // Phase 14 Task 6 adds two more:
         //   - bind_free_elective   (read-only preview of free-credit slot binding)
         //   - bind_pool_slot       (read-only preview of requirement-pool slot binding)
+        // Phase 14 Task 7 adds one more:
+        //   - compare_plan_alternatives (read-only Tier B fallback, Decision #42)
         const reg = buildDefaultRegistry();
         const names = reg.list().map((t) => t.name).sort();
         expect(names).toEqual([
@@ -93,6 +95,7 @@ describe("buildTool + ToolRegistry", () => {
             "bind_pool_slot",
             "check_overlap",
             "check_transfer_eligibility",
+            "compare_plan_alternatives",
             "confirm_plan_change",
             "confirm_profile_update",
             "get_academic_standing",
@@ -117,6 +120,7 @@ describe("buildTool + ToolRegistry", () => {
         // + schedule slot). propose_plan_change and simulate_alternatives are
         // isReadOnly:true.
         // Phase 14 Task 6: bind_free_elective and bind_pool_slot are both isReadOnly:true.
+        // Phase 14 Task 7: compare_plan_alternatives is isReadOnly:true.
         // So the non-read-only set stays at:
         // {confirm_plan_change, confirm_profile_update, plan_forward_degree}.
         const reg = buildDefaultRegistry();
