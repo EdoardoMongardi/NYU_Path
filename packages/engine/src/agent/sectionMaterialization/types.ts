@@ -8,7 +8,9 @@
 // Key API field corrections vs. original plan:
 //   • `rawHours` → `rawMeets`  (FOSE field is `meets`, not `hours`)
 //   • Added `meetingTimes`, `schd`, `section` to SectionView
-//   • `hours?` on FoseSearchResult kept as deprecation slot only
+//   • `hours?` on FoseSearchResult marked @deprecated (FOSE search rows
+//     never carry it; two legacy search_availability wrappers still
+//     pass-through `r.hours` for back-compat — see nyuClassSearch.ts).
 // ============================================================
 
 export type DayOfWeek = "M" | "Tu" | "W" | "Th" | "F" | "Sa" | "Su";

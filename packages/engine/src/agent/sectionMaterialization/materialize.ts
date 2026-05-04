@@ -27,12 +27,11 @@
 //   10. Compute schedulingPreferenceCheck verdict.
 //   11. Return MaterializationResult.
 //
-// Schema note: the existing `FoseSearchResult` interface in
-// `nyuClassSearch.ts` is INCOMPLETE — it omits `meets`,
-// `meetingTimes`, `schd`, `no` (verified against 27 fixtures).
-// We define a local `RawFoseSection` shape with the full set and
-// cast at the boundary. Cleaning up the upstream interface is a
-// separate pass.
+// Schema note: `FoseSearchResult` in `nyuClassSearch.ts` is the source
+// of truth for the FOSE search-row shape. It was aligned with the real
+// 27-fixture corpus (added `meets`, `meetingTimes`, `schd`, `no`) so
+// the orchestrator no longer needs a local mirror or a boundary cast —
+// `searchCourses` returns the structurally-correct type directly.
 //
 // Combination score: kept INTERNAL — used only for sort ordering.
 // `MaterializedSemester.combinations[i]` retains the published
@@ -42,7 +41,10 @@
 // with an optional `score?: number`.
 // ============================================================
 
-import { searchCourses as defaultSearchCourses } from "../../api/nyuClassSearch.js";
+import {
+    searchCourses as defaultSearchCourses,
+    type FoseSearchResult,
+} from "../../api/nyuClassSearch.js";
 import { parseMeetingTimes } from "./parseMeetingTimes.js";
 import { enumerateConflictFreeCombinations, type CourseBundle } from "./conflictDetection.js";
 import { classifyAvailability, type FoseSection } from "./foseAvailabilityGate.js";
@@ -54,29 +56,6 @@ import type {
     SchedulingPreferenceCheck,
 } from "./types.js";
 import type { SchedulingPreferences } from "@nyupath/shared";
-
-// ---- Local FOSE shape (the upstream interface is incomplete) ----
-
-/**
- * The fields we actually need from a FOSE search result. Verified
- * against the 27-fixture sample — see types.ts header for the
- * `meets` vs `hours` correction.
- *
- * NOT exported because callers should always go through
- * `searchCourses` and let the orchestrator do the cast.
- */
-interface RawFoseSection {
-    code?: string;
-    title?: string;
-    crn?: string;
-    no?: string;
-    schd?: string;
-    stat?: string;
-    credits?: string;
-    instr?: string;
-    meets?: string;
-    meetingTimes?: string;
-}
 
 // ---- Module-level shared cache ----
 
@@ -124,7 +103,7 @@ export interface MaterializeArgs {
  */
 export function mapFoseToSectionView(
     courseId: string,
-    raw: RawFoseSection,
+    raw: FoseSearchResult,
 ): SectionView {
     const parsed = parseMeetingTimes(raw.meets ?? "", raw.meetingTimes);
     return {
@@ -211,7 +190,7 @@ export function rankCombinationsByScore<T extends { sections: SectionView[] }>(
 
 interface CourseFetchResult {
     /** Raw FOSE rows that exact-match this courseId. */
-    raw: RawFoseSection[];
+    raw: FoseSearchResult[];
     /** Same rows mapped to SectionView (no filtering yet). */
     sections: SectionView[];
 }
@@ -222,10 +201,14 @@ async function fetchAndMapCourse(
     searchFn: (termCode: string, keyword: string) => Promise<unknown[]>,
     cache: FoseCache<unknown[]>,
 ): Promise<CourseFetchResult> {
-    let raw = cache.get(termCode, courseId) as RawFoseSection[] | undefined;
+    let raw = cache.get(termCode, courseId) as FoseSearchResult[] | undefined;
     if (raw === undefined) {
-        // Cast at the FOSE boundary — see file header for the schema rationale.
-        const fetched = (await searchFn(termCode, courseId)) as RawFoseSection[];
+        // `searchFn` is typed `Promise<unknown[]>` so tests can inject
+        // minimal row shapes without recreating every required field on
+        // FoseSearchResult. The single cast here narrows that test-friendly
+        // escape hatch to the production shape — production `searchCourses`
+        // already returns `Promise<FoseSearchResult[]>` natively.
+        const fetched = (await searchFn(termCode, courseId)) as FoseSearchResult[];
         cache.set(termCode, courseId, fetched);
         raw = fetched;
     }
