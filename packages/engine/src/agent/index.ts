@@ -24,6 +24,9 @@ export {
     getAcademicStandingTool,
     checkOverlapTool,
     searchCoursesTool,
+    // Phase 16 Task B — exposed so the Update-DPR route can re-plan
+    // programmatically without having to spin up the full agent loop.
+    planForwardDegreeTool,
 } from "./registry.js";
 
 export { createSemanticCourseSearchFn } from "./tools/semanticCourseSearch.js";

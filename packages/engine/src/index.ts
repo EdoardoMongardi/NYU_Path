@@ -104,6 +104,8 @@ export {
     confirmProfileUpdateTool,
     getCreditCapsTool,
     searchAvailabilityTool,
+    // Phase 16 Task B — Update-DPR route invokes this programmatically.
+    planForwardDegreeTool,
 } from "./agent/index.js";
 export type {
     AgentTurnOptions,
