@@ -74,40 +74,47 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 14 NYU Path tools (§7.1 complete after Phase 13 Task 6)", () => {
+    it("buildDefaultRegistry exposes the 17 NYU Path tools (§7.1 complete after Phase 14 Task 5)", () => {
         // Phase 13 Task 6 added two new tools alongside the original 12:
         //   - plan_forward_degree  (replaces plan_semester for multi-term planning;
         //                            old tool kept registered for back-compat)
         //   - view_forward_plan    (read-only inspection of session.forwardSchedule)
+        // Phase 14 Task 5 adds three more:
+        //   - propose_plan_change  (read-only preview of mutations)
+        //   - confirm_plan_change  (write — applies mutations)
+        //   - simulate_alternatives (read-only — failure-mode candidates)
         const reg = buildDefaultRegistry();
         const names = reg.list().map((t) => t.name).sort();
         expect(names).toEqual([
             "check_overlap",
             "check_transfer_eligibility",
+            "confirm_plan_change",
             "confirm_profile_update",
             "get_academic_standing",
             "get_credit_caps",
             "plan_forward_degree",
             "plan_semester",
+            "propose_plan_change",
             "run_full_audit",
             "search_availability",
             "search_courses",
             "search_policy",
+            "simulate_alternatives",
             "update_profile",
             "view_forward_plan",
             "what_if_audit",
         ]);
     });
 
-    it("write tools are confirm_profile_update + plan_forward_degree only", () => {
-        // Phase 13 Task 6 added plan_forward_degree as a state-mutating tool
-        // (writes session.forwardSchedule or session.studentDraftPlan per
-        // Decision #32). update_profile only stages; view_forward_plan is
-        // explicitly isReadOnly:true. So the non-read-only set grows from
-        // {confirm_profile_update} to {confirm_profile_update, plan_forward_degree}.
+    it("write tools are confirm_profile_update + plan_forward_degree + confirm_plan_change only", () => {
+        // Phase 13 Task 6 added plan_forward_degree as a state-mutating tool.
+        // Phase 14 Task 5 adds confirm_plan_change (writes session.schedulePreferences
+        // + schedule slot). propose_plan_change and simulate_alternatives are
+        // isReadOnly:true. So the non-read-only set is now:
+        // {confirm_plan_change, confirm_profile_update, plan_forward_degree}.
         const reg = buildDefaultRegistry();
         const writes = reg.list().filter((t) => !t.isReadOnly).map((t) => t.name).sort();
-        expect(writes).toEqual(["confirm_profile_update", "plan_forward_degree"]);
+        expect(writes).toEqual(["confirm_plan_change", "confirm_profile_update", "plan_forward_degree"]);
     });
 });
 

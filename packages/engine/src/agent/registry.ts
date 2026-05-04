@@ -1,5 +1,5 @@
 // ============================================================
-// Default ToolRegistry — wires the 14 NYU Path tools (§7.1 + Phase 13)
+// Default ToolRegistry — wires the 17 NYU Path tools (§7.1 + Phase 13 + Phase 14 Task 5)
 // ============================================================
 // All §7.1 tools shipped:
 //   run_full_audit, plan_semester, check_transfer_eligibility,
@@ -8,6 +8,8 @@
 //   check_overlap, search_courses
 // Phase 13 Task 6 additions:
 //   plan_forward_degree, view_forward_plan
+// Phase 14 Task 5 additions:
+//   propose_plan_change, confirm_plan_change, simulate_alternatives
 // ============================================================
 import { ToolRegistry, type Tool } from "./tool.js";
 import { runFullAuditTool } from "./tools/runFullAudit.js";
@@ -23,6 +25,9 @@ import { checkOverlapTool } from "./tools/checkOverlap.js";
 import { searchCoursesTool } from "./tools/searchCourses.js";
 import { planForwardDegreeTool } from "./tools/planForwardDegree.js";
 import { viewForwardPlanTool } from "./tools/viewForwardPlan.js";
+import { proposePlanChangeTool } from "./tools/proposePlanChange.js";
+import { confirmPlanChangeTool } from "./tools/confirmPlanChange.js";
+import { simulateAlternativesTool } from "./tools/simulateAlternatives.js";
 import type { ZodTypeAny } from "zod";
 
 export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
@@ -40,6 +45,9 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     searchCoursesTool as unknown as Tool<ZodTypeAny, unknown>,
     planForwardDegreeTool as unknown as Tool<ZodTypeAny, unknown>,
     viewForwardPlanTool as unknown as Tool<ZodTypeAny, unknown>,
+    proposePlanChangeTool as unknown as Tool<ZodTypeAny, unknown>,
+    confirmPlanChangeTool as unknown as Tool<ZodTypeAny, unknown>,
+    simulateAlternativesTool as unknown as Tool<ZodTypeAny, unknown>,
 ];
 
 /**
@@ -65,4 +73,7 @@ export {
     searchCoursesTool,
     planForwardDegreeTool,
     viewForwardPlanTool,
+    proposePlanChangeTool,
+    confirmPlanChangeTool,
+    simulateAlternativesTool,
 };
