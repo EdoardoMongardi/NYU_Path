@@ -131,11 +131,12 @@ function checkPoolConstraint(
     targetSlotId: string,
     boundCourseId: string,
 ): { ok: boolean; detail?: string } {
-    // Collect all pool slots in the schedule for the same poolId
+    // First pass: find the target slot's poolId so the second pass can
+    // collect every sibling slot that shares it. We don't keep the target's
+    // own candidate list — the candidate-membership check happens earlier
+    // in the binding pipeline (line ~304); this helper only enforces the
+    // choose_n constraint, which only needs the poolId.
     let targetPoolId: string | null = null;
-    let targetCandidates: string[] = [];
-
-    // First pass: find the target slot's poolId
     for (const sem of schedule.semesters) {
         for (const slot of sem.slots) {
             if (
@@ -144,7 +145,6 @@ function checkPoolConstraint(
                 slot.poolBinding
             ) {
                 targetPoolId = slot.poolBinding.poolId;
-                targetCandidates = slot.poolBinding.candidates;
                 break;
             }
         }
