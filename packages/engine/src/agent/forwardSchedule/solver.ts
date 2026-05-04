@@ -42,6 +42,7 @@ import type {
     WorkloadTier,
     TermConstraint,
     PrereqGroup,
+    SchedulePreferences,
 } from "@nyupath/shared";
 import type { SolverInput, SolverOutput } from "./types.js";
 import { isPrereqSatisfied } from "../../dpr/prereqSatisfaction.js";
@@ -105,6 +106,60 @@ function compareSolverTerms(a: string, b: string): number {
     if (!pa) return -1;
     if (!pb) return 1;
     return termOrd(pa) - termOrd(pb);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 14 Task 3 — load-style ordering + per-term effective target
+// ---------------------------------------------------------------------------
+
+/**
+ * termsForPlacement — returns the ordered list of terms to try when placing
+ * a course, respecting the student's global loadStyle preference.
+ *
+ * - "frontload"  → earliest-first (same as default iteration order)
+ * - "backload"   → latest-first (reversed)
+ * - undefined / "balanced" → earliest-first (Phase 13 default; Phase 15 will
+ *   add a true slack-balancing pass)
+ *
+ * Decision #9 (frontload / backload); Decision #26 partial (term ordering).
+ */
+function termsForPlacement(
+    futureTerms: string[],
+    _perTermCredits: Map<string, number>,
+    _target: number,
+    preferences: SchedulePreferences | undefined,
+): string[] {
+    if (preferences?.loadStyle === "frontload") return [...futureTerms]; // earliest first
+    if (preferences?.loadStyle === "backload") return [...futureTerms].reverse();
+    // Default (balanced): chronological — Phase 13 greedy fills earliest term first.
+    return [...futureTerms];
+}
+
+/**
+ * effectiveTermTarget — returns the credit target for a given term,
+ * respecting per-term and global preference overrides.
+ *
+ * Priority:
+ *   1. creditTargetPerTerm[term] — explicit override
+ *   2. loadStylePerTerm[term] === "light" → f1Floor ?? defaultTarget
+ *   3. loadStylePerTerm[term] === "heavy" → ceiling
+ *   4. defaultTarget
+ *
+ * Decision #11 (per-term light/heavy).
+ */
+function effectiveTermTarget(
+    term: string,
+    defaultTarget: number,
+    preferences: SchedulePreferences | undefined,
+    f1Floor: number | null,
+    ceiling: number,
+): number {
+    const explicit = preferences?.creditTargetPerTerm?.[term];
+    if (explicit != null) return explicit;
+    const styleOverride = preferences?.loadStylePerTerm?.[term];
+    if (styleOverride === "light") return f1Floor ?? defaultTarget;
+    if (styleOverride === "heavy") return ceiling;
+    return defaultTarget;
 }
 
 // ---------------------------------------------------------------------------
@@ -679,6 +734,108 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
     const placeholderRequirements: typeof input.unmetRequirements = [];
     const placedCourseSet = new Set<string>(); // for isCriticalPath and IP assumptions
 
+    // -----------------------------------------------------------------------
+    // Phase 14 Task 3 — (d) Pin-placement pass (Decision #10 / #31)
+    // Pins are mandatory preferences within the valid candidate set.
+    // Pins CANNOT bypass hard filters (offering pattern, catalog-absent).
+    // Pins that violate offering pattern emit an offering_pattern violation.
+    // -----------------------------------------------------------------------
+
+    for (const pin of input.preferences?.pins ?? []) {
+        if (!allFutureTerms.includes(pin.term)) {
+            violations.push({
+                kind: "other",
+                course: pin.courseId,
+                detail: `Pinned to ${pin.term}, not a future term in the plan window.`,
+            });
+            continue;
+        }
+        const meta = input.courseCatalog.get(pin.courseId);
+        if (!meta) {
+            violations.push({
+                kind: "other",
+                course: pin.courseId,
+                detail: `Pinned course ${pin.courseId} not in catalog.`,
+            });
+            continue;
+        }
+        const offered = input.offerings.get(pin.courseId);
+        const seasonOnly = (parseTerm(pin.term)?.season ?? "fall") as "fall" | "spring";
+        if (offered && offered.length > 0 && !offered.includes(seasonOnly)) {
+            violations.push({
+                kind: "offering_pattern",
+                course: pin.courseId,
+                term: pin.term,
+                detail: `${pin.courseId} pinned to ${pin.term}, but offering pattern is ${offered.join(", ")}.`,
+            });
+            continue;
+        }
+
+        // Build full rich fields for the pinned slot (Decision #10 pin hard constraint)
+        const confidence: ConfidenceTier =
+            input.offeringConfidence.get(pin.courseId) ?? "historically_partial";
+        const wtResult = classifyWorkloadTier({
+            courseId: pin.courseId,
+            satisfiesRules: [],
+            majorRuleKinds: input.programRules.majorRuleKinds,
+            schoolCoreRuleIds: input.programRules.schoolCoreRuleIds,
+            generalCategoryRuleIds: input.programRules.generalCategoryRuleIds,
+            bulletinTitle: input.courseTitles?.get(pin.courseId),
+            bulletinKeywords: input.courseBulletinKeywords?.get(pin.courseId),
+        });
+
+        const latestTermForPin = allFutureTerms[allFutureTerms.length - 1] ?? pin.term;
+
+        const pinRationale: SlotRationale = {
+            satisfiesRequirements: [],
+            termConstraints: [
+                { kind: "offering", detail: `Pinned by student preference to ${pin.term}.` },
+            ],
+            consideredAlternatives: [],
+            decisionsApplied: ["D10-pinHardConstraint", "D31-pinPrecedence"],
+        };
+
+        const pinFlexibility: SlotFlexibility = {
+            earliestPossibleTerm: pin.term,
+            latestPossibleTerm: latestTermForPin,
+            alternativeCourses: [],
+        };
+
+        const pinDownstream = computeDownstreamImpact(pin.courseId, dependentsIndex);
+
+        const pinnedSlot: ScheduleSlotSpecificPlanned = {
+            kind: "specific_planned",
+            courseId: pin.courseId,
+            title: meta.title,
+            credits: meta.credits,
+            satisfiesRules: [],
+            reason: `Pinned by student preference to ${pin.term}.`,
+            rationale: pinRationale,
+            flexibility: pinFlexibility,
+            downstreamImpact: pinDownstream,
+            workloadTier: wtResult.tier,
+            workloadWeight: wtResult.weight ?? 1.0,
+            bindingState: "bound",
+            confidence,
+            isCriticalPath: false,
+        };
+
+        perTermSlots.get(pin.term)!.push(pinnedSlot);
+        perTermCredits.set(pin.term, (perTermCredits.get(pin.term) ?? 0) + meta.credits);
+        plannedPlacements.set(pin.courseId, pin.term);
+        placedCourseSet.add(pin.courseId);
+        placementRationale[pin.courseId] = pinnedSlot.reason;
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 14 Task 3 — (e) Build exclusion set (Decision #11)
+    // Courses in preferences.exclusions are never placed by the solver.
+    // -----------------------------------------------------------------------
+
+    const excludedCourseSet = new Set(
+        (input.preferences?.exclusions ?? []).map(e => e.courseId),
+    );
+
     for (const req of sortedRequirements) {
         // --- Stage 6a: candidate-level filters ---
 
@@ -688,8 +845,24 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             continue;
         }
 
+        // Phase 14 Task 3 — (e) Apply exclusions: skip excluded candidates.
+        // Filter the candidate list, then pick the first non-excluded one.
+        const filteredCandidates = req.candidateCourses.filter(
+            c => !excludedCourseSet.has(c),
+        );
+
+        if (filteredCandidates.length === 0) {
+            // All candidates excluded — fall through to placeholder
+            placeholderRequirements.push(req);
+            continue;
+        }
+
         // Pick the first candidate (greedy; Phase 15 would try all)
-        const courseId = req.candidateCourses[0]!;
+        const courseId = filteredCandidates[0]!;
+
+        // Skip if already placed by the pin pass
+        if (plannedPlacements.has(courseId)) continue;
+
         const meta = input.courseCatalog.get(courseId);
 
         // Catalog gap → placeholder (Decision #5 lenient)
@@ -734,13 +907,26 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
         const offered = input.offerings.get(courseId);
 
         // --- Stage 6c: slack-based placement ---
-        // Walk terms in chronological order; find earliest term meeting
-        // (offering pattern + slack ≥ credits + prereqs satisfied).
+        // Walk terms in preference order (frontload / backload / default chronological).
         let placed = false;
 
-        for (const term of allFutureTerms) {
+        const termsToTry = termsForPlacement(
+            allFutureTerms,
+            perTermCredits,
+            input.creditTargetPerSemester,
+            input.preferences,
+        );
+
+        for (const term of termsToTry) {
             const seasonOnly = (parseTerm(term)?.season ?? "fall") as "fall" | "spring";
-            const slack = (input.creditTargetPerSemester) - (perTermCredits.get(term) ?? 0);
+            const termTarget = effectiveTermTarget(
+                term,
+                input.creditTargetPerSemester,
+                input.preferences,
+                input.f1Floor,
+                input.creditCeiling,
+            );
+            const slack = termTarget - (perTermCredits.get(term) ?? 0);
 
             // Check offering pattern
             if (offered && offered.length > 0 && !offered.includes(seasonOnly)) {
@@ -915,11 +1101,18 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
     const degreeCreditsMet = input.creditsEarned >= input.graduationCreditMinimum;
 
     for (const req of placeholderRequirements) {
-        // Find the earliest term with sufficient slack
+        // Find the earliest term with sufficient slack (respects per-term target overrides)
         let bestTerm: string | null = null;
         let bestSlack = -Infinity;
         for (const t of allFutureTerms) {
-            const slack = input.creditTargetPerSemester - (perTermCredits.get(t) ?? 0);
+            const tTarget = effectiveTermTarget(
+                t,
+                input.creditTargetPerSemester,
+                input.preferences,
+                input.f1Floor,
+                input.creditCeiling,
+            );
+            const slack = tTarget - (perTermCredits.get(t) ?? 0);
             if (slack >= req.credits && slack > bestSlack) {
                 bestSlack = slack;
                 bestTerm = t;
@@ -991,11 +1184,21 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
 
     for (const term of allFutureTerms) {
         const cur = perTermCredits.get(term) ?? 0;
-        const target = input.creditTargetPerSemester;
+        const target = effectiveTermTarget(
+            term,
+            input.creditTargetPerSemester,
+            input.preferences,
+            input.f1Floor,
+            input.creditCeiling,
+        );
         let credits = cur;
         const latestTerm = allFutureTerms[allFutureTerms.length - 1] ?? term;
 
-        while (credits + 4 <= target) {
+        // Fill in 4-credit increments; then add a partial-credit top-off slot
+        // if the target is not a multiple of 4 (e.g. target=18 → 4+4+4+4+2).
+        while (credits < target) {
+            const slotCredits = Math.min(4, target - credits);
+
             // Decision #8: above F-1 floor + degreeCreditsMet → optional
             const aboveFloor =
                 credits >= (input.f1Floor ?? input.domesticPartTimeFloor ?? 0);
@@ -1018,7 +1221,7 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             const freeSlot: ScheduleSlotPlaceholder = {
                 kind: "placeholder",
                 category: "Free elective",
-                credits: 4,
+                credits: slotCredits,
                 satisfiesRules: [],
                 optional,
                 reason: optional
@@ -1041,7 +1244,7 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             };
 
             perTermSlots.get(term)!.push(freeSlot);
-            credits += 4;
+            credits += slotCredits;
         }
         perTermCredits.set(term, credits);
     }
