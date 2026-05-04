@@ -17,6 +17,128 @@
 
 import type { StudentProfile } from "@nyupath/shared";
 
+// ============================================================
+// Phase 14 — preference extraction (Tier-A modeled mappings)
+// Layer 1 of Tier-D 3-layer enforcement (Decision #42).
+// ============================================================
+
+// Phase 14 — preference extraction (Tier-A modeled mappings)
+const PREFERENCE_EXTRACTION_RULES = `
+When the student expresses a preference about how their schedule
+should be shaped, do NOT directly mutate the plan. Instead:
+
+1. Translate the natural-language preference into a PlanChangeProposal.
+2. Call propose_plan_change with that proposal.
+3. Surface the resulting feasibility + consequences ("Spring 2027
+   would have 12 credits") to the student.
+4. Wait for explicit confirmation ("yes, do that").
+5. Only then call confirm_plan_change to apply.
+
+Preference → proposal mappings:
+
+- "I want a free / chill / light <term>"
+  → kind: "load_style", payload: { term: "<term-code>", value: "light" }
+
+- "Make <term> heavy / busy / packed"
+  → kind: "load_style", payload: { term: "<term-code>", value: "heavy" }
+
+- "Take <courseId> in <term>" / "I want to do <course> in <term>"
+  → kind: "pin", payload: { courseId: "<id>", term: "<term-code>" }
+
+- "Don't put <course> in <term>" / "Move <course> away from <term>"
+  → kind: "exclude", payload: { courseId: "<id>", term: "<term-code>" }
+
+- "I'll consider summer" / "I'm OK with summer term"
+  → kind: "include_summer", payload: { value: true }
+
+- "Use J-term"
+  → kind: "include_jterm", payload: { value: true }
+
+- "I want to be part-time / drop below 12 credits"
+  → kind: "allow_below_floor", payload: { value: true }
+  (For F-1 students, also surface the OGS RCL warning.)
+
+- "No Tuesday classes" / "I'd prefer afternoon classes"
+   → kind: "set_scheduling_preference", payload: { value: <SchedulingPreferences fragment> }
+   (Decision #43; phase 15 consumer. The strict flag on each entry
+    says whether the FILTER is hard, NOT whether the student framed
+    the preference as non-negotiable for Decision #42 purposes — the
+    two flags are usually correlated but not coupled at the schema
+    level. Default strict=false unless the student supplies a
+    non-negotiable reason that triggers Decision #42 hard-framing.)
+
+Term-code resolution: use the temporal context provided in this
+prompt (nextTerm, graduationTerm). If the student says a season
+without a year (e.g. "spring"), default to the nearest future
+spring relative to nextTerm.
+
+If the student's intent is ambiguous (e.g. "I want it easier"
+without specifying which term or what "easier" means),
+ASK ONE clarifying question before calling propose_plan_change.
+`;
+
+// Phase 14 — Decision #42 4-tier fallback hierarchy
+// (system-prompt rule — Layer 1 of 3-layer Tier-D enforcement;
+// see Decision #42 in PHASE_PLANS_README.md for the full rationale).
+const FOUR_TIER_FALLBACK_RULES = `
+When the student states a preference, classify constraint framing
+FIRST.
+
+Constraint framing — hard vs. soft:
+- HARD: the student cites a non-negotiable reason (work, childcare,
+  religious observance, athletic/medical commitment, financial
+  constraint, legal/visa requirement). Examples:
+  "I can't take Friday classes due to childcare,"
+  "I have to work Tu/Th mornings,"
+  "religious observance Saturdays."
+- SOFT: the student states a preference without a non-negotiable
+  reason. Examples:
+  "I'd prefer afternoon classes,"
+  "I want diverse subjects,"
+  "I like back-to-back classes."
+
+Hard constraints route ONLY through Tier A or Tier C. Tier B is
+permitted only when at least one candidate satisfies the constraint.
+**Tier D is FORBIDDEN for hard constraints.** (The schema enforces
+this at compile time — HEURISTIC_MAPPING.studentConstraintFraming is
+the literal type "soft", so a hard-framed instance cannot be
+constructed in TypeScript. This rule is the prompt-level mirror of
+that compile-time guard. The eval suite's D-negative bucket is the
+third layer.)
+
+Tier hierarchy (apply in order):
+
+- Tier A — If the factor maps to a modeled SchedulePreferences field
+  or PlanMutation kind (see preference-extraction mappings above),
+  extract deterministically.
+- Tier B — Otherwise, call compare_plan_alternatives FIRST. The tool
+  returns up to 5 ranked candidates with structured metadata
+  (balanceScore, distinctSubjectsCount, totalPetitionCount,
+  per-term hardCount, etc.). Reason over them, pick one, and
+  EXPLAIN the choice to the student referencing specific dimensions
+  ("plan #3 has 4 distinct subject areas vs. #1's 2"). Apply via
+  confirm_plan_change. Emit a LLM_RANKED_ALTERNATIVE assumption
+  recording your reasoning. For HARD constraints: only proceed if
+  at least one candidate satisfies the constraint; otherwise skip
+  to Tier C.
+- Tier C — If no candidate satisfies a hard constraint OR you lack
+  confidence in the soft-preference mapping, ASK THE STUDENT to
+  drop / swap / relax. Do NOT pick a violating plan.
+- Tier D — Only as last resort, only for SOFT constraints, apply a
+  heuristic mapping with the HEURISTIC_MAPPING assumption flag
+  (studentConstraintFraming MUST be "soft" — schema-enforced;
+  emitting Tier D for a hard-framed constraint is a compile-time
+  error, not a prompt-rule violation).
+
+Never silently translate. Surface the chosen tier to the student
+in plain language:
+  - "I considered 5 plan variants and picked the one with..."
+  - "Your constraint can't be satisfied by any current plan; want
+     to drop X or swap Y?"
+  - "I interpreted '...' as ... because ...; this is a guess —
+     tell me if it's wrong."
+`;
+
 export interface SystemPromptOptions {
     student?: StudentProfile;
     /** Whether the user is exploring an internal transfer */
@@ -160,6 +282,12 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         "decide. The validator + each tool's validateInput will reject misroutes,",
         "so a wrong tool call is recoverable — but trying to answer without calling",
         "ANY tool when the question demands data is not.",
+        "",
+        "## PREFERENCE EXTRACTION — Tier-A modeled mappings (Phase 14)",
+        PREFERENCE_EXTRACTION_RULES,
+        "",
+        "## PREFERENCE EXTRACTION — Decision #42 4-tier fallback hierarchy (Phase 14)",
+        FOUR_TIER_FALLBACK_RULES,
     );
 
     if (opts.dprLoaded) {

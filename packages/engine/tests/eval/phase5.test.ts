@@ -171,6 +171,44 @@ describe("buildSystemPrompt", () => {
         expect(out).toContain("major cs_major_ba");
         expect(out).toContain("visaStatus: f1");
     });
+
+    // Phase 14 Task 8 — Tier-A modeled extraction rules are present
+    it("contains Phase 14 PREFERENCE_EXTRACTION_RULES (Tier-A modeled mappings)", () => {
+        expect(prompt).toContain("PREFERENCE EXTRACTION");
+        expect(prompt).toContain("propose_plan_change");
+        expect(prompt).toContain("confirm_plan_change");
+        // Spot-check a few of the Tier-A mapping bullet points verbatim
+        expect(prompt).toContain("load_style");
+        expect(prompt).toContain("include_summer");
+        expect(prompt).toContain("allow_below_floor");
+        expect(prompt).toContain("set_scheduling_preference");
+    });
+
+    // Phase 14 Task 8 — 4-tier fallback hierarchy is present (Layer 1)
+    it("contains Phase 14 FOUR_TIER_FALLBACK_RULES including Layer 1 FORBIDDEN text", () => {
+        expect(prompt).toContain("4-tier fallback hierarchy");
+        // Layer 1 of Tier-D 3-layer enforcement — exact required phrasing
+        expect(prompt).toContain("Tier D is FORBIDDEN for hard constraints");
+        // Constraint framing classification
+        expect(prompt).toContain("HARD");
+        expect(prompt).toContain("SOFT");
+        // The 4 tiers
+        expect(prompt).toContain("Tier A");
+        expect(prompt).toContain("Tier B");
+        expect(prompt).toContain("Tier C");
+        expect(prompt).toContain("Tier D");
+        // "Never silently translate" rule
+        expect(prompt).toContain("Never silently translate");
+    });
+
+    // Phase 14 Task 8 — new rules are positioned after TOOL ROUTING
+    it("preference-extraction rules appear after TOOL ROUTING section", () => {
+        const toolRoutingIdx = prompt.indexOf("TOOL ROUTING");
+        const prefExtractionIdx = prompt.indexOf("PREFERENCE EXTRACTION");
+        expect(toolRoutingIdx).toBeGreaterThan(-1);
+        expect(prefExtractionIdx).toBeGreaterThan(-1);
+        expect(prefExtractionIdx).toBeGreaterThan(toolRoutingIdx);
+    });
 });
 
 // ============================================================
