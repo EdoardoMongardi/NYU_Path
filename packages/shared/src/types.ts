@@ -790,7 +790,8 @@ export type PlaceholderSlot =
 export type TermConstraintKind =
     | "prereqChain"
     | "offering"
-    | "creditCeiling"
+    | "creditCeiling"   // term is at or near the hard ceiling (input.creditCeiling)
+    | "creditSlack"     // term has tight remaining slack vs. creditTargetPerSemester
     | "creditFloor"
     | "visaFloor"
     | "coreqSameTerm";
