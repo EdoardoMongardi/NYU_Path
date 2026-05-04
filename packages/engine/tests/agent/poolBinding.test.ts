@@ -20,9 +20,6 @@ describe("placePoolSlot — produces unbound RequirementPoolSlot", () => {
     it("returns kind=requirement-pool, bindingState=unbound, bound=undefined, candidates from poolBinding", () => {
         const args: PlacePoolSlotArgs = {
             poolBinding,
-            credits: 4,
-            term: "2026-fall",
-            placeholderId: "placeholder-001",
         };
         const slot = placePoolSlot(args);
         expect(slot.kind).toBe("requirement-pool");
@@ -38,9 +35,6 @@ describe("promotePoolSlotToConcrete — success: courseId in candidates", () => 
     it("returns success=true and a bound slot when the chosen course is a valid candidate", () => {
         const args: PlacePoolSlotArgs = {
             poolBinding,
-            credits: 4,
-            term: "2026-fall",
-            placeholderId: "placeholder-001",
         };
         const placeholder = placePoolSlot(args);
 
@@ -61,9 +55,6 @@ describe("promotePoolSlotToConcrete — reject: not in candidates", () => {
     it("returns success=false with rejectedBecause=not-in-candidates", () => {
         const args: PlacePoolSlotArgs = {
             poolBinding,
-            credits: 4,
-            term: "2026-fall",
-            placeholderId: "placeholder-001",
         };
         const placeholder = placePoolSlot(args);
 
@@ -83,9 +74,6 @@ describe("promotePoolSlotToConcrete — reject: already bound", () => {
         // Manually create an already-bound slot
         const args: PlacePoolSlotArgs = {
             poolBinding,
-            credits: 4,
-            term: "2026-fall",
-            placeholderId: "placeholder-001",
         };
         const placeholder = placePoolSlot(args);
         // Bind it once successfully
@@ -111,9 +99,6 @@ describe("promotePoolSlotToConcrete — bound slot state", () => {
     it("produces a slot with bindingState='bound' after successful promotion", () => {
         const args: PlacePoolSlotArgs = {
             poolBinding,
-            credits: 4,
-            term: "2026-fall",
-            placeholderId: "placeholder-001",
         };
         const placeholder = placePoolSlot(args);
         const result = promotePoolSlotToConcrete({

@@ -50,6 +50,11 @@ export function forwardFeasibilityScreen(args: ForwardFeasibilityArgs): boolean 
     } = args;
 
     // --- 1. Capacity check ---
+    // Missing-ceiling and missing-placed default to 0. A missing ceiling
+    // contributes 0 capacity (worst-case false-negative — the screen errs
+    // toward "infeasible" if the caller forgot to populate the ceiling map).
+    // The caller is responsible for providing complete ceiling data; this
+    // default exists as a defensive guard, not a "no ceiling" sentinel.
     let totalCapacity = 0;
     for (const term of remainingTerms) {
         const ceiling = creditCeilingByTerm.get(term) ?? 0;
