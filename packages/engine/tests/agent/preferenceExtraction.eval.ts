@@ -988,11 +988,12 @@ export async function evalSuite(): Promise<EvalRunResult> {
         meetsBar,
     };
 
-    // Print summary when run directly.
-    if (typeof require !== "undefined" && require.main === module) {
-        printEvalSummary(summary);
-    }
-
+    // The summary is printed by the top-level direct-invocation block
+    // below (lines 1010+) when the file is run via `tsx` with the
+    // ANTHROPIC_API_KEY env var. The package is ESM ("type": "module"),
+    // so `require.main === module` is never defined at runtime — the
+    // print-on-direct-call path lives entirely in the import.meta.url
+    // check below.
     return summary;
 }
 
