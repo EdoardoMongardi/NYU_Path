@@ -139,25 +139,35 @@ function termsForPlacement(
  * effectiveTermTarget — returns the credit target for a given term,
  * respecting per-term and global preference overrides.
  *
- * Priority:
- *   1. creditTargetPerTerm[term] — explicit override
- *   2. loadStylePerTerm[term] === "light" → f1Floor ?? defaultTarget
- *   3. loadStylePerTerm[term] === "heavy" → ceiling
+ * Priority for "light":
+ *   F-1 floor (typically 12) when set; otherwise the domestic
+ *   part-time floor (typically 8); otherwise defaultTarget. Without
+ *   the domesticPartTimeFloor fallback, a non-F-1 student opting into
+ *   "light" Spring would fall through to defaultTarget=16, defeating
+ *   the override's intent.
+ *
+ * Priority overall:
+ *   1. creditTargetPerTerm[term] — explicit numeric override
+ *   2. loadStylePerTerm[term] === "light"  → f1Floor ?? domesticPartTimeFloor ?? defaultTarget
+ *   3. loadStylePerTerm[term] === "heavy"  → ceiling
  *   4. defaultTarget
  *
- * Decision #11 (per-term light/heavy).
+ * Decision #9 (5 load styles, including per-term light/heavy
+ * overrides). Decision #26 partial — Stage-5 candidate-ranking
+ * workload-tier-aware bias is wired in Task 5.
  */
 function effectiveTermTarget(
     term: string,
     defaultTarget: number,
     preferences: SchedulePreferences | undefined,
     f1Floor: number | null,
+    domesticPartTimeFloor: number | null,
     ceiling: number,
 ): number {
     const explicit = preferences?.creditTargetPerTerm?.[term];
     if (explicit != null) return explicit;
     const styleOverride = preferences?.loadStylePerTerm?.[term];
-    if (styleOverride === "light") return f1Floor ?? defaultTarget;
+    if (styleOverride === "light") return f1Floor ?? domesticPartTimeFloor ?? defaultTarget;
     if (styleOverride === "heavy") return ceiling;
     return defaultTarget;
 }
@@ -739,6 +749,15 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
     // Pins are mandatory preferences within the valid candidate set.
     // Pins CANNOT bypass hard filters (offering pattern, catalog-absent).
     // Pins that violate offering pattern emit an offering_pattern violation.
+    //
+    // Pin / exclusion conflict resolution: if the same courseId appears in
+    // both `preferences.pins` and `preferences.exclusions`, the pin wins.
+    // Decision #31's hierarchy places student pins (rank 4) ABOVE student
+    // soft preferences (rank 5, where exclusions live). Structurally this
+    // happens "for free" because the pin loop runs first, the pinned
+    // course lands in `plannedPlacements`, and the candidate loop's
+    // `plannedPlacements.has(courseId)` skip-check fires before the
+    // exclusion set is consulted.
     // -----------------------------------------------------------------------
 
     for (const pin of input.preferences?.pins ?? []) {
@@ -924,6 +943,7 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
                 input.creditTargetPerSemester,
                 input.preferences,
                 input.f1Floor,
+                input.domesticPartTimeFloor,
                 input.creditCeiling,
             );
             const slack = termTarget - (perTermCredits.get(term) ?? 0);
@@ -1110,6 +1130,7 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
                 input.creditTargetPerSemester,
                 input.preferences,
                 input.f1Floor,
+                input.domesticPartTimeFloor,
                 input.creditCeiling,
             );
             const slack = tTarget - (perTermCredits.get(t) ?? 0);
@@ -1189,6 +1210,7 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             input.creditTargetPerSemester,
             input.preferences,
             input.f1Floor,
+            input.domesticPartTimeFloor,
             input.creditCeiling,
         );
         let credits = cur;
