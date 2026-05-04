@@ -47,7 +47,7 @@ import { parseMeetingTimes } from "./parseMeetingTimes.js";
 import { enumerateConflictFreeCombinations, type CourseBundle } from "./conflictDetection.js";
 import { classifyAvailability, type FoseSection } from "./foseAvailabilityGate.js";
 import { FoseCache } from "./foseCache.js";
-import { applySchedulingPreferences } from "./applySchedulingPreferences.js";
+import { applySchedulingPreferences, isPrefsEmpty } from "./applySchedulingPreferences.js";
 import type {
     SectionView,
     MaterializationResult,
@@ -341,14 +341,12 @@ export async function materializeSections(args: MaterializeArgs): Promise<Materi
     );
 
     // ---- Step 7: swap cascade (Decision #19) ----
-    type FinalBundle = CourseBundle & { swappedFrom?: string };
-    const finalBundles: FinalBundle[] = [];
+    const finalBundles: CourseBundle[] = [];
     /** Courses that ended up dropped (no swap candidate or alt also wiped). */
     const dropped: Array<{
         courseId: string;
         reason: "unavailable" | "scheduling-prefs-eliminated";
         altCourseId?: string;       // present iff swap was attempted and also failed
-        altReason?: "unavailable" | "scheduling-prefs-eliminated";
     }> = [];
 
     for (const c of courseInputs) {
@@ -370,18 +368,39 @@ export async function materializeSections(args: MaterializeArgs): Promise<Materi
         }
 
         // Re-run steps 1, 4, 5 for the alternative (one attempt only — no recursion).
+        //
+        // I-1 (deferred to Phase 16): `altApply.rerankWeights` is intentionally
+        // dropped here. Step 9's `rankCombinationsByScore` reads only the
+        // pre-swap `applyResult.rerankWeights` map, so any soft-pass weights
+        // computed for sections of `altId` fall back to the implicit default
+        // of 1 in the score product.
+        //
+        // Why this is acceptable for now:
+        //   • Swaps are rare (course wipe + structural alt available).
+        //   • The combination score is INTERNAL — sort-only — and never
+        //     surfaced on `MaterializedSemester.combinations[i]` (see file
+        //     header). A user will see the correct ordering of non-swapped
+        //     combos and a plausible (default-weighted) ordering of swapped
+        //     ones; nothing claims a numeric score.
+        //   • Merging the two maps requires a CRN-namespace audit first:
+        //     FOSE CRNs are globally unique within a single term, but
+        //     cross-term de-duplication of the merged map is unverified.
+        //     A naïve `new Map([...applyResult.rerankWeights, ...altApply.rerankWeights])`
+        //     would be safe TODAY for single-term materialization; we defer
+        //     until the audit so we don't build a footgun.
+        //
+        // Phase 16 unblocks this when (and if) we surface the score on
+        // `MaterializedSemester.combinations[i]` (currently optional in the
+        // type — see file header). Until then this is a documented no-op.
         const altFetch = await fetchAndMapCourse(termCode, altId, searchFn, cache);
         const altOpen = altFetch.sections.filter(s => isOpenStatus(s.status));
         const altApply = applySchedulingPreferences(altOpen, schedulingPreferences);
 
         if (altApply.surviving.length === 0) {
-            const altReason: "unavailable" | "scheduling-prefs-eliminated" =
-                altOpen.length === 0 ? "unavailable" : "scheduling-prefs-eliminated";
             dropped.push({
                 courseId: c.courseId,
                 reason,
                 altCourseId: altId,
-                altReason,
             });
             continue;
         }
@@ -390,7 +409,6 @@ export async function materializeSections(args: MaterializeArgs): Promise<Materi
             courseId: altId,
             title: altFetch.sections[0]?.title ?? altId,
             sections: altApply.surviving,
-            swappedFrom: c.courseId,
         });
     }
 
@@ -400,13 +418,20 @@ export async function materializeSections(args: MaterializeArgs): Promise<Materi
     );
 
     // ---- Step 9: rank combinations by rerank-weight product ----
+    //
+    // I-1 (deferred to Phase 16): we pass the pre-swap `applyResult.rerankWeights`
+    // verbatim. Sections from a swapped-in alternative course (step 7) score
+    // at the default weight of 1 because their soft-pass multipliers were
+    // computed against `altApply.rerankWeights`, which is dropped at the swap
+    // call site above. See the long comment in step 7 for the full rationale —
+    // tl;dr swaps are rare + the score is sort-only + a CRN-namespace audit
+    // is the pre-condition for merging the two maps safely.
     const ranked = rankCombinationsByScore(combos.combinations, applyResult.rerankWeights);
 
     // ---- Step 10: compute schedulingPreferenceCheck verdict ----
     const schedulingPreferenceCheck = computeSchedulingPreferenceCheck(
         schedulingPreferences,
         dropped,
-        ranked.length,
     );
 
     // ---- Step 11: build the result ----
@@ -444,16 +469,17 @@ export async function materializeSections(args: MaterializeArgs): Promise<Materi
 /**
  * Compute the Decision-#43 verdict for the visa axis.
  *
- *   - undefined prefs                     → "absent"
- *   - prefs supplied AND ≥1 ranked combo  → "satisfied"
+ *   - undefined prefs OR empty prefs       → "absent"
+ *     (treated identically to how `applySchedulingPreferences`
+ *     short-circuits via `isPrefsEmpty` — keeps the discriminator
+ *     symmetric with the filter behavior).
  *   - prefs supplied AND a course-wipe propagated all the way to drop
  *     (i.e. swap cascade exhausted) AND that wipe was caused by a
  *     strict scheduling preference                          → "violated"
- *   - prefs supplied AND ranked.length === 0 (e.g. enumeration found
- *     no conflict-free combinations even though every course survived)
- *                                                          → "satisfied"
- *     (the strict filter itself was respected; the failure is a time
- *     conflict, not a strict-preference violation).
+ *   - prefs supplied AND no strict-pref-driven drop          → "satisfied"
+ *     Note: even if no conflict-free combinations exist (time-conflict
+ *     only), the strict filter itself was respected — the failure is
+ *     not a strict-preference violation.
  */
 function computeSchedulingPreferenceCheck(
     prefs: SchedulingPreferences | undefined,
@@ -461,9 +487,8 @@ function computeSchedulingPreferenceCheck(
         courseId: string;
         reason: "unavailable" | "scheduling-prefs-eliminated";
     }>,
-    rankedCount: number,
 ): SchedulingPreferenceCheck {
-    if (prefs === undefined) return { kind: "absent" };
+    if (prefs === undefined || isPrefsEmpty(prefs)) return { kind: "absent" };
 
     const violated = dropped.find(d => d.reason === "scheduling-prefs-eliminated");
     if (violated !== undefined) {
@@ -475,8 +500,5 @@ function computeSchedulingPreferenceCheck(
         };
     }
 
-    // No strict-pref-driven drops survived to drop. Even if rankedCount === 0
-    // (time-conflict only), the strict filter itself was respected.
-    void rankedCount;
     return { kind: "satisfied" };
 }
