@@ -898,6 +898,21 @@ export interface ScheduleSlotSpecificPlanned {
         blockingConstraints?: string[];
     };
     approvalAuthority?: ApprovalAuthority;
+    /**
+     * Phase 15 Task 7 — concrete-section fields populated by
+     * `confirm_section_combination` after the student picks a
+     * proposalId. Strict additive extension; absent until a section
+     * is pinned. Surface in Task 8's sidebar UI.
+     *
+     * `crn` is the FOSE Course Registration Number; `meetingPatterns`
+     * is the parsed weekly grid; `instructor` / `schd` / `sectionNumber`
+     * mirror FOSE's `instr` / `schd` / `no` fields verbatim.
+     */
+    crn?: string;
+    meetingPatterns?: MeetingPattern[];
+    instructor?: string;
+    schd?: string;
+    sectionNumber?: string;
 }
 
 /** placeholder slot — reserved credits with rich rationale, pending course binding */
@@ -1046,6 +1061,23 @@ export interface ForwardSchedule {
  * framing=hard) but not coupled at the schema level.
  */
 export type Day = "M" | "Tu" | "W" | "Th" | "F" | "Sa" | "Su";
+
+/**
+ * Phase 15 — A single weekly meeting time for a section. Used by the
+ * section-materializer (`packages/engine/src/agent/sectionMaterialization/`)
+ * AND surfaced into `ScheduleSlotSpecificPlanned` once a concrete CRN has
+ * been pinned via `confirm_section_combination` (Task 7).
+ *
+ * `startMin` / `endMin` are minutes since midnight (e.g. 9:30 AM = 570).
+ * Day shape mirrors `Day` above. Engine's
+ * `sectionMaterialization/types.ts` re-exports this type — shared is the
+ * single source of truth.
+ */
+export interface MeetingPattern {
+    day: Day;
+    startMin: number;
+    endMin: number;
+}
 
 export interface SchedulingPreferences {
     avoidDays?: Array<{ day: Day; strict: boolean }>;

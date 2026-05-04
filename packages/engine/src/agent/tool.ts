@@ -109,6 +109,23 @@ export interface ToolSession {
      *  `solveForwardSchedule` when computing the next plan. In-memory;
      *  lost on session end. */
     schedulePreferences?: import("@nyupath/shared").SchedulePreferences;
+
+    /**
+     * Phase 15 Task 7 — section-materialization previews staged by
+     * `materialize_sections`, awaiting an explicit
+     * `confirm_section_combination` call. Each entry maps a
+     * proposalId to the chosen termCode + section combination so the
+     * confirm step can pin CRNs without re-running FOSE. Two-step
+     * write contract per §7.2; mirrors `pendingMutations` for
+     * `update_profile`.
+     */
+    pendingMaterializations?: Map<
+        string,
+        {
+            termCode: string;
+            sections: import("./sectionMaterialization/types.js").SectionView[];
+        }
+    >;
 }
 
 export type ValidationResult =

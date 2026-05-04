@@ -13,13 +13,14 @@
 
 export type DayOfWeek = "M" | "Tu" | "W" | "Th" | "F" | "Sa" | "Su";
 
-export interface MeetingPattern {
-    day: DayOfWeek;
-    /** Minutes since midnight — e.g. 9:30 AM = 570. */
-    startMin: number;
-    /** Minutes since midnight — e.g. 10:45 AM = 645. */
-    endMin: number;
-}
+// Phase 15 Task 7 — `MeetingPattern` was promoted to shared (single source
+// of truth) when `ScheduleSlotSpecificPlanned` started carrying it directly
+// post-confirm. `DayOfWeek` is a structural alias for shared's `Day` (same
+// 7-string union). Imported + re-exported so engine call sites can keep
+// using `./types.js` without reaching into shared, AND so we can name
+// `MeetingPattern` in the local interfaces below.
+import type { MeetingPattern } from "@nyupath/shared";
+export type { MeetingPattern };
 
 export type ParseResult =
     | { kind: "ok"; patterns: MeetingPattern[] }
