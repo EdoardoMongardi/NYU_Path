@@ -1,0 +1,12 @@
+{
+  "query": {
+    "keyword": "CSCI-UH",
+    "year": 2026,
+    "term": "fall",
+    "label": "csci-uh_2026-fall"
+  },
+  "termCode": "1268",
+  "recordedAt": "2026-05-04T14:32:32.764Z",
+  "resultCount": 0,
+  "results": []
+}
