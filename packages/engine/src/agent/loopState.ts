@@ -52,6 +52,14 @@ export interface LoopState {
     /** Phase 7-B Step 17 — set true after Tier-2 fires so it doesn't
      *  loop on the next turn before we have new content. */
     hasFiredTier2Compaction: boolean;
+    /**
+     * Phase 13 §8b — set true by `maybeQueueValidatorReplay` when a
+     * replay is queued. The next iteration of the streaming loop reads
+     * and clears this flag to pass `isReplayTurn = true` to
+     * `runOneTurn`, which suppresses `thinking_delta` yields on that
+     * turn (the model's self-correction monologue must not reach the
+     * user). */
+    nextTurnIsReplay: boolean;
 }
 
 export interface LoopStateOptions {
@@ -69,6 +77,7 @@ export function createLoopState(opts: LoopStateOptions = {}): LoopState {
         outputTruncationRecoveriesRemaining: opts.outputTruncationRecoveryLimit ?? 3,
         hasAttemptedReactiveCompact: false,
         hasFiredTier2Compaction: false,
+        nextTurnIsReplay: false,
     };
 }
 

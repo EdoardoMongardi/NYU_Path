@@ -25,12 +25,17 @@
 
 import type { StudentProfile } from "@nyupath/shared";
 import type { ToolInvocation } from "./agentLoop.js";
+import { verifyBlockquoteAttribution } from "./verifiers/blockquoteAttribution.js";
 
 export type ViolationKind =
     | "ungrounded_number"
     | "missing_invocation"
     | "missing_caveat"
-    | "verbatim_drift";
+    | "verbatim_drift"
+    | "fabricated_attribution"
+    | "identity_drift"
+    | "quantitative_shortfall"
+    | "incompleteness";
 
 export interface Violation {
     kind: ViolationKind;
@@ -165,26 +170,78 @@ function extractClaimNumbers(text: string): Set<string> {
 }
 
 /**
+ * Returns all numbers present in `text`, including negative.
+ */
+function extractAllNumbers(text: string): string[] {
+    const matches = text.match(/-?\d+(?:\.\d+)?/g);
+    return matches ?? [];
+}
+
+/**
  * Check whether every claim number in `assistantText` appears verbatim
  * in at least one tool invocation's summary or args this turn.
+ *
+ * Phase 13 §8a — extend the allow-set so a claim is grounded if it
+ * appears verbatim OR equals a ± b for any pair of grounded numbers
+ * (tool summaries + user question). Catches "total is 16 (12 already
+ * + 4 planned)" without allowing arbitrary hallucinated numbers.
  */
 function checkGrounding(ctx: ValidatorContext): Violation[] {
     const violations: Violation[] = [];
     const claims = extractClaimNumbers(ctx.assistantText);
     if (claims.size === 0) return violations;
-    const groundCorpus = ctx.invocations
-        .map((inv) => `${inv.summary ?? ""} ${JSON.stringify(inv.args)}`)
-        .join(" ")
-        .toLowerCase();
+
+    // Phase 12.5 Task 2 — numbers the user typed in their question are
+    // legitimately groundable by the agent's reply (e.g. "16 credits"
+    // echoed back in a clarifying question). Without this, the
+    // grounding rule false-positives on every quote-back of a user
+    // quantity.
+    const sources = [
+        ...ctx.invocations.map((inv) => `${inv.summary ?? ""} ${JSON.stringify(inv.args)}`),
+        ctx.userQuestion ?? "",
+    ];
+    const groundCorpus = sources.join(" ").toLowerCase();
+
+    // Phase 13 §8a — collect all groundable numbers (tool results +
+    // user question). A claim is grounded if it appears verbatim OR
+    // if it equals a ± b for some pair of grounded numbers.
+    const groundedNumbers = new Set<number>();
+    for (const s of sources) {
+        for (const n of extractAllNumbers(s)) {
+            const parsed = parseFloat(n);
+            if (Number.isFinite(parsed)) groundedNumbers.add(parsed);
+        }
+    }
+    const numbersArr = [...groundedNumbers];
+
+    function isDerivable(claim: string): boolean {
+        if (groundCorpus.includes(claim)) return true;
+        const claimVal = parseFloat(claim);
+        if (!Number.isFinite(claimVal)) return false;
+        // Use an epsilon comparison rather than strict equality. The
+        // motivating integer cases (12 + 4 = 16) work either way, but
+        // strict === fails for decimal arithmetic — `0.1 + 0.2 !== 0.3`
+        // in IEEE-754, which would falsely flag GPA-change claims like
+        // "your GPA rises by 0.3 (was 3.1, now 3.4)" as ungrounded.
+        const EPS = 1e-9;
+        for (let i = 0; i < numbersArr.length; i++) {
+            for (let j = 0; j < numbersArr.length; j++) {
+                if (Math.abs(numbersArr[i]! + numbersArr[j]! - claimVal) < EPS) return true;
+                if (Math.abs(numbersArr[i]! - numbersArr[j]! - claimVal) < EPS) return true;
+            }
+        }
+        return false;
+    }
+
     for (const claim of claims) {
-        if (!groundCorpus.includes(claim)) {
+        if (!isDerivable(claim)) {
             violations.push({
                 kind: "ungrounded_number",
                 number: claim,
                 detail:
                     `Number "${claim}" appears in the reply but does not appear verbatim ` +
-                    `in any tool result this turn. Either call the tool that returns it ` +
-                    `or remove the claim.`,
+                    `in any tool result this turn, nor is it a sum or difference of two ` +
+                    `grounded numbers. Either call the tool that returns it or remove the claim.`,
             });
         }
     }
@@ -399,6 +456,11 @@ function checkCompleteness(ctx: ValidatorContext): Violation[] {
 function checkVerbatim(ctx: ValidatorContext): Violation[] {
     const violations: Violation[] = [];
     const replyNorm = ctx.assistantText.replace(/\s+/g, " ").trim();
+    // Phase 11 follow-up — case-insensitive substring match. The agent
+    // legitimately rephrases capitalization ("your cumulative GPA" vs
+    // verbatim "Cumulative GPA") and that is NOT drift. Generic
+    // across every verbatim-emitting tool.
+    const replyNormLower = replyNorm.toLowerCase();
     // Phase 10 F4b/F4c — pre-compute number + keyword sets once.
     const replyNumbers = extractNumbers(replyNorm);
     const questionKeywords = ctx.userQuestion ? extractKeywords(ctx.userQuestion) : new Set<string>();
@@ -407,24 +469,44 @@ function checkVerbatim(ctx: ValidatorContext): Violation[] {
         if (!v) continue;
         const verbatimNorm = v.replace(/\s+/g, " ").trim();
         if (!verbatimNorm) continue;
-        if (replyNorm.includes(verbatimNorm)) continue; // satisfied — verbatim is in the reply
+        if (replyNormLower.includes(verbatimNorm.toLowerCase())) continue; // satisfied (case-insensitive)
 
         // Phase 10 F4b — numeric-overlap layer.
-        // If the reply reused at least one of the verbatim's numbers,
-        // it's a paraphrase of the verbatim's load-bearing fact. Fire.
-        // (Catches "Your GPA is 3.402" when verbatim is "Cumulative
-        // GPA: 3.402" — agent kept the number but dropped attribution.)
+        // If the reply reused at least one of the verbatim's numbers
+        // AND did NOT attribute that number to a tool/source, treat as
+        // drift. Phase 11 follow-up — added the attribution gate so
+        // attributed paraphrases ("Your cumulative GPA: 3.402 (per
+        // your DPR)") don't fire. Generic across every numeric
+        // verbatim because we only check for the presence of an
+        // attribution noun within ~50 chars of the matched number,
+        // not a specific phrase.
         const verbatimNumbers = extractNumbers(verbatimNorm);
+        const ATTRIBUTION_NOUN_RE = /\b(?:dpr|degree progress report|audit|transcript|albert|registrar|bulletin|tool|gpa(?:\s+breakdown)?)\b/i;
         let numOverlap = 0;
-        for (const n of verbatimNumbers) if (replyNumbers.has(n)) numOverlap++;
-        if (numOverlap > 0) {
+        let attributedNearAll = true;
+        for (const n of verbatimNumbers) {
+            if (!replyNumbers.has(n)) continue;
+            numOverlap++;
+            // Locate the number in the reply and check a 60-char
+            // window around it for an attribution noun.
+            const idx = replyNorm.indexOf(n);
+            if (idx === -1) { attributedNearAll = false; continue; }
+            const window = replyNorm.slice(Math.max(0, idx - 60), Math.min(replyNorm.length, idx + n.length + 60));
+            if (!ATTRIBUTION_NOUN_RE.test(window)) attributedNearAll = false;
+        }
+        if (numOverlap > 0 && !attributedNearAll) {
             violations.push({
                 kind: "verbatim_drift",
                 detail:
                     `Tool "${inv.toolName}" returned verbatim text the reply must quote unchanged, ` +
-                    `but the reply paraphrased it (kept the number, dropped the attribution). ` +
+                    `but the reply paraphrased it (kept the number without attributing it to the source). ` +
                     `Required text: ${verbatimNorm.slice(0, 200)}${verbatimNorm.length > 200 ? "…" : ""}`,
             });
+            continue;
+        }
+        if (numOverlap > 0 && attributedNearAll) {
+            // Reused the number AND attributed it nearby — treat as
+            // satisfied without firing the drift violation.
             continue;
         }
 
@@ -467,14 +549,162 @@ function checkVerbatim(ctx: ValidatorContext): Violation[] {
     return violations;
 }
 
+// ============================================================
+// 6. Identity-drift validator (Phase 12 §6)
+// ============================================================
+// Catches structural output bugs where the agent refers to itself
+// as a contactable third party. The agent IS the assistant — there
+// is no separate entity for the user to "call", "email", or
+// "reply to". This is a generic structural-coherence check, not a
+// per-case keyword blacklist: it matches the first-person-imperative
+// + contact-verb + trailing-pronoun pattern (me/us only), which is
+// the precise structural signal of identity drift.
+
+/**
+ * Catches identity-drift output bugs where the agent refers to
+ * itself in the third person as a contactable entity. The agent
+ * IS the assistant — phrasings like "call me", "email me", "reply
+ * to me" mistakenly cast it as a separate person the user should
+ * contact. Phase 12 §6 — generic structural-coherence check, not
+ * a keyword blacklist (matches first-person-imperative + third-
+ * party-contact-verb structural pattern).
+ */
+function checkIdentityDrift(assistantText: string): Violation[] {
+    const violations: Violation[] = [];
+    // The agent should never instruct the user to "call me" /
+    // "email me" / "reply to me" / "message me" / "contact me".
+    // The trailing pronoun must be "me" or "us" — NOT a third party
+    // (so "call OGS" / "email your adviser" pass through).
+    // Two-branch alternation: the simple contact verbs take an optional
+    // "back"/"to" modifier between the verb and the pronoun; "reply" is
+    // handled separately because it already embeds those modifiers in the
+    // verb phrase ("reply back to me") before the pronoun.
+    const PATTERN = /\b(?:call|email|message|contact|text|reach)\s+(?:back\s+)?(?:to\s+)?(?:me|us)\b|\breply\s+(?:back\s+)?(?:to\s+)?(?:me|us)\b/i;
+    const match = PATTERN.exec(assistantText);
+    if (match) {
+        violations.push({
+            kind: "identity_drift",
+            detail:
+                `Identity drift: assistant referred to itself as a contactable third party ` +
+                `with the phrase "${match[0]}". The agent is the assistant — there is nothing ` +
+                `for the user to "contact". Rephrase as a direct first-person commitment ` +
+                `("I'll suggest electives in the next message") or as a concrete tool the ` +
+                `user can take action on.`,
+        });
+    }
+    return violations;
+}
+
+// ============================================================
+// 7. Quantitative-shortfall validator (Phase 12.5 §1)
+// ============================================================
+// Catches "asked for N <unit>, delivered M < N <unit>, punted to user"
+// patterns. Generic structural rule: extracts (number, unit) pairs from
+// userQuestion, finds the same unit in assistantText, compares
+// quantities. If assistantText already acknowledges the shortfall (via
+// one of the SHORTFALL_ACKNOWLEDGEMENTS phrases), the rule passes — the
+// agent did its job by being explicit about the gap.
+
+const SHORTFALL_ACKNOWLEDGEMENTS = [
+    /could not fill/i,
+    /below the requested/i,
+    /short of the requested/i,
+    /f-?1 floor/i,
+    /credit ceiling/i,
+    /less than (?:the )?requested/i,
+    /unable to (?:fill|reach) the (?:requested )?(?:target|amount)/i,
+];
+
+/**
+ * Catches "asked for N <unit>, delivered M < N <unit>, punted to user"
+ * patterns. Generic structural rule: extracts (number, unit) pairs from
+ * userQuestion, finds the same unit in assistantText, compares
+ * quantities. If assistantText already acknowledges the shortfall (via
+ * one of the SHORTFALL_ACKNOWLEDGEMENTS phrases), the rule passes — the
+ * agent did its job by being explicit about the gap.
+ *
+ * Phase 12.5 §1 — generic across all unit-keyword + quantity asks; not
+ * a per-case keyword rule.
+ */
+function checkQuantitativeShortfall(userQuestion: string | undefined, assistantText: string): Violation[] {
+    if (!userQuestion) return [];
+
+    // Extract (number, unit) pairs from the user's question. Pattern:
+    // a number followed by an optional adjective then a unit-keyword.
+    // E.g. "16 credits", "5 electives", "courses of 16 credits in total".
+    const requested: Array<{ count: number; unit: string }> = [];
+    const REQ_RE = /\b(\d+)\s+(?:[a-z]+\s+)?(credits?|courses?|electives?|units?|classes)\b/gi;
+    let m: RegExpExecArray | null;
+    while ((m = REQ_RE.exec(userQuestion)) !== null) {
+        requested.push({ count: parseInt(m[1]!, 10), unit: m[2]!.toLowerCase().replace(/s$/, "") });
+    }
+    if (requested.length === 0) return [];
+
+    // Did the assistant acknowledge a shortfall? If so, no violation —
+    // the agent already explained the gap.
+    const acknowledged = SHORTFALL_ACKNOWLEDGEMENTS.some(re => re.test(assistantText));
+    if (acknowledged) return [];
+
+    // For each requested (count, unit), find the highest delivered
+    // count for the same unit in the assistant text. If highest < count,
+    // fire the violation.
+    const violations: Violation[] = [];
+    for (const req of requested) {
+        // Use the singular-or-plural form of the unit key.
+        const DELIV_RE = new RegExp(`\\b(\\d+)\\s+${req.unit}s?\\b`, "gi");
+        let highest = 0;
+        let mm: RegExpExecArray | null;
+        while ((mm = DELIV_RE.exec(assistantText)) !== null) {
+            const delivered = parseInt(mm[1]!, 10);
+            if (delivered > highest) highest = delivered;
+        }
+        if (highest > 0 && highest < req.count) {
+            violations.push({
+                kind: "quantitative_shortfall",
+                detail:
+                    `User requested ${req.count} ${req.unit}${req.count === 1 ? "" : "s"}; ` +
+                    `assistant delivered ${highest}. Either deliver the full request, or explicitly ` +
+                    `acknowledge the shortfall ("could not fill", "below the requested ${req.count}", etc.) ` +
+                    `and explain why. Do not punt with a clarifying question after a partial delivery.`,
+            });
+        }
+    }
+    return violations;
+}
+
 export function validateResponse(ctx: ValidatorContext): ValidatorVerdict {
     const violations: Violation[] = [
         ...checkGrounding(ctx),
         ...checkInvocations(ctx),
         ...checkCompleteness(ctx),
         ...checkVerbatim(ctx),
+        ...checkAttribution(ctx),
+        ...checkIdentityDrift(ctx.assistantText),
+        ...checkQuantitativeShortfall(ctx.userQuestion, ctx.assistantText),
     ];
     return { ok: violations.length === 0, violations };
+}
+
+// ============================================================
+// 5. Attribution validator (Phase 11 Stage 1)
+// ============================================================
+// Catches Class E (confidently-wrong fabrication): blockquotes
+// attributed to "the bulletin" / "§..." with text that does NOT
+// appear in any search_policy chunk this turn. Pattern modeled on
+// claude-code-leak/verificationAgent.ts:81-128 — every PASS must
+// include the executed evidence; same idea here, every blockquote
+// must have a supporting chunk substring.
+function checkAttribution(ctx: ValidatorContext): Violation[] {
+    const verdict = verifyBlockquoteAttribution(ctx.assistantText, ctx.invocations);
+    if (verdict.ok) return [];
+    return verdict.fabrications.map((f) => ({
+        kind: "fabricated_attribution" as const,
+        detail:
+            `Blockquote attributed to "${f.attribution || "(unattributed)"}" was not found ` +
+            `in any of the ${f.chunksSearched} search_policy result(s) this turn. ` +
+            `Either re-run search_policy with a query that surfaces the source, ` +
+            `or rephrase without the verbatim attribution. Quote: ${f.quote}`,
+    }));
 }
 
 // Re-exports for tests

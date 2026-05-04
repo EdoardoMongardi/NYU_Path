@@ -1,8 +1,18 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import styles from "./chat.module.css";
 import { streamChatV2, extractPendingMutationId, type ChatV2Event } from "../../lib/chatV2Client";
+import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
+import { formatDuration } from "../../lib/formatDuration";
+import type { ForwardSchedule } from "@nyupath/shared";
+import ScheduleSidebar from "./scheduleSidebar";
+
+// Char-reveal rates for the ChatGPT-style typewriter animations.
+// Tuned by feel: thinking should read like deliberative reasoning;
+// the final answer should feel snappy, like ChatGPT post-token.
+const THINKING_CHARS_PER_SEC = 60;
+const CONTENT_CHARS_PER_SEC = 220;
 
 // Phase 7-E W10 reviewer P1-2 — stable per-browser UUID so each
 // student gets their own rate-limit bucket (instead of every
@@ -44,6 +54,34 @@ interface Message {
     /** Phase 5 §7.2 two-step profile-update affordance — present when
      *  this message reports a `pendingMutationId` from `update_profile`. */
     pendingMutationId?: string;
+    /** Agent-status UX: epoch ms when the v2 stream was opened. Set
+     *  on assistant messages only; absent on welcome / v1 / user. */
+    startedAt?: number;
+    /** Agent-status UX: epoch ms when the `done` SSE event arrived. */
+    completedAt?: number;
+    /** Agent-status UX: epoch ms when an `error` event arrived. Used
+     *  to render "Failed after Xs" instead of "Thought for Xs". */
+    failedAt?: number;
+    /** Agent-status UX: whether the user has expanded the reasoning block. */
+    traceExpanded?: boolean;
+    /** Reasoning text that streams above the final answer. Holds real
+     *  Anthropic chain-of-thought when `hasRealThinking` is set,
+     *  otherwise a fallback of synthesized tool-sentence narration
+     *  (one sentence per tool fired). */
+    thinkingText?: string;
+    /** How many chars of `thinkingText` are currently revealed
+     *  (typewriter animation; ticker bumps this up over time). */
+    thinkingRevealed?: number;
+    /** How many chars of `content` are currently revealed in the
+     *  final-answer bubble. Drives the ChatGPT-style streaming. */
+    contentRevealed?: number;
+    /** True once at least one `thinking` SSE event has fired for this
+     *  message. When set, suppresses the synthesized tool-thought
+     *  fallback so we don't double-narrate (real reasoning + canned
+     *  sentences). Stays unset on OpenAI-fallback turns and template-
+     *  match recovery, where the synthesized fallback is what the
+     *  user sees. */
+    hasRealThinking?: boolean;
 }
 
 type OnboardingStep = "awaiting_dpr" | "awaiting_transcript" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation" | "complete" | "unsupported_major";
@@ -58,6 +96,10 @@ const WELCOME_MESSAGE: Message = {
     timestamp: new Date(),
 };
 
+function isInFlight(m: Message): boolean {
+    return m.role === "assistant" && !!m.startedAt && !m.completedAt && !m.failedAt;
+}
+
 export default function ChatPage() {
     const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
     const [input, setInput] = useState("");
@@ -67,6 +109,8 @@ export default function ChatPage() {
     const [parsedData, setParsedData] = useState<ParsedTranscript | null>(null);
     const [visaStatus, setVisaStatus] = useState<string | null>(null);
     const [graduationTarget, setGraduationTarget] = useState<string | null>(null);
+    const [forwardSchedule, setForwardSchedule] = useState<ForwardSchedule | null>(null);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -74,6 +118,61 @@ export default function ChatPage() {
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
+
+    /**
+     * Single rAF-driven typewriter ticker. Walks the messages array
+     * each frame and bumps `thinkingRevealed` / `contentRevealed`
+     * forward by `rate * elapsed` chars. Once the message is
+     * `completedAt` / `failedAt`, thinking snaps to full and content
+     * starts streaming. All reveal counters are clamped at the full
+     * length, so a settled message renders as a no-op.
+     */
+    useEffect(() => {
+        let raf = 0;
+        let lastTime = performance.now();
+        const tick = (now: number) => {
+            const elapsed = Math.min(100, now - lastTime); // clamp to avoid huge jumps after tab-switch
+            lastTime = now;
+            setMessages(prev => {
+                let changed = false;
+                const next = prev.map(m => {
+                    if (m.role !== "assistant" || !m.startedAt) return m;
+                    const thinkingFull = (m.thinkingText ?? "").length;
+                    const contentFull = (m.content ?? "").length;
+                    const tRev = m.thinkingRevealed ?? 0;
+                    const cRev = m.contentRevealed ?? 0;
+
+                    let newT = tRev;
+                    let newC = cRev;
+
+                    if (m.completedAt || m.failedAt) {
+                        // Once a turn is settled, snap thinking to full
+                        // immediately and let the content typewriter run.
+                        newT = thinkingFull;
+                        if (m.failedAt) {
+                            newC = contentFull;
+                        } else if (cRev < contentFull) {
+                            const step = Math.max(1, Math.round(CONTENT_CHARS_PER_SEC * elapsed / 1000));
+                            newC = Math.min(contentFull, cRev + step);
+                        }
+                    } else if (tRev < thinkingFull) {
+                        const step = Math.max(1, Math.round(THINKING_CHARS_PER_SEC * elapsed / 1000));
+                        newT = Math.min(thinkingFull, tRev + step);
+                    }
+
+                    if (newT !== tRev || newC !== cRev) {
+                        changed = true;
+                        return { ...m, thinkingRevealed: newT, contentRevealed: newC };
+                    }
+                    return m;
+                });
+                return changed ? next : prev;
+            });
+            raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, []);
 
     const addMessage = (role: "user" | "assistant", content: string): Message => {
         const msg: Message = {
@@ -106,6 +205,12 @@ export default function ChatPage() {
 
         // Pre-create the assistant bubble so tokens stream INTO it.
         const assistant = addMessage("assistant", "");
+        updateMessage(assistant.id, {
+            startedAt: Date.now(),
+            thinkingText: "",
+            thinkingRevealed: 0,
+            contentRevealed: 0,
+        });
         const toolStatuses: ToolStatus[] = [];
 
         for await (const ev of streamChatV2({
@@ -129,10 +234,25 @@ export default function ChatPage() {
                     toolStatuses: [...toolStatuses, { toolName: `template:${ev.templateId}`, state: "done", summary: ev.source }],
                 });
                 break;
-            case "tool_invocation_start":
+            case "tool_invocation_start": {
                 toolStatuses.push({ toolName: ev.toolName, state: "running" });
-                updateMessage(assistantId, { toolStatuses: [...toolStatuses] });
+                const sentence = getThoughtSentence(ev.toolName);
+                setMessages(prev => prev.map(m => {
+                    if (m.id !== assistantId) return m;
+                    // When the real model is producing a chain-of-thought,
+                    // the synthesized tool-sentence narration would just
+                    // duplicate / contradict the model's words. Skip it.
+                    if (m.hasRealThinking) {
+                        return { ...m, toolStatuses: [...toolStatuses] };
+                    }
+                    return {
+                        ...m,
+                        toolStatuses: [...toolStatuses],
+                        thinkingText: ((m.thinkingText ?? "") + (m.thinkingText ? "\n\n" : "") + sentence),
+                    };
+                }));
                 break;
+            }
             case "tool_invocation_done": {
                 const idx = toolStatuses.findIndex(t => t.toolName === ev.toolName && t.state === "running");
                 if (idx >= 0) {
@@ -160,6 +280,31 @@ export default function ChatPage() {
                     : m));
                 setTimeout(scrollToBottom, 50);
                 break;
+            case "thinking":
+                setMessages(prev => prev.map(m => {
+                    if (m.id !== assistantId) return m;
+                    if (!m.hasRealThinking) {
+                        // Phase 13 §8c — first real thinking event. The
+                        // synthesized tool-sentence narration (if any) was
+                        // a fallback; real reasoning replaces it. Clear and
+                        // start fresh so the user doesn't see both.
+                        return {
+                            ...m,
+                            thinkingText: ev.text,
+                            thinkingRevealed: 0, // restart the typewriter on the new text
+                            hasRealThinking: true,
+                        };
+                    }
+                    return {
+                        ...m,
+                        thinkingText: (m.thinkingText ?? "") + ev.text,
+                        hasRealThinking: true,
+                    };
+                }));
+                break;
+            case "forward_schedule_update":
+                setForwardSchedule(ev.schedule);
+                break;
             case "validator_block":
                 updateMessage(assistantId, {
                     validatorViolations: ev.violations.map(v => ({
@@ -174,7 +319,7 @@ export default function ChatPage() {
                 // authoritative. For block-streaming this matches the
                 // accumulated tokens; for future intra-token streaming
                 // this guards against partial-chunk artifacts.
-                updateMessage(assistantId, { content: ev.finalText });
+                updateMessage(assistantId, { content: ev.finalText, completedAt: Date.now() });
                 break;
             case "error": {
                 // Don't leak raw exception text (file paths, internal
@@ -186,7 +331,10 @@ export default function ChatPage() {
                     `Something went wrong on our side handling that turn. ` +
                     `Try resending — if it keeps happening, email the operator at edoardo.mongardi18@gmail.com.`;
                 const existing = assistantId ? messages.find(m => m.id === assistantId)?.content : "";
-                updateMessage(assistantId, { content: existing && existing.length > 0 ? existing : friendly });
+                updateMessage(assistantId, {
+                    content: existing && existing.length > 0 ? existing : friendly,
+                    failedAt: Date.now(),
+                });
                 break;
             }
         }
@@ -339,6 +487,20 @@ export default function ChatPage() {
             <header className={styles.header}>
                 <a href="/" className={styles.headerLogo}>🎓 NYU Path</a>
                 <span className={styles.headerBadge}>AI Advisor</span>
+                {/* Phase 13 Task 9 — show the schedule toggle only after the
+                    solver has produced a forward plan; before that there's
+                    nothing to reveal and the affordance would be confusing. */}
+                {forwardSchedule !== null && (
+                    <button
+                        type="button"
+                        className={styles.scheduleToggle}
+                        onClick={() => setSidebarOpen(o => !o)}
+                        aria-label="Toggle schedule sidebar"
+                        aria-expanded={sidebarOpen}
+                    >
+                        📅 Schedule
+                    </button>
+                )}
             </header>
 
             {/* Phase 7-E W10.3 — persistent disclaimer banner.
@@ -387,22 +549,98 @@ export default function ChatPage() {
                             <div className={styles.avatar}>🎓</div>
                         )}
                         <div className={styles.bubbleContent}>
-                            {/* Tool-invocation log (Phase 6.5 P-1) */}
-                            {msg.toolStatuses && msg.toolStatuses.length > 0 && (
-                                <div className={styles.toolLog ?? ""} style={{ fontSize: "0.85em", opacity: 0.7, marginBottom: 6 }}>
-                                    {msg.toolStatuses.map((t, idx) => (
-                                        <div key={idx}>
-                                            {t.state === "running" && <>⏳ running <code>{t.toolName}</code>…</>}
-                                            {t.state === "done" && <>✓ <code>{t.toolName}</code></>}
-                                            {t.state === "error" && <>⚠ <code>{t.toolName}</code> — {t.error}</>}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            <div
-                                className={styles.bubbleText}
-                                dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content || "") }}
-                            />
+                            {/* Reasoning block — header + indented thinking text.
+                                Live: shimmering "Thinking" with streaming sentences.
+                                Done: "Reasoned for Xs" / "Failed after Xs", click to toggle. */}
+                            {msg.role === "assistant" && msg.startedAt && (() => {
+                                const settled = msg.completedAt || msg.failedAt;
+                                const inFlight = !settled;
+                                const headerText = msg.failedAt
+                                    ? `Failed after ${formatDuration(msg.failedAt - msg.startedAt)}`
+                                    : settled
+                                    ? `Reasoned for ${formatDuration((msg.completedAt ?? Date.now()) - msg.startedAt)}`
+                                    : "Thinking";
+                                const expanded = inFlight ? true : !!msg.traceExpanded;
+                                const visibleThought = (msg.thinkingText ?? "").slice(0, msg.thinkingRevealed ?? 0);
+                                const hasAnyThought = (msg.thinkingText ?? "").length > 0;
+                                return (
+                                    <div className={styles.reasoning}>
+                                        {settled ? (
+                                            <button
+                                                type="button"
+                                                className={styles.reasoningHeader}
+                                                onClick={() => updateMessage(msg.id, { traceExpanded: !msg.traceExpanded })}
+                                                aria-expanded={!!msg.traceExpanded}
+                                                aria-controls={`reasoning-${msg.id}`}
+                                                disabled={!hasAnyThought}
+                                            >
+                                                <span className={styles.reasoningHeaderText}>{headerText}</span>
+                                                {hasAnyThought && (
+                                                    <span className={styles.reasoningChevron} aria-hidden="true">
+                                                        {msg.traceExpanded ? "▾" : "▸"}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        ) : (
+                                            <div
+                                                className={`${styles.reasoningHeader} ${styles.reasoningHeaderActive}`}
+                                                role="status"
+                                                aria-live="polite"
+                                            >
+                                                <span className={styles.reasoningHeaderText}>{headerText}</span>
+                                            </div>
+                                        )}
+                                        {expanded && hasAnyThought && (
+                                            <div
+                                                id={`reasoning-${msg.id}`}
+                                                className={styles.reasoningBody}
+                                            >
+                                                {visibleThought.split("\n\n").map((para, idx) => (
+                                                    <p key={idx} className={styles.reasoningParagraph}>
+                                                        {para}
+                                                        {inFlight && idx === visibleThought.split("\n\n").length - 1 && (
+                                                            <span className={styles.reasoningCaret} aria-hidden="true" />
+                                                        )}
+                                                    </p>
+                                                ))}
+                                                {msg.toolStatuses && msg.toolStatuses.length > 0 && (
+                                                    <ul className={styles.reasoningToolList}>
+                                                        {msg.toolStatuses.map((t, idx) => (
+                                                            <li key={idx} className={styles.reasoningToolItem}>
+                                                                <span className={styles.reasoningToolIcon}>
+                                                                    {t.state === "running" ? "•" : t.state === "error" ? "⚠" : "✓"}
+                                                                </span>
+                                                                <span className={styles.reasoningToolText}>
+                                                                    {getPastVerb(t.toolName)}
+                                                                    {t.error ? ` — ${t.error}` : ""}
+                                                                </span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+                            {/* Final-answer bubble. Hidden while empty so we don't render
+                                an empty white card while the agent is still thinking. */}
+                            {(() => {
+                                const isV2 = msg.role === "assistant" && !!msg.startedAt;
+                                const text = isV2
+                                    ? (msg.content ?? "").slice(0, msg.contentRevealed ?? 0)
+                                    : (msg.content ?? "");
+                                if (!text) return null;
+                                const inFlight = isV2 && !msg.completedAt && !msg.failedAt;
+                                return (
+                                    <div
+                                        className={styles.bubbleText}
+                                        dangerouslySetInnerHTML={{
+                                            __html: renderMarkdown(text) + (inFlight ? "" : ""),
+                                        }}
+                                    />
+                                );
+                            })()}
                             {/* Validator block warning (§9.1 Part 9) */}
                             {msg.validatorViolations && msg.validatorViolations.length > 0 && (
                                 <div style={{ fontSize: "0.85em", marginTop: 8, padding: 8, background: "#fff3cd", borderRadius: 6, color: "#664d03" }}>
@@ -431,7 +669,11 @@ export default function ChatPage() {
                     </div>
                 ))}
 
-                {isLoading && (
+                {/* Legacy v1 loader — only shown for onboarding turns
+                    that go through the JSON `/api/chat` route (which
+                    has no SSE indicator of its own). v2 turns get
+                    their reasoning header + streaming block instead. */}
+                {isLoading && !(onboardingStep === "complete" && parsedData) && (
                     <div className={`${styles.messageBubble} ${styles.assistant}`}>
                         <div className={styles.avatar}>🎓</div>
                         <div className={styles.bubbleContent}>
@@ -502,6 +744,11 @@ export default function ChatPage() {
                     }}
                 />
             </div>
+            <ScheduleSidebar
+                schedule={forwardSchedule}
+                open={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+            />
         </div>
     );
 }

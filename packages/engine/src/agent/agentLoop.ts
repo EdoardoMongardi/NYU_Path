@@ -466,6 +466,10 @@ function maybeQueueValidatorReplay(args: {
     if (state.validatorReplaysRemaining <= 0) return false;
 
     state.validatorReplaysRemaining -= 1;
+    // Phase 13 §8b — flag the next iteration as a replay turn so
+    // `runOneTurn` can suppress `thinking_delta` yields (the model's
+    // self-correction monologue must not reach the user).
+    state.nextTurnIsReplay = true;
     const detail = verdict.violations.map((v) => `${v.kind}: ${v.detail}`).join(" | ");
     recordTransition(state, "validation_retry", sink, detail, correlationId);
     emitFallback(sink, "validator_replay", `Validator rejected reply; one replay attempt remaining=${state.validatorReplaysRemaining}.`, {
@@ -791,6 +795,7 @@ export type AgentStreamEvent =
     | { type: "tool_invocation_start"; toolName: string; args: Record<string, unknown> }
     | { type: "tool_invocation_done"; invocation: ToolInvocation }
     | { type: "text_delta"; text: string }
+    | { type: "thinking_delta"; text: string }
     | { type: "done"; result: ChatTurnResult };
 
 export async function* runAgentTurnStreaming(
@@ -883,17 +888,49 @@ export async function* runAgentTurnStreaming(
             signal: options.signal,
         };
 
+        // Phase 12.5 Task 3 — buffer thinking deltas exactly as we
+        // buffer text deltas. Both must be held until we know the
+        // validator will NOT replay the turn. If `maybeQueueValidatorReplay`
+        // returns true we `continue` and both buffers are discarded,
+        // preventing the model's internal self-correction monologue from
+        // escaping to the SSE writer.
+        //
+        // Phase 13 §8b — read and clear nextTurnIsReplay so that when
+        // this iteration was queued as a replay, runOneTurn suppresses
+        // its thinking_delta yields (the model's self-correction
+        // monologue should not reach the user).
+        const isReplayTurn = state.nextTurnIsReplay;
+        state.nextTurnIsReplay = false;
+
         const bufferedDeltas: string[] = [];
+        const bufferedThinking: string[] = [];
         let runResult:
             | { ok: true; completion: LLMCompletion; usedClientId: string; fallbackTriggered: boolean }
             | { ok: false; error: string };
         try {
-            const primaryEvents = await runOneTurn(client, args, bufferedDeltas);
+            let primaryResult: { ok: true; completion: LLMCompletion } | { ok: false; error: string } | null = null;
+            for await (const ev of runOneTurn(client, args, bufferedDeltas, isReplayTurn)) {
+                if (ev.type === "thinking_delta") {
+                    bufferedThinking.push(ev.text);
+                } else if (ev.type === "_turn_result") {
+                    primaryResult = ev.result;
+                }
+            }
+            const primaryEvents = primaryResult!;
             if (primaryEvents.ok) {
                 runResult = { ok: true, completion: primaryEvents.completion, usedClientId: client.id, fallbackTriggered: false };
             } else if (options.fallbackClient) {
                 bufferedDeltas.length = 0; // discard any partial primary deltas before fallback
-                const fbEvents = await runOneTurn(options.fallbackClient, args, bufferedDeltas);
+                bufferedThinking.length = 0; // discard partial thinking deltas before fallback
+                let fbResult: { ok: true; completion: LLMCompletion } | { ok: false; error: string } | null = null;
+                for await (const ev of runOneTurn(options.fallbackClient, args, bufferedDeltas, isReplayTurn)) {
+                    if (ev.type === "thinking_delta") {
+                        bufferedThinking.push(ev.text);
+                    } else if (ev.type === "_turn_result") {
+                        fbResult = ev.result;
+                    }
+                }
+                const fbEvents = fbResult!;
                 if (fbEvents.ok) {
                     runResult = { ok: true, completion: fbEvents.completion, usedClientId: options.fallbackClient.id, fallbackTriggered: true };
                 } else {
@@ -957,10 +994,14 @@ export async function* runAgentTurnStreaming(
                 validateResponse: options.validateResponse,
             });
             if (replayed) {
-                // Drop the deltas; we'll regenerate on the next turn.
+                // Drop both thinking and text deltas; we'll regenerate
+                // on the next (replay) turn. The validator's system-message
+                // complaint must never reach the SSE writer.
                 continue;
             }
-            // Flush any deltas the streaming client emitted.
+            // Flush buffered thinking deltas first, then text deltas.
+            // Both were held until we confirmed no replay would occur.
+            for (const t of bufferedThinking) yield { type: "thinking_delta", text: t };
             for (const d of bufferedDeltas) yield { type: "text_delta", text: d };
             // If the client had no streamComplete (synthetic path),
             // bufferedDeltas is empty and we yield the full text as a
@@ -1020,30 +1061,56 @@ export async function* runAgentTurnStreaming(
     yield { type: "done", result };
 }
 
-/** Run one model turn against a single client, capturing any
- *  text_delta events into `outDeltas` and returning the final
- *  completion. */
-async function runOneTurn(
+/** Run one model turn against a single client. Yields
+ *  `thinking_delta` events IMMEDIATELY as they arrive from the
+ *  client so the caller's generator can forward them upstream
+ *  without buffering. Text deltas are captured into `outDeltas`
+ *  (buffered until the final non-tool-call turn, per the existing
+ *  design). Terminates with a `_turn_result` pseudo-event carrying
+ *  the completion or error so the caller can inspect the result
+ *  after draining the generator.
+ *
+ *  Phase 13 §8b — `isReplayTurn` suppresses `thinking_delta`
+ *  yields. On replay turns the model often narrates its self-
+ *  correction ("the validator caught my synthesized 16, let me
+ *  remove that"). That monologue is internal and must not reach
+ *  the user. Suppressing here is safe because the caller already
+ *  discards the buffered thinking on the FIRST (pre-replay) turn
+ *  via the `continue` path; this gate ensures the REPLAY turn's
+ *  thinking is also never emitted. */
+async function* runOneTurn(
     client: LLMClient,
     args: Parameters<NonNullable<LLMClient["streamComplete"]>>[0],
     outDeltas: string[],
-): Promise<
-    | { ok: true; completion: LLMCompletion }
-    | { ok: false; error: string }
+    isReplayTurn = false,
+): AsyncGenerator<
+    | { type: "thinking_delta"; text: string }
+    | { type: "_turn_result"; result: { ok: true; completion: LLMCompletion } | { ok: false; error: string } },
+    void,
+    void
 > {
     try {
         if (client.streamComplete) {
             let final: LLMCompletion | null = null;
             for await (const ev of client.streamComplete(args)) {
                 if (ev.type === "text_delta") outDeltas.push(ev.text);
-                else if (ev.type === "done") final = ev.completion;
+                else if (ev.type === "thinking_delta") {
+                    // Phase 13 §8b — on replay turns, the model often narrates
+                    // its self-correction in the open. That monologue is internal
+                    // and should not reach the user. Suppress here.
+                    if (!isReplayTurn) yield { type: "thinking_delta", text: ev.text };
+                } else if (ev.type === "done") final = ev.completion;
             }
-            if (!final) return { ok: false, error: "streamComplete returned without a done event" };
-            return { ok: true, completion: final };
+            if (!final) {
+                yield { type: "_turn_result", result: { ok: false, error: "streamComplete returned without a done event" } };
+                return;
+            }
+            yield { type: "_turn_result", result: { ok: true, completion: final } };
+            return;
         }
         const c = await client.complete(args);
-        return { ok: true, completion: c };
+        yield { type: "_turn_result", result: { ok: true, completion: c } };
     } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        yield { type: "_turn_result", result: { ok: false, error: e instanceof Error ? e.message : String(e) } };
     }
 }

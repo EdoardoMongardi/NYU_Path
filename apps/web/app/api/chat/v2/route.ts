@@ -30,6 +30,7 @@ import {
     // reintroduce the keyword router. runTemplateMatcherOnly stays
     // for recovery mode (cohortConfig.evalGateFailing).
     validateResponse,
+    reviewCompleteness,
     createPrimaryClient,
     createFallbackClient,
     getCohortConfig,
@@ -48,6 +49,10 @@ import {
     degreeProgressReportSchema,
     deriveTemporalContext,
     normalizeGraduationTarget,
+    detectMultiIntent,
+    renderMultiIntentBriefing,
+    detectAmbiguity,
+    askClarification,
     type DegreeProgressReport,
 } from "@nyupath/engine";
 import {
@@ -256,6 +261,11 @@ export async function POST(req: NextRequest): Promise<Response> {
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
+        // Phase 11 follow-up — thread the latest user message so
+        // tool validateInput hooks can apply scope guards (e.g.,
+        // reject check_transfer_eligibility when the message keys
+        // on "minor"). Generic across all tools.
+        lastUserMessage: body.message,
         ...(schoolConfig ? { schoolConfig } : {}),
         ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
@@ -287,6 +297,16 @@ export async function POST(req: NextRequest): Promise<Response> {
             ? { preRegisteredTerms: temporal.preRegisteredTerms } : {}),
         ...(graduationTerm ? { graduationTerm } : {}),
     });
+
+    // Phase 11 S3 — multi-intent detector. When the user's message
+    // contains multiple distinct requests, prepend a briefing line
+    // to the system prompt so the agent enumerates and addresses
+    // each sub-question. Pure deterministic; no extra LLM call.
+    const multiIntent = detectMultiIntent(body.message);
+    const briefing = renderMultiIntentBriefing(multiIntent);
+    const finalSystemPrompt = briefing
+        ? `${systemPrompt}\n\n${briefing}`
+        : systemPrompt;
     const templates = getTemplates();
 
     // Phase 7-A P-1 + Phase 7-B Step 8b: cohort gate. The store factory
@@ -308,13 +328,52 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const { stream, writer } = createSseStream();
 
+    // Phase 11 S4 — gated clarifier. Detect deterministic
+    // ambiguity signals; if any fire, run the clarifier sub-agent
+    // (single haiku call, no tools). When the clarifier returns a
+    // question, stream it as the agent's reply for THIS turn and
+    // skip the main agent loop. The student responds with detail,
+    // and the next turn flows through the agent normally.
+    const ambiguity = detectAmbiguity(body.message, body.history ?? []);
+    if (ambiguity.ambiguous) {
+        // Cheap haiku call — no tools, ~80 tokens out.
+        const clarification = await askClarification(
+            primary,
+            body.message,
+            body.history ?? [],
+            {
+                ...(student.homeSchool ? { homeSchool: student.homeSchool } : {}),
+                declaredPrograms: student.declaredPrograms.map((p) => p.programId),
+                ...(student.visaStatus ? { visaStatus: student.visaStatus } : {}),
+            },
+        ).catch((err) => {
+            console.error("[clarifier] failed; falling back to agent loop", err);
+            return null;
+        });
+        if (clarification && !clarification.isClear && clarification.output.length > 0) {
+            // Stream the clarifying question + close the SSE.
+            for (const tok of clarification.output.match(/.{1,40}/g) ?? []) {
+                writer.write({ kind: "token", text: tok });
+            }
+            writer.write({ kind: "done", finalText: clarification.output, modelUsedId: primary.id });
+            writer.close();
+            return new NextResponse(stream, {
+                headers: {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache, no-transform",
+                    Connection: "keep-alive",
+                },
+            });
+        }
+    }
+
     // Run the agent loop in the background; the SSE stream returns
     // immediately so the browser sees event flow from t=0.
     void runV2Turn({
         primary,
         fallback,
         session,
-        systemPrompt,
+        systemPrompt: finalSystemPrompt,
         templates,
         userMessage: body.message,
         history: body.history,
@@ -427,6 +486,11 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         const invocationsSoFar: ToolInvocation[] = [];
         let finalResult: import("@nyupath/engine").ChatTurnResult | null = null;
 
+        // Phase 13 Task 9 — capture forwardSchedule.computedAt before
+        // the agent runs so we can detect when plan_forward_degree (or
+        // any tool) writes a new schedule to session.forwardSchedule.
+        const beforeComputedAt = session.forwardSchedule?.computedAt;
+
         for await (const ev of runAgentTurnStreaming(
             primary,
             buildDefaultRegistry(),
@@ -462,7 +526,7 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                         // Phase 10 F4c — pass the user's last message so
                         // the verbatim-drift check can skip when the
                         // verbatim is topically irrelevant.
-                        userQuestion: body.message,
+                        userQuestion: userMessage,
                     });
                     return {
                         ok: verdict.ok,
@@ -491,6 +555,9 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                         ...(ev.invocation.error?.message !== undefined ? { error: ev.invocation.error.message } : {}),
                     });
                     break;
+                case "thinking_delta":
+                    writer.write({ kind: "thinking", text: ev.text });
+                    break;
                 case "text_delta":
                     writer.write({ kind: "token", text: ev.text });
                     break;
@@ -498,6 +565,22 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                     finalResult = ev.result;
                     break;
             }
+        }
+
+        // Phase 13 Task 9 — emit forward_schedule_update when the
+        // schedule was computed (or updated) this turn. The schedule is
+        // written to session.forwardSchedule by plan_forward_degree /
+        // reconcile tools. Emit before the done/error path so the UI
+        // sidebar can display the plan before the final text is written.
+        const afterComputedAt = session.forwardSchedule?.computedAt;
+        const scheduleChanged =
+            session.forwardSchedule !== undefined
+            && (beforeComputedAt === undefined || beforeComputedAt !== afterComputedAt);
+        if (scheduleChanged) {
+            writer.write({
+                kind: "forward_schedule_update",
+                schedule: session.forwardSchedule!,
+            });
         }
 
         // Phase 7-B Step 18 — Tier-3 graceful termination. Surface a
@@ -529,27 +612,60 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             student: session.student,
             // Phase 10 F4c — thread the user's last message for
             // topical-relevance gating in checkVerbatim.
-            userQuestion: body.message,
+            userQuestion: userMessage,
         });
-        if (!verdict.ok) {
+
+        // Phase 12.5 Task 4 — completeness reviewer. Runs after
+        // validateResponse so envelope-metadata drops (missing
+        // disclaimers / bulletin anchors) are surfaced as
+        // `incompleteness` violations alongside the existing validator
+        // violations. Same `validator_block` event, no new event kind.
+        const completenessVerdict = reviewCompleteness(
+            finalResult.finalText,
+            finalResult.invocations,
+        );
+        const completenessViolations = completenessVerdict.pass
+            ? []
+            : [
+                {
+                    kind: "incompleteness" as const,
+                    detail: completenessVerdict.retryGuidance,
+                },
+            ];
+
+        const allViolations = [
+            ...verdict.violations.map((v) => ({
+                kind: v.kind,
+                detail: v.detail,
+                ...(v.caveatId ? { caveatId: v.caveatId } : {}),
+                ...(v.number ? { number: v.number } : {}),
+            })),
+            ...completenessViolations,
+        ];
+        const allOk = verdict.ok && completenessVerdict.pass;
+
+        // Phase 11 follow-up — when the validator catches fabricated
+        // bulletin attribution AFTER the replay budget is spent, strip
+        // the offending blockquote from the final text rather than
+        // streaming a known-wrong citation to the student. The UI
+        // still gets a `validator_block` event so the warning is
+        // logged. Generic across every fabrication (any tool, any
+        // school, any policy).
+        let finalTextOut = finalResult.finalText;
+        if (!allOk) {
+            const fabrications = verdict.violations.filter((v) => v.kind === "fabricated_attribution");
+            for (const _f of fabrications) {
+                finalTextOut = stripFabricatedBlockquotes(finalTextOut);
+            }
             writer.write({
                 kind: "validator_block",
-                violations: verdict.violations.map((v) => ({
-                    kind: v.kind,
-                    detail: v.detail,
-                    ...(v.caveatId ? { caveatId: v.caveatId } : {}),
-                    ...(v.number ? { number: v.number } : {}),
-                })),
+                violations: allViolations,
             });
-            // Phase 6.1 posture: surface the reply anyway with a
-            // clear validator_block event so the UI can render a
-            // warning. Phase 7 should add an automatic re-run with
-            // an additional system-prompt rule per §9.1 Part 9.
         }
 
         writer.write({
             kind: "done",
-            finalText: finalResult.finalText,
+            finalText: finalTextOut,
             modelUsedId: finalResult.modelUsedId,
         });
 
@@ -586,4 +702,46 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
     } finally {
         writer.close();
     }
+}
+
+// ============================================================
+// Phase 11 follow-up — fabricated-attribution substitution
+// ============================================================
+// When the post-loop validator catches a `fabricated_attribution`
+// violation and the replay budget is exhausted, we strip every
+// blockquote attributed to a bulletin/policy source from the final
+// text so the student doesn't see a known-wrong citation. A short
+// substitution paragraph informs them. Generic across every
+// fabrication shape (any school, any policy, any tool).
+const ATTRIBUTION_LINE_RE = /^\s*(?:.*\b(?:per|according to|from|as stated in|the (?:cas )?bulletin|the policy|the catalog).*?:?\s*)?$/i;
+const BLOCKQUOTE_LINE_RE = /^>\s*(.*)$/;
+
+function stripFabricatedBlockquotes(text: string): string {
+    const lines = text.split("\n");
+    const out: string[] = [];
+    let droppedAny = false;
+    let i = 0;
+    while (i < lines.length) {
+        const line = lines[i]!;
+        if (BLOCKQUOTE_LINE_RE.test(line)) {
+            // Drop this blockquote group and the immediately preceding
+            // attribution-introduction line (e.g., "Per the bulletin:").
+            droppedAny = true;
+            if (out.length > 0 && ATTRIBUTION_LINE_RE.test(out[out.length - 1]!)) {
+                out.pop();
+            }
+            while (i < lines.length && BLOCKQUOTE_LINE_RE.test(lines[i]!)) i++;
+            continue;
+        }
+        out.push(line);
+        i++;
+    }
+    if (!droppedAny) return text;
+    out.push("");
+    out.push(
+        "_(Note: a bulletin quotation was removed because the agent could not " +
+        "verify it against the indexed corpus. Please confirm the underlying " +
+        "policy with your academic adviser before relying on it.)_",
+    );
+    return out.join("\n").replace(/\n{3,}/g, "\n\n");
 }
