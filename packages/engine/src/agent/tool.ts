@@ -90,6 +90,17 @@ export interface ToolSession {
      * are swallowed — the live session remains the source of truth.
      */
     profileStore?: import("../persistence/profileStore.js").ProfileStore;
+
+    /** Phase 13 — solved forward schedule. Set by `plan_forward_degree`
+     *  when state ∈ { "valid-clean", "valid-with-trade-offs" }. Read by
+     *  `view_forward_plan`, the SSE route, and the chat sidebar. */
+    forwardSchedule?: import("@nyupath/shared").ForwardSchedule;
+
+    /** Phase 13 — draft schedule for plans whose state is
+     *  "infeasible-draft" OR (Phase 14) "student-preferred-invalid-draft".
+     *  Decision #32 mandates these NEVER write to forwardSchedule so the
+     *  agent doesn't endorse an illegal plan. */
+    studentDraftPlan?: import("@nyupath/shared").ForwardSchedule;
 }
 
 export type ValidationResult =
