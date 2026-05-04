@@ -737,9 +737,14 @@ export type Assumption =
           /** Layer-2 of Tier-D 3-layer enforcement. Literal "soft" —
            *  hard-framed constraints CANNOT construct this variant. */
           studentConstraintFraming: "soft";
-          /** Phase 14 will tighten this to PlanMutation once that type is defined
-           *  (Phase 14 Task 1). Typed as unknown for now per controller note 5. */
-          mappedToMutation: unknown;
+          /** The concrete mutation the heuristic-mapping translated the
+           *  student's stated factor into. Null when the heuristic
+           *  produced a description but no actionable mutation kind
+           *  (e.g. the agent flagged the factor for clarification but
+           *  didn't commit to a translation). The PlanMutation union is
+           *  defined later in this file; TypeScript resolves the
+           *  forward reference within a single declaration file. */
+          mappedToMutation: PlanMutation | null;
           confidence: "low" | "medium" | "high";
           reasoning: string;
           consequenceIfWrong: string;
