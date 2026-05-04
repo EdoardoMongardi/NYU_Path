@@ -1,3 +1,19 @@
+/* ==========================================================
+   Phase 16 Task D — sidebar polish tokens
+   ----------------------------------------------------------
+   Workload-tier palette consumed by per-slot left-border tints
+   in `.slotTier_*` (see further down). Defined at file top so
+   any future tier-aware affordance can re-use the same hues
+   instead of duplicating literals.
+   ========================================================== */
+:root {
+    --tier-major-required: #4f46e5;
+    --tier-major-elective: #7c3aed;
+    --tier-school-core: #0d9488;
+    --tier-free-elective: #64748b;
+    --tier-general-elective: #71717a;
+}
+
 .chatPage {
     height: 100vh;
     display: flex;
@@ -600,9 +616,23 @@ button.reasoningHeader:focus-visible {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
+    /* Phase 16 Task D — pin the term header while the sidebar body
+       scrolls. `top: 0` inside .scheduleSidebar (overflow-y: auto)
+       keeps the card title at the top of the viewport. The opaque
+       background prevents slot rows from bleeding through. */
+    position: sticky;
+    top: 0;
+    background: var(--bg-primary);
+    padding: 4px 0;
+    z-index: 1;
 }
 .semesterCardHeader h3 { margin: 0; font-size: 0.95em; font-weight: 600; }
-.semesterCredits { font-size: 0.8em; color: var(--text-secondary); }
+.semesterCredits {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    /* Phase 16 Task D — credit columns line up across cards. */
+    font-variant-numeric: tabular-nums;
+}
 .semesterNotes {
     list-style: disc;
     margin: 0 0 8px 16px;
@@ -625,10 +655,23 @@ button.reasoningHeader:focus-visible {
 .slotList li:last-child { border-bottom: none; }
 
 .slotIcon { flex: 0 0 16px; text-align: center; opacity: 0.7; }
-.slotCourseId { font-family: var(--font-mono); font-weight: 600; }
+/* Phase 16 Task D — course IDs read as code; mono font + tabular nums
+   so two adjacent courses (e.g. "CSCI-UA 102" / "CSCI-UA 421") stack
+   on the digit column. */
+.slotCourseId {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
 .slotTitle, .slotPlaceholderCategory { flex: 1 1 auto; color: var(--text-primary); }
 .slot_placeholder .slotPlaceholderCategory { font-style: italic; color: var(--text-secondary); }
-.slotMeta { flex: 0 0 auto; font-size: 0.8em; color: var(--text-secondary); }
+.slotMeta {
+    flex: 0 0 auto;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    /* Phase 16 Task D — credit numbers align across rows. */
+    font-variant-numeric: tabular-nums;
+}
 .slotFlag { color: #b58000; font-size: 0.85em; margin-left: 4px; }
 
 .slot_completed { background: rgba(40, 167, 69, 0.06); }
@@ -924,9 +967,90 @@ button.reasoningHeader:focus-visible {
     background: inherit !important;
 }
 
+/* Phase 16 Task D — fixed-width lock-icon slot. Sits to the right of
+   the grade column, so rows with and without the icon still line up
+   on their grade text. */
 .slotLockIcon {
-    flex: 0 0 auto;
+    flex: 0 0 14px;
+    width: 14px;
     margin-left: 4px;
     font-size: 0.78em;
+    line-height: 1;
+    text-align: center;
     opacity: 0.6;
 }
+
+/* ==========================================================
+   Phase 16 Task D — summary card + workload-tier tints
+   ----------------------------------------------------------
+   Top-of-sidebar identity card (name / programs / school /
+   visa / GPA / credits / graduation) + the per-slot left-
+   border tints driven by `slot.workloadTier`.
+   ========================================================== */
+
+.summaryCard {
+    margin: 0 0 16px 0;
+    padding: 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--nyu-violet-faint);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.summaryCardHeader {
+    margin: 0 0 4px 0;
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.25;
+}
+
+.summaryCardRow {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    /* Numbers (GPA + credit ratios) align cleanly across rows. */
+    font-variant-numeric: tabular-nums;
+}
+
+.summaryCardRow strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.summaryCardProgressBar {
+    margin-top: 6px;
+    height: 6px;
+    background: rgba(87, 6, 140, 0.12);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.summaryCardProgressFill {
+    height: 100%;
+    background: var(--nyu-violet);
+    border-radius: var(--radius-full);
+    transition: width 0.25s ease-out;
+}
+
+/* Per-slot left-border tint per `slot.workloadTier`. The base class
+   sets the border style + width; the tier-specific classes only
+   override the color, so the layout never shifts when the tier
+   changes (or is absent — see `.slot_completed` / `.slot_in_progress`,
+   which simply don't add a tier class). */
+.slotTier {
+    border-left-width: 4px;
+    border-left-style: solid;
+    /* Account for the new left border so the row's content stays
+       aligned with non-tinted (history / IP) rows. */
+    padding-left: 6px;
+}
+
+.slotTier_major-required   { border-left-color: var(--tier-major-required); }
+.slotTier_major-elective   { border-left-color: var(--tier-major-elective); }
+.slotTier_school-core      { border-left-color: var(--tier-school-core); }
+.slotTier_free-elective    { border-left-color: var(--tier-free-elective); }
+.slotTier_general-elective { border-left-color: var(--tier-general-elective); }
