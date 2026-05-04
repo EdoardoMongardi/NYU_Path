@@ -161,9 +161,18 @@ export function buildStudentProfileFromDpr(
     //    (type=EN with grade=null but no IP designation isn't expected,
     //    but we guard against it). Skip the synthetic ELECTIVE CREDIT
     //    rows because they have no real course id the engine can use.
+    //
+    // FIX (May 2026 post-mortem): the prior loop pushed EVERY IP row into
+    // `pendingCourses` regardless of term, then picked the latest IP term
+    // as `currentSemester.term`. When a student is mid-Spring with Fall
+    // pre-registered, the DPR carries IP rows for BOTH terms — so
+    // `currentSemester.courses` ended up mixing 4 Spring IP rows with 3
+    // Fall IP rows, and the agent surfaced "7 courses for Fall 2026."
+    // We now collect IP rows into a per-term map first, pick the latest
+    // term, and only THEN populate `pendingCourses` from that single
+    // term's rows.
     const coursesTaken: CourseTaken[] = [];
-    const pendingCourses: Array<{ courseId: string; title: string; credits: number }> = [];
-    let currentTerm: string | undefined;
+    const ipRowsByTerm: Record<string, Array<{ courseId: string; title: string; credits: number }>> = {};
 
     for (const row of report.courseHistory) {
         if (row.subject === "ELECTIVE") continue; // synthetic transfer-credit row, no audit value
@@ -176,17 +185,21 @@ export function buildStudentProfileFromDpr(
             credits: row.units,
         });
         if (row.type === "IP") {
-            pendingCourses.push({
+            (ipRowsByTerm[row.term] ??= []).push({
                 courseId,
                 title: row.courseTitle,
                 credits: row.units,
             });
-            // Pick the latest IP term as currentSemester.
-            if (!currentTerm || compareTerms(row.term, currentTerm) > 0) {
-                currentTerm = row.term;
-            }
         }
     }
+
+    // Pick the latest IP term as `currentSemester.term`; populate
+    // `pendingCourses` ONLY from that term's IP rows.
+    let currentTerm: string | undefined;
+    for (const term of Object.keys(ipRowsByTerm)) {
+        if (!currentTerm || compareTerms(term, currentTerm) > 0) currentTerm = term;
+    }
+    const pendingCourses = currentTerm ? ipRowsByTerm[currentTerm] ?? [] : [];
 
     // 2. Declared programs from DPR Programs table (filter to Major /
     //    Minor / Concentration types — skip the Career + Program rows
