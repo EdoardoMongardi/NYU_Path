@@ -266,6 +266,16 @@ describe("Forward-schedule solver — rationale emission (regression catcher)", 
         }
     });
 
+    it("alternativeCandidates totalAssumptionCount matches ForwardSchedule.assumptions.length (post-pass backfill)", () => {
+        const out = makeRationalePlan();
+        if (out.alternativeCandidates !== undefined) {
+            const expected = out.assumptions.length;
+            for (const cand of out.alternativeCandidates) {
+                expect(cand.totalAssumptionCount).toBe(expected);
+            }
+        }
+    });
+
     // Bonus: verify the MATH-UA 120 spring-only course lands in spring
     it("spring-only course rationale includes offering termConstraint", () => {
         const out = makeRationalePlan();

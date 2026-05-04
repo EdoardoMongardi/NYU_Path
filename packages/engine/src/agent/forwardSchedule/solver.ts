@@ -462,7 +462,7 @@ function buildAlternativeCandidates(
                 .flatMap(s => s.slots)
                 .filter(s => s.kind === "specific_planned" && s.requiresPetition === true)
                 .length,
-            totalAssumptionCount: 0, // filled after assumptions are built
+            totalAssumptionCount: 0, // backfilled in solveForwardSchedule's post-pass after buildIpAssumptions runs
             graduationTerm: semesters[semesters.length - 1]?.term ?? "",
             topDiffsFromWinner: topDiffs,
         });
@@ -1165,6 +1165,17 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
 
     // Stage 7: alternativeCandidates
     const alternativeCandidates = buildAlternativeCandidates(semesters, { balanceScore });
+
+    // Backfill totalAssumptionCount on each candidate now that assumptions
+    // are computed. Stage 7 emitted summaries with the field set to 0 so
+    // the structural shape was complete; this pass populates the real
+    // count. (Phase 13 ships a single `assumptions[]` per plan — same value
+    // applies to every alternative because the candidates are distribution
+    // probes over the same placed slots; future backtracking phases that
+    // re-run the solver per candidate will fill per-candidate counts.)
+    for (const cand of alternativeCandidates) {
+        cand.totalAssumptionCount = assumptions.length;
+    }
 
     return {
         semesters,
