@@ -1,9 +1,9 @@
 // ============================================================
-// Default ToolRegistry — wires the 22 NYU Path tools (§7.1 + Phase 13 + Phase 14 + Phase 15)
+// Default ToolRegistry — wires the 21 LIVE NYU Path tools
 // ============================================================
-// All §7.1 tools shipped:
-//   run_full_audit, plan_semester, check_transfer_eligibility,
-//   what_if_audit, search_policy, update_profile, confirm_profile_update,
+// §7.1 tools (Phase 0–11):
+//   run_full_audit, check_transfer_eligibility, what_if_audit,
+//   search_policy, update_profile, confirm_profile_update,
 //   get_credit_caps, search_availability, get_academic_standing,
 //   check_overlap, search_courses
 // Phase 13 Task 6 additions:
@@ -16,9 +16,24 @@
 //   compare_plan_alternatives
 // Phase 15 Task 7 additions:
 //   materialize_sections, confirm_section_combination
+//
+// DEPRECATED (May 2026 post-mortem):
+//   plan_semester — Phase 5 single-term planner. Superseded by Phase 13's
+//   `plan_forward_degree`, which (a) plans every remaining term, not just
+//   the immediate one, (b) writes `session.forwardSchedule` so the UI can
+//   display the schedule sidebar, and (c) cooperates with Phase 14's
+//   `propose_plan_change` for what-if analysis. Keeping `plan_semester`
+//   registered alongside the new tool caused the LLM to fall back to it
+//   for "what should I take next semester" questions, leaving the forward
+//   schedule unset and the sidebar empty. The tool's source file is kept
+//   for unit tests + future reference, but it is no longer wired into
+//   `ALL_NYUPATH_TOOLS` so the agent loop cannot invoke it.
 // ============================================================
 import { ToolRegistry, type Tool } from "./tool.js";
 import { runFullAuditTool } from "./tools/runFullAudit.js";
+// Deprecated — kept as a named export for back-compat with unit tests and
+// future migration tooling, but NOT included in ALL_NYUPATH_TOOLS.
+// See header comment for rationale.
 import { planSemesterTool } from "./tools/planSemester.js";
 import { checkTransferEligibilityTool } from "./tools/checkTransferEligibility.js";
 import { whatIfAuditTool } from "./tools/whatIfAudit.js";
@@ -45,7 +60,7 @@ import type { ZodTypeAny } from "zod";
 
 export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     runFullAuditTool as unknown as Tool<ZodTypeAny, unknown>,
-    planSemesterTool as unknown as Tool<ZodTypeAny, unknown>,
+    // planSemesterTool intentionally NOT registered — see header.
     checkTransferEligibilityTool as unknown as Tool<ZodTypeAny, unknown>,
     whatIfAuditTool as unknown as Tool<ZodTypeAny, unknown>,
     searchPolicyTool as unknown as Tool<ZodTypeAny, unknown>,

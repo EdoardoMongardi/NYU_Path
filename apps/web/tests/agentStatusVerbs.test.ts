@@ -7,8 +7,8 @@ describe("agentStatusVerbs", () => {
         // (ALL_NYUPATH_TOOLS). When that array grows, add the new name here
         // AND add an entry in TOOL_VERBS + TOOL_THOUGHT_SENTENCES.
         const registered = [
-            // Phase 0–11 (legacy 12)
-            "run_full_audit", "plan_semester", "check_transfer_eligibility",
+            // Phase 0–11 (legacy minus plan_semester, which was deprecated May 2026)
+            "run_full_audit", "check_transfer_eligibility",
             "what_if_audit", "search_policy", "update_profile",
             "confirm_profile_update", "get_credit_caps", "search_availability",
             "get_academic_standing", "check_overlap", "search_courses",
