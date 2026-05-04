@@ -131,6 +131,9 @@ describe("visaValidator — rclEligible", () => {
     it("non-F-1 → pass (RCL N/A)", () => {
         const r = visaValidator(makeCtx({ termCredits: 6, profile: { visaStatus: "domestic" } }));
         expect(r.rclEligible.status).toBe("pass");
+        if (r.rclEligible.status === "pass") {
+            expect(r.rclEligible.verifiedFrom).toBe("DPR");
+        }
     });
 });
 
@@ -273,5 +276,13 @@ describe("visaValidator — overallWarningLevel + citations", () => {
     it("online limit assumed-pass → citation for F-1 online cap included", () => {
         const r = visaValidator(makeCtx({ termCredits: 12, profile: { visaStatus: "f1" } }));
         expect(r.citations.some(c => /Online Course Limit/.test(c))).toBe(true);
+    });
+
+    it("domestic students do NOT receive the F-1 online-cap citation", () => {
+        const r = visaValidator(makeCtx({ termCredits: 16, profile: { visaStatus: "domestic" } }));
+        expect(r.citations.some(c => /Online Course Limit/.test(c))).toBe(false);
+        // The axis itself still returns assumed-pass (Phase 15 promotes for
+        // every student); only the F-1-labelled citation is suppressed.
+        expect(r.onlineLimitSatisfied.status).toBe("assumed-pass");
     });
 });
