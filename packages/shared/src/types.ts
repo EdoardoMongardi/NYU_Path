@@ -992,3 +992,140 @@ export interface ForwardSchedule {
     /** Decision #44 — top-K alternative-plan summaries from Stage 7. ≤5. */
     alternativeCandidates?: AlternativePlanSummary[];
 }
+
+// === Phase 14 — Preferences + Mutation API ===
+
+// ---- 1. SchedulingPreferences (Decision #43 — defined Phase 14, consumed Phase 15) ----
+
+/**
+ * Phase 14-defined / Phase 15-consumed (Decision #43).
+ *
+ * Time/day filters as a first-class scheduling-preference factor.
+ * `strict: true` per entry → HARD filter (drops sections during
+ * Phase 15's section materialization). `strict: false` → soft
+ * deboost in section ranking.
+ *
+ * INDEPENDENT from Decision #42's hard-vs-soft constraint framing.
+ * `strict: true` says the FILTER is hard (drop the section), not
+ * that the student framed the preference as non-negotiable for
+ * Decision #42 tier-routing purposes — the two flags are usually
+ * correlated (childcare-driven Friday avoidance: strict=true AND
+ * framing=hard) but not coupled at the schema level.
+ */
+export type Day = "M" | "Tu" | "W" | "Th" | "F" | "Sa" | "Su";
+
+export interface SchedulingPreferences {
+    avoidDays?: Array<{ day: Day; strict: boolean }>;
+    avoidTimeWindows?: Array<{ days: Day[]; startMin: number; endMin: number; strict: boolean }>;
+    preferTimeWindows?: Array<{ days: Day[]; startMin: number; endMin: number; weight: number }>;
+    desiredFreeDay?: { day: "any" | Day; strict: boolean };
+    avoidConsecutiveLongBlocks?: boolean;
+}
+
+// ---- 2. SchedulePreferences (Phase 14 — per-student solver preferences) ----
+
+/**
+ * Phase 14 — Per-student preferences governing how the solver
+ * distributes credits and respects student-driven overrides. All
+ * fields are optional; absent fields use Phase 13 defaults.
+ */
+export interface SchedulePreferences {
+    loadStyle?: "balanced" | "frontload" | "backload";
+    loadStylePerTerm?: Record<string, "light" | "heavy" | "balanced">;
+    creditTargetPerTerm?: Record<string, number>;
+    pins?: Array<{ courseId: string; term: string }>;
+    exclusions?: Array<{ courseId: string; term?: string }>;
+    includeSummer?: boolean;
+    includeJTerm?: boolean;
+    allowBelowF1Floor?: boolean;
+    /** Phase 14 reserved-but-unused; Phase 15's materialize_sections consumes
+     *  this per Decision #43. The shape lands here so the mutation array
+     *  doesn't version-skew across phases. */
+    schedulingPreferences?: SchedulingPreferences;
+}
+
+// ---- 3. PlanChangeProposal + PlanChangeOutcome + AlternativeCandidate (Phase 14 literal spec) ----
+
+export interface PlanChangeProposal {
+    kind: "pin" | "exclude" | "load_style" | "credit_target" | "include_summer" | "include_jterm" | "allow_below_floor";
+    payload: Record<string, unknown>;
+}
+
+export interface PlanChangeOutcome {
+    feasible: boolean;
+    diff: {
+        added: Array<{ term: string; slot: ScheduleSlot }>;
+        removed: Array<{ term: string; slot: ScheduleSlot }>;
+    };
+    consequences: string[];
+    conflicts?: Array<{ kind: string; detail: string }>;
+}
+
+export interface AlternativeCandidate {
+    summary: string;
+    relaxation: "include_summer" | "include_jterm" | "extend_grad_one_term" | "extend_grad_one_year" | "lower_credit_target";
+    schedule: ForwardSchedule | null;
+    stillInfeasibleReason?: string;
+}
+
+// ---- 4. PlanMutation tagged union + PlanDiff (Decision #23) ----
+
+/**
+ * Phase 14 Decision #23 — Discriminated union over mutation kinds
+ * accepted by `propose_plan_change`. Multi-mutation enables compound
+ * counterfactuals in one call ("drop minor + swap Algorithms for
+ * Theory + add summer 2027").
+ *
+ * The `setSchedulingPreference` / `clearSchedulingPreference` kinds
+ * are defined-but-unused at Phase 14 — Phase 15's materialize_sections
+ * is the first reader. Defining them here keeps the mutation array
+ * shape stable across phases.
+ */
+export type PlanMutation =
+    | { kind: "pin"; courseId: string; term: string }
+    | { kind: "exclude"; courseId: string; term?: string }
+    | { kind: "swap"; drop: string; add: string; term: string }
+    | { kind: "addTerm"; term: string }
+    | { kind: "loadStyleOverride"; term?: string; style: "balanced" | "frontload" | "backload" | "light" | "heavy" }
+    | { kind: "bindFreeElective"; slotId: string; courseId: string }
+    | { kind: "unbindFreeElective"; slotId: string }
+    | { kind: "bindPoolSlot"; slotId: string; courseId: string }
+    | { kind: "setSchedulingPreference"; value: SchedulingPreferences }
+    | { kind: "clearSchedulingPreference" };
+
+/**
+ * Output of `propose_plan_change` per Decision #23. Carries
+ * structured deltas the agent surfaces to the student before
+ * confirmation. Multiple decision-flavored fields land here so the
+ * agent can read pre-computed verdicts rather than re-derive them.
+ */
+export interface PlanDiff {
+    creditsByTermDelta: Record<string, number>;
+    graduationTermShift: number;
+    newRequiresPetition: string[];
+    removedRequiresPetition: string[];
+    newUnmetRequirements: string[];
+    cascadedShifts: Array<{ courseId: string; fromTerm: string; toTerm: string; becauseOf: string }>;
+    /** Decision #24 — per-term workloadWeight delta. */
+    weightedCreditsByTermDelta: Record<string, number>;
+    /** Decision #24 — per-term hardCount/easyCount/weightedCredits before+after. */
+    workloadTierShifts: Array<{
+        term: string;
+        before: { hardCount: number; easyCount: number; weightedCredits: number };
+        after: { hardCount: number; easyCount: number; weightedCredits: number };
+    }>;
+    /** Decision #25 — pre-computed balance verdict. */
+    balanceImpact: {
+        before: number;
+        after: number;
+        delta: number;
+        classification: "improved" | "negligible" | "degraded-mild" | "degraded-significant";
+    };
+    /** Decision #30 — assumptions newly introduced by the proposed change. */
+    newAssumptions: Assumption[];
+    /** Decision #40 — per-axis ValidationResult transitions. Surfaces
+     *  "F-1 onlineLimit: assumed-pass → requires-approval" cleanly. */
+    validationResultsChanges: Record<string, { before: ValidationResult; after: ValidationResult }>;
+    /** Decision #32 — when the mutation flips PlanState. */
+    planStateChange?: { from: PlanState; to: PlanState };
+}
