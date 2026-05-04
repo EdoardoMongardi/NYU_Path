@@ -170,33 +170,72 @@ function extractClaimNumbers(text: string): Set<string> {
 }
 
 /**
+ * Returns all numbers present in `text`, including negative.
+ */
+function extractAllNumbers(text: string): string[] {
+    const matches = text.match(/-?\d+(?:\.\d+)?/g);
+    return matches ?? [];
+}
+
+/**
  * Check whether every claim number in `assistantText` appears verbatim
  * in at least one tool invocation's summary or args this turn.
+ *
+ * Phase 13 §8a — extend the allow-set so a claim is grounded if it
+ * appears verbatim OR equals a ± b for any pair of grounded numbers
+ * (tool summaries + user question). Catches "total is 16 (12 already
+ * + 4 planned)" without allowing arbitrary hallucinated numbers.
  */
 function checkGrounding(ctx: ValidatorContext): Violation[] {
     const violations: Violation[] = [];
     const claims = extractClaimNumbers(ctx.assistantText);
     if (claims.size === 0) return violations;
+
     // Phase 12.5 Task 2 — numbers the user typed in their question are
     // legitimately groundable by the agent's reply (e.g. "16 credits"
     // echoed back in a clarifying question). Without this, the
     // grounding rule false-positives on every quote-back of a user
     // quantity.
-    const groundCorpus = [
+    const sources = [
         ...ctx.invocations.map((inv) => `${inv.summary ?? ""} ${JSON.stringify(inv.args)}`),
         ctx.userQuestion ?? "",
-    ]
-        .join(" ")
-        .toLowerCase();
+    ];
+    const groundCorpus = sources.join(" ").toLowerCase();
+
+    // Phase 13 §8a — collect all groundable numbers (tool results +
+    // user question). A claim is grounded if it appears verbatim OR
+    // if it equals a ± b for some pair of grounded numbers.
+    const groundedNumbers = new Set<number>();
+    for (const s of sources) {
+        for (const n of extractAllNumbers(s)) {
+            const parsed = parseFloat(n);
+            if (Number.isFinite(parsed)) groundedNumbers.add(parsed);
+        }
+    }
+    const numbersArr = [...groundedNumbers];
+
+    function isDerivable(claim: string): boolean {
+        if (groundCorpus.includes(claim)) return true;
+        const claimVal = parseFloat(claim);
+        if (!Number.isFinite(claimVal)) return false;
+        for (let i = 0; i < numbersArr.length; i++) {
+            for (let j = 0; j < numbersArr.length; j++) {
+                if (numbersArr[i]! + numbersArr[j]! === claimVal) return true;
+                if (numbersArr[i]! - numbersArr[j]! === claimVal) return true;
+            }
+        }
+        return false;
+    }
+
     for (const claim of claims) {
-        if (!groundCorpus.includes(claim)) {
+        if (!isDerivable(claim)) {
             violations.push({
                 kind: "ungrounded_number",
                 number: claim,
                 detail:
                     `Number "${claim}" appears in the reply but does not appear verbatim ` +
-                    `in any tool result this turn. Either call the tool that returns it ` +
-                    `or remove the claim.`,
+                    `in any tool result this turn, nor is it a sum or difference of two ` +
+                    `grounded numbers. Either call the tool that returns it or remove the claim.`,
             });
         }
     }
