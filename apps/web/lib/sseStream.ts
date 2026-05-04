@@ -7,6 +7,8 @@
 // EventSource API and `fetch().then(r => r.body)` reading.
 // ============================================================
 
+import type { ForwardSchedule } from "@nyupath/shared";
+
 export type SseEvent =
     | { kind: "template_match"; templateId: string; body: string; source: string }
     | { kind: "tool_invocation_start"; toolName: string; args: Record<string, unknown> }
@@ -14,6 +16,7 @@ export type SseEvent =
     | { kind: "token"; text: string }
     | { kind: "thinking"; text: string }
     | { kind: "validator_block"; violations: Array<{ kind: string; detail: string; caveatId?: string; number?: string }> }
+    | { kind: "forward_schedule_update"; schedule: ForwardSchedule }
     | { kind: "done"; finalText: string; modelUsedId: string }
     | { kind: "error"; message: string };
 

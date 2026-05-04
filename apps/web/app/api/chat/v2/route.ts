@@ -486,6 +486,11 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         const invocationsSoFar: ToolInvocation[] = [];
         let finalResult: import("@nyupath/engine").ChatTurnResult | null = null;
 
+        // Phase 13 Task 9 — capture forwardSchedule.computedAt before
+        // the agent runs so we can detect when plan_forward_degree (or
+        // any tool) writes a new schedule to session.forwardSchedule.
+        const beforeComputedAt = session.forwardSchedule?.computedAt;
+
         for await (const ev of runAgentTurnStreaming(
             primary,
             buildDefaultRegistry(),
@@ -560,6 +565,22 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                     finalResult = ev.result;
                     break;
             }
+        }
+
+        // Phase 13 Task 9 — emit forward_schedule_update when the
+        // schedule was computed (or updated) this turn. The schedule is
+        // written to session.forwardSchedule by plan_forward_degree /
+        // reconcile tools. Emit before the done/error path so the UI
+        // sidebar can display the plan before the final text is written.
+        const afterComputedAt = session.forwardSchedule?.computedAt;
+        const scheduleChanged =
+            session.forwardSchedule !== undefined
+            && (beforeComputedAt === undefined || beforeComputedAt !== afterComputedAt);
+        if (scheduleChanged) {
+            writer.write({
+                kind: "forward_schedule_update",
+                schedule: session.forwardSchedule!,
+            });
         }
 
         // Phase 7-B Step 18 — Tier-3 graceful termination. Surface a
