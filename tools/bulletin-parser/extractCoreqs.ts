@@ -94,6 +94,20 @@ Respond with ONLY a JSON object (no markdown, no prose):
    - Must match: DEPT-SUFFIX NUMBER where SUFFIX is one of UA, UB, UE, UF, UG, UH, UT, UY, SHU
    - Ignore any non-course text (eligibility, standing requirements, etc.)
 
+6. **OR-choice among co-requisites (CRITICAL):**
+   - If the bulletin offers an OR-choice for the concurrent enrollment
+     (e.g. "co-requisite: X OR Y" or "MATH-UA 121 OR MATH-UA 131 as
+     co-requisites"), the courses are ALTERNATIVES, not all required.
+     Emit coreqs: [] in this case — co-requisites mean a SINGLE
+     mandatory concurrent enrollment, not a choice the student makes.
+   - Same rule for catalog-level patterns (e.g. "any SPAN-UA 9300
+     level"): SPAN-UA 9300 is not a real courseId; emit coreqs: [].
+   - Same rule when the bulletin says "Prerequisite: [X] with min C
+     OR Corequisite: [X]" — that's an OR between two satisfaction
+     paths, not a required coreq. Emit coreqs: [].
+   - Only emit a non-empty coreqs[] when EVERY listed course MUST be
+     taken concurrently (typically a lab paired with its lecture).
+
 ## RESPONSE FORMAT
 
 Respond with the JSON object ONLY. No prose, no markdown. Begin with \`{\` and end with \`}\`.
@@ -325,19 +339,39 @@ async function runExtraction() {
                 const response = await callLLM(courseId, chunk);
                 const result = parseJSONResponse(response);
 
-                if (result.coreqs && result.coreqs.length > 0) {
+                // Defensive course-ID validator: even with prompt Rules
+                // 5 + 6, a misbehaving model could emit a malformed
+                // entry (e.g. "WAI", "MATH-121" without the suffix
+                // tag, etc.). Filter every emitted ID against the
+                // canonical courseId regex BEFORE write-back so
+                // prereqs.json never carries spurious entries.
+                const VALID_COURSE_ID = /^[A-Z][A-Z0-9]*-[A-Z]{2,4} \d{1,4}[A-Z]?$/;
+                const accepted: string[] = [];
+                const rejected: string[] = [];
+                for (const id of result.coreqs ?? []) {
+                    if (VALID_COURSE_ID.test(id)) {
+                        accepted.push(id);
+                    } else {
+                        rejected.push(id);
+                    }
+                }
+                if (rejected.length > 0) {
+                    console.warn(`  ?? ${courseId}: rejected ${rejected.length} malformed coreq id(s) — ${JSON.stringify(rejected)}`);
+                }
+
+                if (accepted.length > 0) {
                     // Write back into the curated map
                     if (existing) {
-                        existing.coreqs = result.coreqs;
+                        existing.coreqs = accepted;
                     } else {
                         curated.set(courseId, {
                             course: courseId,
                             prereqGroups: [],
-                            coreqs: result.coreqs,
+                            coreqs: accepted,
                         });
                     }
                     updated++;
-                    console.log(`  ++ ${courseId}: coreqs = ${JSON.stringify(result.coreqs)}`);
+                    console.log(`  ++ ${courseId}: coreqs = ${JSON.stringify(accepted)}`);
                 }
 
                 // Rate-limit: ~10 req/s = 100ms delay

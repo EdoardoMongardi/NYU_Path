@@ -942,9 +942,7 @@
         ]
       }
     ],
-    "coreqs": [
-      "SPAN-UA 9300"
-    ]
+    "coreqs": []
   },
   {
     "course": "ANTH-UA 9085",
@@ -991,10 +989,7 @@
         ]
       }
     ],
-    "coreqs": [
-      "SPAN-UA 9050",
-      "SPAN-UA 9051"
-    ]
+    "coreqs": []
   },
   {
     "course": "ANTH-UA 9200",
@@ -3312,10 +3307,7 @@
         ]
       }
     ],
-    "coreqs": [
-      "SPAN-UA 9050",
-      "SPAN-UA 9051"
-    ]
+    "coreqs": []
   },
   {
     "course": "ARTH-UA 9338",
@@ -17225,9 +17217,6 @@
       }
     ],
     "coreqs": [
-      "MATH-UA 0185",
-      "MATH-UA 0334",
-      "MA-UY 2224",
       "CSCI-UA 0473"
     ]
   },
@@ -34287,10 +34276,7 @@
         ]
       }
     ],
-    "coreqs": [
-      "SPAN-UA 9050",
-      "SPAN-UA 9051"
-    ]
+    "coreqs": []
   },
   {
     "course": "LATC-UA 9606",
@@ -48742,9 +48728,7 @@
         ]
       }
     ],
-    "coreqs": [
-      "MATH-UA 0121"
-    ],
+    "coreqs": [],
     "minGrades": {
       "MATH-UA 0121": "C"
     }
