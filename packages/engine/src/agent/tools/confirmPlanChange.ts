@@ -19,6 +19,7 @@ import {
     computeSlotDiff,
     deriveConsequences,
     buildPlanDiff,
+    PlanMutationSchema,
 } from "../forwardSchedule/planChangeHelpers.js";
 import type {
     PlanChangeOutcome,
@@ -27,45 +28,6 @@ import type {
     SchedulePreferences,
     ForwardSchedule,
 } from "@nyupath/shared";
-
-// ---------------------------------------------------------------------------
-// Re-use the same Zod schema from proposePlanChange (copy to avoid import cycle)
-// ---------------------------------------------------------------------------
-
-const SchedulingPreferencesSchema = z.object({
-    avoidDays: z.array(z.object({ day: z.string(), strict: z.boolean() })).optional(),
-    avoidTimeWindows: z.array(z.object({
-        days: z.array(z.string()),
-        startMin: z.number(),
-        endMin: z.number(),
-        strict: z.boolean(),
-    })).optional(),
-    preferTimeWindows: z.array(z.object({
-        days: z.array(z.string()),
-        startMin: z.number(),
-        endMin: z.number(),
-        weight: z.number(),
-    })).optional(),
-    desiredFreeDay: z.object({ day: z.string(), strict: z.boolean() }).optional(),
-    avoidConsecutiveLongBlocks: z.boolean().optional(),
-}).passthrough();
-
-const PlanMutationSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("pin"), courseId: z.string(), term: z.string() }),
-    z.object({ kind: z.literal("exclude"), courseId: z.string(), term: z.string().optional() }),
-    z.object({ kind: z.literal("swap"), drop: z.string(), add: z.string(), term: z.string() }),
-    z.object({ kind: z.literal("addTerm"), term: z.string() }),
-    z.object({
-        kind: z.literal("loadStyleOverride"),
-        term: z.string().optional(),
-        style: z.enum(["balanced", "frontload", "backload", "light", "heavy"]),
-    }),
-    z.object({ kind: z.literal("bindFreeElective"), slotId: z.string(), courseId: z.string() }),
-    z.object({ kind: z.literal("unbindFreeElective"), slotId: z.string() }),
-    z.object({ kind: z.literal("bindPoolSlot"), slotId: z.string(), courseId: z.string() }),
-    z.object({ kind: z.literal("setSchedulingPreference"), value: SchedulingPreferencesSchema }),
-    z.object({ kind: z.literal("clearSchedulingPreference") }),
-]);
 
 // ---------------------------------------------------------------------------
 // Output type

@@ -5,6 +5,7 @@
  * No I/O, no module state — all functions are pure transformations.
  */
 
+import { z } from "zod";
 import type {
     PlanMutation,
     SchedulePreferences,
@@ -21,6 +22,57 @@ import { notSatisfiedRequirements, walkRequirements } from "../../dpr/schema.js"
 import { meetsGradeThreshold } from "../../dpr/gradeComparison.js";
 import { classifyBalanceDelta, computeBalanceScore } from "./balanceScore.js";
 import { hashDprCourseHistory } from "./reconcile.js";
+
+// ---------------------------------------------------------------------------
+// Shared Zod schemas (used by propose_plan_change + confirm_plan_change)
+// ---------------------------------------------------------------------------
+
+/** Mirrors `SchedulingPreferences` from `@nyupath/shared` (Decision #43). */
+export const SchedulingPreferencesSchema = z.object({
+    avoidDays: z.array(z.object({ day: z.string(), strict: z.boolean() })).optional(),
+    avoidTimeWindows: z.array(z.object({
+        days: z.array(z.string()),
+        startMin: z.number(),
+        endMin: z.number(),
+        strict: z.boolean(),
+    })).optional(),
+    preferTimeWindows: z.array(z.object({
+        days: z.array(z.string()),
+        startMin: z.number(),
+        endMin: z.number(),
+        weight: z.number(),
+    })).optional(),
+    desiredFreeDay: z.object({ day: z.string(), strict: z.boolean() }).optional(),
+    avoidConsecutiveLongBlocks: z.boolean().optional(),
+}).passthrough();
+
+/** Mirrors `PlanMutation` discriminated union from `@nyupath/shared`
+ *  (Decision #23). Single source of truth for both propose + confirm
+ *  tools — adding a new PlanMutation kind requires updating ONLY this
+ *  schema (and the corresponding `applyMutationsToPreferences` switch
+ *  below, where TypeScript's exhaustiveness check will flag the
+ *  default: never branch). */
+export const PlanMutationSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("pin"), courseId: z.string(), term: z.string() }),
+    z.object({ kind: z.literal("exclude"), courseId: z.string(), term: z.string().optional() }),
+    z.object({ kind: z.literal("swap"), drop: z.string(), add: z.string(), term: z.string() }),
+    z.object({ kind: z.literal("addTerm"), term: z.string() }),
+    z.object({
+        kind: z.literal("loadStyleOverride"),
+        term: z.string().optional(),
+        style: z.enum(["balanced", "frontload", "backload", "light", "heavy"]),
+    }),
+    z.object({ kind: z.literal("bindFreeElective"), slotId: z.string(), courseId: z.string() }),
+    z.object({ kind: z.literal("unbindFreeElective"), slotId: z.string() }),
+    z.object({ kind: z.literal("bindPoolSlot"), slotId: z.string(), courseId: z.string() }),
+    z.object({ kind: z.literal("setSchedulingPreference"), value: SchedulingPreferencesSchema }),
+    z.object({ kind: z.literal("clearSchedulingPreference") }),
+]);
+
+/** Top-level input shape: `{ mutations: PlanMutation[] }` with min(1). */
+export const PlanChangeInputSchema = z.object({
+    mutations: z.array(PlanMutationSchema).min(1),
+});
 
 // ---------------------------------------------------------------------------
 // applyMutationsToPreferences — pure left-to-right walk
@@ -93,22 +145,32 @@ export function applyMutationsToPreferences(
             }
             case "loadStyleOverride": {
                 if (m.term) {
-                    // Per-term override
-                    if (!prefs.loadStylePerTerm) prefs.loadStylePerTerm = {};
-                    // The per-term loadStyle is typed as "light" | "heavy" | "balanced"
-                    // but the mutation also allows "frontload" / "backload".
-                    // Cast through the intersection — if an incompatible style arrives,
-                    // store it as-is and let the solver degrade gracefully.
-                    (prefs.loadStylePerTerm as Record<string, string>)[m.term] = m.style;
+                    // Per-term override. SchedulePreferences.loadStylePerTerm
+                    // is typed `Record<string, "light" | "heavy" | "balanced">`
+                    // but the PlanMutation union also allows "frontload" /
+                    // "backload" (which are global-only styles). Reject those
+                    // at the per-term layer and surface a no-op consequence
+                    // instead of silently storing a value the solver will
+                    // misinterpret.
+                    if (m.style === "frontload" || m.style === "backload") {
+                        noOpConsequences.push(
+                            `loadStyleOverride(${m.term}, ${m.style}) is a no-op — ` +
+                            `"frontload" / "backload" are plan-level styles only; per-term overrides accept "light" / "heavy" / "balanced".`,
+                        );
+                    } else {
+                        if (!prefs.loadStylePerTerm) prefs.loadStylePerTerm = {};
+                        prefs.loadStylePerTerm[m.term] = m.style;
+                    }
                 } else {
-                    // Plan-level: only "balanced" | "frontload" | "backload" are valid
-                    // for the global loadStyle field.
+                    // Plan-level: SchedulePreferences.loadStyle is
+                    // "balanced" | "frontload" | "backload". "light" / "heavy"
+                    // are per-term styles only — surface a no-op consequence
+                    // when the agent attempts a global light/heavy override.
                     if (m.style === "light" || m.style === "heavy") {
-                        // These are only valid at per-term level; store anyway.
-                        // The solver will interpret them as per-term overrides
-                        // if it reads loadStylePerTerm; the plan-level field
-                        // has a narrower union. Silently cast.
-                        prefs.loadStyle = m.style as ("balanced" | "frontload" | "backload");
+                        noOpConsequences.push(
+                            `loadStyleOverride(${m.style}) without a term is a no-op — ` +
+                            `"light" / "heavy" are per-term styles; pass a term to apply them.`,
+                        );
                     } else {
                         prefs.loadStyle = m.style;
                     }

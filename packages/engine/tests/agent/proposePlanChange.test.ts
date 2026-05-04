@@ -474,3 +474,80 @@ describe("read-only invariant for propose_plan_change and simulate_alternatives"
         expect(session.forwardSchedule).toBe(originalSchedule);
     });
 });
+
+// ---------------------------------------------------------------------------
+// applyMutationsToPreferences semantics — left-to-right override
+// ---------------------------------------------------------------------------
+
+describe("applyMutationsToPreferences — left-to-right override semantics", () => {
+    it("two pins for the same courseId keep both pins (unique-by-courseId is a Phase 14 Task 6 concern)", async () => {
+        // Decision #23 says later mutations override earlier ones for the
+        // same FIELD. For pins the field is the array itself (each entry
+        // is independent), so two pins land as two distinct entries.
+        // De-duplication, if needed, belongs in solver/Stage-6c (where
+        // the second pin wins because the first pin's slot is already
+        // placed by the time the second pin is evaluated).
+        const session = makeSession({
+            forwardSchedule: makeMinimalFeasibleSchedule(),
+        });
+        const ctx = makeCtx(session);
+
+        await confirmPlanChangeTool.call(
+            {
+                mutations: [
+                    { kind: "pin", courseId: "CSCI-UA 102", term: "2026-fall" },
+                    { kind: "pin", courseId: "CSCI-UA 102", term: "2027-spring" },
+                ],
+            },
+            ctx,
+        );
+
+        const pins = session.schedulePreferences?.pins ?? [];
+        expect(pins.length).toBe(2);
+        expect(pins[0]?.term).toBe("2026-fall");
+        expect(pins[1]?.term).toBe("2027-spring");
+    });
+
+    it("two loadStyleOverride mutations for the SAME term — second wins", async () => {
+        const session = makeSession({
+            forwardSchedule: makeMinimalFeasibleSchedule(),
+        });
+        const ctx = makeCtx(session);
+
+        await confirmPlanChangeTool.call(
+            {
+                mutations: [
+                    { kind: "loadStyleOverride", term: "2027-spring", style: "light" },
+                    { kind: "loadStyleOverride", term: "2027-spring", style: "heavy" },
+                ],
+            },
+            ctx,
+        );
+
+        // The second mutation overrides the first for the same term key.
+        expect(session.schedulePreferences?.loadStylePerTerm?.["2027-spring"]).toBe("heavy");
+    });
+
+    it("plan-level loadStyleOverride with style=light/heavy is a no-op (those styles are per-term only)", async () => {
+        const session = makeSession({
+            forwardSchedule: makeMinimalFeasibleSchedule(),
+        });
+        const ctx = makeCtx(session);
+
+        const result = await proposePlanChangeTool.call(
+            {
+                mutations: [
+                    { kind: "loadStyleOverride", style: "light" },
+                ],
+            },
+            ctx,
+        );
+
+        // Per the helper's switch: plan-level light/heavy emit a no-op
+        // consequence and don't mutate prefs.loadStyle. The consequence
+        // is surfaced so the agent knows the mutation didn't apply.
+        expect(
+            result.consequences.some(c => /no-op/i.test(c) && /light/i.test(c)),
+        ).toBe(true);
+    });
+});
