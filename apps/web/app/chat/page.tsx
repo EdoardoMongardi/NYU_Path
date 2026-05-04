@@ -5,6 +5,8 @@ import styles from "./chat.module.css";
 import { streamChatV2, extractPendingMutationId, type ChatV2Event } from "../../lib/chatV2Client";
 import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
 import { formatDuration } from "../../lib/formatDuration";
+import type { ForwardSchedule } from "@nyupath/shared";
+import ScheduleSidebar from "./scheduleSidebar";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -107,6 +109,8 @@ export default function ChatPage() {
     const [parsedData, setParsedData] = useState<ParsedTranscript | null>(null);
     const [visaStatus, setVisaStatus] = useState<string | null>(null);
     const [graduationTarget, setGraduationTarget] = useState<string | null>(null);
+    const [forwardSchedule, setForwardSchedule] = useState<ForwardSchedule | null>(null);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -298,6 +302,9 @@ export default function ChatPage() {
                     };
                 }));
                 break;
+            case "forward_schedule_update":
+                setForwardSchedule(ev.schedule);
+                break;
             case "validator_block":
                 updateMessage(assistantId, {
                     validatorViolations: ev.violations.map(v => ({
@@ -480,6 +487,15 @@ export default function ChatPage() {
             <header className={styles.header}>
                 <a href="/" className={styles.headerLogo}>🎓 NYU Path</a>
                 <span className={styles.headerBadge}>AI Advisor</span>
+                <button
+                    type="button"
+                    className={styles.scheduleToggle}
+                    onClick={() => setSidebarOpen(o => !o)}
+                    aria-label="Toggle schedule sidebar"
+                    aria-expanded={sidebarOpen}
+                >
+                    📅 Schedule
+                </button>
             </header>
 
             {/* Phase 7-E W10.3 — persistent disclaimer banner.
@@ -723,6 +739,11 @@ export default function ChatPage() {
                     }}
                 />
             </div>
+            <ScheduleSidebar
+                schedule={forwardSchedule}
+                open={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+            />
         </div>
     );
 }

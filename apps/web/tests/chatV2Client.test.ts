@@ -135,6 +135,37 @@ describe("streamChatV2 (Phase 6.5 P-1)", () => {
             { kind: "done", finalText: "ok", modelUsedId: "claude-haiku-4-5-20251001" },
         ]);
     });
+
+    it("parses a forward_schedule_update event and round-trips its payload", async () => {
+        const fakeSchedule = {
+            studentId: "t",
+            homeSchoolId: "cas",
+            graduationTerm: "2027-spring",
+            creditTargetPerSemester: 16,
+            f1Floor: 12,
+            domesticPartTimeFloor: 8,
+            graduationCreditMinimum: 128,
+            degreeCreditsMet: false,
+            semesters: [],
+            dprCourseHistoryHash: "abc",
+            computedAt: 0,
+            feasibility: { feasible: true, constraintViolations: [], placementRationale: {} },
+            state: "valid-clean",
+            balanceScore: 0.9,
+            assumptions: [],
+        } as const;
+        const chunks = [
+            "event: forward_schedule_update\ndata: " + JSON.stringify({ kind: "forward_schedule_update", schedule: fakeSchedule }) + "\n\n",
+            "event: done\ndata: " + JSON.stringify({ kind: "done", finalText: "ok", modelUsedId: "claude-haiku-4-5-20251001" }) + "\n\n",
+        ];
+        installFetch(async () => fakeResponse(chunks));
+        const events: ChatV2Event[] = [];
+        for await (const ev of streamChatV2({ message: "hi", parsedData: {} })) {
+            events.push(ev);
+        }
+        expect(events[0]).toEqual({ kind: "forward_schedule_update", schedule: fakeSchedule });
+        expect(events[1]!.kind).toBe("done");
+    });
 });
 
 describe("extractPendingMutationId", () => {

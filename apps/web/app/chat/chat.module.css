@@ -489,3 +489,161 @@ button.reasoningHeader:focus-visible {
 .reasoningToolText {
     flex: 1 1 auto;
 }
+
+/* ---------- Phase 13 — Schedule sidebar ---------- */
+.scheduleToggle {
+    background: transparent;
+    border: 1px solid var(--border-light);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    font-size: 0.85em;
+    cursor: pointer;
+    margin-left: auto;
+}
+.scheduleToggle:hover { background: var(--bg-secondary); }
+.scheduleToggle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+    border-color: var(--nyu-violet);
+}
+
+.scheduleSidebar {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 380px;
+    background: var(--bg-primary);
+    border-left: 1px solid var(--border-light);
+    overflow-y: auto;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.05);
+    z-index: 50;
+    animation: slideInRight 0.2s ease-out;
+}
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .scheduleSidebar { animation: none; }
+}
+
+.scheduleSidebarHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-light);
+    position: sticky;
+    top: 0;
+    background: var(--bg-primary);
+}
+.scheduleSidebarTitle { font-size: 1rem; font-weight: 600; margin: 0; }
+.scheduleSidebarClose {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1em;
+    padding: 4px 8px;
+    color: var(--text-secondary);
+}
+.scheduleSidebarBody { padding: 12px 20px 24px; }
+.scheduleSidebarMeta { color: var(--text-secondary); font-size: 0.85em; margin: 8px 0 16px 0; }
+.scheduleSidebarEmpty { padding: 24px 20px; color: var(--text-secondary); font-size: 0.9em; }
+
+/* Decision #32 — 4-state banners */
+.scheduleTradeOffsBanner {
+    background: #cfe2ff;
+    border: 1px solid #9ec5fe;
+    color: #084298;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}
+.scheduleTradeOffsBanner ul { margin: 6px 0 0 16px; padding: 0; }
+
+.scheduleInfeasibilityBanner {
+    background: #f8d7da;
+    border: 1px solid #f5c2c7;
+    color: #842029;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}
+.scheduleInfeasibilityBanner ul { margin: 6px 0 0 16px; padding: 0; }
+
+.scheduleStudentPrefBanner {
+    background: #fff3cd;
+    border: 1px solid #ffe69c;
+    color: #664d03;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    margin-bottom: 12px;
+}
+
+.semesterCard {
+    margin-bottom: 16px;
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+}
+.semesterCard.locked {
+    background: rgba(108, 117, 125, 0.04);
+    border-color: rgba(108, 117, 125, 0.18);
+}
+.semesterCardHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+.semesterCardHeader h3 { margin: 0; font-size: 0.95em; font-weight: 600; }
+.semesterCredits { font-size: 0.8em; color: var(--text-secondary); }
+.semesterNotes {
+    list-style: disc;
+    margin: 0 0 8px 16px;
+    font-size: 0.78em;
+    color: #b58000;
+    padding: 0;
+}
+
+.slotList { list-style: none; padding: 0; margin: 0; }
+.slotList li {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 4px 6px;
+    font-size: 0.85em;
+    line-height: 1.4;
+    border-bottom: 1px dashed rgba(0, 0, 0, 0.04);
+    border-radius: 4px;
+}
+.slotList li:last-child { border-bottom: none; }
+
+.slotIcon { flex: 0 0 16px; text-align: center; opacity: 0.7; }
+.slotCourseId { font-family: var(--font-mono); font-weight: 600; }
+.slotTitle, .slotPlaceholderCategory { flex: 1 1 auto; color: var(--text-primary); }
+.slot_placeholder .slotPlaceholderCategory { font-style: italic; color: var(--text-secondary); }
+.slotMeta { flex: 0 0 auto; font-size: 0.8em; color: var(--text-secondary); }
+.slotFlag { color: #b58000; font-size: 0.85em; margin-left: 4px; }
+
+.slot_completed { background: rgba(40, 167, 69, 0.06); }
+.slot_in_progress { background: rgba(255, 193, 7, 0.08); }
+.slot_specific_planned { background: rgba(13, 110, 253, 0.06); }
+.slot_placeholder { background: transparent; }
+
+/* Phase 13 §locked-decision-8 — optional electives (above floor when
+   degree-credit minimum is already met) get a dotted border + faded
+   tone so the student knows they are discretionary. */
+.slotOptional {
+    border: 1px dashed var(--border-light) !important;
+    background: transparent !important;
+}
+.slotOptionalTag {
+    font-style: italic;
+    color: var(--text-tertiary);
+}
