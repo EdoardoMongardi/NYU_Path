@@ -647,3 +647,58 @@ button.reasoningHeader:focus-visible {
     font-style: italic;
     color: var(--text-tertiary);
 }
+
+/* Phase 14 Task 10 — load-style pills + slot popover */
+.loadStylePills { display: flex; gap: 6px; margin-bottom: 16px; }
+.loadStylePill {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    color: var(--text-primary);
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.loadStylePill:hover {
+    background: var(--bg-hover, var(--bg-secondary));
+    border-color: var(--nyu-violet);
+}
+.loadStylePillActive {
+    background: var(--nyu-violet);
+    color: #fff;
+    border-color: var(--nyu-violet);
+}
+.slotClickable {
+    cursor: pointer;
+    position: relative;
+}
+.slotClickable:hover {
+    background: rgba(87, 6, 140, 0.08) !important;
+}
+.slotPopover {
+    position: absolute;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 8px;
+    border-radius: 6px;
+    z-index: 100;
+    min-width: 200px;
+    left: 0;
+    top: 100%;
+    margin-top: 2px;
+}
+.slotPopover button {
+    display: block;
+    background: transparent;
+    border: none;
+    width: 100%;
+    text-align: left;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.85em;
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+.slotPopover button:hover { background: var(--bg-secondary); }

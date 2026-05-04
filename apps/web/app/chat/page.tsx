@@ -392,6 +392,59 @@ export default function ChatPage() {
     };
 
     /**
+     * Phase 14 Task 10 — Load-style proposal.
+     * Injects a user-visible chat message asking the agent to call
+     * `propose_plan_change` with the requested load style. The agent's
+     * tool-use behavior handles the round-trip from here.
+     */
+    const handleProposeLoadStyle = async (style: "balanced" | "frontload" | "backload") => {
+        if (isLoading) return;
+        const text = `Please propose a ${style} load style for my schedule — call propose_plan_change with loadStyle="${style}".`;
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage("assistant", err instanceof Error ? err.message : "Could not propose load style change.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * Phase 14 Task 10 — Slot-level change proposal.
+     * Injects a user-visible chat message describing the desired
+     * slot mutation. The agent's tool-use behavior routes the call
+     * to `propose_plan_change` with appropriate args.
+     */
+    const handleProposeSlotChange = async (
+        slot: import("@nyupath/shared").ScheduleSlot,
+        action: "lock" | "replace" | "drop" | "pin",
+    ) => {
+        if (isLoading) return;
+        const slotId =
+            slot.kind === "specific_planned" || slot.kind === "completed" || slot.kind === "in_progress"
+                ? slot.courseId
+                : `placeholder(${slot.category})`;
+        const actionText: Record<string, string> = {
+            lock: `lock the slot for ${slotId} as-is`,
+            replace: `replace the slot for ${slotId} with a different course`,
+            drop: `drop the slot for ${slotId}`,
+            pin: `pin ${slotId} to a different term`,
+        };
+        const text = `Please ${actionText[action]} — call propose_plan_change with the appropriate args for this change.`;
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage("assistant", err instanceof Error ? err.message : "Could not propose slot change.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
      * Two-step profile-update confirm affordance (§7.2). Sends a
      * follow-up user message that asks the agent to invoke
      * `confirm_profile_update` with the pending id. The agent's
@@ -748,6 +801,8 @@ export default function ChatPage() {
                 schedule={forwardSchedule}
                 open={sidebarOpen}
                 onClose={() => setSidebarOpen(false)}
+                onProposeLoadStyle={handleProposeLoadStyle}
+                onProposeSlotChange={handleProposeSlotChange}
             />
         </div>
     );
