@@ -101,6 +101,14 @@ export interface ToolSession {
      *  Decision #32 mandates these NEVER write to forwardSchedule so the
      *  agent doesn't endorse an illegal plan. */
     studentDraftPlan?: import("@nyupath/shared").ForwardSchedule;
+
+    /** Phase 14 — student-driven preferences for the forward planner
+     *  (load styles, pins, exclusions, summer/J-term opt-in, plus the
+     *  defined-but-unused-at-Phase-14 SchedulingPreferences slot per
+     *  Decision #43). Mutated by `confirm_plan_change`; read by
+     *  `solveForwardSchedule` when computing the next plan. In-memory;
+     *  lost on session end. */
+    schedulePreferences?: import("@nyupath/shared").SchedulePreferences;
 }
 
 export type ValidationResult =
