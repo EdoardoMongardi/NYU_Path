@@ -279,14 +279,21 @@ export default function ChatPage() {
             case "thinking":
                 setMessages(prev => prev.map(m => {
                     if (m.id !== assistantId) return m;
-                    // Insert a paragraph break the FIRST time real thinking
-                    // arrives on a message that already has some text (from
-                    // synthesized fallback sentences fired earlier in the
-                    // turn). Adjacent thinking deltas just concatenate.
-                    const sep = (!m.hasRealThinking && m.thinkingText) ? "\n\n" : "";
+                    if (!m.hasRealThinking) {
+                        // Phase 13 §8c — first real thinking event. The
+                        // synthesized tool-sentence narration (if any) was
+                        // a fallback; real reasoning replaces it. Clear and
+                        // start fresh so the user doesn't see both.
+                        return {
+                            ...m,
+                            thinkingText: ev.text,
+                            thinkingRevealed: 0, // restart the typewriter on the new text
+                            hasRealThinking: true,
+                        };
+                    }
                     return {
                         ...m,
-                        thinkingText: (m.thinkingText ?? "") + sep + ev.text,
+                        thinkingText: (m.thinkingText ?? "") + ev.text,
                         hasRealThinking: true,
                     };
                 }));

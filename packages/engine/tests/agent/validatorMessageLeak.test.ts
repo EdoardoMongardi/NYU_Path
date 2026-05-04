@@ -79,7 +79,12 @@ describe("validator-replay messages do not leak into user-facing content", () =>
         // Turn 1: model emits thinking mentioning the validator complaint,
         // then a text reply that triggers the validator.
         // Turn 2 (replay): model emits clean thinking + clean reply.
-        // Expected: ONLY the turn-2 thinking_delta events are yielded.
+        //
+        // Phase 12.5 Task 3: turn-1 thinking is suppressed (buffer discard).
+        // Phase 13 §8b: turn-2 (replay turn) thinking is ALSO suppressed
+        // (isReplayTurn flag). On replay turns the model often narrates
+        // its self-correction in the open — that monologue is internal
+        // and must not reach the user. Only the final text_delta flows.
 
         const leakyThinking = "The validator is catching several issues: ungrounded_number found.";
         const cleanThinking = "I should look up the course count properly.";
@@ -102,7 +107,7 @@ describe("validator-replay messages do not leak into user-facing content", () =>
                 { type: "text_delta", text: "You have 8 free electives available." },
                 { type: "done", completion: rejectCompletion },
             ],
-            // Turn 2 — replay, clean
+            // Turn 2 — replay (isReplayTurn=true; thinking suppressed)
             [
                 { type: "thinking_delta", text: cleanThinking },
                 { type: "text_delta", text: "Let me verify that for you." },
@@ -125,13 +130,14 @@ describe("validator-replay messages do not leak into user-facing content", () =>
         const thinkingEvents = events.filter((e) => e.type === "thinking_delta") as Array<{ type: "thinking_delta"; text: string }>;
         const thinkingTexts = thinkingEvents.map((e) => e.text).join(" ");
 
-        // The leaky thinking from the rejected turn must NOT appear.
+        // Phase 12.5: The leaky thinking from the rejected turn must NOT appear.
         expect(thinkingTexts).not.toMatch(/the validator is catching/i);
         expect(thinkingTexts).not.toMatch(/ungrounded_number/i);
         expect(thinkingTexts).not.toMatch(/the validator (is|caught|flagged)/i);
 
-        // The clean thinking from the accepted replay turn MUST appear.
-        expect(thinkingTexts).toContain(cleanThinking);
+        // Phase 13 §8b: The replay turn's thinking is ALSO suppressed.
+        // No thinking_delta events should be emitted at all across both turns.
+        expect(thinkingEvents).toHaveLength(0);
 
         // The final text_delta must be from the accepted reply.
         const textEvents = events.filter((e) => e.type === "text_delta") as Array<{ type: "text_delta"; text: string }>;
