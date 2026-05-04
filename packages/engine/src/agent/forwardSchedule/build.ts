@@ -15,6 +15,7 @@ import type { ToolSession } from "../tool.js";
 import type { ForwardSchedule } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import { walkRequirements, notSatisfiedRequirements } from "../../dpr/schema.js";
+import { meetsGradeThreshold } from "../../dpr/gradeComparison.js";
 import { solveForwardSchedule } from "./solver.js";
 import {
     runGraduationPathValidator,
@@ -79,7 +80,13 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
         const key = `${row.subject} ${row.catalogNbr}`;
         if (row.type === "IP") {
             coursesInProgress.add(key);
-        } else if (row.grade && row.grade !== "W" && row.grade !== "WD" && row.grade !== "F") {
+            continue;
+        }
+        // Use the canonical grade comparator so non-standard NYU codes
+        // (I, NR, WF, AU, etc.) fail closed — same semantics reconcile.ts
+        // uses for "completed" detection. Raw inequality on a hand-listed
+        // negative-grade set would silently accept these codes.
+        if (row.grade && meetsGradeThreshold(row.grade, "D")) {
             coursesTaken.add(key);
         }
     }

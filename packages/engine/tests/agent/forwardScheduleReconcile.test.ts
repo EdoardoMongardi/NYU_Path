@@ -516,11 +516,64 @@ describe("reconcileWithDpr — state re-derived after reconciliation", () => {
         expect(result.hashChanged).toBe(true);
         // The validator is re-run; state should reflect the validator's assessment
         expect(["valid-clean", "valid-with-trade-offs", "infeasible-draft"]).toContain(result.schedule.state);
-        // Specifically: the new DPR has no IP rows, empty requirement groups → no failing axes
-        // The IP assumption is still in the schedule (reconcile doesn't strip assumptions)
-        // but with 128 credits met and no semesters, validator should pass all axes
-        // and emit valid-clean (no IP assumptions in semesters after reconcile).
         // The result.schedule.state must be deterministic.
         expect(typeof result.schedule.state).toBe("string");
+    });
+
+    // Regression: assumptions[] for courses now completed in newDpr must
+    // be pruned. Pre-fix, a stale IP_COURSE_COMPLETION assumption for a
+    // course the registrar has marked passed would persist, surfacing a
+    // false caveat ("assuming X completes IP") to the agent.
+    it("prunes IP_COURSE_COMPLETION assumptions for courses completed in newDpr", () => {
+        const oldDpr = makeDpr({
+            courseHistory: [
+                { term: "2026 Fall", subject: "CSCI-UA", catalogNbr: "421", courseTitle: "OS", grade: null, units: 4, type: "IP" },
+            ],
+        });
+        const oldHash = hashDprCourseHistory(oldDpr);
+        const schedule = makeSchedule([], oldHash, "valid-with-trade-offs");
+        schedule.assumptions = [
+            {
+                type: "IP_COURSE_COMPLETION",
+                courseId: "CSCI-UA 421",
+                consequenceIfFalse: "graduation delayed",
+                cascadingSlots: [],
+                contingencyPlanAvailable: false,
+            },
+            // Add a second IP assumption for a course NOT in the new DPR — must persist
+            {
+                type: "IP_COURSE_COMPLETION",
+                courseId: "MATH-UA 250",
+                consequenceIfFalse: "downstream linear-algebra slots shift",
+                cascadingSlots: [],
+                contingencyPlanAvailable: false,
+            },
+        ];
+
+        // newDpr: CSCI-UA 421 now completed (EN, A grade); MATH-UA 250 absent
+        const newDpr = makeDpr({
+            courseHistory: [
+                { term: "2026 Fall", subject: "CSCI-UA", catalogNbr: "421", courseTitle: "OS", grade: "A", units: 4, type: "EN" },
+            ],
+        });
+
+        const programRulesMin: ReconcileArgs["programRules"] = {
+            degreeCreditMinimum: 128,
+            residencyMinCredits: null,
+            majorCreditMinimum: null,
+            minorCreditMinimum: null,
+            upperLevelMinCredits: null,
+            schoolCoreMinCredits: null,
+            graduationTargetTerm: "2027-spring",
+        };
+
+        const result = reconcileWithDpr({ schedule, newDpr, programRules: programRulesMin });
+
+        expect(result.hashChanged).toBe(true);
+        const ipCourseIds = result.schedule.assumptions
+            .filter(a => a.type === "IP_COURSE_COMPLETION")
+            .map(a => (a as { courseId: string }).courseId);
+        expect(ipCourseIds).not.toContain("CSCI-UA 421");
+        expect(ipCourseIds).toContain("MATH-UA 250");
     });
 });

@@ -7,8 +7,11 @@
  *   - specific_planned → in_progress when the DPR shows IP
  *   - placeholder → removed         when its satisfiesRules[] rId is now in DPR coursesUsed
  *
- * After all slot replacements, re-run runGraduationPathValidator so
- * ForwardSchedule.state and assumptions[] stay correct.
+ * After all slot replacements:
+ *   - re-run runGraduationPathValidator → refresh ForwardSchedule.state
+ *   - prune IP_COURSE_COMPLETION assumptions for courses now completed
+ *     in the new DPR (otherwise the agent would surface a stale caveat
+ *     for a course the registrar has marked passed).
  */
 
 import { createHash } from "node:crypto";
@@ -209,11 +212,22 @@ export function reconcileWithDpr(args: ReconcileArgs): ReconcileResult {
         return { ...sem, slots: newSlots, plannedCredits };
     });
 
-    // Build the reconciled schedule with updated hash + semesters
+    // Drop stale IP_COURSE_COMPLETION assumptions whose courseId is now
+    // present in the DPR's completed set — the validator re-run refreshes
+    // `state`, but `assumptions[]` is preserved data and would otherwise
+    // surface a false caveat ("assuming X completes IP") for a course the
+    // DPR now marks as passed. Strip those entries proactively so the
+    // post-reconciliation schedule's caveat surface matches reality.
+    const prunedAssumptions = schedule.assumptions.filter(
+        a => !(a.type === "IP_COURSE_COMPLETION" && completedByKey.has(a.courseId)),
+    );
+
+    // Build the reconciled schedule with updated hash + semesters + pruned assumptions
     const reconciled: ForwardSchedule = {
         ...schedule,
         semesters: newSemesters,
         dprCourseHistoryHash: newHash,
+        assumptions: prunedAssumptions,
     };
 
     // Re-run the graduation path validator to get a fresh state + update it
