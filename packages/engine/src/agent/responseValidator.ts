@@ -218,10 +218,16 @@ function checkGrounding(ctx: ValidatorContext): Violation[] {
         if (groundCorpus.includes(claim)) return true;
         const claimVal = parseFloat(claim);
         if (!Number.isFinite(claimVal)) return false;
+        // Use an epsilon comparison rather than strict equality. The
+        // motivating integer cases (12 + 4 = 16) work either way, but
+        // strict === fails for decimal arithmetic — `0.1 + 0.2 !== 0.3`
+        // in IEEE-754, which would falsely flag GPA-change claims like
+        // "your GPA rises by 0.3 (was 3.1, now 3.4)" as ungrounded.
+        const EPS = 1e-9;
         for (let i = 0; i < numbersArr.length; i++) {
             for (let j = 0; j < numbersArr.length; j++) {
-                if (numbersArr[i]! + numbersArr[j]! === claimVal) return true;
-                if (numbersArr[i]! - numbersArr[j]! === claimVal) return true;
+                if (Math.abs(numbersArr[i]! + numbersArr[j]! - claimVal) < EPS) return true;
+                if (Math.abs(numbersArr[i]! - numbersArr[j]! - claimVal) < EPS) return true;
             }
         }
         return false;
