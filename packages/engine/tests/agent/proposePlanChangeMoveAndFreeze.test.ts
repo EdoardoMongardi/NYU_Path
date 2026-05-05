@@ -6,8 +6,8 @@
  *  - pin freeze:false places the course but does NOT add to pins[].
  *  - pin freeze:true behaves identically to omitting freeze.
  *  - pin omitting freeze writes to pins[] (default-true semantics).
- *  - move drops from fromTerm + does NOT write to pins[] in a single
- *    atomic mutation pass.
+ *  - move records the helper-level exclusion and does NOT write to pins[];
+ *    the to-term placement is asserted at the route layer (Phase 17 Task B).
  *  - move with non-existent course in fromTerm still produces a
  *    PlanChangeOutcome (no exception); the helper-level effect is the
  *    new exclusion entry.
