@@ -147,6 +147,12 @@ export type {
     SchedulingPreferenceCheck,
 } from "./sectionMaterialization/types.js";
 
+// Phase 17 Task D follow-up — exposed so the /api/plan/stage2 route
+// can run the section-materialization pipeline directly per term in
+// `futureTerms[]` without spinning up the agent loop.
+export { materializeSections } from "./sectionMaterialization/materialize.js";
+export type { MaterializeArgs } from "./sectionMaterialization/materialize.js";
+
 export { OpenAIEngineClient, toOpenAIMessage } from "./clients/openaiClient.js";
 export type { OpenAIClientOptions } from "./clients/openaiClient.js";
 export { AnthropicEngineClient, toAnthropicMessage } from "./clients/anthropicClient.js";
