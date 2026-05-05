@@ -20,6 +20,7 @@ import {
     buildPlanDiff,
     PlanMutationSchema,
 } from "../forwardSchedule/planChangeHelpers.js";
+import { explainPlanDiff } from "../forwardSchedule/explainPlanDiff.js";
 import type {
     ForwardSchedule,
     PlanChangeOutcome,
@@ -34,6 +35,17 @@ import type {
 
 interface ProposePlanChangeOutput extends PlanChangeOutcome {
     planDiff?: PlanDiff;
+    /**
+     * Phase 17 — deterministic confirm-bubble template rendered from
+     * `(planDiff, mutations[0])`. Plain English; preserves every
+     * course code, term, and credit number verbatim. The route layer
+     * surfaces this as the fast-path explanation; an optional LLM
+     * polish call (Phase 17 Task D) may replace it later. Always
+     * derived from the FIRST mutation in the input array — multi-
+     * mutation batches show the first operation's template (the
+     * route layer can request additional renders if needed).
+     */
+    explanation: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,6 +101,7 @@ export const proposePlanChangeTool = buildTool({
                 diff: { added: [], removed: [] },
                 consequences: ["No forward plan found. Call plan_forward_degree first."],
                 conflicts: [{ kind: "no_plan", detail: "session.forwardSchedule is absent" }],
+                explanation: "No forward plan found. Call plan_forward_degree first.",
             };
         }
 
@@ -142,12 +155,21 @@ export const proposePlanChangeTool = buildTool({
             detail: v.detail,
         }));
 
+        // Phase 17 — deterministic confirm-bubble template. Use the
+        // first mutation in the batch as the "headline" mutation. The
+        // route layer (Phase 17 Task B) can call explainPlanDiff again
+        // for any subsequent mutation if it wants per-mutation copy.
+        const mutations = input.mutations as PlanMutation[];
+        const firstMutation = mutations[0]!;
+        const explanation = explainPlanDiff(planDiff, firstMutation);
+
         return {
             feasible: solverOutput.feasibility.feasible,
             diff,
             consequences,
             conflicts: conflicts.length > 0 ? conflicts : undefined,
             planDiff,
+            explanation,
         };
     },
     summarizeResult(output) {
