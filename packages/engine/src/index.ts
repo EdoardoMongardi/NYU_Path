@@ -106,6 +106,11 @@ export {
     searchAvailabilityTool,
     // Phase 16 Task B — Update-DPR route invokes this programmatically.
     planForwardDegreeTool,
+    // Phase 17 Task B — deterministic plan-action routes invoke these
+    // programmatically (no agent loop) for the sidebar's Add/Swap/
+    // Drop/Lock/Move/Confirm verbs.
+    proposePlanChangeTool,
+    confirmPlanChangeTool,
 } from "./agent/index.js";
 export type {
     AgentTurnOptions,

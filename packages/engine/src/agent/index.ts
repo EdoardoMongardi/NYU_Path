@@ -27,6 +27,12 @@ export {
     // Phase 16 Task B — exposed so the Update-DPR route can re-plan
     // programmatically without having to spin up the full agent loop.
     planForwardDegreeTool,
+    // Phase 17 Task B — exposed so the deterministic plan-action
+    // routes (/api/plan/add|swap|drop|lock|move|confirm) can run the
+    // structural validation + persist pipeline without going through
+    // the agent loop.
+    proposePlanChangeTool,
+    confirmPlanChangeTool,
 } from "./registry.js";
 
 export { createSemanticCourseSearchFn } from "./tools/semanticCourseSearch.js";

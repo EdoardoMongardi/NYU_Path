@@ -370,6 +370,80 @@ describe("propose_plan_change — move mutation (Phase 17)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// unpin mutation (Phase 17 Task B): helper-level semantics
+// ---------------------------------------------------------------------------
+
+describe("applyMutationsToPreferences — unpin mutation (Phase 17 Task B)", () => {
+    it("removes the matching (courseId, term) entry from pins[]", () => {
+        const base: SchedulePreferences = {
+            pins: [
+                { courseId: "CSCI-UA 421", term: "2027-spring" },
+                { courseId: "MATH-UA 343", term: "2026-fall" },
+            ],
+        };
+        const m: PlanMutation = { kind: "unpin", courseId: "CSCI-UA 421", term: "2027-spring" };
+        const { prefs } = applyMutationsToPreferences(base, [m]);
+        expect(prefs.pins).toBeDefined();
+        expect(prefs.pins!.find(p => p.courseId === "CSCI-UA 421")).toBeUndefined();
+        // Other pins survive untouched.
+        expect(prefs.pins!.find(p => p.courseId === "MATH-UA 343")).toBeDefined();
+    });
+
+    it("is a no-op when no matching pin exists (no exception, no spurious entries)", () => {
+        const base: SchedulePreferences = {
+            pins: [{ courseId: "MATH-UA 343", term: "2026-fall" }],
+        };
+        const m: PlanMutation = { kind: "unpin", courseId: "DOES-NOT-EXIST 999", term: "2027-spring" };
+        const { prefs } = applyMutationsToPreferences(base, [m]);
+        expect(prefs.pins).toEqual([{ courseId: "MATH-UA 343", term: "2026-fall" }]);
+    });
+
+    it("is a no-op when pins[] is undefined", () => {
+        const base: SchedulePreferences = {};
+        const m: PlanMutation = { kind: "unpin", courseId: "CSCI-UA 421", term: "2027-spring" };
+        const { prefs } = applyMutationsToPreferences(base, [m]);
+        // pins[] should remain undefined (no spurious empty array creation).
+        expect(prefs.pins).toBeUndefined();
+    });
+
+    it("only matches on the (courseId, term) tuple — same course in different term survives", () => {
+        const base: SchedulePreferences = {
+            pins: [
+                { courseId: "CSCI-UA 421", term: "2027-spring" },
+                { courseId: "CSCI-UA 421", term: "2027-fall" },
+            ],
+        };
+        const m: PlanMutation = { kind: "unpin", courseId: "CSCI-UA 421", term: "2027-spring" };
+        const { prefs } = applyMutationsToPreferences(base, [m]);
+        expect(prefs.pins).toHaveLength(1);
+        expect(prefs.pins![0]!.term).toBe("2027-fall");
+    });
+});
+
+// ---------------------------------------------------------------------------
+// unpin mutation: end-to-end through confirm_plan_change
+// ---------------------------------------------------------------------------
+
+describe("confirm_plan_change — unpin mutation (Phase 17 Task B)", () => {
+    it("removes the matching pin from session.schedulePreferences.pins[]", async () => {
+        const session = makeSession();
+        // Seed a pin that the unpin should clear.
+        session.schedulePreferences = {
+            pins: [{ courseId: "CSCI-UA 421", term: "2027-spring" }],
+        };
+        const ctx = makeCtx(session);
+
+        await confirmPlanChangeTool.call(
+            { mutations: [{ kind: "unpin", courseId: "CSCI-UA 421", term: "2027-spring" }] },
+            ctx,
+        );
+
+        const pins = session.schedulePreferences?.pins ?? [];
+        expect(pins.find(p => p.courseId === "CSCI-UA 421")).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // 2-mutation [swap, swap] cross-term batch (Phase 17 atomicity)
 // ---------------------------------------------------------------------------
 
