@@ -22,11 +22,17 @@ import type { PlanMutation } from "@nyupath/shared";
 
 export const runtime = "nodejs";
 
+// May 2026 review: tighten the discriminator. The two schemas are
+// non-overlapping (single-term has `drop`+`add`+`term`; cross-term has
+// `exchanges`), but a body containing BOTH would silently match the
+// single-term branch (zod strips unknown keys before union resolution).
+// `.strict()` on each schema rejects extra keys so the union truly
+// fails on a mixed body.
 const SingleTermSwapSchema = z.object({
     drop: z.string().min(1),
     add: z.string().min(1),
     term: z.string().min(1),
-});
+}).strict();
 
 const CrossTermExchangeSchema = z.object({
     exchanges: z.array(z.object({
@@ -35,7 +41,7 @@ const CrossTermExchangeSchema = z.object({
         bCourseId: z.string().min(1),
         bTerm: z.string().min(1),
     })).min(1),
-});
+}).strict();
 
 const InputSchema = z.union([SingleTermSwapSchema, CrossTermExchangeSchema]);
 type Input = z.infer<typeof InputSchema>;
