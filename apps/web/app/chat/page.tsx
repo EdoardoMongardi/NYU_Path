@@ -811,20 +811,24 @@ export default function ChatPage() {
             <header className={styles.header}>
                 <a href="/" className={styles.headerLogo}>🎓 NYU Path</a>
                 <span className={styles.headerBadge}>AI Advisor</span>
-                {/* Phase 13 Task 9 — show the schedule toggle only after the
-                    solver has produced a forward plan; before that there's
-                    nothing to reveal and the affordance would be confusing. */}
-                {forwardSchedule !== null && (
-                    <button
-                        type="button"
-                        className={styles.scheduleToggle}
-                        onClick={() => setSidebarOpen(o => !o)}
-                        aria-label="Toggle schedule sidebar"
-                        aria-expanded={sidebarOpen}
-                    >
-                        📅 Schedule
-                    </button>
-                )}
+                {/* Schedule toggle is ALWAYS visible (May 2026 post-mortem
+                    fix). Even before a forward plan exists, the sidebar
+                    surfaces the empty state ("Ask me what to take next
+                    semester to compute one"), the Update DPR / Clear
+                    affordances, and — once a DPR is loaded — the
+                    historical + IP term cards. The Phase 13 gate that
+                    hid the button until `forwardSchedule !== null` left
+                    students with no obvious way to inspect what data
+                    the agent already had. */}
+                <button
+                    type="button"
+                    className={styles.scheduleToggle}
+                    onClick={() => setSidebarOpen(o => !o)}
+                    aria-label="Toggle schedule sidebar"
+                    aria-expanded={sidebarOpen}
+                >
+                    📅 Schedule
+                </button>
             </header>
 
             {/* Phase 7-E W10.3 — persistent disclaimer banner.

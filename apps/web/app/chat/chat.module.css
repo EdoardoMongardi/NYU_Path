@@ -611,15 +611,12 @@ button.reasoningHeader:focus-visible {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
-    /* Phase 16 Task D — pin the term header while the sidebar body
-       scrolls. `top: 0` inside .scheduleSidebar (overflow-y: auto)
-       keeps the card title at the top of the viewport. The opaque
-       background prevents slot rows from bleeding through. */
-    position: sticky;
-    top: 0;
-    background: var(--bg-primary);
     padding: 4px 0;
-    z-index: 1;
+    /* Phase 16 Task D's per-card sticky-header was REVERTED in the May
+       2026 post-mortem — when the outer .scheduleSidebarHeader is also
+       sticky (as it has been since Phase 13), the two compete for the
+       top of the viewport and visually overlap each subsequent card
+       AND the outer header. Sticky stays only on the outer wrapper. */
 }
 .semesterCardHeader h3 { margin: 0; font-size: 0.95em; font-weight: 600; }
 .semesterCredits {

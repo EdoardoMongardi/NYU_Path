@@ -241,6 +241,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     // build a stub via the transcript builder for the legacy tests.
     const student = parsedDpr
         ? buildStudentProfileFromDpr(parsedDpr, {
+            // RC: studentIdOverride MUST track the auth subject so every
+            // persistence write keys on the SAME id the restore route
+            // reads from. Without this, tools persist under the slugified
+            // DPR-name id while restore reads from auth.sub → split rows
+            // in `students` / `forward_schedules` / `chat_messages`.
+            // See May 2026 post-mortem (DB-split bug).
+            studentIdOverride: userId,
             ...(body.visaStatus === "f1" || body.visaStatus === "domestic"
                 ? { visaStatus: body.visaStatus }
                 : {}),
@@ -282,6 +289,36 @@ export async function POST(req: NextRequest): Promise<Response> {
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
     };
+
+    // RC: persist the parsed DPR + profile at session bootstrap so it
+    // survives a refresh / new login. Previously, persistence only
+    // landed when the user confirmed a profile mutation (the
+    // `confirm_profile_update` two-step flow). Initial onboarding
+    // never triggers that flow, so `students.profile` and
+    // `students.parsed_dpr` stayed null and `/api/session/restore`
+    // returned an empty payload on every refresh.
+    //
+    // No-throw: persistence failures don't break the live turn.
+    if (parsedDpr && userId !== "anonymous") {
+        try {
+            await stores.profileStore.persistMutation(
+                student,
+                {
+                    pendingMutationId: `bootstrap-${Date.now()}`,
+                    field: "homeSchool" as const, // discriminator unused at restore — we just need a row
+                    before: null,
+                    after: student.homeSchool,
+                    confirmedAt: new Date().toISOString(),
+                },
+                parsedDpr,
+            );
+        } catch (err) {
+            console.warn(
+                `[v2 route] bootstrap persistMutation failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+
     // Phase 7-E + Phase 8 calendar fix — temporal context.
     // currentTerm + nextTerm come from the wall clock + NYU calendar
     // (independent of the DPR), so "next semester" resolves correctly

@@ -151,6 +151,19 @@ export interface BuildSessionFromDprOptions {
     declaredProgramsOverride?: ProgramDeclaration[];
     /** Override homeSchool (defaults to derived from CAS/Tisch/Tandon/etc. label). */
     homeSchoolOverride?: string;
+    /**
+     * Override student.id (the canonical identifier used as a Postgres FK
+     * across `students`, `forward_schedules`, `schedule_preferences`,
+     * `chat_messages`, `audit_log`, and `session_summaries`).
+     *
+     * MUST be set to the auth-session subject (`auth.sub`) when the user
+     * is logged in. When omitted, the legacy slugified-name fallback
+     * (`deriveStudentId(report)`) runs — but that diverges from the auth
+     * studentId and silently splits persistence across two phantom
+     * student rows. The May 2026 post-mortem traced the "schedule
+     * disappears on refresh" bug to exactly this divergence.
+     */
+    studentIdOverride?: string;
 }
 
 export function buildStudentProfileFromDpr(
@@ -218,7 +231,7 @@ export function buildStudentProfileFromDpr(
     const genericTransferCredits = transferRows.reduce((sum, r) => sum + r.units, 0);
 
     return {
-        id: deriveStudentId(report),
+        id: opts.studentIdOverride ?? deriveStudentId(report),
         catalogYear,
         homeSchool,
         declaredPrograms,

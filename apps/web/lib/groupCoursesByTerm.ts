@@ -1,23 +1,36 @@
 // ============================================================
-// groupCoursesByTerm — Phase 16 Task C
+// groupCoursesByTerm — Phase 16 Task C (rewritten May 2026 post-mortem)
 // ============================================================
 // Pure helper that produces a chronologically-ordered render plan
-// for the schedule sidebar. Combines:
+// for the schedule sidebar.
 //
-//   - StudentProfile.coursesTaken (history)        → "completed" slots
-//   - StudentProfile.currentSemester               → "in_progress" slots
-//   - ForwardSchedule.semesters (planner output)   → "specific_planned"
-//                                                    + "placeholder" slots
-//   - DegreeProgressReport.courseHistory[type=TE]  → priorCredits payload
+// SOURCE OF TRUTH: when a parsed `DegreeProgressReport` is available,
+// historical AND in-progress term cards are derived directly from
+// `dpr.courseHistory` (so we get real titles + real types — not the
+// synthesized `grade="C"` placeholder `buildStudentProfileFromDpr`
+// stamps on IP rows for audit consumption). Future cards still come
+// from `forwardSchedule.semesters`.
 //
-// Phase 14/15 emitted only the future-only forward plan; Phase 16 Task C's
-// goal is to surface the ENTIRE degree timeline so a returning student
-// sees their history (locked), the in-flight term (editable), and the
-// proposed future (editable) in one place.
+// FALLBACK: when no DPR is available (legacy transcript-only flow),
+// fall back to `StudentProfile.coursesTaken` + `currentSemester` —
+// less accurate (no real course titles, IP rows render as completed
+// with placeholder grades) but the legacy path is being removed
+// alongside Phase 16 cohort migration.
 //
 // Cardinal Rule §2.1: every entry traces back to a DPR / StudentProfile
 // field; this helper performs no LLM synthesis and no fabrication. When
 // upstream data is missing we omit the entry rather than guess.
+//
+// May 2026 post-mortem fixes:
+//  - Two-card Fall-2026 duplicate: dedup now compares NORMALIZED term
+//    keys (handles "2026 Fall", "Fall 2026", "2026-fall" interchangeably)
+//    instead of literal strings.
+//  - Spring 2026 C-grade leakage: IP-tagged rows render under their own
+//    in-progress card with grade="IP", regardless of the synthesized "C"
+//    on `coursesTaken`.
+//  - Course title duplication ("CSCI-UA 4 CSCI-UA 4"): historical and
+//    IP slots now carry `row.courseTitle` from the DPR row instead of
+//    falling back to the courseId.
 // ============================================================
 
 import type {
@@ -65,8 +78,8 @@ export interface GroupedDegree {
 export function groupCoursesByTerm(args: {
     student: StudentProfile | null;
     forwardSchedule: ForwardSchedule | null;
-    /** Raw DPR for extracting TE rows. Optional — if absent, no prior
-     *  credits surface in the UI. */
+    /** Raw DPR for extracting TE rows + historical/IP titles + types.
+     *  Optional — if absent, we fall back to `student.coursesTaken`. */
     dpr?: DegreeProgressReport | null;
 }): GroupedDegree {
     const { student, forwardSchedule, dpr } = args;
@@ -80,61 +93,27 @@ export function groupCoursesByTerm(args: {
         }
     }
 
-    // ---- 2. Historical buckets (from coursesTaken) -------------------
-    // Skip the term that matches `currentSemester.term` so IP rows don't
-    // double-render as a "completed" history card AND an "in_progress"
-    // current-term card. (buildStudentProfileFromDpr stamps grade="C" on
-    // IP rows so the audit can see them; that placeholder grade isn't
-    // meant for the sidebar.)
-    const currentTerm = student?.currentSemester?.term;
-    const historicalRows: CourseTaken[] = (student?.coursesTaken ?? []).filter(
-        (c) => c.semester !== currentTerm,
-    );
+    // ---- 2. Historical + IP term buckets -----------------------------
+    // Preferred path: walk dpr.courseHistory so we get real titles + the
+    // accurate type discriminator (EN vs IP). Fallback path uses
+    // student.coursesTaken when no DPR is available.
+    const dprTerms: TermBucket[] = dpr
+        ? buildTermsFromDpr(dpr)
+        : buildTermsFromCoursesTaken(student?.coursesTaken ?? [], student?.currentSemester);
 
-    const historicalByTerm = new Map<string, CourseTaken[]>();
-    for (const row of historicalRows) {
-        const list = historicalByTerm.get(row.semester) ?? [];
-        list.push(row);
-        historicalByTerm.set(row.semester, list);
-    }
-
-    const historicalTerms: TermBucket[] = Array.from(historicalByTerm.entries())
-        .map(([term, rows]) => ({
-            term,
-            locked: true,
-            slots: rows.map(courseTakenToCompletedSlot),
-        }));
-
-    // ---- 3. Current-term bucket (from currentSemester) ---------------
-    let currentBucket: TermBucket | null = null;
-    if (student?.currentSemester && student.currentSemester.courses.length > 0) {
-        currentBucket = {
-            term: student.currentSemester.term,
-            locked: false,
-            slots: student.currentSemester.courses.map((c) => ({
-                kind: "in_progress" as const,
-                courseId: c.courseId,
-                title: c.title,
-                credits: c.credits,
-            })),
-        };
-    }
-
-    // ---- 4. Future-term buckets (from forwardSchedule) ---------------
-    // De-dup against history + current. The Phase 13 forward planner
-    // sometimes emits the immediate term as the first slot of
-    // `forwardSchedule.semesters`; when it does, the IP rendering
-    // (driven by `currentSemester`) wins and the future-card duplicate
-    // is dropped.
-    const seenTerms = new Set<string>();
-    for (const t of historicalTerms) seenTerms.add(t.term);
-    if (currentBucket) seenTerms.add(currentBucket.term);
+    // ---- 3. Future-term buckets (from forwardSchedule) ---------------
+    // De-dup against history + IP using a NORMALIZED term key so
+    // "2026 Fall" / "Fall 2026" / "2026-fall" all collapse to one bucket.
+    // The IP/historical rendering wins; the future-card duplicate is
+    // dropped.
+    const seenKeys = new Set<string>();
+    for (const t of dprTerms) seenKeys.add(normalizeTermKey(t.term));
 
     const futureTerms: TermBucket[] = [];
     for (const sem of forwardSchedule?.semesters ?? []) {
-        if (seenTerms.has(sem.term)) continue;
-        // Avoid intra-`semesters` duplicates too (defensive).
-        seenTerms.add(sem.term);
+        const key = normalizeTermKey(sem.term);
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
         futureTerms.push({
             term: sem.term,
             locked: sem.locked,
@@ -142,12 +121,8 @@ export function groupCoursesByTerm(args: {
         });
     }
 
-    // ---- 5. Chronological merge --------------------------------------
-    const allTerms: TermBucket[] = [
-        ...historicalTerms,
-        ...(currentBucket ? [currentBucket] : []),
-        ...futureTerms,
-    ];
+    // ---- 4. Chronological merge --------------------------------------
+    const allTerms: TermBucket[] = [...dprTerms, ...futureTerms];
     allTerms.sort((a, b) => compareTerms(a.term, b.term));
 
     return { priorCredits, terms: allTerms };
@@ -157,6 +132,107 @@ export function groupCoursesByTerm(args: {
 // helpers
 // ---------------------------------------------------------------------
 
+/**
+ * Build term buckets directly from the DPR's course-history block. Each
+ * term gets its OWN bucket; rows are classified as completed (`type=EN`
+ * with a real grade) or in-progress (`type=IP`). When a single term has
+ * a mix (rare — usually a re-take), we treat the whole card as IP so the
+ * student doesn't see a phantom "passed" status next to a re-enrolled
+ * row.
+ */
+function buildTermsFromDpr(dpr: DegreeProgressReport): TermBucket[] {
+    const byTerm = new Map<string, DPRCourseRow[]>();
+    for (const row of dpr.courseHistory) {
+        // TE rows surface in the Prior Credits card, not a term card.
+        if (row.type === "TE") continue;
+        // Synthetic catch-all rows (subject="ELECTIVE") are credit-bucket
+        // counters with no real course; skip them in the term cards.
+        if (row.subject.toUpperCase() === "ELECTIVE") continue;
+        const list = byTerm.get(row.term) ?? [];
+        list.push(row);
+        byTerm.set(row.term, list);
+    }
+
+    const buckets: TermBucket[] = [];
+    for (const [term, rows] of byTerm.entries()) {
+        const isIP = rows.some((r) => r.type === "IP");
+        buckets.push({
+            term,
+            locked: !isIP, // historical = locked; IP = editable
+            slots: rows.map((r) => dprRowToSlot(r, isIP)),
+        });
+    }
+    return buckets;
+}
+
+function dprRowToSlot(row: DPRCourseRow, isIPTerm: boolean): ScheduleSlot {
+    const courseId = `${row.subject} ${row.catalogNbr}`.replace(/\s+/g, " ").trim();
+    const title = row.courseTitle?.trim() || courseId;
+    if (isIPTerm) {
+        return {
+            kind: "in_progress",
+            courseId,
+            title,
+            credits: row.units,
+        };
+    }
+    return {
+        kind: "completed",
+        courseId,
+        title,
+        credits: row.units,
+        // Use the real DPR grade. Empty/missing falls through to a literal
+        // "—" character so the renderer's grade column never crashes on
+        // a null read.
+        grade: row.grade ?? "—",
+    };
+}
+
+/**
+ * Legacy fallback for the transcript-only onboarding path (no DPR).
+ * Same shape as the DPR-driven builder but produces less-accurate slots
+ * (no real titles; IP rows render as completed with whatever grade
+ * `buildStudentProfileV2` stamped). Removed once cohort A retires the
+ * transcript flow.
+ */
+function buildTermsFromCoursesTaken(
+    coursesTaken: CourseTaken[],
+    currentSemester?: { term: string; courses: Array<{ courseId: string; title: string; credits: number }> },
+): TermBucket[] {
+    const currentTerm = currentSemester?.term;
+    const historicalRows = coursesTaken.filter((c) => c.semester !== currentTerm);
+    const byTerm = new Map<string, CourseTaken[]>();
+    for (const row of historicalRows) {
+        const list = byTerm.get(row.semester) ?? [];
+        list.push(row);
+        byTerm.set(row.semester, list);
+    }
+    const historical: TermBucket[] = Array.from(byTerm.entries()).map(([term, rows]) => ({
+        term,
+        locked: true,
+        slots: rows.map((c) => ({
+            kind: "completed" as const,
+            courseId: c.courseId,
+            title: c.courseId,
+            credits: c.credits ?? 0,
+            grade: c.grade,
+        })),
+    }));
+    const current: TermBucket[] = currentSemester && currentSemester.courses.length > 0
+        ? [{
+            term: currentSemester.term,
+            locked: false,
+            slots: currentSemester.courses.map((c) => ({
+                kind: "in_progress" as const,
+                courseId: c.courseId,
+                title: c.title,
+                credits: c.credits,
+            })),
+        }]
+        : [];
+    return [...historical, ...current];
+}
+
 function makePriorCreditEntry(row: DPRCourseRow): PriorCreditEntry {
     const isElective = row.subject.toUpperCase() === "ELECTIVE";
     const courseId = isElective
@@ -165,33 +241,52 @@ function makePriorCreditEntry(row: DPRCourseRow): PriorCreditEntry {
             : "Elective Credit")
         : `${row.subject} ${row.catalogNbr}`.replace(/\s+/g, " ").trim();
     const entry: PriorCreditEntry = { courseId, credits: row.units };
-    // Preserve a light source hint when the courseTitle differs from the
-    // courseId — useful for Task 16.D's tooltip ("AP Calculus AB → MATH-UA
-    // 121"). For now we keep it strictly as the row's own courseTitle.
     if (!isElective && row.courseTitle && row.courseTitle.trim() !== courseId) {
         entry.source = row.courseTitle.trim();
     }
     return entry;
 }
 
-function courseTakenToCompletedSlot(c: CourseTaken): ScheduleSlot {
-    return {
-        kind: "completed",
-        courseId: c.courseId,
-        title: c.courseId, // CourseTaken doesn't carry a title; reuse the id
-        credits: c.credits ?? 0,
-        grade: c.grade,
+/**
+ * Normalize a term string to a canonical key for dedup. Accepts the
+ * DPR's "2024 Fall" / "2026 Spr", the planner's "2026-fall", or the
+ * inverted "Fall 2026". Returns "{year}-{season}" lowercased.
+ *
+ * RC: the literal-string dedup that shipped with Task C missed the
+ * "2026 Fall" vs "Fall 2026" pair, producing two cards for the same
+ * term. Normalizing fixes that without changing the canonical term
+ * value displayed in the UI.
+ */
+export function normalizeTermKey(term: string): string {
+    const SEASON_CANON: Record<string, string> = {
+        january: "january",
+        "j-term": "january",
+        jterm: "january",
+        spring: "spring",
+        spr: "spring",
+        summer: "summer",
+        sum: "summer",
+        fall: "fall",
     };
+    const dash = term.match(/^(\d{4})-([a-z]+)$/i);
+    if (dash) {
+        return `${dash[1]}-${SEASON_CANON[dash[2]!.toLowerCase()] ?? dash[2]!.toLowerCase()}`;
+    }
+    const space = term.match(/(\d{4})\s+([A-Za-z-]+)/) ?? term.match(/([A-Za-z-]+)\s+(\d{4})/);
+    if (space) {
+        const [g1, g2] = [space[1]!, space[2]!];
+        const yearStr = /^\d{4}$/.test(g1) ? g1 : g2;
+        const seasonStr = /^\d{4}$/.test(g1) ? g2 : g1;
+        const canon = SEASON_CANON[seasonStr.toLowerCase()] ?? seasonStr.toLowerCase();
+        return `${yearStr}-${canon}`;
+    }
+    return term.toLowerCase();
 }
 
 /**
  * Term comparator that handles BOTH the DPR's "YYYY Season" shape (e.g.
  * "2024 Fall", "2026 Spr") AND the planner's "YYYY-season" shape (e.g.
  * "2026-fall"). Returns negative if `a` precedes `b`, positive otherwise.
- *
- * Mirrors the small comparator inline in `apps/web/lib/buildSession.ts`
- * but extends it to recognize both case variants because the sidebar
- * mixes terms from both sources.
  */
 export function compareTerms(a: string, b: string): number {
     const SEASON_ORDER: Record<string, number> = {
@@ -204,7 +299,6 @@ export function compareTerms(a: string, b: string): number {
         fall: 3,
     };
     const parse = (t: string): { year: number; season: number } => {
-        // Try "YYYY-season" first.
         const dash = t.match(/^(\d{4})-([a-z]+)$/i);
         if (dash) {
             return {
@@ -212,7 +306,6 @@ export function compareTerms(a: string, b: string): number {
                 season: SEASON_ORDER[dash[2]!.toLowerCase()] ?? 0,
             };
         }
-        // Fall back to "YYYY Season" / "Season YYYY".
         const space = t.match(/(\d{4})\s+([A-Za-z-]+)/) ?? t.match(/([A-Za-z-]+)\s+(\d{4})/);
         if (space) {
             const [g1, g2] = [space[1]!, space[2]!];
