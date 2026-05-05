@@ -1241,3 +1241,44 @@ button.reasoningHeader:focus-visible {
    Lock verb makes a separate icon-button redundant. Removed in the
    May 2026 code-review pass to drop the dead style declarations. The
    popover label "Lock / Unlock" carries the affordance instead.) */
+
+/* Phase 17 Task D — sidebar-bottom toast. Appears when ANY slot's
+   spinner has been on for 600ms+; surfaces "Validating plan change…"
+   so the student knows the click registered when the round-trip is
+   slower than typical. Pinned to the sidebar's bottom edge so it
+   never displaces term cards. */
+.sidebarToastContainer {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 12px;
+    background: linear-gradient(
+        to top,
+        var(--bg-primary) 0%,
+        var(--bg-primary) 60%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    z-index: 5;
+    pointer-events: none;
+}
+
+.sidebarToast {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--nyu-violet-faint);
+    border: 1px solid var(--nyu-violet-glow);
+    border-radius: var(--radius-md);
+    color: var(--nyu-violet);
+    font-size: 0.82rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+    animation: fadeInUp 0.2s ease-out both;
+}
+
+.sidebarToast::before {
+    content: "⏳";
+    font-size: 0.95em;
+}
