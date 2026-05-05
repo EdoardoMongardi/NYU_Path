@@ -2,13 +2,36 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import styles from "./chat.module.css";
-import { streamChatV2, extractPendingMutationId, type ChatV2Event, type ForwardMaterializationPayload } from "../../lib/chatV2Client";
+import {
+    streamChatV2,
+    extractPendingMutationId,
+    streamPlanActionPolish,
+    streamPlanActionStage2,
+    type ChatV2Event,
+    type ForwardMaterializationPayload,
+} from "../../lib/chatV2Client";
 import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
 import { formatDuration } from "../../lib/formatDuration";
 import type { ForwardSchedule, StudentProfile } from "@nyupath/shared";
 import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@nyupath/engine";
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
 import ScheduleSidebar from "./scheduleSidebar";
+import {
+    classifyPlanActionOutcome,
+    bubbleSlotKey,
+    bubbleHasButtons,
+    bubbleHasOverrideButton,
+    initBubbleState,
+    applyPolishEvent,
+    applyStage2Event,
+    type PlanActionBubbleState,
+    type PlanActionBubbleKind,
+} from "../../lib/planActionBubbleHelpers";
+import {
+    planConfirm,
+    type PlanActionResult,
+    type PlanActionRouteResponse,
+} from "../../lib/planActionClient";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -49,6 +72,26 @@ interface Message {
     role: "user" | "assistant";
     content: string;
     timestamp: Date;
+    /** Phase 17 Task D follow-up — discriminator for the new
+     *  `plan_action_bubble` kind. `undefined` = a regular chat
+     *  bubble (the existing render path); `"plan_action_bubble"`
+     *  swaps the render to the bubble + buttons block. */
+    kind?: "plan_action_bubble";
+    /** Phase 17 Task D follow-up — populated only when
+     *  `kind === "plan_action_bubble"`. Holds the bubble's
+     *  template/polished text, the verb, the pendingMutationId
+     *  (Confirm / Override-anyway target), the bubble category
+     *  (clean | trade_offs | soft_refusal | hard_refusal), and the
+     *  Stage 2 enrichment Map. Mutated by the polish + Stage 2 SSE
+     *  reducers. */
+    bubble?: PlanActionBubbleState;
+    /** Phase 17 Task D follow-up — verb that triggered the bubble
+     *  (used for analytics + the bubble's lead-in). */
+    bubbleVerb?: "add" | "swap" | "drop" | "lock" | "move";
+    /** Phase 17 Task D follow-up — true once Confirm / Keep-as-is /
+     *  Override-anyway has fired so we can disable the buttons +
+     *  hide them while the confirm round-trip is in flight. */
+    bubbleResolved?: boolean;
     /** Per-message tool-invocation log (rendered inline above the bubble) */
     toolStatuses?: ToolStatus[];
     /** Per-message validator violations (rendered as a warning chip below the bubble) */
@@ -637,6 +680,203 @@ export default function ChatPage() {
         }
     };
 
+    // ============================================================
+    // Phase 17 Task D follow-up — plan_action_bubble lifecycle
+    // ============================================================
+    // Sidebar verbs (Add / Swap / Drop / Lock / Move) call deterministic
+    // /api/plan/<verb> routes; the sidebar surfaces the route response
+    // to the page via `onPlanActionResult`. The page injects ONE
+    // `plan_action_bubble` Message into the chat thread for non-clean
+    // outcomes (clean applies stay silent — the sidebar's own state
+    // re-render is the only feedback). The bubble carries Confirm +
+    // Keep-as-is buttons (and Override-anyway for soft refusals); a
+    // background polish stream (gated on
+    // NEXT_PUBLIC_PLAN_CHANGE_LLM_POLISH=1) replaces the deterministic
+    // template text once Anthropic Haiku returns; Stage 2 streams
+    // FOSE-section enrichment per future term inside the data window.
+
+    /** Patch a single Message by id while leaving the rest untouched. */
+    const patchMessage = useCallback((id: string, patch: Partial<Message>) => {
+        setMessages(prev => prev.map(m => (m.id === id ? { ...m, ...patch } : m)));
+    }, []);
+
+    /**
+     * Patch the bubble payload of a single Message — convenience
+     * wrapper around `patchMessage` so reducers don't have to
+     * spread the full Message wrapper themselves.
+     */
+    const patchBubble = useCallback((messageId: string, mutate: (b: PlanActionBubbleState) => PlanActionBubbleState) => {
+        setMessages(prev => prev.map(m => {
+            if (m.id !== messageId) return m;
+            if (!m.bubble) return m;
+            const next = mutate(m.bubble);
+            if (next === m.bubble) return m;
+            return { ...m, bubble: next };
+        }));
+    }, []);
+
+    /**
+     * Spawn the polish + Stage 2 fetches for a freshly-injected bubble.
+     * Both fetches are fire-and-forget — they update the bubble via
+     * the patchBubble reducer as events stream in.
+     */
+    const spawnBubbleEnrichers = useCallback((messageId: string, bubble: PlanActionBubbleState) => {
+        // ---- LLM polish (env-flag gated, non-clean only) ----
+        const polishEnabled = process.env.NEXT_PUBLIC_PLAN_CHANGE_LLM_POLISH === "1";
+        if (polishEnabled && bubble.kind !== "clean") {
+            (async () => {
+                try {
+                    for await (const ev of streamPlanActionPolish({
+                        slotKey: bubble.slotKey,
+                        templateText: bubble.text,
+                    })) {
+                        patchBubble(messageId, (b) => applyPolishEvent(b, ev));
+                    }
+                } catch (err) {
+                    // Best-effort — keep the deterministic template
+                    // intact on failure.
+                    console.error("[plan_action_bubble] polish stream failed:", err);
+                }
+            })();
+        }
+
+        // ---- Stage 2 enrichment (only when futureTerms non-empty) ----
+        if (bubble.futureTerms.length > 0) {
+            (async () => {
+                try {
+                    for await (const ev of streamPlanActionStage2({
+                        slotKey: bubble.slotKey,
+                        futureTerms: bubble.futureTerms,
+                    })) {
+                        patchBubble(messageId, (b) => applyStage2Event(b, ev));
+                    }
+                } catch (err) {
+                    console.error("[plan_action_bubble] stage2 stream failed:", err);
+                }
+            })();
+        }
+    }, [patchBubble]);
+
+    /**
+     * Sidebar callback wired through `<ScheduleSidebar onPlanActionResult>`.
+     * Decides whether to inject a bubble based on the route response's
+     * shape (clean → silent; trade-offs / refusal → bubble).
+     */
+    const handlePlanActionResult = useCallback((
+        verb: "add" | "swap" | "drop" | "lock" | "move",
+        result: PlanActionResult<PlanActionRouteResponse>,
+    ): void => {
+        if (!result.ok) {
+            // Route layer surfaced an error (401/409/500/etc). The
+            // sidebar already logs to the console; surface a brief
+            // assistant-bubble so the user sees something happened.
+            const friendly = result.status === 0
+                ? `Network error during ${verb}: ${result.error}`
+                : `Plan-${verb} failed (${result.status}): ${result.error}`;
+            const failureMsg: Message = {
+                id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+                role: "assistant",
+                content: friendly,
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, failureMsg]);
+            setTimeout(scrollToBottom, 50);
+            return;
+        }
+        const kind: PlanActionBubbleKind = classifyPlanActionOutcome(result.data);
+        if (kind === "clean") {
+            // Spec: clean apply ≈ 70% of clicks → silent commit, no
+            // bubble. The sidebar's own Stage-1 spinner clears
+            // synchronously when the route returns; nothing else to
+            // do here.
+            return;
+        }
+        // Build the bubble Message + insert.
+        const bubble = initBubbleState(result.data);
+        const id = `bubble-${result.data.pendingMutationId}`;
+        const msg: Message = {
+            id,
+            role: "assistant",
+            content: bubble.text,
+            timestamp: new Date(),
+            kind: "plan_action_bubble",
+            bubble,
+            bubbleVerb: verb,
+            bubbleResolved: false,
+        };
+        setMessages(prev => [...prev, msg]);
+        setTimeout(scrollToBottom, 50);
+        spawnBubbleEnrichers(id, bubble);
+    }, [spawnBubbleEnrichers]);
+
+    /** Confirm — apply the staged mutation. */
+    const handleBubbleConfirm = useCallback(async (messageId: string, pendingMutationId: string): Promise<void> => {
+        // Lock buttons immediately so a double-click can't double-submit.
+        patchMessage(messageId, { bubbleResolved: true });
+        try {
+            const result = await planConfirm({ pendingMutationId });
+            if (!result.ok) {
+                // Re-enable buttons so the user can retry; surface a
+                // brief inline note via patchMessage.
+                patchMessage(messageId, {
+                    bubbleResolved: false,
+                    content: `Confirm failed (${result.status}): ${result.error}`,
+                });
+                return;
+            }
+            // Persist state — the sidebar reads forwardSchedule on the
+            // next render. Keep the bubble in the resolved state so the
+            // chat shows what just happened (buttons hidden).
+            if (result.data.forwardSchedule) {
+                setForwardSchedule(result.data.forwardSchedule);
+            }
+            patchMessage(messageId, {
+                bubbleResolved: true,
+                content: "✓ Applied.",
+            });
+        } catch (err) {
+            patchMessage(messageId, {
+                bubbleResolved: false,
+                content: `Confirm failed: ${err instanceof Error ? err.message : String(err)}`,
+            });
+        }
+    }, [patchMessage]);
+
+    /** Keep-as-is — discard the bubble without applying. */
+    const handleBubbleKeepAsIs = useCallback((messageId: string): void => {
+        patchMessage(messageId, {
+            bubbleResolved: true,
+            content: "Kept the plan as-is.",
+        });
+    }, [patchMessage]);
+
+    /** Override-anyway — apply with `force: true` (Decision #32). */
+    const handleBubbleOverrideAnyway = useCallback(async (messageId: string, pendingMutationId: string): Promise<void> => {
+        patchMessage(messageId, { bubbleResolved: true });
+        try {
+            const result = await planConfirm({ pendingMutationId, force: true });
+            if (!result.ok) {
+                patchMessage(messageId, {
+                    bubbleResolved: false,
+                    content: `Override failed (${result.status}): ${result.error}`,
+                });
+                return;
+            }
+            if (result.data.forwardSchedule) {
+                setForwardSchedule(result.data.forwardSchedule);
+            }
+            patchMessage(messageId, {
+                bubbleResolved: true,
+                content: "⚠ Override applied — plan saved as student-preferred-invalid-draft.",
+            });
+        } catch (err) {
+            patchMessage(messageId, {
+                bubbleResolved: false,
+                content: `Override failed: ${err instanceof Error ? err.message : String(err)}`,
+            });
+        }
+    }, [patchMessage]);
+
     /**
      * Phase 16 Task B — Update-DPR sidebar affordance.
      * POSTs the new PDF to /api/onboard/refresh-dpr; the route
@@ -867,7 +1107,115 @@ export default function ChatPage() {
 
             {/* Messages */}
             <div className={styles.messages}>
-                {messages.map((msg, i) => (
+                {messages.map((msg, i) => {
+                    // Phase 17 Task D follow-up — plan_action_bubble has its
+                    // own render block. Returns early so the regular
+                    // assistant-bubble path below doesn't double-render the
+                    // text + reasoning columns.
+                    if (msg.kind === "plan_action_bubble" && msg.bubble) {
+                        const buttons = bubbleHasButtons(msg.bubble.kind);
+                        const showOverride = bubbleHasOverrideButton(msg.bubble.kind);
+                        const stage2Entries = Array.from(msg.bubble.stage2.values());
+                        // While the bubble is unresolved, the bubble text
+                        // is the source of truth (the polish reducer writes
+                        // to it). Once the user clicks Confirm / Keep-as-is /
+                        // Override-anyway, `msg.content` carries the
+                        // resolved-state caption ("✓ Applied." etc).
+                        const displayedText = msg.bubbleResolved ? msg.content : msg.bubble.text;
+                        return (
+                            <div
+                                key={msg.id}
+                                className={`${styles.messageBubble} ${styles.assistant}`}
+                                style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}
+                                data-kind="plan_action_bubble"
+                                data-bubble-kind={msg.bubble.kind}
+                            >
+                                <div className={styles.avatar}>🎓</div>
+                                <div className={styles.bubbleContent}>
+                                    <div
+                                        className={styles.bubbleText}
+                                        data-bubble-text="true"
+                                        dangerouslySetInnerHTML={{
+                                            __html: renderMarkdown(displayedText),
+                                        }}
+                                    />
+                                    {stage2Entries.length > 0 && (
+                                        <ul
+                                            data-bubble-stage2="true"
+                                            style={{
+                                                margin: "8px 0 0",
+                                                padding: "0 0 0 16px",
+                                                fontSize: "0.85em",
+                                                color: "#444",
+                                            }}
+                                        >
+                                            {stage2Entries.map((s, idx) => (
+                                                <li key={idx}>{s.message}</li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                    {buttons && !msg.bubbleResolved && (
+                                        <div
+                                            data-bubble-buttons="true"
+                                            style={{
+                                                display: "flex",
+                                                gap: 8,
+                                                marginTop: 10,
+                                                flexWrap: "wrap",
+                                            }}
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleBubbleConfirm(msg.id, msg.bubble!.pendingMutationId)}
+                                                style={{
+                                                    padding: "6px 12px",
+                                                    borderRadius: 6,
+                                                    background: "#0d6efd",
+                                                    color: "white",
+                                                    border: "none",
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                Confirm
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleBubbleKeepAsIs(msg.id)}
+                                                style={{
+                                                    padding: "6px 12px",
+                                                    borderRadius: 6,
+                                                    background: "#e9ecef",
+                                                    color: "#212529",
+                                                    border: "none",
+                                                    cursor: "pointer",
+                                                }}
+                                            >
+                                                Keep as-is
+                                            </button>
+                                            {showOverride && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleBubbleOverrideAnyway(msg.id, msg.bubble!.pendingMutationId)}
+                                                    style={{
+                                                        padding: "6px 12px",
+                                                        borderRadius: 6,
+                                                        background: "#fff",
+                                                        color: "#dc3545",
+                                                        border: "1px solid #dc3545",
+                                                        cursor: "pointer",
+                                                    }}
+                                                >
+                                                    Override anyway
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    return (
                     <div
                         key={msg.id}
                         className={`${styles.messageBubble} ${styles[msg.role]}`}
@@ -995,7 +1343,8 @@ export default function ChatPage() {
                             )}
                         </div>
                     </div>
-                ))}
+                    );
+                })}
 
                 {/* Legacy v1 loader — only shown for onboarding turns
                     that go through the JSON `/api/chat` route (which
@@ -1081,6 +1430,7 @@ export default function ChatPage() {
                 onClose={() => setSidebarOpen(false)}
                 onProposeLoadStyle={handleProposeLoadStyle}
                 onProposeSlotChange={handleProposeSlotChange}
+                onPlanActionResult={handlePlanActionResult}
                 onConfirmCombination={handleConfirmSectionCombination}
                 onRefreshDpr={handleRefreshDpr}
                 onClearAll={handleClearAll}

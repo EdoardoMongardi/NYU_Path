@@ -138,7 +138,13 @@ export type {
     MaterializationResult,
     MaterializedSemester,
     SchedulingPreferenceCheck,
+    // Phase 17 Task D follow-up — `MaterializeArgs` shape used by the
+    // /api/plan/stage2 route to call the orchestrator directly.
+    MaterializeArgs,
 } from "./agent/index.js";
+
+// Phase 17 Task D follow-up — exposed for the /api/plan/stage2 route.
+export { materializeSections } from "./agent/index.js";
 
 // Phase 7-E: Degree Progress Report (DPR) module — the canonical
 // audit ingestion path. The DPR is a structured rendering of NYU's

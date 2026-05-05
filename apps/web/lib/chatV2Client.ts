@@ -69,8 +69,14 @@ export type PlanActionBubbleSseEvent =
     | { kind: "plan_action_explanation_polish_chunk"; slotKey: string; deltaText: string }
     | { kind: "plan_action_explanation_polish_done"; slotKey: string; polishedText: string }
     | { kind: "plan_action_explanation_polish_error"; slotKey: string; message: string }
-    /** Stage 2 enrichment carried by /api/plan/stage2. */
-    | { kind: "plan_action_stage2_enrichment"; slotKey: string; status: "pending" | "ok" | "warn" | "unavailable"; message: string };
+    /** Stage 2 enrichment carried by /api/plan/stage2. One event per
+     *  term in the request's `futureTerms[]`. The `message` field
+     *  starts with `[<term>] ` so a downstream UI reducer can route
+     *  per-term without re-parsing the term out of it. */
+    | { kind: "plan_action_stage2_enrichment"; slotKey: string; term?: string; status: "pending" | "ok" | "warn" | "unavailable"; message: string }
+    /** Terminator for the Stage 2 stream. Emitted after every term
+     *  in the input list has produced an enrichment event. */
+    | { kind: "plan_action_stage2_done"; slotKey: string };
 
 export interface ChatV2Request {
     message: string;
@@ -272,5 +278,90 @@ function parseBubbleBlock(block: string): PlanActionBubbleSseEvent | null {
         return JSON.parse(dataLine) as PlanActionBubbleSseEvent;
     } catch {
         return null;
+    }
+}
+
+/**
+ * Phase 17 Task D follow-up — POST to /api/plan/stage2 with the
+ * `futureTerms[]` from a propose-stage response. The route runs
+ * `materializeSections` per term in the background and streams one
+ * `plan_action_stage2_enrichment` event per term, terminated by a
+ * `plan_action_stage2_done` event. The slotKey echoed on every
+ * event matches `bubbleSlotKey(pendingMutationId)` so the
+ * page-side reducer can route the signal to the right bubble.
+ */
+export async function* streamPlanActionStage2(
+    body: { slotKey: string; futureTerms: string[] },
+    init: { endpoint?: string; signal?: AbortSignal } = {},
+): AsyncGenerator<PlanActionBubbleSseEvent, void, void> {
+    const endpoint = init.endpoint ?? "/api/plan/stage2";
+    let response: Response;
+    try {
+        response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            credentials: "same-origin",
+            signal: init.signal,
+        });
+    } catch (err) {
+        // Stage 2 failures are best-effort — surface as a single
+        // "unavailable" enrichment so the bubble can show the
+        // section-data-unavailable signal rather than nothing.
+        yield {
+            kind: "plan_action_stage2_enrichment",
+            slotKey: body.slotKey,
+            status: "unavailable",
+            message: `[stage2] section data unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        };
+        return;
+    }
+    if (response.status === 204) return;
+    if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+            const j = await response.json();
+            if (j?.error) detail = j.error;
+        } catch { /* fall through */ }
+        yield {
+            kind: "plan_action_stage2_enrichment",
+            slotKey: body.slotKey,
+            status: "unavailable",
+            message: `[stage2] ${detail}`,
+        };
+        return;
+    }
+    if (!response.body) return;
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let sep = buffer.indexOf("\n\n");
+            while (sep !== -1) {
+                const block = buffer.slice(0, sep);
+                buffer = buffer.slice(sep + 2);
+                const ev = parseBubbleBlock(block);
+                if (ev) yield ev;
+                sep = buffer.indexOf("\n\n");
+            }
+        }
+        buffer += decoder.decode();
+        if (buffer.trim().length > 0) {
+            const ev = parseBubbleBlock(buffer);
+            if (ev) yield ev;
+        }
+    } catch (err) {
+        if (init.signal?.aborted) return;
+        yield {
+            kind: "plan_action_stage2_enrichment",
+            slotKey: body.slotKey,
+            status: "unavailable",
+            message: `[stage2] ${err instanceof Error ? err.message : String(err)}`,
+        };
     }
 }
