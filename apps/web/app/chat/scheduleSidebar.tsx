@@ -330,11 +330,22 @@ export default function ScheduleSidebar({
         const key = slotKey(slot, term);
         markSlotPending(key, true);
         try {
-            // Determine current locked state — Phase 17 Task A's pin
-            // freeze flag is the source of truth, but the slot type does
-            // not yet expose it; we toggle by inferring "locked" when
-            // the user explicitly Locks (the plan-action route accepts
-            // either value and is idempotent).
+            // TODO(Phase 17 Task D): the popover label says "Lock /
+            // Unlock" but this handler ALWAYS sends locked: true — the
+            // toggle is currently one-way. The blocker is that
+            // ScheduleSlot doesn't yet expose the freeze flag (Task A
+            // landed it on PlanMutation.pin but not on the slot shape
+            // the sidebar consumes), so we can't read `slot.isLocked`
+            // to compute `!isLocked`. Task D must:
+            //   (a) plumb the freeze flag from SchedulePreferences.pins[]
+            //       onto each ScheduleSlot at sidebar-render time
+            //       (probably in groupCoursesByTerm), then
+            //   (b) flip this `locked: true` to `!slot.isLocked` so
+            //       the toggle actually toggles.
+            // Without (a) + (b), the popover label is aspirational —
+            // the toggle currently only LOCKS, never UNLOCKS.
+            // The plan-action route is idempotent, so always-locking
+            // is harmless until the toggle is wired correctly.
             const result = await planLock({ courseId, term, locked: true });
             announceResult("lock", result);
             onProposeSlotChange?.(slot, "lock");

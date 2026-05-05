@@ -1236,18 +1236,8 @@ button.reasoningHeader:focus-visible {
     to { transform: rotate(360deg); }
 }
 
-/* Phase 17 — Lock-icon affordance click target. Reuses the layout
-   slot from `.slotLockIcon` but with hover + cursor so the student
-   knows it is interactive when the slot is editable. */
-.slotLockToggle {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    font-size: 0.78em;
-    line-height: 1;
-    opacity: 0.6;
-    transition: opacity 0.15s;
-}
-.slotLockToggle:hover { opacity: 1; }
-.slotLockToggleActive { opacity: 1; color: var(--nyu-violet); }
+/* (Phase 17 Task C originally added .slotLockToggle / .slotLockToggleActive
+   here as a click-target for an inline lock icon, but the popover-driven
+   Lock verb makes a separate icon-button redundant. Removed in the
+   May 2026 code-review pass to drop the dead style declarations. The
+   popover label "Lock / Unlock" carries the affordance instead.) */
