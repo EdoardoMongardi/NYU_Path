@@ -6,6 +6,15 @@ import type { DegreeProgressReport } from "@nyupath/engine";
 import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import { formatPatterns } from "../../lib/formatMeetingPatterns";
 import { groupCoursesByTerm, type PriorCreditEntry } from "../../lib/groupCoursesByTerm";
+import {
+    planAdd,
+    planSwap,
+    planDrop,
+    planLock,
+    planMove,
+    type PlanActionResult,
+    type PlanActionRouteResponse,
+} from "../../lib/planActionClient";
 import styles from "./chat.module.css";
 
 // Phase 16 Task B — env-flag-gated Clear button. The flag is read at
@@ -23,14 +32,39 @@ const LOAD_STYLES: Array<{ value: "balanced" | "frontload" | "backload"; label: 
     { value: "backload", label: "Backload", tooltip: "Propose lighter semesters early, heavier ones later" },
 ];
 
-// Actions available on each slot popover
-type SlotAction = "lock" | "replace" | "drop" | "pin";
-const SLOT_ACTIONS: Array<{ action: SlotAction; label: string }> = [
-    { action: "lock", label: "Lock as-is" },
-    { action: "replace", label: "Replace with a different course" },
-    { action: "drop", label: "Drop this slot" },
-    { action: "pin", label: "Pin to a different term" },
+/**
+ * Phase 17 Task C — 4-verb slot popover model. The legacy `pin` verb
+ * is dropped; "Add" lives on the term card (not the slot popover) so
+ * Phase 17 routes a clean 4-verb surface here. The submenu-bearing
+ * verbs (`swap`, `move`) keep `submenu: true` so the popover knows to
+ * render an inline picker instead of firing the route on first click.
+ */
+type SlotVerb = "swap" | "drop" | "lock" | "move";
+const SLOT_VERBS: Array<{ verb: SlotVerb; label: string; submenu: boolean }> = [
+    { verb: "swap", label: "Swap with…", submenu: true },
+    { verb: "drop", label: "Drop", submenu: false },
+    { verb: "lock", label: "Lock / Unlock", submenu: false },
+    { verb: "move", label: "Move to…", submenu: true },
 ];
+
+/**
+ * Legacy verb-set surfaced via the optional `onProposeSlotChange`
+ * callback. Kept as a no-op shim because the previous page-side
+ * handler is still wired in `page.tsx` (Task D will retire the shim
+ * when it wires the inline confirm bubble through the new SSE event).
+ */
+type LegacySlotAction = "lock" | "replace" | "drop" | "pin";
+
+/**
+ * Phase 17 Task C — slot-with-term tuple used by drag-to-move /
+ * drag-to-exchange handlers. The drag source carries the slot's
+ * courseId + the bucket's term so the drop handler can construct the
+ * route call without re-walking the grouped term buckets.
+ */
+interface DragSlotRef {
+    courseId: string;
+    term: string;
+}
 
 interface ScheduleSidebarProps {
     schedule: ForwardSchedule | null;
@@ -63,7 +97,28 @@ interface ScheduleSidebarProps {
     open: boolean;
     onClose: () => void;
     onProposeLoadStyle?: (style: "balanced" | "frontload" | "backload") => void;
-    onProposeSlotChange?: (slot: ScheduleSlot, action: SlotAction) => void;
+    /**
+     * Phase 14 — legacy chat-mediated slot-change callback. Phase 17
+     * Task C wires the deterministic engine routes directly inside
+     * the sidebar, so this prop is now optional. When provided, it is
+     * still invoked with the legacy verb set (`lock | replace | drop |
+     * pin`) AFTER the deterministic call resolves — gives existing
+     * page wiring (and the upstream chat-thread message kind) a
+     * consistent transition path until Task D's inline confirm bubble
+     * lands.
+     */
+    onProposeSlotChange?: (slot: ScheduleSlot, action: LegacySlotAction) => void;
+    /**
+     * Phase 17 Task C — fired AFTER each deterministic plan-action
+     * route (Add / Swap / Drop / Lock / Move) returns. The page can
+     * use this to refresh local schedule state, append a chat-thread
+     * message, or stage Task D's inline confirm bubble. Optional so
+     * existing tests + Storybook fixtures don't have to wire it.
+     */
+    onPlanActionResult?: (
+        verb: "add" | "swap" | "drop" | "lock" | "move",
+        result: PlanActionResult<PlanActionRouteResponse>,
+    ) => void;
     /**
      * Phase 15 Task 8 — invoked when the student clicks the
      * "Apply combination" button. Receives the proposalId of the
@@ -95,12 +150,48 @@ export default function ScheduleSidebar({
     onClose,
     onProposeLoadStyle,
     onProposeSlotChange,
+    onPlanActionResult,
     onConfirmCombination,
     onRefreshDpr,
     onClearAll,
 }: ScheduleSidebarProps) {
     // Track which slot's popover is open. Key = "semIdx-slotIdx"
     const [openPopover, setOpenPopover] = useState<string | null>(null);
+    /**
+     * Phase 17 Task C — which submenu (Swap or Move) is currently
+     * expanded inside the open popover. `null` means the popover is
+     * showing only the verb row. `{key, verb}` keys the expansion to
+     * the same slot ref so closing/reopening the popover (or jumping
+     * to a different slot) collapses cleanly.
+     */
+    const [openSubmenu, setOpenSubmenu] = useState<{ key: string; verb: "swap" | "move" } | null>(null);
+    /**
+     * Phase 17 Task C — per-slot in-flight Stage-1 spinner. Keyed by
+     * `${term}::${courseId}` (the slot ref shape used by the
+     * draggable + popover code paths). When a slot's key is in this
+     * Set, the row replaces its grade cell with a small spinner.
+     */
+    const [pendingSlots, setPendingSlots] = useState<Set<string>>(() => new Set());
+    /**
+     * Phase 17 Task C — per-term-card "+ Add course" affordance state.
+     * Keyed by term string. `null` means the input is closed for that
+     * term; a string value carries the current input contents.
+     */
+    const [addCourseDraft, setAddCourseDraft] = useState<Map<string, string>>(() => new Map());
+    /**
+     * Phase 17 Task C — drag-to-move source ref. Set by `onDragStart`
+     * on a slot pill, read by `onDrop` on the destination term card
+     * (or destination slot, for cross-term exchange). Cleared at the
+     * end of every drag op.
+     */
+    const dragSourceRef = useRef<DragSlotRef | null>(null);
+    /**
+     * Phase 17 Task C — which term card is currently the active drop
+     * target. Drives the highlight ring rendered via
+     * `.termCardDropTarget`. `null` means no drag is hovering. Stored
+     * in state (not a ref) because the ring is a render concern.
+     */
+    const [dropTargetTerm, setDropTargetTerm] = useState<string | null>(null);
     // Phase 15 Task 8 — selected combination index for the Sections
     // picker. Defaults to 0 (the highest-scored combination per Task 6's
     // ranking) and resets whenever the materialization changes.
@@ -160,11 +251,300 @@ export default function ScheduleSidebar({
     const handleSlotClick = (key: string, slot: ScheduleSlot) => {
         if (slot.kind === "completed") return;
         setOpenPopover(prev => (prev === key ? null : key));
+        setOpenSubmenu(null);
     };
 
-    const handleSlotAction = (slot: ScheduleSlot, action: SlotAction) => {
-        setOpenPopover(null);
-        onProposeSlotChange?.(slot, action);
+    /**
+     * Phase 17 Task C — derive the slot's stable identity key for the
+     * pendingSlots Set + the drag source ref. Returns null when the
+     * slot has no concrete courseId (placeholder slots use a generated
+     * id derived from category + term so they can still surface a
+     * spinner during a swap).
+     */
+    const slotKey = (slot: ScheduleSlot, term: string): string => {
+        const id =
+            slot.kind === "specific_planned" ||
+            slot.kind === "completed" ||
+            slot.kind === "in_progress"
+                ? slot.courseId
+                : `placeholder(${slot.category})`;
+        return `${term}::${id}`;
+    };
+
+    /**
+     * Mark a slot as in-flight (or clear it). Wraps the Set state
+     * update in an immutable copy so React re-renders deterministically
+     * across nested closures.
+     */
+    const markSlotPending = (key: string, pending: boolean): void => {
+        setPendingSlots(prev => {
+            const next = new Set(prev);
+            if (pending) next.add(key);
+            else next.delete(key);
+            return next;
+        });
+    };
+
+    /**
+     * Phase 17 Task C — surface a route response to the user. Until
+     * Task D wires the inline confirm bubble, we use deterministic
+     * `alert()` placeholders so the explanation + pendingMutationId
+     * are still visible end-to-end. The alerts will be replaced by
+     * the bubble + console-only logging once Task D lands.
+     */
+    const announceResult = (
+        verb: "add" | "swap" | "drop" | "lock" | "move",
+        result: PlanActionResult<PlanActionRouteResponse>,
+    ): void => {
+        if (!result.ok) {
+            const msg = `Plan action failed (${result.status}): ${result.error}`;
+            console.error(`[plan/${verb}]`, msg);
+            try { window.alert(msg); } catch { /* SSR / jsdom-no-window */ }
+            onPlanActionResult?.(verb, result);
+            return;
+        }
+        const { explanation, pendingMutationId, feasible, consequences } = result.data;
+        if (!feasible) {
+            const msg = `${explanation}\n\n(Refused — Task D will offer "Override anyway" for soft refusals.)\npendingMutationId=${pendingMutationId}`;
+            console.warn(`[plan/${verb}] refusal`, msg);
+            try { window.alert(msg); } catch { /* SSR / jsdom-no-window */ }
+        } else if (consequences.length > 0) {
+            const msg = `${explanation}\n\nConsequences:\n - ${consequences.join("\n - ")}\n\n(Trade-offs — Task D will render the inline Confirm / Keep-as-is bubble.)\npendingMutationId=${pendingMutationId}`;
+            console.info(`[plan/${verb}] trade-offs`, msg);
+            try { window.alert(msg); } catch { /* SSR / jsdom-no-window */ }
+        } else {
+            const msg = `Action validated: ${explanation}\n\npendingMutationId=${pendingMutationId}`;
+            console.info(`[plan/${verb}] clean`, msg);
+            try { window.alert(msg); } catch { /* SSR / jsdom-no-window */ }
+        }
+        onPlanActionResult?.(verb, result);
+    };
+
+    /** Phase 17 Task C — Lock / Unlock click handler. */
+    const handleLockToggle = async (slot: ScheduleSlot, term: string): Promise<void> => {
+        const courseId =
+            slot.kind === "specific_planned" || slot.kind === "completed" || slot.kind === "in_progress"
+                ? slot.courseId
+                : null;
+        if (!courseId) return;
+        const key = slotKey(slot, term);
+        markSlotPending(key, true);
+        try {
+            // Determine current locked state — Phase 17 Task A's pin
+            // freeze flag is the source of truth, but the slot type does
+            // not yet expose it; we toggle by inferring "locked" when
+            // the user explicitly Locks (the plan-action route accepts
+            // either value and is idempotent).
+            const result = await planLock({ courseId, term, locked: true });
+            announceResult("lock", result);
+            onProposeSlotChange?.(slot, "lock");
+        } finally {
+            markSlotPending(key, false);
+            setOpenPopover(null);
+            setOpenSubmenu(null);
+        }
+    };
+
+    /** Phase 17 Task C — Drop click handler. */
+    const handleDrop = async (slot: ScheduleSlot, term: string): Promise<void> => {
+        const courseId =
+            slot.kind === "specific_planned" || slot.kind === "completed" || slot.kind === "in_progress"
+                ? slot.courseId
+                : null;
+        if (!courseId) return;
+        const key = slotKey(slot, term);
+        markSlotPending(key, true);
+        try {
+            const result = await planDrop({ courseId, term });
+            announceResult("drop", result);
+            onProposeSlotChange?.(slot, "drop");
+        } finally {
+            markSlotPending(key, false);
+            setOpenPopover(null);
+            setOpenSubmenu(null);
+        }
+    };
+
+    /** Phase 17 Task C — Swap click handler. Picks the candidate from
+     *  the submenu (engine-suggested or free-text). */
+    const handleSwap = async (
+        slot: ScheduleSlot,
+        term: string,
+        candidateCourseId: string,
+    ): Promise<void> => {
+        const dropId =
+            slot.kind === "specific_planned" || slot.kind === "completed" || slot.kind === "in_progress"
+                ? slot.courseId
+                : null;
+        if (!dropId) return;
+        const trimmed = candidateCourseId.trim();
+        if (trimmed.length === 0) return;
+        const key = slotKey(slot, term);
+        markSlotPending(key, true);
+        try {
+            const result = await planSwap({ drop: dropId, add: trimmed, term });
+            announceResult("swap", result);
+            onProposeSlotChange?.(slot, "replace");
+        } finally {
+            markSlotPending(key, false);
+            setOpenPopover(null);
+            setOpenSubmenu(null);
+        }
+    };
+
+    /** Phase 17 Task C — Move click handler (popover submenu picker). */
+    const handleMove = async (
+        slot: ScheduleSlot,
+        fromTerm: string,
+        toTerm: string,
+    ): Promise<void> => {
+        const courseId =
+            slot.kind === "specific_planned" || slot.kind === "completed" || slot.kind === "in_progress"
+                ? slot.courseId
+                : null;
+        if (!courseId || fromTerm === toTerm) return;
+        const key = slotKey(slot, fromTerm);
+        markSlotPending(key, true);
+        try {
+            const result = await planMove({ courseId, fromTerm, toTerm });
+            announceResult("move", result);
+            onProposeSlotChange?.(slot, "pin");
+        } finally {
+            markSlotPending(key, false);
+            setOpenPopover(null);
+            setOpenSubmenu(null);
+        }
+    };
+
+    /** Phase 17 Task C — per-term-card Add course handler. */
+    const handleAddCourse = async (term: string): Promise<void> => {
+        const draft = (addCourseDraft.get(term) ?? "").trim();
+        if (draft.length === 0) return;
+        const key = `${term}::add(${draft})`;
+        markSlotPending(key, true);
+        try {
+            const result = await planAdd({ courseId: draft, term });
+            announceResult("add", result);
+        } finally {
+            markSlotPending(key, false);
+            setAddCourseDraft(prev => {
+                const next = new Map(prev);
+                next.delete(term);
+                return next;
+            });
+        }
+    };
+
+    /** Phase 17 Task C — slot-pill `onDragStart` handler. */
+    const handleDragStart = (
+        e: React.DragEvent<HTMLLIElement>,
+        slot: ScheduleSlot,
+        term: string,
+    ): void => {
+        const courseId =
+            slot.kind === "specific_planned" || slot.kind === "completed" || slot.kind === "in_progress"
+                ? slot.courseId
+                : null;
+        if (!courseId) {
+            e.preventDefault();
+            return;
+        }
+        dragSourceRef.current = { courseId, term };
+        // Use dataTransfer so the browser shows the move cursor +
+        // ghost image; opaque payload (the source ref is also held
+        // in the closure-bound ref above so we don't depend on
+        // dataTransfer for routing).
+        try {
+            e.dataTransfer.setData("application/x-nyupath-slot", JSON.stringify({ courseId, term }));
+            e.dataTransfer.effectAllowed = "move";
+        } catch { /* jsdom may not support dataTransfer */ }
+    };
+
+    /** Phase 17 Task C — term-card `onDragOver` (allow drop). */
+    const handleTermDragOver = (e: React.DragEvent<HTMLElement>, term: string): void => {
+        if (!dragSourceRef.current) return;
+        // Cross-term only — dropping back on the source term is a no-op.
+        if (dragSourceRef.current.term === term) return;
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = "move"; } catch { /* */ }
+        if (dropTargetTerm !== term) setDropTargetTerm(term);
+    };
+
+    const handleTermDragLeave = (term: string): void => {
+        if (dropTargetTerm === term) setDropTargetTerm(null);
+    };
+
+    /** Phase 17 Task C — term-card `onDrop` (drag-to-move). */
+    const handleTermDrop = async (
+        e: React.DragEvent<HTMLElement>,
+        targetTerm: string,
+    ): Promise<void> => {
+        e.preventDefault();
+        const src = dragSourceRef.current;
+        dragSourceRef.current = null;
+        setDropTargetTerm(null);
+        if (!src) return;
+        if (src.term === targetTerm) return;
+        const key = `${src.term}::${src.courseId}`;
+        markSlotPending(key, true);
+        try {
+            const result = await planMove({
+                courseId: src.courseId,
+                fromTerm: src.term,
+                toTerm: targetTerm,
+            });
+            announceResult("move", result);
+        } finally {
+            markSlotPending(key, false);
+        }
+    };
+
+    /** Phase 17 Task C — slot-pill `onDrop` (drag-to-exchange). */
+    const handleSlotDrop = async (
+        e: React.DragEvent<HTMLElement>,
+        target: { courseId: string; term: string },
+    ): Promise<void> => {
+        e.preventDefault();
+        e.stopPropagation();
+        const src = dragSourceRef.current;
+        dragSourceRef.current = null;
+        setDropTargetTerm(null);
+        if (!src) return;
+        if (src.courseId === target.courseId && src.term === target.term) return;
+        // Same-term swap when dropping a slot pill on another slot pill
+        // in the SAME term — collapse to the single-mutation form so the
+        // engine path is identical to the popover-driven Swap.
+        if (src.term === target.term) {
+            const key = `${src.term}::${src.courseId}`;
+            markSlotPending(key, true);
+            try {
+                const result = await planSwap({
+                    drop: src.courseId,
+                    add: target.courseId,
+                    term: src.term,
+                });
+                announceResult("swap", result);
+            } finally {
+                markSlotPending(key, false);
+            }
+            return;
+        }
+        // Cross-term exchange — atomic 2-mutation batch via {exchanges}.
+        const key = `${src.term}::${src.courseId}`;
+        markSlotPending(key, true);
+        try {
+            const result = await planSwap({
+                exchanges: [{
+                    aCourseId: src.courseId,
+                    aTerm: src.term,
+                    bCourseId: target.courseId,
+                    bTerm: target.term,
+                }],
+            });
+            announceResult("swap", result);
+        } finally {
+            markSlotPending(key, false);
+        }
     };
 
     const handleRefreshDprPick = async (file: File) => {
@@ -333,10 +713,30 @@ export default function ScheduleSidebar({
                                     const headerCredits = fwd
                                         ? fwd.plannedCredits
                                         : bucket.slots.reduce((sum, s) => sum + (slotCredits(s)), 0);
+                                    // Phase 17 Task C — drag-to-move drop-target
+                                    // eligibility: term card must NOT be locked
+                                    // (history/completed buckets stay read-only).
+                                    const isDropEligible = !bucket.locked;
+                                    const isActiveDropTarget = isDropEligible && dropTargetTerm === bucket.term;
+                                    // Phase 17 Task C — Add-course affordance:
+                                    // only on non-locked future term cards (the
+                                    // bucket is non-locked AND has a forward
+                                    // semester entry — we don't add courses to
+                                    // an IP term).
+                                    const showAddCourse = isDropEligible && !!fwd;
+                                    const addDraft = addCourseDraft.get(bucket.term);
+                                    const isAddOpen = addDraft !== undefined;
                                     return (
                                         <section
                                             key={bucket.term}
-                                            className={`${styles.semesterCard} ${bucket.locked ? styles.locked : ""}`}
+                                            className={[
+                                                styles.semesterCard,
+                                                bucket.locked ? styles.locked : "",
+                                                isActiveDropTarget ? styles.termCardDropTarget : "",
+                                            ].filter(Boolean).join(" ")}
+                                            onDragOver={isDropEligible ? (e) => handleTermDragOver(e, bucket.term) : undefined}
+                                            onDragLeave={isDropEligible ? () => handleTermDragLeave(bucket.term) : undefined}
+                                            onDrop={isDropEligible ? (e) => void handleTermDrop(e, bucket.term) : undefined}
                                         >
                                             <header className={styles.semesterCardHeader}>
                                                 <h3>{formatTermLabel(bucket.term)}</h3>
@@ -371,6 +771,19 @@ export default function ScheduleSidebar({
                                                         // history (completed) and IP slots
                                                         // intentionally render uncolored.
                                                         const tierClass = slotTierClassName(slot);
+                                                        // Phase 17 Task C — pending-spinner state
+                                                        // + draggable affordance. Slots are
+                                                        // draggable iff the bucket is non-locked
+                                                        // AND the slot carries a courseId
+                                                        // (placeholder slots do not).
+                                                        const sKey = slotKey(slot, bucket.term);
+                                                        const isPending = pendingSlots.has(sKey);
+                                                        const slotCourseId = (
+                                                            slot.kind === "specific_planned"
+                                                            || slot.kind === "in_progress"
+                                                            || slot.kind === "completed"
+                                                        ) ? slot.courseId : null;
+                                                        const isDraggable = !isLocked && slotCourseId !== null;
                                                         return (
                                                             <li
                                                                 key={slotIdx}
@@ -380,12 +793,32 @@ export default function ScheduleSidebar({
                                                                     isLocked ? styles.slotLocked : styles.slotClickable,
                                                                     tierClass ? styles.slotTier : "",
                                                                     tierClass ?? "",
+                                                                    isDraggable ? styles.slotDraggable : "",
                                                                 ].filter(Boolean).join(" ")}
                                                                 onClick={() => handleSlotClick(key, slot)}
-                                                                title={isLocked ? "Completed — locked" : "Click to propose a change"}
+                                                                title={isLocked ? "Completed — locked" : "Click to open verbs · drag to move"}
+                                                                draggable={isDraggable}
+                                                                onDragStart={isDraggable ? (e) => handleDragStart(e, slot, bucket.term) : undefined}
+                                                                onDragOver={isDraggable ? (e) => {
+                                                                    // Allow dropping ONTO this
+                                                                    // slot for cross-term
+                                                                    // exchange. Stop the term-
+                                                                    // card handler from also
+                                                                    // claiming the drop.
+                                                                    if (!dragSourceRef.current) return;
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                } : undefined}
+                                                                onDrop={isDraggable && slotCourseId
+                                                                    ? (e) => void handleSlotDrop(e, { courseId: slotCourseId, term: bucket.term })
+                                                                    : undefined}
                                                             >
                                                                 {renderSlot(slot)}
-                                                                <span className={styles.slotGradeCell}>{slotGradeText(slot)}</span>
+                                                                {isPending ? (
+                                                                    <span className={styles.slotSpinner} aria-label="Validating plan change" role="status" />
+                                                                ) : (
+                                                                    <span className={styles.slotGradeCell}>{slotGradeText(slot)}</span>
+                                                                )}
                                                                 <span
                                                                     className={styles.slotLockIcon}
                                                                     aria-label={isLocked ? "locked" : ""}
@@ -394,27 +827,127 @@ export default function ScheduleSidebar({
                                                                 >
                                                                     {isLocked ? "🔒" : ""}
                                                                 </span>
-                                                                {isOpen && !isLocked && (
-                                                                    <div
-                                                                        className={styles.slotPopover}
-                                                                        // Stop click from bubbling to the li
-                                                                        onClick={e => e.stopPropagation()}
-                                                                    >
-                                                                        {SLOT_ACTIONS.map(a => (
-                                                                            <button
-                                                                                key={a.action}
-                                                                                type="button"
-                                                                                onClick={() => handleSlotAction(slot, a.action)}
-                                                                            >
-                                                                                {a.label}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
+                                                                {isOpen && !isLocked && renderSlotPopover({
+                                                                    slot,
+                                                                    term: bucket.term,
+                                                                    popoverKey: key,
+                                                                    openSubmenu,
+                                                                    setOpenSubmenu,
+                                                                    schedule,
+                                                                    onSwap: handleSwap,
+                                                                    onMove: handleMove,
+                                                                    onDrop: handleDrop,
+                                                                    onLock: handleLockToggle,
+                                                                })}
                                                             </li>
                                                         );
                                                     })}
                                                 </ul>
+                                            )}
+                                            {/* Phase 17 Task C — per-term-card
+                                                "+ Add course" affordance. Only
+                                                renders on non-locked future
+                                                terms (i.e. the bucket has a
+                                                matching forward semester AND
+                                                isn't a history card). */}
+                                            {showAddCourse && (
+                                                <div className={styles.addCourseAffordance}>
+                                                    {!isAddOpen ? (
+                                                        <button
+                                                            type="button"
+                                                            className={styles.addCourseButton}
+                                                            onClick={() => {
+                                                                setAddCourseDraft(prev => {
+                                                                    const next = new Map(prev);
+                                                                    next.set(bucket.term, "");
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                        >
+                                                            + Add course
+                                                        </button>
+                                                    ) : (
+                                                        <div className={styles.addCourseInputWrap}>
+                                                            <input
+                                                                type="text"
+                                                                className={styles.addCourseInput}
+                                                                placeholder="e.g. CSCI-UA 480"
+                                                                value={addDraft ?? ""}
+                                                                autoFocus
+                                                                onChange={(e) => {
+                                                                    const v = e.target.value;
+                                                                    setAddCourseDraft(prev => {
+                                                                        const next = new Map(prev);
+                                                                        next.set(bucket.term, v);
+                                                                        return next;
+                                                                    });
+                                                                }}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === "Enter") void handleAddCourse(bucket.term);
+                                                                    if (e.key === "Escape") {
+                                                                        setAddCourseDraft(prev => {
+                                                                            const next = new Map(prev);
+                                                                            next.delete(bucket.term);
+                                                                            return next;
+                                                                        });
+                                                                    }
+                                                                }}
+                                                            />
+                                                            {/* V1 autocomplete is a static
+                                                                stub: when the draft has 2+
+                                                                chars, surface a small list of
+                                                                candidate course IDs derived
+                                                                from existing schedule slots
+                                                                whose courseId starts with the
+                                                                draft string (case-insensitive).
+                                                                Task D will replace this with a
+                                                                real /api/v2/search-courses
+                                                                call. */}
+                                                            {(addDraft ?? "").trim().length >= 2 && (
+                                                                <ul className={styles.addCourseSuggestions}>
+                                                                    {gatherAddCourseSuggestions(schedule, addDraft ?? "").map((cid) => (
+                                                                        <li
+                                                                            key={cid}
+                                                                            className={styles.addCourseSuggestion}
+                                                                            onClick={() => {
+                                                                                setAddCourseDraft(prev => {
+                                                                                    const next = new Map(prev);
+                                                                                    next.set(bucket.term, cid);
+                                                                                    return next;
+                                                                                });
+                                                                            }}
+                                                                        >
+                                                                            {cid}
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            )}
+                                                            <div className={styles.addCourseInputRow}>
+                                                                <button
+                                                                    type="button"
+                                                                    className={styles.addCourseSubmitBtn}
+                                                                    disabled={(addDraft ?? "").trim().length === 0}
+                                                                    onClick={() => void handleAddCourse(bucket.term)}
+                                                                >
+                                                                    Add
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className={styles.addCourseCancelBtn}
+                                                                    onClick={() => {
+                                                                        setAddCourseDraft(prev => {
+                                                                            const next = new Map(prev);
+                                                                            next.delete(bucket.term);
+                                                                            return next;
+                                                                        });
+                                                                    }}
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
                                         </section>
                                     );
@@ -453,6 +986,248 @@ export default function ScheduleSidebar({
             )}
         </aside>
     );
+}
+
+// ============================================================
+// Phase 17 Task C — slot-popover renderer + autocomplete helper
+// ============================================================
+
+interface RenderSlotPopoverArgs {
+    slot: ScheduleSlot;
+    term: string;
+    popoverKey: string;
+    openSubmenu: { key: string; verb: "swap" | "move" } | null;
+    setOpenSubmenu: (next: { key: string; verb: "swap" | "move" } | null) => void;
+    schedule: ForwardSchedule | null;
+    onSwap: (slot: ScheduleSlot, term: string, candidateCourseId: string) => Promise<void>;
+    onMove: (slot: ScheduleSlot, fromTerm: string, toTerm: string) => Promise<void>;
+    onDrop: (slot: ScheduleSlot, term: string) => Promise<void>;
+    onLock: (slot: ScheduleSlot, term: string) => Promise<void>;
+}
+
+/**
+ * Render the per-slot popover (4-verb model). Inline `<input>` for
+ * the Swap submenu's free-search lives here so the typed value never
+ * leaks out to a parent ref. Move's submenu is a list of buttons —
+ * one per eligible target term.
+ */
+function renderSlotPopover(args: RenderSlotPopoverArgs) {
+    const { slot, term, popoverKey, openSubmenu, setOpenSubmenu, schedule } = args;
+    const submenu = openSubmenu && openSubmenu.key === popoverKey ? openSubmenu.verb : null;
+
+    return (
+        <div className={styles.slotPopover} onClick={(e) => e.stopPropagation()}>
+            {SLOT_VERBS.map((v) => (
+                <button
+                    key={v.verb}
+                    type="button"
+                    onClick={() => {
+                        // Toggle submenu — clicking the same verb
+                        // again collapses; clicking a different
+                        // submenu verb swaps. The verb-without-
+                        // submenu paths fire the route directly.
+                        if (v.verb === "swap" || v.verb === "move") {
+                            if (submenu === v.verb) setOpenSubmenu(null);
+                            else setOpenSubmenu({ key: popoverKey, verb: v.verb });
+                            return;
+                        }
+                        if (v.verb === "drop") void args.onDrop(slot, term);
+                        else if (v.verb === "lock") void args.onLock(slot, term);
+                    }}
+                >
+                    {v.label}
+                </button>
+            ))}
+            {submenu === "swap" && renderSwapSubmenu(args)}
+            {submenu === "move" && renderMoveSubmenu(args)}
+        </div>
+    );
+}
+
+/**
+ * Phase 17 Task C — Swap submenu. Top section: client-side derived
+ * alternatives (other slots in the same term that share a
+ * satisfiesRules entry). Bottom section: free-text input that
+ * submits literally. Task D will replace the free-text shim with a
+ * real catalog autocomplete.
+ */
+function renderSwapSubmenu(args: RenderSlotPopoverArgs) {
+    const { slot, term, schedule, onSwap } = args;
+    const alternatives = gatherSwapAlternatives(slot, term, schedule);
+    return (
+        <div className={`${styles.slotPopoverSubmenu} ${styles.swapSubmenu}`}>
+            {alternatives.length > 0 && (
+                <>
+                    <div className={styles.slotPopoverSubmenuHeading}>Alternatives</div>
+                    {alternatives.map((alt) => (
+                        <button
+                            key={alt}
+                            type="button"
+                            onClick={() => void onSwap(slot, term, alt)}
+                        >
+                            {alt}
+                        </button>
+                    ))}
+                </>
+            )}
+            <div className={styles.slotPopoverSubmenuHeading}>Or search…</div>
+            <SwapFreeSearch slot={slot} term={term} onSwap={onSwap} />
+        </div>
+    );
+}
+
+function SwapFreeSearch(props: {
+    slot: ScheduleSlot;
+    term: string;
+    onSwap: (slot: ScheduleSlot, term: string, candidateCourseId: string) => Promise<void>;
+}) {
+    const [value, setValue] = useState("");
+    return (
+        <div className={styles.addCourseInputWrap}>
+            <input
+                type="text"
+                className={styles.addCourseInput}
+                placeholder="e.g. CSCI-UA 480"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" && value.trim().length > 0) {
+                        void props.onSwap(props.slot, props.term, value.trim());
+                    }
+                }}
+            />
+            <div className={styles.addCourseInputRow}>
+                <button
+                    type="button"
+                    className={styles.addCourseSubmitBtn}
+                    disabled={value.trim().length === 0}
+                    onClick={() => void props.onSwap(props.slot, props.term, value.trim())}
+                >
+                    Swap
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Phase 17 Task C — Move submenu. Lists eligible target terms
+ * (every non-locked future term in the schedule, except the source
+ * term).
+ */
+function renderMoveSubmenu(args: RenderSlotPopoverArgs) {
+    const { slot, term, schedule, onMove } = args;
+    const targets = gatherMoveTargets(term, schedule);
+    if (targets.length === 0) {
+        return (
+            <div className={`${styles.slotPopoverSubmenu} ${styles.moveSubmenu}`}>
+                <div className={styles.slotPopoverSubmenuHeading}>No eligible terms</div>
+            </div>
+        );
+    }
+    return (
+        <div className={`${styles.slotPopoverSubmenu} ${styles.moveSubmenu}`}>
+            <div className={styles.slotPopoverSubmenuHeading}>Move to…</div>
+            {targets.map((t) => (
+                <button
+                    key={t}
+                    type="button"
+                    onClick={() => void onMove(slot, term, t)}
+                >
+                    {formatTermLabel(t)}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+/**
+ * Phase 17 Task C — derive Swap candidate course IDs from the
+ * forward schedule. We collect course IDs that appear in OTHER
+ * slots across ANY term and share at least one entry in
+ * `satisfiesRules` with the source slot. Falls back to "other slots
+ * in the same term" when the slot lacks rules (history / IP slots).
+ */
+function gatherSwapAlternatives(
+    slot: ScheduleSlot,
+    term: string,
+    schedule: ForwardSchedule | null,
+): string[] {
+    if (!schedule) return [];
+    const rules = (slot.kind === "specific_planned" || slot.kind === "placeholder")
+        ? new Set(slot.satisfiesRules)
+        : null;
+    const ownId = (slot.kind === "specific_planned" || slot.kind === "completed" || slot.kind === "in_progress")
+        ? slot.courseId
+        : null;
+    const out = new Set<string>();
+    for (const sem of schedule.semesters) {
+        for (const s of sem.slots) {
+            // Skip self.
+            if (s === slot) continue;
+            const cid =
+                s.kind === "specific_planned" || s.kind === "completed" || s.kind === "in_progress"
+                    ? s.courseId
+                    : null;
+            if (!cid) continue;
+            if (cid === ownId) continue;
+            // When the source slot has rules, require an overlap.
+            if (rules && rules.size > 0) {
+                const sRules = (s.kind === "specific_planned" || s.kind === "placeholder")
+                    ? s.satisfiesRules
+                    : [];
+                if (!sRules.some((r) => rules.has(r))) continue;
+            } else {
+                // Fall back to same-term "other slots".
+                if (sem.term !== term) continue;
+            }
+            out.add(cid);
+        }
+    }
+    return Array.from(out).slice(0, 5);
+}
+
+/**
+ * Phase 17 Task C — derive Move target terms. Eligible = any
+ * non-locked semester other than the source term.
+ */
+function gatherMoveTargets(sourceTerm: string, schedule: ForwardSchedule | null): string[] {
+    if (!schedule) return [];
+    const out: string[] = [];
+    for (const sem of schedule.semesters) {
+        if (sem.locked) continue;
+        if (sem.term === sourceTerm) continue;
+        out.push(sem.term);
+    }
+    return out;
+}
+
+/**
+ * Phase 17 Task C — V1 Add-course autocomplete. Surface concrete
+ * course IDs from the forward schedule that match the draft as a
+ * prefix (case-insensitive). When no matches exist, returns an
+ * empty list — the input still accepts free-text submission via
+ * Enter / the Add button. Task D will swap this for
+ * `/api/v2/search-courses` once the route ships.
+ */
+function gatherAddCourseSuggestions(
+    schedule: ForwardSchedule | null,
+    draft: string,
+): string[] {
+    const q = draft.trim().toUpperCase();
+    if (q.length < 2 || !schedule) return [];
+    const out = new Set<string>();
+    for (const sem of schedule.semesters) {
+        for (const s of sem.slots) {
+            const cid =
+                s.kind === "specific_planned" || s.kind === "completed" || s.kind === "in_progress"
+                    ? s.courseId
+                    : null;
+            if (!cid) continue;
+            if (cid.toUpperCase().startsWith(q)) out.add(cid);
+        }
+    }
+    return Array.from(out).slice(0, 5);
 }
 
 // ============================================================
