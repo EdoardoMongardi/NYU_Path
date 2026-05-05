@@ -505,13 +505,22 @@ export async function runProposeStage(
  * staging entry, and applies via `confirmPlanChangeTool.call`. On
  * success the staging entry is dropped so the same id cannot be
  * confirmed twice.
+ *
+ * Phase 17 Task D — `opts.force` toggles the Decision #32
+ * "student-preferred-invalid-draft" route. When `force === true`
+ * AND the engine returns `feasible: false`, the persisted schedule
+ * is reclassified from `infeasible-draft` to
+ * `student-preferred-invalid-draft` (the engine itself only emits
+ * 3 of the 4 PlanState members; the route-layer reclassification
+ * keeps the engine scope unchanged).
  */
 export async function runConfirmStage(
     studentId: string,
     pendingMutationId: string,
-    opts: { env?: Record<string, string | undefined> } = {},
+    opts: { env?: Record<string, string | undefined>; force?: boolean } = {},
 ): Promise<{ ok: true; response: PlanConfirmResponse } | { ok: false; error: RunConfirmError }> {
     const env = opts.env ?? process.env;
+    const force = opts.force === true;
     purgeExpired();
 
     const entry = pendingMutations.get(pendingMutationId);
@@ -560,7 +569,47 @@ export async function runConfirmStage(
     // returns 404 (avoids accidental double-apply).
     pendingMutations.delete(pendingMutationId);
 
-    const persistedSchedule = session.forwardSchedule ?? session.studentDraftPlan;
+    let persistedSchedule = session.forwardSchedule ?? session.studentDraftPlan;
+
+    // Phase 17 Task D — Override-anyway reclassification. The engine's
+    // derivePlanState emits at most `infeasible-draft` for an
+    // infeasible apply; the 4th PlanState member
+    // `student-preferred-invalid-draft` is the route layer's signal
+    // that the student explicitly chose to keep the plan despite
+    // hard violations. We mutate ONLY the persisted schedule's
+    // `state` field (and the studentDraftPlan slot in the session)
+    // so the sidebar's 4-state banner picks it up on the next
+    // restore.
+    if (force && !outcome.feasible && persistedSchedule) {
+        const reclassified: ForwardSchedule = {
+            ...persistedSchedule,
+            state: "student-preferred-invalid-draft",
+        };
+        // Keep the session + persistence layer in lockstep.
+        if (session.studentDraftPlan === persistedSchedule) {
+            session.studentDraftPlan = reclassified;
+        }
+        if (session.forwardSchedule === persistedSchedule) {
+            session.forwardSchedule = reclassified;
+        }
+        persistedSchedule = reclassified;
+        // Persist the reclassified state so login restore agrees with
+        // the live UI. Failures are logged but never throw — the
+        // in-memory mutation already landed.
+        if (session.scheduleStore && session.student) {
+            try {
+                const fingerprint = persistedSchedule.dprCourseHistoryHash;
+                await session.scheduleStore.persistSchedule(
+                    session.student.id,
+                    persistedSchedule,
+                    fingerprint,
+                );
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.warn(`[confirm/force] persistSchedule failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        }
+    }
 
     const response: PlanConfirmResponse = {
         feasible: outcome.feasible,

@@ -168,8 +168,11 @@ export async function handleProposeRoute<T>(
 }
 
 /** Same shape as handleProposeRoute but for the /confirm route. The
- *  body is `{ pendingMutationId: string }` and we delegate straight
- *  to runConfirmStage. */
+ *  body is `{ pendingMutationId: string, force?: boolean }` and we
+ *  delegate straight to runConfirmStage. The optional `force` flag
+ *  routes an infeasible apply into Decision #32's
+ *  `student-preferred-invalid-draft` slot rather than the default
+ *  `infeasible-draft`. */
 export async function handleConfirmRoute(
     req: NextRequest,
     schema: ZodTypeAny,
@@ -177,9 +180,9 @@ export async function handleConfirmRoute(
     const pre = await preflight(req);
     if (!pre.ok) return pre.response;
 
-    let parsed: { pendingMutationId: string };
+    let parsed: { pendingMutationId: string; force?: boolean };
     try {
-        parsed = schema.parse(pre.body) as { pendingMutationId: string };
+        parsed = schema.parse(pre.body) as { pendingMutationId: string; force?: boolean };
     } catch (err) {
         return NextResponse.json(
             { error: `Invalid request body: ${formatZodIssues(err)}` },
@@ -187,7 +190,11 @@ export async function handleConfirmRoute(
         );
     }
 
-    const result = await runConfirmStage(pre.studentId, parsed.pendingMutationId);
+    const result = await runConfirmStage(
+        pre.studentId,
+        parsed.pendingMutationId,
+        { force: parsed.force === true },
+    );
     if (!result.ok) return mapConfirmError(result.error);
 
     return NextResponse.json(result.response);
