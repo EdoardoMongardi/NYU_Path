@@ -1046,3 +1046,208 @@ button.reasoningHeader:focus-visible {
 .slotTier_school-core      { border-left-color: var(--tier-school-core); }
 .slotTier_free-elective    { border-left-color: var(--tier-free-elective); }
 .slotTier_general-elective { border-left-color: var(--tier-general-elective); }
+
+/* ==========================================================
+   Phase 17 Task C — 4-verb sidebar affordances
+   ----------------------------------------------------------
+   Drag-to-move (slot pill draggable + term-card drop target),
+   nested submenus inside the slot popover (Swap / Move),
+   per-term-card "+ Add course" affordance, in-flight slot
+   spinner replacing the grade cell during the Stage-1 round
+   trip, and a small lock toggle for the Lock verb.
+   ========================================================== */
+
+/* Pill cursor — distinct from `.slotClickable` (the popover-opening
+   cursor) so the student knows they can EITHER click for the popover
+   OR drag the pill to a different term card. */
+.slotDraggable {
+    cursor: grab;
+}
+.slotDraggable:active { cursor: grabbing; }
+
+/* Highlight ring shown on a term card while a draggable slot pill is
+   hovering above it. Pure visual cue — the JS `onDragOver` /
+   `onDragLeave` handlers toggle this class. */
+.termCardDropTarget {
+    outline: 2px dashed var(--nyu-violet);
+    outline-offset: -2px;
+    background: rgba(87, 6, 140, 0.06);
+}
+
+/* Submenu container shared by Swap + Move. Sits below the verb row
+   inside the slot popover. */
+.slotPopoverSubmenu {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border-light);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.slotPopoverSubmenuHeading {
+    font-size: 0.72em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    margin: 4px 0 2px;
+    padding: 0 4px;
+}
+
+/* Free-search input rendered at the bottom of the Swap submenu and
+   inside the per-term-card "+ Add course" affordance. Reused by both
+   for layout consistency. */
+.swapSubmenu, .moveSubmenu {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.addCourseAffordance {
+    margin-top: 8px;
+    padding: 6px 4px 0;
+    border-top: 1px dashed var(--border-light);
+}
+
+.addCourseButton {
+    width: 100%;
+    background: transparent;
+    border: 1px dashed var(--border-light);
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.82em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.addCourseButton:hover:not(:disabled) {
+    background: rgba(87, 6, 140, 0.06);
+    color: var(--text-primary);
+    border-color: var(--nyu-violet);
+}
+
+.addCourseButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.addCourseInputWrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 0;
+}
+
+.addCourseInput {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}
+
+.addCourseInput:focus {
+    outline: none;
+    border-color: var(--nyu-violet);
+    box-shadow: 0 0 0 2px var(--nyu-violet-glow);
+}
+
+.addCourseSuggestions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+    background: var(--bg-primary);
+}
+
+.addCourseSuggestion {
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 0.82em;
+    border-bottom: 1px dashed var(--border-light);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}
+
+.addCourseSuggestion:last-child { border-bottom: none; }
+.addCourseSuggestion:hover { background: rgba(87, 6, 140, 0.06); }
+
+.addCourseInputRow {
+    display: flex;
+    gap: 4px;
+}
+
+.addCourseSubmitBtn {
+    background: var(--nyu-violet);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.78em;
+    cursor: pointer;
+}
+
+.addCourseSubmitBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.addCourseCancelBtn {
+    background: transparent;
+    border: 1px solid var(--border-light);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.78em;
+    cursor: pointer;
+}
+
+/* Inline spinner that replaces the grade cell while a Stage-1 propose
+   round-trip is in flight for that slot. Sized to the grade cell's
+   width so the row layout stays stable. */
+.slotSpinner {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.slotSpinner::after {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border-light);
+    border-top-color: var(--nyu-violet);
+    border-radius: 50%;
+    animation: slotSpin 0.7s linear infinite;
+}
+
+@keyframes slotSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* Phase 17 — Lock-icon affordance click target. Reuses the layout
+   slot from `.slotLockIcon` but with hover + cursor so the student
+   knows it is interactive when the slot is editable. */
+.slotLockToggle {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.78em;
+    line-height: 1;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+.slotLockToggle:hover { opacity: 1; }
+.slotLockToggleActive { opacity: 1; color: var(--nyu-violet); }
