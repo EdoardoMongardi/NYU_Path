@@ -1187,6 +1187,16 @@ export type PlanMutation =
      * future re-plans.
      */
     | { kind: "move"; courseId: string; fromTerm: string; toTerm: string }
+    /**
+     * Phase 17 Task B — Inverse of `pin` with `freeze: true`. Removes
+     * the matching `(courseId, term)` entry from
+     * `SchedulePreferences.pins[]` so a previously locked slot becomes
+     * solver-eligible for re-placement on the next re-plan.
+     *
+     * Sent by the sidebar's `Lock` verb when the student toggles
+     * `locked: false`. No-ops when no matching pin exists.
+     */
+    | { kind: "unpin"; courseId: string; term: string }
     | { kind: "addTerm"; term: string }
     | { kind: "loadStyleOverride"; term?: string; style: "balanced" | "frontload" | "backload" | "light" | "heavy" }
     | { kind: "bindFreeElective"; slotId: string; courseId: string }

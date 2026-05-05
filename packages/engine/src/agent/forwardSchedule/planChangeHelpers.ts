@@ -72,6 +72,14 @@ export const PlanMutationSchema = z.discriminatedUnion("kind", [
      * `[exclude(courseId), pin(courseId, toTerm, freeze: false)]`.
      */
     z.object({ kind: z.literal("move"), courseId: z.string(), fromTerm: z.string(), toTerm: z.string() }),
+    /**
+     * Phase 17 Task B — inverse of pin(freeze: true). Removes the
+     * matching `(courseId, term)` entry from `SchedulePreferences.pins[]`
+     * so a previously locked slot becomes solver-eligible for
+     * re-placement on the next re-plan. The sidebar's Lock verb sends
+     * this when the student toggles `locked: false`.
+     */
+    z.object({ kind: z.literal("unpin"), courseId: z.string(), term: z.string() }),
     z.object({ kind: z.literal("addTerm"), term: z.string() }),
     z.object({
         kind: z.literal("loadStyleOverride"),
@@ -186,6 +194,20 @@ export function applyMutationsToPreferences(
                 if (!prefs.exclusions) prefs.exclusions = [];
                 prefs.exclusions = prefs.exclusions.filter(e => e.courseId !== m.courseId);
                 prefs.exclusions.push({ courseId: m.courseId, term: m.fromTerm });
+                break;
+            }
+            case "unpin": {
+                // Phase 17 Task B — inverse of pin(freeze: true).
+                // Removes the matching `(courseId, term)` entry from
+                // `prefs.pins[]` so the solver may re-place the course
+                // on the next re-plan. No-op when no matching pin
+                // exists (the helper is purely a state transform; the
+                // route layer can detect a no-op via `pins[]` length
+                // delta if it cares).
+                if (!prefs.pins || prefs.pins.length === 0) break;
+                prefs.pins = prefs.pins.filter(
+                    p => !(p.courseId === m.courseId && p.term === m.term),
+                );
                 break;
             }
             case "addTerm": {

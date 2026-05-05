@@ -1,0 +1,617 @@
+// ============================================================
+// planActionOrchestrator (Phase 17 Task B)
+// ============================================================
+// Shared two-stage orchestrator for the deterministic
+// /api/plan/<verb> routes (add | swap | drop | lock | move).
+//
+// Each route forwards an authenticated request + a constructed
+// PlanMutation[] to `runProposeStage` here. The orchestrator:
+//
+//   1. Loads the student's persisted state (profile, parsed DPR,
+//      latest schedule, latest preferences) from the unified store
+//      bundle.
+//   2. Builds a minimal `ToolSession` with everything
+//      `proposePlanChangeTool` reads from session.
+//   3. Runs Stage 1 — `proposePlanChangeTool.call({ mutations })` —
+//      synchronously. This is the structural validation pass
+//      (Phase 13/14 pipeline; ~180–600ms typical, never hits FOSE).
+//   4. Mints a `pendingMutationId` (uuid) and stashes
+//      `{ studentId, mutations }` in a per-process in-memory map so
+//      a follow-up `/api/plan/confirm` can apply the same mutation
+//      array atomically.
+//   5. Computes the list of `futureTerms` the route layer should
+//      hand to Task D's UI for Stage 2 (FOSE section
+//      enrichment). Stage 2 itself is NOT forked here — the spec
+//      explicitly allows it to be deferred to the UI/SSE channel,
+//      and Task D wires the actual `materialize_sections` call.
+//
+// Confirm flow (`runConfirmStage`) looks up the pending mutation
+// by id and applies it through `confirmPlanChangeTool.call`. After
+// a successful apply, the staging entry is dropped so a second
+// confirm of the same id is a no-op (returns 404).
+// ============================================================
+
+import { randomUUID } from "node:crypto";
+import {
+    proposePlanChangeTool,
+    confirmPlanChangeTool,
+    loadSchoolConfig,
+    loadCourses,
+    loadPrereqs,
+    type ToolSession,
+    type DegreeProgressReport,
+} from "@nyupath/engine";
+import type {
+    Course,
+    ForwardSchedule,
+    PlanChangeOutcome,
+    PlanDiff,
+    PlanMutation,
+    Prerequisite,
+    SchedulePreferences,
+    StudentProfile,
+} from "@nyupath/shared";
+import { getStores } from "./db/store.js";
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+/**
+ * Stage-1 outcome surfaced by every plan-action route. The shape is
+ * a superset of `PlanChangeOutcome` (the engine's existing type) plus
+ * three Phase 17 fields:
+ *
+ *   - `explanation`: deterministic confirm-bubble template (Task A).
+ *   - `pendingMutationId`: opaque uuid the UI hands to
+ *     `/api/plan/confirm` to actually apply the staged mutation.
+ *   - `futureTerms`: the unique list of term strings touched by the
+ *     mutation that fall within the FOSE data window (~6 months
+ *     from wall-clock today). Task D's confirm-bubble passes these
+ *     to `materialize_sections` for Stage 2 enrichment.
+ *   - `forwardSchedule`: the proposed (read-only) schedule the
+ *     proposal would produce — included so callers can assert on the
+ *     destination-term placement (the load-bearing test case for
+ *     drag-to-move).
+ */
+export interface PlanActionResponse extends PlanChangeOutcome {
+    planDiff?: PlanDiff;
+    explanation: string;
+    pendingMutationId: string;
+    futureTerms: string[];
+    /** The proposed (read-only, NOT persisted) ForwardSchedule the
+     *  caller would land on if it confirmed. Populated when Stage 1
+     *  produced one; absent only on the no-plan failure path. */
+    forwardSchedule?: ForwardSchedule;
+}
+
+/** Confirm-stage outcome — the actual apply via confirm_plan_change. */
+export interface PlanConfirmResponse extends PlanChangeOutcome {
+    planDiff?: PlanDiff;
+    /** Where confirm_plan_change wrote the resulting schedule. */
+    storedIn: "forwardSchedule" | "studentDraftPlan";
+    /** The persisted ForwardSchedule (whichever slot it landed in). */
+    forwardSchedule?: ForwardSchedule;
+    /** The staging-map entry was consumed; the mutationId is no longer
+     *  resolvable. */
+    consumedMutationId: string;
+}
+
+export type RunProposeError =
+    | { kind: "no_profile";  message: string }
+    | { kind: "no_dpr";      message: string }
+    | { kind: "no_schedule"; message: string }
+    | { kind: "engine_error"; message: string };
+
+export type RunConfirmError =
+    | { kind: "unknown_mutation_id"; message: string }
+    | { kind: "studentId_mismatch";  message: string }
+    | RunProposeError;
+
+// ---------------------------------------------------------------------------
+// Pending-mutation staging map
+// ---------------------------------------------------------------------------
+//
+// Mirrors the in-session `pendingMaterializations` map from Phase 15
+// Task 7 — but keyed at module scope because the propose → confirm
+// round-trip crosses two route invocations (each with its own fresh
+// ToolSession). The key is the uuid the orchestrator mints; the
+// value carries the studentId (so confirm can refuse cross-tenant
+// id-guessing) plus the mutation array to re-apply.
+//
+// Entries are evicted on confirm. They also age out after 10 minutes
+// to keep the map bounded if a UI flow crashes mid-confirm. The
+// 10-minute TTL is well above the typical "user reads the bubble +
+// clicks Confirm" latency; longer-lived deferrals (close-tab,
+// re-open) are handled by re-running the propose from scratch.
+
+interface PendingMutationEntry {
+    studentId: string;
+    mutations: PlanMutation[];
+    createdAt: number;
+}
+
+const PENDING_TTL_MS = 10 * 60 * 1000;
+const pendingMutations = new Map<string, PendingMutationEntry>();
+
+function purgeExpired(now: number = Date.now()): void {
+    for (const [id, entry] of pendingMutations) {
+        if (now - entry.createdAt > PENDING_TTL_MS) {
+            pendingMutations.delete(id);
+        }
+    }
+}
+
+/** Test-only: drop every staged mutation. */
+export function _resetPendingMutationsForTests(): void {
+    pendingMutations.clear();
+}
+
+/** Test-only: peek at the staging map size. */
+export function _pendingMutationsSizeForTests(): number {
+    return pendingMutations.size;
+}
+
+// ---------------------------------------------------------------------------
+// Future-term computation (Stage 2 hint)
+// ---------------------------------------------------------------------------
+
+const SEASON_ORD: Record<string, number> = { spring: 0, summer: 1, fall: 2, january: 3, winter: 3 };
+
+/** Parse a solver-style "YYYY-season" term. Returns null if not parseable. */
+function parseSolverTerm(t: string): { year: number; season: string } | null {
+    const m = t.match(/^(\d{4})-(spring|summer|fall|january|winter)$/i);
+    if (!m) return null;
+    return { year: parseInt(m[1]!, 10), season: m[2]!.toLowerCase() };
+}
+
+/** Map a wall-clock date → the "YYYY-season" term roughly N months out
+ *  by adding `monthsAhead` to the current month and bucketing
+ *  Jan-May→spring, Jun-Aug→summer, Sep-Dec→fall. Used as the
+ *  "Stage 2 FOSE window" upper bound. */
+function termOrdinal(t: { year: number; season: string }): number {
+    return t.year * 4 + (SEASON_ORD[t.season] ?? 0);
+}
+
+function todayTerm(now: Date): { year: number; season: string } {
+    const m = now.getUTCMonth() + 1; // 1..12
+    const y = now.getUTCFullYear();
+    if (m <= 5) return { year: y, season: "spring" };
+    if (m <= 8) return { year: y, season: "summer" };
+    return { year: y, season: "fall" };
+}
+
+/** Given an array of mutations, return the unique term strings the
+ *  mutation touches that:
+ *   - parse as solver-style "YYYY-season",
+ *   - are NOT in the past (current term or later),
+ *   - are within ~6 months from wall-clock today (FOSE data window).
+ *
+ *  Mutations that don't carry a term (e.g., bare `exclude` without
+ *  `term`, `clearSchedulingPreference`) are ignored. The output is
+ *  the hint Task D's UI uses to decide which terms to background-
+ *  materialize. */
+export function computeFutureTerms(mutations: PlanMutation[], now: Date = new Date()): string[] {
+    const today = todayTerm(now);
+    const todayOrd = termOrdinal(today);
+    const windowEnd = todayOrd + 2; // today + 2 seasons ahead ≈ 6 months window
+
+    const out = new Set<string>();
+    const collect = (raw: string): void => {
+        const t = parseSolverTerm(raw);
+        if (!t) return;
+        const ord = termOrdinal(t);
+        if (ord >= todayOrd && ord <= windowEnd) {
+            out.add(`${t.year}-${t.season}`);
+        }
+    };
+
+    for (const m of mutations) {
+        switch (m.kind) {
+            case "pin":     collect(m.term); break;
+            case "exclude": if (m.term) collect(m.term); break;
+            case "swap":    collect(m.term); break;
+            case "move":    collect(m.fromTerm); collect(m.toTerm); break;
+            case "unpin":   collect(m.term); break;
+            case "addTerm": collect(m.term); break;
+            case "loadStyleOverride": if (m.term) collect(m.term); break;
+            // Other kinds carry no term reference.
+            default: break;
+        }
+    }
+
+    // Stable sort so route responses are deterministic across calls.
+    return Array.from(out).sort();
+}
+
+// ---------------------------------------------------------------------------
+// Session loading
+// ---------------------------------------------------------------------------
+
+interface LoadedSessionState {
+    profile: StudentProfile;
+    dpr: DegreeProgressReport;
+    forwardSchedule: ForwardSchedule | null;
+    studentDraftPlan: ForwardSchedule | null;
+    schedulePreferences: SchedulePreferences | null;
+}
+
+/**
+ * Load everything the engine's plan-change tools need to evaluate a
+ * mutation. Returns null on the slices that are non-fatal (no
+ * preferences row yet); throws a typed `RunProposeError` on the
+ * fatal misses.
+ */
+async function loadSessionState(
+    studentId: string,
+    env: Record<string, string | undefined> = process.env,
+): Promise<{ ok: true; state: LoadedSessionState } | { ok: false; error: RunProposeError }> {
+    const stores = getStores(env);
+
+    let profile: StudentProfile | null = null;
+    try {
+        profile = await stores.profileStore.get(studentId);
+    } catch (err) {
+        return {
+            ok: false,
+            error: {
+                kind: "no_profile",
+                message: `profileStore.get failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+        };
+    }
+    if (!profile) {
+        return {
+            ok: false,
+            error: {
+                kind: "no_profile",
+                message: "No persisted student profile. Onboard first via /api/onboard.",
+            },
+        };
+    }
+    // Defensive: the profile id must match the auth subject so engine
+    // writes (which key on session.student.id) land on the right row.
+    profile = { ...profile, id: studentId };
+
+    let dpr: DegreeProgressReport | null = null;
+    try {
+        dpr = (await stores.profileStore.getParsedDpr?.(studentId)) ?? null;
+    } catch (err) {
+        return {
+            ok: false,
+            error: {
+                kind: "no_dpr",
+                message: `profileStore.getParsedDpr failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+        };
+    }
+    if (!dpr) {
+        return {
+            ok: false,
+            error: {
+                kind: "no_dpr",
+                message: "No parsed DPR on file. Re-onboard or upload a DPR via /api/onboard/refresh-dpr.",
+            },
+        };
+    }
+
+    let forwardSchedule: ForwardSchedule | null = null;
+    let studentDraftPlan: ForwardSchedule | null = null;
+    try {
+        const loaded = await stores.scheduleStore.loadLatestSchedule(studentId);
+        if (loaded) {
+            const isDraft =
+                loaded.schedule.state === "infeasible-draft" ||
+                loaded.schedule.state === "student-preferred-invalid-draft";
+            if (isDraft) studentDraftPlan = loaded.schedule;
+            else         forwardSchedule  = loaded.schedule;
+        }
+    } catch (err) {
+        // No-op — propose_plan_change has its own validateInput hook
+        // that bails with a friendly error when neither slot is set.
+        // Surface a typed error if neither slot resolves.
+        return {
+            ok: false,
+            error: {
+                kind: "no_schedule",
+                message: `scheduleStore.loadLatestSchedule failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+        };
+    }
+    if (!forwardSchedule && !studentDraftPlan) {
+        return {
+            ok: false,
+            error: {
+                kind: "no_schedule",
+                message: "No forward plan exists. Call plan_forward_degree first via the chat agent.",
+            },
+        };
+    }
+
+    let schedulePreferences: SchedulePreferences | null = null;
+    try {
+        schedulePreferences = await stores.scheduleStore.loadPreferences(studentId);
+    } catch {
+        // best-effort — empty prefs are valid
+    }
+
+    return {
+        ok: true,
+        state: {
+            profile,
+            dpr,
+            forwardSchedule,
+            studentDraftPlan,
+            schedulePreferences,
+        },
+    };
+}
+
+// Cache the bundled courses + prereqs at module scope so a flurry of
+// plan-action route calls doesn't re-read the same JSON N times. The
+// engine's `loadCourses` / `loadPrereqs` are synchronous fs reads.
+let CACHED_COURSES: Course[] | null = null;
+let CACHED_PREREQS: Prerequisite[] | null = null;
+
+function getBundledCourses(): Course[] | null {
+    if (CACHED_COURSES) return CACHED_COURSES;
+    try {
+        CACHED_COURSES = loadCourses();
+        return CACHED_COURSES;
+    } catch {
+        return null;
+    }
+}
+
+function getBundledPrereqs(): Prerequisite[] | null {
+    if (CACHED_PREREQS) return CACHED_PREREQS;
+    try {
+        CACHED_PREREQS = loadPrereqs();
+        return CACHED_PREREQS;
+    } catch {
+        return null;
+    }
+}
+
+/** Build a minimal ToolSession from the loaded state. Pre-load the
+ *  home-school config + bundled course catalog + prereqs so the
+ *  solver can place pinned slots (the solver rejects pins on
+ *  courses absent from `courseCatalog`; see solver.ts:773). */
+function buildSession(state: LoadedSessionState, env: Record<string, string | undefined> = process.env): ToolSession {
+    const stores = getStores(env);
+    const schoolConfig = (() => {
+        try {
+            return loadSchoolConfig(state.profile.homeSchool);
+        } catch {
+            return null;
+        }
+    })();
+    const courses = getBundledCourses();
+    const prereqs = getBundledPrereqs();
+
+    const session: ToolSession = {
+        student: state.profile,
+        degreeProgressReport: state.dpr,
+        scheduleStore: stores.scheduleStore,
+        profileStore: stores.profileStore,
+        ...(state.forwardSchedule  ? { forwardSchedule:  state.forwardSchedule  } : {}),
+        ...(state.studentDraftPlan ? { studentDraftPlan: state.studentDraftPlan } : {}),
+        ...(state.schedulePreferences ? { schedulePreferences: state.schedulePreferences } : {}),
+        ...(schoolConfig ? { schoolConfig } : {}),
+        ...(courses ? { courses } : {}),
+        ...(prereqs ? { prereqs } : {}),
+    };
+    return session;
+}
+
+// ---------------------------------------------------------------------------
+// Stage 1 — propose
+// ---------------------------------------------------------------------------
+
+/**
+ * Run the propose stage. Returns either a typed error (the route
+ * maps to 400/500) or the staged outcome plus the mintedpendingMutationId.
+ *
+ * The proposed `forwardSchedule` is included on the response so the
+ * route's caller can assert on its contents (in particular, the
+ * load-bearing assertion that the dragged course actually lands in
+ * the toTerm semesters[].slots after the route returns).
+ */
+export async function runProposeStage(
+    studentId: string,
+    mutations: PlanMutation[],
+    opts: { env?: Record<string, string | undefined>; now?: Date } = {},
+): Promise<{ ok: true; response: PlanActionResponse } | { ok: false; error: RunProposeError }> {
+    const env = opts.env ?? process.env;
+    const loaded = await loadSessionState(studentId, env);
+    if (!loaded.ok) return { ok: false, error: loaded.error };
+
+    const session = buildSession(loaded.state, env);
+    const ctx = { signal: new AbortController().signal, session };
+
+    let outcome: Awaited<ReturnType<typeof proposePlanChangeTool.call>>;
+    try {
+        // The engine's PlanMutationSchema is the source of truth; the
+        // structurally-equivalent Zod-inferred input type collapses the
+        // discriminated union into a different (but isomorphic) shape.
+        // Cast through `unknown` to satisfy the input contract without
+        // weakening the public PlanMutation type at the call sites.
+        outcome = await proposePlanChangeTool.call(
+            { mutations: mutations as unknown as Parameters<typeof proposePlanChangeTool.call>[0]["mutations"] },
+            ctx,
+        );
+    } catch (err) {
+        return {
+            ok: false,
+            error: {
+                kind: "engine_error",
+                message: `proposePlanChangeTool failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+        };
+    }
+
+    // Extract the proposed schedule from the diff's added slots when
+    // possible. The proposal tool returns a planDiff but not the
+    // proposed schedule object directly — re-derive it by walking
+    // (current + diff). We fall back to None when no plan is
+    // present (the no_plan path).
+    //
+    // NOTE: rather than re-compose, we lift the proposal's added
+    // slots into a synthetic schedule whose semesters[] = current
+    // semesters mutated per the diff. Since proposePlanChange is
+    // read-only, the way to get the destination schedule is to
+    // simulate it. To keep this implementation simple and avoid
+    // duplicating solver logic at the route layer, we invoke a
+    // SECOND read-only pass via a clone-session (no persistence) and
+    // confirm_plan_change semantics on a CLONED session — but that
+    // would mutate the clone's state. Cleaner: invoke
+    // confirm_plan_change on a CLONED session whose stores are
+    // null-ed out so persistence is skipped. The cloned session's
+    // post-call `forwardSchedule` IS the proposed schedule.
+
+    const clonedState: LoadedSessionState = {
+        profile: loaded.state.profile,
+        dpr: loaded.state.dpr,
+        forwardSchedule: loaded.state.forwardSchedule
+            ? structuredClone(loaded.state.forwardSchedule)
+            : null,
+        studentDraftPlan: loaded.state.studentDraftPlan
+            ? structuredClone(loaded.state.studentDraftPlan)
+            : null,
+        schedulePreferences: loaded.state.schedulePreferences
+            ? structuredClone(loaded.state.schedulePreferences)
+            : null,
+    };
+    const cloneSession = buildSession(clonedState, env);
+    // Strip persistence stores so confirm_plan_change runs purely in
+    // memory (its persist hook gates on `session.scheduleStore` +
+    // `session.student`; clearing the store bypasses both writes).
+    delete cloneSession.scheduleStore;
+    delete cloneSession.profileStore;
+
+    let proposedForwardSchedule: ForwardSchedule | undefined;
+    try {
+        await confirmPlanChangeTool.call(
+            { mutations: mutations as unknown as Parameters<typeof confirmPlanChangeTool.call>[0]["mutations"] },
+            { signal: new AbortController().signal, session: cloneSession },
+        );
+        proposedForwardSchedule = cloneSession.forwardSchedule ?? cloneSession.studentDraftPlan;
+    } catch (err) {
+        // If the clone pass fails, fall back to NOT including the
+        // proposed schedule rather than failing the whole route. The
+        // structured outcome from propose still has `feasible`,
+        // `consequences`, etc. for the caller.
+        // eslint-disable-next-line no-console
+        console.warn(
+            `[planActionOrchestrator] clone-session simulation failed (non-fatal): ${
+                err instanceof Error ? err.message : String(err)
+            }`,
+        );
+        proposedForwardSchedule = undefined;
+    }
+
+    // Mint a pendingMutationId and stage the mutations for confirm.
+    purgeExpired();
+    const pendingMutationId = randomUUID();
+    pendingMutations.set(pendingMutationId, {
+        studentId,
+        mutations,
+        createdAt: Date.now(),
+    });
+
+    const futureTerms = computeFutureTerms(mutations, opts.now);
+
+    const response: PlanActionResponse = {
+        feasible: outcome.feasible,
+        diff: outcome.diff,
+        consequences: outcome.consequences,
+        ...(outcome.conflicts ? { conflicts: outcome.conflicts } : {}),
+        ...(outcome.planDiff ? { planDiff: outcome.planDiff } : {}),
+        explanation: outcome.explanation,
+        pendingMutationId,
+        futureTerms,
+        ...(proposedForwardSchedule ? { forwardSchedule: proposedForwardSchedule } : {}),
+    };
+
+    return { ok: true, response };
+}
+
+// ---------------------------------------------------------------------------
+// Stage Confirm — actually apply
+// ---------------------------------------------------------------------------
+
+/**
+ * Run the confirm stage. Looks up the staged mutations by
+ * `pendingMutationId`, refuses if the studentId doesn't match the
+ * staging entry, and applies via `confirmPlanChangeTool.call`. On
+ * success the staging entry is dropped so the same id cannot be
+ * confirmed twice.
+ */
+export async function runConfirmStage(
+    studentId: string,
+    pendingMutationId: string,
+    opts: { env?: Record<string, string | undefined> } = {},
+): Promise<{ ok: true; response: PlanConfirmResponse } | { ok: false; error: RunConfirmError }> {
+    const env = opts.env ?? process.env;
+    purgeExpired();
+
+    const entry = pendingMutations.get(pendingMutationId);
+    if (!entry) {
+        return {
+            ok: false,
+            error: {
+                kind: "unknown_mutation_id",
+                message: `No staged mutation found for id ${pendingMutationId}. It may have expired (10 min TTL) or already been confirmed.`,
+            },
+        };
+    }
+    if (entry.studentId !== studentId) {
+        return {
+            ok: false,
+            error: {
+                kind: "studentId_mismatch",
+                message: `pendingMutationId belongs to a different student.`,
+            },
+        };
+    }
+
+    const loaded = await loadSessionState(studentId, env);
+    if (!loaded.ok) return { ok: false, error: loaded.error };
+
+    const session = buildSession(loaded.state, env);
+    const ctx = { signal: new AbortController().signal, session };
+
+    let outcome: Awaited<ReturnType<typeof confirmPlanChangeTool.call>>;
+    try {
+        outcome = await confirmPlanChangeTool.call(
+            { mutations: entry.mutations as unknown as Parameters<typeof confirmPlanChangeTool.call>[0]["mutations"] },
+            ctx,
+        );
+    } catch (err) {
+        return {
+            ok: false,
+            error: {
+                kind: "engine_error",
+                message: `confirmPlanChangeTool failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+        };
+    }
+
+    // Drop the staging entry so a second confirm with the same id
+    // returns 404 (avoids accidental double-apply).
+    pendingMutations.delete(pendingMutationId);
+
+    const persistedSchedule = session.forwardSchedule ?? session.studentDraftPlan;
+
+    const response: PlanConfirmResponse = {
+        feasible: outcome.feasible,
+        diff: outcome.diff,
+        consequences: outcome.consequences,
+        ...(outcome.conflicts ? { conflicts: outcome.conflicts } : {}),
+        ...(outcome.planDiff ? { planDiff: outcome.planDiff } : {}),
+        storedIn: outcome.storedIn,
+        ...(persistedSchedule ? { forwardSchedule: persistedSchedule } : {}),
+        consumedMutationId: pendingMutationId,
+    };
+    return { ok: true, response };
+}

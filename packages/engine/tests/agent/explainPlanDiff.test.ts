@@ -160,6 +160,33 @@ describe("explainPlanDiff — move (Phase 17)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Per-kind: unpin (Phase 17 Task B)
+// ---------------------------------------------------------------------------
+
+describe("explainPlanDiff — unpin (Phase 17 Task B)", () => {
+    it("cites course + term + 'Unlocking'", () => {
+        const m: PlanMutation = { kind: "unpin", courseId: "CSCI-UA 421", term: "2027-spring" };
+        const out = explainPlanDiff(emptyDiff(), m);
+        expect(out).toMatch(/Unlocking/);
+        expect(out).toContain("CSCI-UA 421");
+        expect(out).toContain("2027-spring");
+    });
+
+    it("notes the solver may re-place when no issues are present", () => {
+        const m: PlanMutation = { kind: "unpin", courseId: "CSCI-UA 421", term: "2027-spring" };
+        const out = explainPlanDiff(emptyDiff(), m);
+        expect(out).toMatch(/re-place/);
+    });
+
+    it("surfaces graduation shift when unlock pushes graduation back", () => {
+        const m: PlanMutation = { kind: "unpin", courseId: "CSCI-UA 421", term: "2027-spring" };
+        const diff = emptyDiff({ graduationTermShift: 1 });
+        const out = explainPlanDiff(diff, m);
+        expect(out).toMatch(/Graduation deferred/);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Per-kind: addTerm
 // ---------------------------------------------------------------------------
 
@@ -269,6 +296,7 @@ describe("explainPlanDiff — edge cases", () => {
             { kind: "exclude", courseId: "CSCI-UA 102" },
             { kind: "swap", drop: "A", add: "B", term: "2026-fall" },
             { kind: "move", courseId: "C", fromTerm: "2026-fall", toTerm: "2027-spring" },
+            { kind: "unpin", courseId: "CSCI-UA 421", term: "2027-spring" },
             { kind: "addTerm", term: "2027-summer" },
             { kind: "loadStyleOverride", style: "balanced" },
             { kind: "bindFreeElective", slotId: "X", courseId: "Y" },

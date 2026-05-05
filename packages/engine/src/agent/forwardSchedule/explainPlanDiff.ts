@@ -38,6 +38,7 @@ export function explainPlanDiff(diff: PlanDiff, mutation: PlanMutation): string 
         case "exclude":  return renderExclude(diff, mutation);
         case "swap":     return renderSwap(diff, mutation);
         case "move":     return renderMove(diff, mutation);
+        case "unpin":    return renderUnpin(diff, mutation);
         case "addTerm":  return renderAddTerm(diff, mutation);
         case "loadStyleOverride": return renderLoadStyleOverride(diff, mutation);
         case "bindFreeElective":  return renderBindFreeElective(diff, mutation);
@@ -136,6 +137,13 @@ function renderMove(diff: PlanDiff, m: Extract<PlanMutation, { kind: "move" }>):
         return `${head} ${parts.join("; ")}.`;
     }
     return `${head} Credit totals unchanged.`;
+}
+
+function renderUnpin(diff: PlanDiff, m: Extract<PlanMutation, { kind: "unpin" }>): string {
+    const head = `Unlocking **${m.courseId}** in **${m.term}**.`;
+    const issues = renderIssuesShort(diff);
+    if (issues) return `${head} ${issues}`;
+    return `${head} The solver may re-place it on the next re-plan.`;
 }
 
 function renderAddTerm(diff: PlanDiff, m: Extract<PlanMutation, { kind: "addTerm" }>): string {
