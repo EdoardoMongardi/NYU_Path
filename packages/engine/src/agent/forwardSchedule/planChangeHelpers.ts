@@ -53,9 +53,25 @@ export const SchedulingPreferencesSchema = z.object({
  *  below, where TypeScript's exhaustiveness check will flag the
  *  default: never branch). */
 export const PlanMutationSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("pin"), courseId: z.string(), term: z.string() }),
+    z.object({
+        kind: z.literal("pin"),
+        courseId: z.string(),
+        term: z.string(),
+        /**
+         * Phase 17 — Whether the pin is a permanent solver freeze.
+         * Defaults to `true` when omitted (backwards-compatible with
+         * Phase 14, where every pin was a freeze). `false` is sent by
+         * the Phase 17 "Add" sidebar verb (place without lock).
+         */
+        freeze: z.boolean().optional(),
+    }),
     z.object({ kind: z.literal("exclude"), courseId: z.string(), term: z.string().optional() }),
     z.object({ kind: z.literal("swap"), drop: z.string(), add: z.string(), term: z.string() }),
+    /**
+     * Phase 17 — drag-to-move primitive. Atomic shorthand for
+     * `[exclude(courseId), pin(courseId, toTerm, freeze: false)]`.
+     */
+    z.object({ kind: z.literal("move"), courseId: z.string(), fromTerm: z.string(), toTerm: z.string() }),
     z.object({ kind: z.literal("addTerm"), term: z.string() }),
     z.object({
         kind: z.literal("loadStyleOverride"),
@@ -108,6 +124,21 @@ export function applyMutationsToPreferences(
     for (const m of mutations) {
         switch (m.kind) {
             case "pin": {
+                // Phase 17 — `freeze` defaults to `true` when omitted to
+                // preserve Phase 14 semantics (every pin was a freeze).
+                // The Phase 17 "Add" verb sends `freeze: false` to express
+                // "place without lock"; in that mode we deliberately skip
+                // the `prefs.pins[]` write so the placement does not
+                // survive a future re-plan as a permanent solver freeze.
+                const freeze = m.freeze ?? true;
+                if (!freeze) {
+                    // No-op at the preferences layer. The route layer
+                    // (Phase 17 Task B `/api/plan/add`) handles the
+                    // transient placement directly; the helper records
+                    // the user's freeze-vs-place intent purely by NOT
+                    // writing the pin.
+                    break;
+                }
                 if (!prefs.pins) prefs.pins = [];
                 // Remove any existing pin for the same courseId + term to avoid dupes.
                 prefs.pins = prefs.pins.filter(p => !(p.courseId === m.courseId && p.term === m.term));
@@ -131,6 +162,23 @@ export function applyMutationsToPreferences(
                 if (!prefs.pins) prefs.pins = [];
                 prefs.pins = prefs.pins.filter(p => !(p.courseId === m.add && p.term === m.term));
                 prefs.pins.push({ courseId: m.add, term: m.term });
+                break;
+            }
+            case "move": {
+                // Phase 17 — `move` = atomic drag-to-move. Semantically
+                // equivalent to `[exclude(courseId), pin(courseId, toTerm,
+                // freeze: false)]`. The exclusion clears any
+                // solver-driven re-placement of the course in fromTerm
+                // (or anywhere else, since the solver's exclusion set is
+                // term-agnostic). The toTerm placement itself is the
+                // route layer's responsibility (Phase 17 Task B
+                // `/api/plan/move`) — `move` deliberately does NOT write
+                // to `prefs.pins[]` because moving a course is a
+                // transient placement gesture, not a request to freeze
+                // the solver against future re-plans.
+                if (!prefs.exclusions) prefs.exclusions = [];
+                prefs.exclusions = prefs.exclusions.filter(e => e.courseId !== m.courseId);
+                prefs.exclusions.push({ courseId: m.courseId, term: m.fromTerm });
                 break;
             }
             case "addTerm": {

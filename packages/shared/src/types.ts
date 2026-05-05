@@ -1147,9 +1147,46 @@ export interface AlternativeCandidate {
  * shape stable across phases.
  */
 export type PlanMutation =
-    | { kind: "pin"; courseId: string; term: string }
+    | {
+          kind: "pin";
+          courseId: string;
+          term: string;
+          /**
+           * Phase 17 — Whether this pin is a permanent solver freeze.
+           *
+           * `true` (default when omitted): write to
+           * `SchedulePreferences.pins[]`. The solver will respect this on
+           * every future re-plan — backwards-compatible with Phase 14's
+           * single semantic where every pin was a freeze. The Phase 17
+           * "Lock" sidebar verb sends this value.
+           *
+           * `false`: do NOT write to `SchedulePreferences.pins[]`. The
+           * Phase 17 "Add" sidebar verb sends this value to express the
+           * intent "place this course in this term right now, but don't
+           * lock the solver against moving it on a future re-plan". The
+           * actual placement is achieved by the route layer (Task B);
+           * this flag carries the user's freeze-vs-place intent through
+           * the engine.
+           */
+          freeze?: boolean;
+      }
     | { kind: "exclude"; courseId: string; term?: string }
     | { kind: "swap"; drop: string; add: string; term: string }
+    /**
+     * Phase 17 — Drag-to-move a course from one future term to another.
+     *
+     * Semantically equivalent to `[{kind: "exclude", courseId},
+     * {kind: "pin", courseId, term: toTerm, freeze: false}]` — the
+     * single-mutation form keeps audit-log entries readable
+     * ("move CSCI-UA 421 from 2026-fall to 2027-spring") and lets the
+     * solver treat the gesture atomically.
+     *
+     * Unlike `pin` with `freeze: true`, `move` does NOT write to
+     * `SchedulePreferences.pins[]` — moving a course is a transient
+     * placement gesture, not a request to freeze the solver against
+     * future re-plans.
+     */
+    | { kind: "move"; courseId: string; fromTerm: string; toTerm: string }
     | { kind: "addTerm"; term: string }
     | { kind: "loadStyleOverride"; term?: string; style: "balanced" | "frontload" | "backload" | "light" | "heavy" }
     | { kind: "bindFreeElective"; slotId: string; courseId: string }
