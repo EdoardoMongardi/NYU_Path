@@ -1,21 +1,13 @@
 /* ==========================================================
    Phase 16 Task D — sidebar polish tokens
    ----------------------------------------------------------
-   Workload-tier palette consumed by per-slot left-border tints
-   in `.slotTier_*` (see further down). Defined at file top so
-   any future tier-aware affordance can re-use the same hues
-   instead of duplicating literals.
-   Wrapped in `:global` because Next's CSS-Modules loader rejects
-   bare `:root { ... }` ("Selector :root is not pure"). The custom
-   properties still cascade to every descendant of <html>.
+   The workload-tier palette (`--tier-*`) is defined in
+   apps/web/app/globals.css alongside the rest of the design
+   tokens. CSS Modules in Next 16 reject any top-level pseudo-
+   class block (`:root`, `:global(:root)`), so token definitions
+   must live in the global stylesheet. The `.slotTier_*` rules
+   below consume the tokens via `var(...)`.
    ========================================================== */
-:global(:root) {
-    --tier-major-required: #4f46e5;
-    --tier-major-elective: #7c3aed;
-    --tier-school-core: #0d9488;
-    --tier-free-elective: #64748b;
-    --tier-general-elective: #71717a;
-}
 
 .chatPage {
     height: 100vh;
