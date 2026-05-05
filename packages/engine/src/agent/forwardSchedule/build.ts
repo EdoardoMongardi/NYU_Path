@@ -16,6 +16,7 @@ import type { ForwardSchedule } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import { walkRequirements, notSatisfiedRequirements } from "../../dpr/schema.js";
 import { meetsGradeThreshold } from "../../dpr/gradeComparison.js";
+import { deriveTemporalContext } from "../../dpr/temporalContext.js";
 import { solveForwardSchedule } from "./solver.js";
 import {
     runGraduationPathValidator,
@@ -219,33 +220,61 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Infer the current term from DPR IP rows, or fall back to a default. */
-function inferCurrentTerm(dpr: DegreeProgressReport): string {
-    // Look for the latest IP row term and use it as current
-    const ipRows = dpr.courseHistory.filter(r => r.type === "IP");
-    if (ipRows.length > 0) {
-        // Convert PeopleSoft term format ("2026 Fall") to solver format ("2026-fall")
-        const latestTerm = ipRows[ipRows.length - 1]!.term;
-        const converted = psTermToSolverTerm(latestTerm);
-        if (converted) return converted;
-    }
-    // Fall back to the next semester from "now" (2026-fall as a reasonable default)
+/** Infer the current term using the wall clock (NOT the latest IP row).
+ *
+ *  RC (May 2026 post-mortem): the prior implementation picked the LAST
+ *  IP-tagged DPR row as "current term". With a student mid-Spring 2026
+ *  who has Fall 2026 already pre-registered, that picked Fall 2026 — so
+ *  the planner started building forward from Fall 2026 and stacked new
+ *  unmet-requirement courses on top of the 3 IP rows already in that
+ *  term, producing a 28-credit semester (well over the 18-credit cap).
+ *
+ *  The fix routes through `deriveTemporalContext` (which already does
+ *  wall-clock-vs-DPR reconciliation correctly) and returns its
+ *  `currentTerm` in the solver's "{year}-{season}" shape.
+ *
+ *  `now` is injectable for deterministic tests; defaults to wall clock.
+ */
+function inferCurrentTerm(dpr: DegreeProgressReport, now: Date = new Date()): string {
+    const temporal = deriveTemporalContext(dpr, { now });
+    // `temporal.currentTerm` is in human-readable "Season YYYY" or
+    // "YYYY Season" shape (e.g. "Fall 2026"). The planner needs
+    // "{year}-{season}" — convert via the existing helper.
+    const solverShape = temporal.currentTerm
+        ? psTermToSolverTerm(temporal.currentTerm)
+        : null;
+    if (solverShape) return solverShape;
+    // Defensive fallback (should never hit; deriveTemporalContext is
+    // pure + deterministic given a Date). Keeps the legacy default so
+    // we never crash on a malformed temporal output.
     return "2026-fall";
 }
 
-/** Convert PeopleSoft term ("2026 Fall") to solver format ("2026-fall"). */
+/** Convert a human term label to the solver's "{year}-{season}" shape.
+ *  Accepts EITHER "2026 Fall" (PeopleSoft / DPR) OR "Fall 2026"
+ *  (deriveTemporalContext output) OR the already-canonical "2026-fall".
+ *  Returns null when the input isn't a recognizable term label.
+ */
 function psTermToSolverTerm(psTerm: string): string | null {
-    const m = psTerm.match(/^(\d{4})\s+(Fall|Spring|Summer|J Term|Spr|Sum)$/i);
+    // Already in solver format → pass through.
+    if (/^\d{4}-(?:fall|spring|summer|january)$/i.test(psTerm)) {
+        return psTerm.toLowerCase();
+    }
+    // "YYYY Season" or "Season YYYY".
+    const m = psTerm.match(/^(\d{4})\s+(Fall|Spring|Summer|J Term|J-Term|January|Spr|Sum)$/i)
+        ?? psTerm.match(/^(Fall|Spring|Summer|J Term|J-Term|January|Spr|Sum)\s+(\d{4})$/i);
     if (!m) return null;
-    const year = m[1]!;
-    const seasonRaw = m[2]!.toLowerCase();
+    const [g1, g2] = [m[1]!, m[2]!];
+    const yearStr = /^\d{4}$/.test(g1) ? g1 : g2;
+    const seasonStr = /^\d{4}$/.test(g1) ? g2 : g1;
+    const seasonRaw = seasonStr.toLowerCase();
     const season =
         seasonRaw.startsWith("fa") ? "fall" :
         seasonRaw.startsWith("sp") ? "spring" :
         seasonRaw.startsWith("su") ? "summer" :
         seasonRaw.startsWith("j") ? "january" : null;
     if (!season) return null;
-    return `${year}-${season}`;
+    return `${yearStr}-${season}`;
 }
 
 /** Derive graduation term from current term + credits needed. */
