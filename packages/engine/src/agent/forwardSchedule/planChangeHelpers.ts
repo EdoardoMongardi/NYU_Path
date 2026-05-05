@@ -176,6 +176,13 @@ export function applyMutationsToPreferences(
                 // to `prefs.pins[]` because moving a course is a
                 // transient placement gesture, not a request to freeze
                 // the solver against future re-plans.
+                //
+                // Dedupe-by-courseId-only matches `swap`'s semantics
+                // (line 159 above); both rely on the solver's exclusion
+                // set being keyed on courseId only (see solver.ts:854).
+                // If the solver ever becomes term-aware on exclusions,
+                // both `swap` and `move` need to switch to dedupe by the
+                // (courseId, term) tuple together.
                 if (!prefs.exclusions) prefs.exclusions = [];
                 prefs.exclusions = prefs.exclusions.filter(e => e.courseId !== m.courseId);
                 prefs.exclusions.push({ courseId: m.courseId, term: m.fromTerm });
