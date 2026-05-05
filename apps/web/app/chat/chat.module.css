@@ -5,8 +5,11 @@
    in `.slotTier_*` (see further down). Defined at file top so
    any future tier-aware affordance can re-use the same hues
    instead of duplicating literals.
+   Wrapped in `:global` because Next's CSS-Modules loader rejects
+   bare `:root { ... }` ("Selector :root is not pure"). The custom
+   properties still cascade to every descendant of <html>.
    ========================================================== */
-:root {
+:global(:root) {
     --tier-major-required: #4f46e5;
     --tier-major-elective: #7c3aed;
     --tier-school-core: #0d9488;
