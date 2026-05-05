@@ -188,6 +188,22 @@ describe("buildSystemPrompt", () => {
         expect(out).toContain("visaStatus: f1");
     });
 
+    // Phase 17 Task E — auto-chain plan_forward_degree → materialize_sections.
+    // The system prompt MUST instruct the agent to follow plan_forward_degree
+    // with materialize_sections for the immediate registration term so the
+    // student gets section-level data without a separate ask.
+    it("contains Phase 17 Task E auto-chain instruction", () => {
+        const dprPrompt = buildSystemPrompt({ dprLoaded: true });
+        expect(dprPrompt).toContain("AUTO-CHAIN");
+        expect(dprPrompt).toContain("materialize_sections");
+        expect(dprPrompt).toContain("first non-locked");
+        // The instruction explains why other future terms stay structural-only
+        // (FOSE has no data for them yet) — this anchor prevents the agent
+        // from materializing every future term and burning rate-limit on
+        // empty FOSE responses.
+        expect(dprPrompt).toMatch(/FOSE has no section data|wasted work|6 months/);
+    });
+
     // Phase 14 Task 8 — Tier-A modeled extraction rules are present
     it("contains Phase 14 PREFERENCE_EXTRACTION_RULES (Tier-A modeled mappings)", () => {
         expect(prompt).toContain("PREFERENCE EXTRACTION");
