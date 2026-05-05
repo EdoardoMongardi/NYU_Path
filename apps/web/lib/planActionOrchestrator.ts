@@ -220,8 +220,16 @@ export function computeFutureTerms(mutations: PlanMutation[], now: Date = new Da
         }
     }
 
-    // Stable sort so route responses are deterministic across calls.
-    return Array.from(out).sort();
+    // Sort CHRONOLOGICALLY (not alphabetically) so Task D's UI consumer
+    // can render the bubbles in calendar order. May 2026 review caught
+    // the alphabetical-sort bug where ["2026-fall", "2026-spring"] would
+    // surface fall before spring even though spring comes first.
+    const parsed = Array.from(out).map((s) => {
+        const t = parseSolverTerm(s)!;
+        return { term: s, ord: termOrdinal(t) };
+    });
+    parsed.sort((a, b) => a.ord - b.ord);
+    return parsed.map((p) => p.term);
 }
 
 // ---------------------------------------------------------------------------
@@ -450,65 +458,16 @@ export async function runProposeStage(
         };
     }
 
-    // Extract the proposed schedule from the diff's added slots when
-    // possible. The proposal tool returns a planDiff but not the
-    // proposed schedule object directly — re-derive it by walking
-    // (current + diff). We fall back to None when no plan is
-    // present (the no_plan path).
-    //
-    // NOTE: rather than re-compose, we lift the proposal's added
-    // slots into a synthetic schedule whose semesters[] = current
-    // semesters mutated per the diff. Since proposePlanChange is
-    // read-only, the way to get the destination schedule is to
-    // simulate it. To keep this implementation simple and avoid
-    // duplicating solver logic at the route layer, we invoke a
-    // SECOND read-only pass via a clone-session (no persistence) and
-    // confirm_plan_change semantics on a CLONED session — but that
-    // would mutate the clone's state. Cleaner: invoke
-    // confirm_plan_change on a CLONED session whose stores are
-    // null-ed out so persistence is skipped. The cloned session's
-    // post-call `forwardSchedule` IS the proposed schedule.
-
-    const clonedState: LoadedSessionState = {
-        profile: loaded.state.profile,
-        dpr: loaded.state.dpr,
-        forwardSchedule: loaded.state.forwardSchedule
-            ? structuredClone(loaded.state.forwardSchedule)
-            : null,
-        studentDraftPlan: loaded.state.studentDraftPlan
-            ? structuredClone(loaded.state.studentDraftPlan)
-            : null,
-        schedulePreferences: loaded.state.schedulePreferences
-            ? structuredClone(loaded.state.schedulePreferences)
-            : null,
-    };
-    const cloneSession = buildSession(clonedState, env);
-    // Strip persistence stores so confirm_plan_change runs purely in
-    // memory (its persist hook gates on `session.scheduleStore` +
-    // `session.student`; clearing the store bypasses both writes).
-    delete cloneSession.scheduleStore;
-    delete cloneSession.profileStore;
-
-    let proposedForwardSchedule: ForwardSchedule | undefined;
-    try {
-        await confirmPlanChangeTool.call(
-            { mutations: mutations as unknown as Parameters<typeof confirmPlanChangeTool.call>[0]["mutations"] },
-            { signal: new AbortController().signal, session: cloneSession },
-        );
-        proposedForwardSchedule = cloneSession.forwardSchedule ?? cloneSession.studentDraftPlan;
-    } catch (err) {
-        // If the clone pass fails, fall back to NOT including the
-        // proposed schedule rather than failing the whole route. The
-        // structured outcome from propose still has `feasible`,
-        // `consequences`, etc. for the caller.
-        // eslint-disable-next-line no-console
-        console.warn(
-            `[planActionOrchestrator] clone-session simulation failed (non-fatal): ${
-                err instanceof Error ? err.message : String(err)
-            }`,
-        );
-        proposedForwardSchedule = undefined;
-    }
+    // Phase 17 Task B follow-up (May 2026 review) — read the proposed
+    // schedule directly from the propose tool's output. Previously this
+    // path ran a SECOND solver invocation via a clone-session
+    // confirm_plan_change call (purely to extract the post-mutation
+    // schedule), doubling Stage 1 latency from ~180-600ms to
+    // ~360-1200ms — over the budget the Phase 17 plan committed to.
+    // proposePlanChange now returns `proposedSchedule` as a pure
+    // preview (no writes), so a single solver pass is sufficient.
+    const proposedForwardSchedule = (outcome as { proposedSchedule?: ForwardSchedule })
+        .proposedSchedule;
 
     // Mint a pendingMutationId and stage the mutations for confirm.
     purgeExpired();

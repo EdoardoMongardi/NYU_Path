@@ -183,7 +183,37 @@ describe("planActionOrchestrator (Phase 17 Task B)", () => {
                 { kind: "pin",  courseId: "Y", term: "2026-fall" },
             ];
             const out = computeFutureTerms(mutations, MAY_2026);
-            expect(out).toEqual(["2026-fall", "2026-summer"]);
+            // CHRONOLOGICAL order: summer comes BEFORE fall in 2026.
+            // (Previously this test happened to pass under alphabetical
+            // sort because "fall" < "summer" — which is alphabetically
+            // ascending but chronologically REVERSED. The May 2026 review
+            // caught the alphabetical-sort bug; now sorted by term
+            // ordinal so Task D's UI consumer gets calendar order.)
+            expect(out).toEqual(["2026-summer", "2026-fall"]);
+        });
+
+        it("sorts spring before fall in the same year (chronological, not alphabetical)", () => {
+            // Regression test for the alphabetical-sort bug: alphabetical
+            // sort of ["2026-fall", "2026-spring"] yields fall first
+            // (because "f" < "s"), but chronologically spring comes
+            // first. Use a JANUARY caller-now so both terms fall inside
+            // the 6-month window.
+            const JAN_2026 = new Date("2026-01-15T12:00:00Z");
+            const mutations: PlanMutation[] = [
+                { kind: "pin", courseId: "X", term: "2026-fall" },
+                { kind: "pin", courseId: "Y", term: "2026-spring" },
+            ];
+            const out = computeFutureTerms(mutations, JAN_2026);
+            // Spring 2026 is current (Jan-May); summer 2026 is +1 season
+            // from Jan; fall 2026 is +2. All three windows hit.
+            expect(out[0]).toBe("2026-spring");
+            // Whichever of summer / fall lands in the result, fall is
+            // never before spring.
+            const springIdx = out.indexOf("2026-spring");
+            const fallIdx = out.indexOf("2026-fall");
+            if (fallIdx !== -1) {
+                expect(springIdx).toBeLessThan(fallIdx);
+            }
         });
     });
 

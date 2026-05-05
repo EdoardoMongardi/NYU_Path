@@ -46,6 +46,21 @@ interface ProposePlanChangeOutput extends PlanChangeOutcome {
      * route layer can request additional renders if needed).
      */
     explanation: string;
+    /**
+     * Phase 17 — the simulated post-mutation schedule. Returned so the
+     * route-layer orchestrator can read the proposed `forwardSchedule`
+     * directly without re-running the solver via a clone-session
+     * `confirmPlanChange` call (the May 2026 post-mortem variant of the
+     * Task A reviewer's load-bearing assertion: doubling the solver
+     * invocation per click would push Stage 1 latency from 180-600ms
+     * up to 360-1200ms — over the budget I committed to in the plan).
+     *
+     * The route layer reads this to validate "course actually lands in
+     * toTerm" without persisting; the actual persist still goes through
+     * `confirmPlanChange` on a separate user-confirm action. So this
+     * field NEVER triggers a write — it's a pure preview.
+     */
+    proposedSchedule?: ForwardSchedule;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +185,7 @@ export const proposePlanChangeTool = buildTool({
             conflicts: conflicts.length > 0 ? conflicts : undefined,
             planDiff,
             explanation,
+            proposedSchedule,
         };
     },
     summarizeResult(output) {

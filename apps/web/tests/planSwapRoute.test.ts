@@ -59,6 +59,24 @@ describe("/api/plan/swap (Phase 17 Task B)", () => {
         expect(res.status).toBe(400);
     });
 
+    it("returns 400 when body mixes single-term AND cross-term fields (May 2026 review fix)", async () => {
+        // Defensive against malformed clients: a body containing BOTH
+        // {drop, add, term} AND {exchanges} would silently match the
+        // single-term branch and skip cross-term. The schema's `.refine`
+        // rejects mixed bodies at validation time.
+        const studentId = "swap_mixed_shape";
+        await seedStudentState(studentId);
+        const token = await issueTestToken(studentId);
+        const { POST } = await import("../app/api/plan/swap/route");
+        const res = await POST(fakeRequest(token, {
+            drop: "CSCI-UA 421",
+            add: "CSCI-UA 480",
+            term: "2026-fall",
+            exchanges: [{ aCourseId: "X", aTerm: "2026-fall", bCourseId: "Y", bTerm: "2027-spring" }],
+        }) as never);
+        expect(res.status).toBe(400);
+    });
+
     describe("single-term swap shape", () => {
         it("returns 200 with explanation citing both course codes + the term", async () => {
             const studentId = "swap_single_term";
