@@ -561,11 +561,17 @@ function renderSlot(slot: ScheduleSlot) {
             // Phase 16 Task C — grade moved into the dedicated grade
             // cell appended by the row layout; the meta cell now holds
             // ONLY credits to keep alignment with the other slot kinds.
+            // May 2026 post-mortem: only render title when it actually
+            // differs from courseId — the legacy CourseTaken path stores
+            // `title = courseId` as a placeholder and would otherwise
+            // render "CSCI-UA 4 CSCI-UA 4".
             return (
                 <>
                     <span className={styles.slotIcon}>✓</span>
                     <span className={styles.slotCourseId}>{slot.courseId}</span>
-                    <span className={styles.slotTitle}>{slot.title}</span>
+                    {slot.title && slot.title !== slot.courseId && (
+                        <span className={styles.slotTitle}>{slot.title}</span>
+                    )}
                     <span className={styles.slotMeta}>{slot.credits}cr</span>
                 </>
             );
@@ -574,7 +580,9 @@ function renderSlot(slot: ScheduleSlot) {
                 <>
                     <span className={styles.slotIcon}>⏳</span>
                     <span className={styles.slotCourseId}>{slot.courseId}</span>
-                    <span className={styles.slotTitle}>{slot.title}</span>
+                    {slot.title && slot.title !== slot.courseId && (
+                        <span className={styles.slotTitle}>{slot.title}</span>
+                    )}
                     <span className={styles.slotMeta}>{slot.credits}cr</span>
                 </>
             );
@@ -583,7 +591,9 @@ function renderSlot(slot: ScheduleSlot) {
                 <>
                     <span className={styles.slotIcon}>📅</span>
                     <span className={styles.slotCourseId}>{slot.courseId}</span>
-                    <span className={styles.slotTitle}>{slot.title}</span>
+                    {slot.title && slot.title !== slot.courseId && (
+                        <span className={styles.slotTitle}>{slot.title}</span>
+                    )}
                     <span className={styles.slotMeta}>{slot.credits}cr</span>
                     {slot.requiresPetition && <span className={styles.slotFlag} title="Requires petition (instructor permission)">⚠</span>}
                 </>

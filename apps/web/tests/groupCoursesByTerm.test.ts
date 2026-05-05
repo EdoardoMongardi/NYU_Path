@@ -264,4 +264,99 @@ describe("groupCoursesByTerm — Phase 16 Task C", () => {
         expect(compareTerms("2025 Fall", "2025-fall")).toBe(0);
         expect(compareTerms("2024 Spr", "2024 Fall")).toBeLessThan(0);
     });
+
+    // ---- May 2026 post-mortem regressions ----
+
+    it("(f) DPR-driven path: each IP-tagged term gets its own in-progress card with REAL grades, no synthesized 'C'", () => {
+        // SAA_STD_DS-shaped fixture: 4 IP rows in 2026 Spr + 3 IP rows in
+        // 2026 Fall. The original Task C bug rendered Spring 2026 as a
+        // historical "completed" card with C grades because (a) it walked
+        // coursesTaken (which carries the synthesized C), and (b) the
+        // currentSemester filter only excluded ONE term, not all IP terms.
+        const dpr = mkDpr([
+            mkRow({ term: "2024 Fall", subject: "WRIT-UA", catalogNbr: "100", grade: "A", type: "EN", courseTitle: "Writing the Essay" }),
+            mkRow({ term: "2026 Spr", subject: "CSCI-UA", catalogNbr: "4", grade: "", type: "IP", courseTitle: "Introduction to Web Design and" }),
+            mkRow({ term: "2026 Spr", subject: "CSCI-UA", catalogNbr: "473", grade: "", type: "IP", courseTitle: "Fundamentals of Machine Learning" }),
+            mkRow({ term: "2026 Fall", subject: "CORE-UA", catalogNbr: "700", grade: "", type: "IP", courseTitle: "Expressive Culture: Topics" }),
+        ]);
+        const out = groupCoursesByTerm({ student: null, forwardSchedule: null, dpr });
+        expect(out.terms).toHaveLength(3);
+        // Historical card.
+        expect(out.terms[0]!.term).toBe("2024 Fall");
+        expect(out.terms[0]!.locked).toBe(true);
+        expect(out.terms[0]!.slots[0]!.kind).toBe("completed");
+        // Spring 2026 IP card — locked=false, kind=in_progress, real titles.
+        expect(out.terms[1]!.term).toBe("2026 Spr");
+        expect(out.terms[1]!.locked).toBe(false);
+        expect(out.terms[1]!.slots).toHaveLength(2);
+        const springSlot = out.terms[1]!.slots[0]!;
+        expect(springSlot.kind).toBe("in_progress");
+        if (springSlot.kind === "in_progress") {
+            expect(springSlot.title).toBe("Introduction to Web Design and");
+        }
+        // Fall 2026 IP card — also in_progress, NOT historical.
+        expect(out.terms[2]!.term).toBe("2026 Fall");
+        expect(out.terms[2]!.locked).toBe(false);
+        const fallSlot = out.terms[2]!.slots[0]!;
+        expect(fallSlot.kind).toBe("in_progress");
+        if (fallSlot.kind === "in_progress") {
+            expect(fallSlot.title).toBe("Expressive Culture: Topics");
+        }
+    });
+
+    it("(g) NORMALIZED dedup collapses 'YYYY Season' (DPR) and 'YYYY-season' (planner) to one bucket", () => {
+        // The May 2026 'two-card Fall 2026' bug: dedup compared literal
+        // strings. DPR sent "2026 Fall" while planner sent "Fall 2026"
+        // OR "2026-fall", producing two cards for the same term.
+        const dpr = mkDpr([
+            mkRow({ term: "2026 Fall", subject: "CORE-UA", catalogNbr: "700", grade: "", type: "IP", courseTitle: "Expressive Culture" }),
+            mkRow({ term: "2026 Fall", subject: "MATH-UA", catalogNbr: "251", grade: "", type: "IP", courseTitle: "Math Modeling" }),
+            mkRow({ term: "2026 Fall", subject: "MATH-UA", catalogNbr: "343", grade: "", type: "IP", courseTitle: "Algebra" }),
+        ]);
+        const schedule = mkSchedule([
+            // Phase 13 forward planner emits the same term in its
+            // own shape — should DEDUP, not duplicate.
+            mkSemester({
+                term: "2026-fall",
+                slots: [
+                    mkSpecificSlot("CSCI-UA 4"),
+                    mkSpecificSlot("CSCI-UA 473"),
+                    mkSpecificSlot("MATH-UA 334"),
+                    mkSpecificSlot("MPAJZ-UE 71"),
+                    mkSpecificSlot("CORE-UA 700"),
+                ],
+            }),
+            mkSemester({ term: "2027-spring", slots: [mkSpecificSlot("CSCI-UA 421")] }),
+        ]);
+        const out = groupCoursesByTerm({ student: null, forwardSchedule: schedule, dpr });
+        // Fall 2026 should appear EXACTLY ONCE — the IP rendering wins.
+        const fallTerms = out.terms.filter((t) => t.term.includes("2026 Fall") || t.term.includes("2026-fall"));
+        expect(fallTerms).toHaveLength(1);
+        expect(fallTerms[0]!.term).toBe("2026 Fall"); // DPR wins on display
+        expect(fallTerms[0]!.locked).toBe(false);
+        expect(fallTerms[0]!.slots).toHaveLength(3); // DPR's 3, NOT planner's 5
+        // Spring 2027 (planner-only) survives.
+        expect(out.terms.find((t) => t.term === "2027-spring")).toBeDefined();
+    });
+
+    it("(h) historical slots carry the DPR row's courseTitle, not a duplicated courseId", () => {
+        const dpr = mkDpr([
+            mkRow({
+                term: "2025 Fall",
+                subject: "MKTG-UB",
+                catalogNbr: "1",
+                grade: "A",
+                type: "EN",
+                courseTitle: "Introduction to Marketing",
+            }),
+        ]);
+        const out = groupCoursesByTerm({ student: null, forwardSchedule: null, dpr });
+        const slot = out.terms[0]!.slots[0]!;
+        expect(slot.kind).toBe("completed");
+        if (slot.kind === "completed") {
+            expect(slot.courseId).toBe("MKTG-UB 1");
+            expect(slot.title).toBe("Introduction to Marketing");
+            expect(slot.title).not.toBe(slot.courseId); // no duplication
+        }
+    });
 });
