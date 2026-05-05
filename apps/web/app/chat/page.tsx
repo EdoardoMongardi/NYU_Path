@@ -12,7 +12,7 @@ import {
 } from "../../lib/chatV2Client";
 import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
 import { formatDuration } from "../../lib/formatDuration";
-import type { ForwardSchedule, StudentProfile } from "@nyupath/shared";
+import type { ForwardSchedule, SchedulePreferences, StudentProfile } from "@nyupath/shared";
 import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@nyupath/engine";
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
 import ScheduleSidebar from "./scheduleSidebar";
@@ -155,6 +155,13 @@ export default function ChatPage() {
     const [visaStatus, setVisaStatus] = useState<string | null>(null);
     const [graduationTarget, setGraduationTarget] = useState<string | null>(null);
     const [forwardSchedule, setForwardSchedule] = useState<ForwardSchedule | null>(null);
+    // Phase 17 Task D — restored SchedulePreferences row drives the
+    // sidebar's freeze-flag plumb-through (so the Lock popover label
+    // flips to "Unlock" when a slot is in pins[]). Hydrated from
+    // /api/session/restore on mount; refreshed after each successful
+    // /api/plan/confirm round-trip when the route returns updated prefs.
+    const [schedulePreferences, setSchedulePreferences] =
+        useState<SchedulePreferences | null>(null);
     // Phase 15 Task 8 — captured from the `forward_materialization_update`
     // SSE event when the agent runs `materialize_sections`. Drives the
     // sidebar's IMMEDIATE-term render: full → Sections view with
@@ -286,6 +293,12 @@ export default function ChatPage() {
                     setForwardSchedule(data.forwardSchedule);
                 } else if (data.studentDraftPlan) {
                     setForwardSchedule(data.studentDraftPlan);
+                }
+                // Hydrate restored preferences so the sidebar can
+                // render freeze indicators on Lock-toggle UI without
+                // waiting for the next /api/plan/confirm round-trip.
+                if (data.schedulePreferences) {
+                    setSchedulePreferences(data.schedulePreferences as SchedulePreferences);
                 }
                 // ---- Replay chat history ----
                 if (data.chatMessages.length > 0) {
@@ -716,46 +729,100 @@ export default function ChatPage() {
     }, []);
 
     /**
+     * Per-bubble AbortController registry. When the user clicks
+     * Confirm / Keep-as-is / Override-anyway we want to abort any
+     * in-flight polish + Stage 2 streams so we don't burn Anthropic +
+     * FOSE tokens after the bubble is resolved. Keyed by messageId.
+     *
+     * Stored as a ref (not state) because abort signaling is an
+     * imperative side-effect, not a render-driving value.
+     */
+    const bubbleAbortersRef = useRef<Map<string, AbortController>>(new Map());
+
+    /**
      * Spawn the polish + Stage 2 fetches for a freshly-injected bubble.
      * Both fetches are fire-and-forget — they update the bubble via
      * the patchBubble reducer as events stream in.
+     *
+     * Each spawn registers an AbortController on `bubbleAbortersRef`
+     * so the bubble's resolution handlers can stop the streams cleanly.
+     * Stage 2 is gated on `bubble.kind !== "hard_refusal"` because a
+     * hard refusal already failed structural validation — surfacing
+     * "✓ Open sections exist" for terms we just refused to plan into
+     * is confusing UX.
      */
     const spawnBubbleEnrichers = useCallback((messageId: string, bubble: PlanActionBubbleState) => {
+        // Reuse-or-create the AbortController for this bubble.
+        let aborter = bubbleAbortersRef.current.get(messageId);
+        if (!aborter) {
+            aborter = new AbortController();
+            bubbleAbortersRef.current.set(messageId, aborter);
+        }
+        const { signal } = aborter;
+
         // ---- LLM polish (env-flag gated, non-clean only) ----
         const polishEnabled = process.env.NEXT_PUBLIC_PLAN_CHANGE_LLM_POLISH === "1";
         if (polishEnabled && bubble.kind !== "clean") {
             (async () => {
                 try {
-                    for await (const ev of streamPlanActionPolish({
-                        slotKey: bubble.slotKey,
-                        templateText: bubble.text,
-                    })) {
+                    for await (const ev of streamPlanActionPolish(
+                        {
+                            slotKey: bubble.slotKey,
+                            templateText: bubble.text,
+                        },
+                        { signal },
+                    )) {
+                        if (signal.aborted) return;
                         patchBubble(messageId, (b) => applyPolishEvent(b, ev));
                     }
                 } catch (err) {
+                    if (signal.aborted) return; // expected on user-confirm path
                     // Best-effort — keep the deterministic template
-                    // intact on failure.
+                    // intact on transport failure.
                     console.error("[plan_action_bubble] polish stream failed:", err);
                 }
             })();
         }
 
-        // ---- Stage 2 enrichment (only when futureTerms non-empty) ----
-        if (bubble.futureTerms.length > 0) {
+        // ---- Stage 2 enrichment (non-empty futureTerms; not hard refusals) ----
+        // Hard refusals had Stage 1 reject the structural change, so
+        // surfacing per-term FOSE-section signals for the rejected
+        // terms would mislead the user. Only fire Stage 2 when there
+        // is something the user could actually choose to confirm.
+        if (bubble.futureTerms.length > 0 && bubble.kind !== "hard_refusal") {
             (async () => {
                 try {
-                    for await (const ev of streamPlanActionStage2({
-                        slotKey: bubble.slotKey,
-                        futureTerms: bubble.futureTerms,
-                    })) {
+                    for await (const ev of streamPlanActionStage2(
+                        {
+                            slotKey: bubble.slotKey,
+                            futureTerms: bubble.futureTerms,
+                        },
+                        { signal },
+                    )) {
+                        if (signal.aborted) return;
                         patchBubble(messageId, (b) => applyStage2Event(b, ev));
                     }
                 } catch (err) {
+                    if (signal.aborted) return;
                     console.error("[plan_action_bubble] stage2 stream failed:", err);
                 }
             })();
         }
     }, [patchBubble]);
+
+    /**
+     * Abort any in-flight polish + Stage 2 streams for a bubble. Called
+     * by all three resolution handlers (Confirm / Keep-as-is /
+     * Override-anyway) so the network round-trips stop the moment the
+     * user picks an action — no orphan token spend.
+     */
+    const abortBubbleEnrichers = useCallback((messageId: string): void => {
+        const aborter = bubbleAbortersRef.current.get(messageId);
+        if (aborter) {
+            aborter.abort();
+            bubbleAbortersRef.current.delete(messageId);
+        }
+    }, []);
 
     /**
      * Sidebar callback wired through `<ScheduleSidebar onPlanActionResult>`.
@@ -813,6 +880,10 @@ export default function ChatPage() {
     const handleBubbleConfirm = useCallback(async (messageId: string, pendingMutationId: string): Promise<void> => {
         // Lock buttons immediately so a double-click can't double-submit.
         patchMessage(messageId, { bubbleResolved: true });
+        // Abort any in-flight polish + Stage 2 streams — no point
+        // burning Anthropic / FOSE tokens on a bubble the user already
+        // resolved.
+        abortBubbleEnrichers(messageId);
         try {
             const result = await planConfirm({ pendingMutationId });
             if (!result.ok) {
@@ -840,19 +911,21 @@ export default function ChatPage() {
                 content: `Confirm failed: ${err instanceof Error ? err.message : String(err)}`,
             });
         }
-    }, [patchMessage]);
+    }, [patchMessage, abortBubbleEnrichers]);
 
     /** Keep-as-is — discard the bubble without applying. */
     const handleBubbleKeepAsIs = useCallback((messageId: string): void => {
+        abortBubbleEnrichers(messageId);
         patchMessage(messageId, {
             bubbleResolved: true,
             content: "Kept the plan as-is.",
         });
-    }, [patchMessage]);
+    }, [patchMessage, abortBubbleEnrichers]);
 
     /** Override-anyway — apply with `force: true` (Decision #32). */
     const handleBubbleOverrideAnyway = useCallback(async (messageId: string, pendingMutationId: string): Promise<void> => {
         patchMessage(messageId, { bubbleResolved: true });
+        abortBubbleEnrichers(messageId);
         try {
             const result = await planConfirm({ pendingMutationId, force: true });
             if (!result.ok) {
@@ -875,7 +948,7 @@ export default function ChatPage() {
                 content: `Override failed: ${err instanceof Error ? err.message : String(err)}`,
             });
         }
-    }, [patchMessage]);
+    }, [patchMessage, abortBubbleEnrichers]);
 
     /**
      * Phase 16 Task B — Update-DPR sidebar affordance.
@@ -1426,6 +1499,7 @@ export default function ChatPage() {
                 student={sidebarStudent}
                 dpr={sidebarDpr}
                 materialization={forwardMaterialization}
+                schedulePreferences={schedulePreferences}
                 open={sidebarOpen}
                 onClose={() => setSidebarOpen(false)}
                 onProposeLoadStyle={handleProposeLoadStyle}
