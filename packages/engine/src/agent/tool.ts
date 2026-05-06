@@ -112,6 +112,18 @@ export interface ToolSession {
      */
     chatHistoryStore?: import("../persistence/chatHistoryStore.js").ChatHistoryStore;
 
+    /** Onboarding-stated target graduation term in display form (e.g.
+     *  "Spring 2027"). Set by the chat v2 route after normalizing the
+     *  free-form student input. `plan_forward_degree` reads it as the
+     *  implicit default for `graduationTermOverride` when the LLM
+     *  doesn't pass one explicitly — without this fallback the planner
+     *  derives a graduation term from `creditsEarned >= minimum`,
+     *  which collapses to currentTerm+1 for any student already at the
+     *  credit floor and produces a too-narrow window that flips the
+     *  schedule to `infeasible-draft` for spurious credit-ceiling
+     *  reasons. Solver shape conversion happens at read time. */
+    graduationTarget?: string;
+
     /** Phase 13 — solved forward schedule. Set by `plan_forward_degree`
      *  when state ∈ { "valid-clean", "valid-with-trade-offs" }. Read by
      *  `view_forward_plan`, the SSE route, and the chat sidebar. */
