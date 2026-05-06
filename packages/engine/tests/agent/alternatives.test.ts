@@ -73,7 +73,7 @@ function infeasibleInput(overrides: Partial<SolverInput> = {}): SolverInput {
         homeSchoolId: "cas",
         visaStatus: "f1",
         coursesTaken: new Set(),
-        coursesInProgress: new Set(),
+        coursesInProgress: new Map(),
         // single-term window: current == graduation → solver can only fill 1 term
         currentTerm: "2026-fall",
         graduationTerm: "2026-fall",

@@ -340,12 +340,19 @@ export function buildSolverInputFromSession(
     const homeSchoolId = student?.homeSchool ?? schoolConfig?.schoolId ?? "cas";
     const visaStatus = student?.visaStatus;
 
+    // currentTerm is computed first because the IP-row term-fallback
+    // path needs it. See build.ts for the post-mortem context — IP rows
+    // carry a per-row term that the solver depends on for correct
+    // placement; flattening would re-introduce the 28-credit phantom.
+    const currentTerm = inferCurrentTermFromDpr(dpr);
+
     const coursesTaken = new Set<string>();
-    const coursesInProgress = new Set<string>();
+    const coursesInProgress = new Map<string, { term: string }>();
     for (const row of dpr.courseHistory) {
         const key = `${row.subject} ${row.catalogNbr}`;
         if (row.type === "IP") {
-            coursesInProgress.add(key);
+            const rowTerm = psTermToSolverTerm(row.term) ?? currentTerm;
+            coursesInProgress.set(key, { term: rowTerm });
             continue;
         }
         if (row.grade && meetsGradeThreshold(row.grade, "D")) {
@@ -353,7 +360,6 @@ export function buildSolverInputFromSession(
         }
     }
 
-    const currentTerm = inferCurrentTermFromDpr(dpr);
     const graduationTerm = deriveGraduationTermFromCredits(currentTerm, creditsEarned, graduationCreditMinimum, creditTargetPerSemester);
 
     const unmetReqs = notSatisfiedRequirements(dpr.requirementGroups);

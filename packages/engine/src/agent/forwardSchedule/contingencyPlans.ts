@@ -85,7 +85,7 @@ export function generateContingencies(
         // Build a derived SolverInput with a SHALLOW copy, removing the IP course:
         // 1. coursesInProgress minus the IP course
         // 2. unmetRequirements augmented with the IP course (synthetic re-take entry)
-        const derivedCoursesInProgress = new Set(baseInput.coursesInProgress);
+        const derivedCoursesInProgress = new Map(baseInput.coursesInProgress);
         derivedCoursesInProgress.delete(ipCourseId);
 
         // Also remove from coursesTaken if it was there (IP course that previously

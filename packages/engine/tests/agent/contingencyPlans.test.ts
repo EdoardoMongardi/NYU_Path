@@ -61,7 +61,7 @@ function makeBaseInput(overrides: Partial<SolverInput> = {}): SolverInput {
         homeSchoolId: "cas",
         visaStatus: "f1",
         coursesTaken: new Set(["CSCI-UA 101"]),
-        coursesInProgress: new Set(),
+        coursesInProgress: new Map(),
         currentTerm: "2026-fall",
         graduationTerm: "2027-spring",
         creditTargetPerSemester: 16,
@@ -179,7 +179,7 @@ describe("generateContingencies — single IP assumption", () => {
 
         // Base input: CSCI-UA 201 is in progress; 202 is an unmet requirement
         const baseInput = makeBaseInput({
-            coursesInProgress: new Set(["CSCI-UA 201"]),
+            coursesInProgress: new Map([["CSCI-UA 201", { term: "2026-fall" }]]),
             unmetRequirements: [
                 {
                     rId: "CS_UPPER_1",
@@ -222,7 +222,7 @@ describe("generateContingencies — single IP assumption", () => {
         };
         const optimistic = makeOptimistic({ assumptions: [ipAssumption] });
         const baseInput = makeBaseInput({
-            coursesInProgress: new Set(["CSCI-UA 201"]),
+            coursesInProgress: new Map([["CSCI-UA 201", { term: "2026-fall" }]]),
         });
         const result = generateContingencies(optimistic, baseInput);
         // The optimistic plan should be the same object (referential equality)
@@ -253,7 +253,10 @@ describe("generateContingencies — multiple IP assumptions", () => {
         const optimistic = makeOptimistic({ assumptions: [ip1, ip2] });
 
         const baseInput = makeBaseInput({
-            coursesInProgress: new Set(["CSCI-UA 201", "MATH-UA 122"]),
+            coursesInProgress: new Map([
+                ["CSCI-UA 201", { term: "2026-fall" }],
+                ["MATH-UA 122", { term: "2026-fall" }],
+            ]),
             unmetRequirements: [
                 {
                     rId: "CS_1",
@@ -309,7 +312,10 @@ describe("generateContingencies — multiple IP assumptions", () => {
         };
         const optimistic = makeOptimistic({ assumptions: [ip1, ip2] });
         const baseInput = makeBaseInput({
-            coursesInProgress: new Set(["CSCI-UA 201", "MATH-UA 122"]),
+            coursesInProgress: new Map([
+                ["CSCI-UA 201", { term: "2026-fall" }],
+                ["MATH-UA 122", { term: "2026-fall" }],
+            ]),
             courseCatalog: new Map([
                 ["CSCI-UA 201", { title: "Comp Org", credits: 4 }],
                 ["MATH-UA 122", { title: "Calc 2", credits: 4 }],
@@ -344,7 +350,7 @@ describe("generateContingencies — conservative plan feasibility", () => {
         // CSCI-UA 202 requires CSCI-UA 201 as prereq, but if 201 is removed
         // from coursesInProgress and added back as unmet, solver must re-plan it.
         const baseInput = makeBaseInput({
-            coursesInProgress: new Set(["CSCI-UA 201"]),
+            coursesInProgress: new Map([["CSCI-UA 201", { term: "2026-fall" }]]),
             unmetRequirements: [
                 {
                     rId: "CS_202",
@@ -377,7 +383,7 @@ describe("generateContingencies — conservative plan feasibility", () => {
         };
         const optimistic = makeOptimistic({ assumptions: [ipAssumption] });
         const baseInput = makeBaseInput({
-            coursesInProgress: new Set(["CSCI-UA 201"]),
+            coursesInProgress: new Map([["CSCI-UA 201", { term: "2026-fall" }]]),
         });
         const originalSize = baseInput.coursesInProgress.size;
 

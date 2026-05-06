@@ -74,13 +74,25 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
     const visaStatus = student?.visaStatus;
 
     // ---- 3. Build courses-taken and courses-in-progress sets from DPR ----
+    //
+    // Each IP row carries its own term on the DPR (e.g. a senior in
+    // Spring 2026 may have 4 IP rows for "2026 Spr" + 3 IP rows for
+    // "2026 Fall" they pre-registered for). The solver later places
+    // each IP row in the term it was tagged with; flattening the term
+    // info here is what produced the May 2026 post-mortem 28-credit
+    // phantom term. When a row's term can't be parsed, fall back to
+    // currentTerm so a stale-DPR row still surfaces somewhere.
+
+    // currentTerm is computed first because the IP fallback path needs it.
+    const currentTerm = inferCurrentTerm(dpr);
 
     const coursesTaken = new Set<string>();
-    const coursesInProgress = new Set<string>();
+    const coursesInProgress = new Map<string, { term: string }>();
     for (const row of dpr.courseHistory) {
         const key = `${row.subject} ${row.catalogNbr}`;
         if (row.type === "IP") {
-            coursesInProgress.add(key);
+            const rowTerm = psTermToSolverTerm(row.term) ?? currentTerm;
+            coursesInProgress.set(key, { term: rowTerm });
             continue;
         }
         // Use the canonical grade comparator so non-standard NYU codes
@@ -95,7 +107,6 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
     // ---- 4. Determine graduation term ----
 
     // Priority: explicit override > solver default (2 semesters out)
-    const currentTerm = inferCurrentTerm(dpr);
     const graduationTerm = graduationTermOverride ?? deriveGraduationTerm(currentTerm, creditsEarned, graduationCreditMinimum, creditTargetPerSemester);
 
     // ---- 5. Build unmet requirements from DPR ----
