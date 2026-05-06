@@ -59,7 +59,7 @@ function makeInput(
         homeSchoolId: "cas",
         visaStatus: "f1",
         coursesTaken: new Set(),
-        coursesInProgress: new Set(),
+        coursesInProgress: new Map(),
         currentTerm: "2026-fall",
         graduationTerm: "2027-spring",
         creditTargetPerSemester: 16,

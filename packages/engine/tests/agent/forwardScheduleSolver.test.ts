@@ -69,7 +69,7 @@ function makeInput(overrides: Partial<SolverInput> = {}): SolverInput {
         homeSchoolId: "cas",
         visaStatus: "f1",
         coursesTaken: new Set(),
-        coursesInProgress: new Set(),
+        coursesInProgress: new Map(),
         currentTerm: "2026-fall",
         graduationTerm: "2027-spring",
         creditTargetPerSemester: 16,
@@ -156,7 +156,11 @@ describe("solveForwardSchedule — slack-based distribution", () => {
         // creditTarget=16, so only 4cr of slack remains.
         // Two hard requirements × 4cr = 8cr total — only 1 can fit in fall.
         const input = makeInput({
-            coursesInProgress: new Set(["CORE-UA 700", "MATH-UA 251", "MATH-UA 343"]),
+            coursesInProgress: new Map([
+                ["CORE-UA 700", { term: "2026-fall" }],
+                ["MATH-UA 251", { term: "2026-fall" }],
+                ["MATH-UA 343", { term: "2026-fall" }],
+            ]),
             unmetRequirements: [
                 { rId: "r1", title: "CS 421", category: "cs_major_required", credits: 4, candidateCourses: ["CSCI-UA 421"] },
                 { rId: "r2", title: "CORE-UA 400", category: "cas_core", credits: 4, candidateCourses: ["CORE-UA 400"] },
@@ -502,7 +506,7 @@ describe("solveForwardSchedule — SolverOutput fields", () => {
         });
 
         const input = makeInput({
-            coursesInProgress: new Set(["CSCI-UA Y"]),
+            coursesInProgress: new Map([["CSCI-UA Y", { term: "2026-fall" }]]),
             dpr,
             unmetRequirements: [
                 { rId: "rX", title: "CS X", category: "cs_major_required", credits: 4, candidateCourses: ["CSCI-UA X"] },
