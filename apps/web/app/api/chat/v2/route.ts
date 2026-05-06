@@ -331,6 +331,17 @@ export async function POST(req: NextRequest): Promise<Response> {
         ? deriveTemporalContext(parsedDpr, { now })
         : { currentTerm: undefined, nextTerm: undefined };
     const graduationTerm = normalizeGraduationTarget(body.graduationTarget);
+    // Stash the normalized term on the session so plan_forward_degree
+    // can default `graduationTermOverride` to the student's onboarding-
+    // stated value when the LLM forgets to pass it. Without this fall-
+    // back the planner derives graduationTerm from creditsEarned alone,
+    // which collapses to currentTerm+1 for any student already past
+    // their credit minimum and produces a too-narrow window that flips
+    // the schedule to `infeasible-draft` for spurious credit-ceiling
+    // reasons. (See May 2026 graduation-term-default post-mortem.)
+    if (graduationTerm) {
+        session.graduationTarget = graduationTerm;
+    }
     const todayIso = now.toISOString().slice(0, 10);
     const systemPrompt = buildSystemPrompt({
         student,
