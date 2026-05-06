@@ -180,6 +180,25 @@ export default function ScheduleSidebar({
         return () => clearTimeout(id);
     }, [pendingSince]);
 
+    /**
+     * Phase 17 Task D — set of pin keys ("term::courseId") derived
+     * from `schedule.schedulePreferences.pins[]` at render time. Drives
+     * the SlotRow's `isFrozen` flag → which in turn flips the popover's
+     * Lock/Unlock label and lets the Lock-toggle handler send
+     * `locked: !isFrozen` instead of always `true`.
+     *
+     * Must sit above the `if (!open) return null` early return so the
+     * hook count is stable across open/closed renders (Rules of Hooks).
+     */
+    const frozenKeys = useMemo<Set<string>>(() => {
+        const out = new Set<string>();
+        const pins = schedulePreferences?.pins ?? [];
+        for (const p of pins) {
+            out.add(`${p.term}::${p.courseId}`);
+        }
+        return out;
+    }, [schedulePreferences]);
+
     if (!open) return null;
 
     const hasBody = !!student || !!schedule;
@@ -209,25 +228,6 @@ export default function ScheduleSidebar({
                 : `placeholder(${slot.category})`;
         return `${term}::${id}`;
     };
-
-    /**
-     * Phase 17 Task D — set of pin keys ("term::courseId") derived
-     * from `schedule.schedulePreferences.pins[]` at render time. Drives
-     * the SlotRow's `isFrozen` flag → which in turn flips the popover's
-     * Lock/Unlock label and lets the Lock-toggle handler send
-     * `locked: !isFrozen` instead of always `true`.
-     *
-     * Computed via useMemo so a re-render that doesn't change the
-     * pins[] array doesn't allocate a fresh Set.
-     */
-    const frozenKeys = useMemo<Set<string>>(() => {
-        const out = new Set<string>();
-        const pins = schedulePreferences?.pins ?? [];
-        for (const p of pins) {
-            out.add(`${p.term}::${p.courseId}`);
-        }
-        return out;
-    }, [schedulePreferences]);
 
     const markSlotPending = (key: string, pending: boolean): void => {
         setPendingSlots(prev => {
