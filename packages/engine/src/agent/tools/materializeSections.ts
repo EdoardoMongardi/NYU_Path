@@ -147,24 +147,39 @@ export const materializeSectionsTool = buildTool({
         // skips them. (Section-level materialization for a placeholder
         // requires the student to bind it via `bind_pool_slot` /
         // `bind_free_elective` first.)
+        //
+        // IP slots are ALSO skipped here, but for a different reason:
+        // the student is already pinned to a specific CRN in Albert that
+        // the DPR does not carry. We don't know which section. The list
+        // below tracks those courses so the LLM-facing summary can
+        // surface honest uncertainty: "I can't time-conflict-check
+        // against your pre-registered sections because Albert tracks
+        // the CRN, the DPR doesn't."
         const courseIds: string[] = [];
+        const ipCourses: string[] = [];
         for (const slot of semester.slots) {
             if (slot.kind === "specific_planned") {
                 courseIds.push(slot.courseId);
+            } else if (slot.kind === "in_progress") {
+                ipCourses.push(slot.courseId);
             }
         }
+        const ipWarning =
+            ipCourses.length > 0
+                ? ` NOTE: ${input.targetTerm} also has ${ipCourses.length} pre-registered IP course(s) — ${ipCourses.join(", ")} — whose specific section CRNs live in Albert, not the DPR. The conflict-free combinations below DO NOT account for those courses' meeting times; the student must verify the proposed elective against their actual Albert schedule.`
+                : "";
 
         if (courseIds.length === 0) {
             // No concrete courses to look up — return an "unavailable"
             // result with a clear message and stage nothing. We do NOT
             // touch session.pendingMaterializations in this branch.
+            const reason =
+                ipCourses.length > 0
+                    ? `${input.targetTerm} has only pre-registered IP courses (${ipCourses.join(", ")}) and/or placeholders, no newly-planned slots. The materializer cannot conflict-check against IP sections — Albert holds the specific CRNs, the DPR doesn't — so it has nothing to stage. To check meeting times for your IP courses, look them up directly in Albert. To plan a new course in this term, bind a placeholder first then re-run materialize_sections.`
+                    : `No concrete courses are scheduled in ${input.targetTerm} (target semester contains only placeholders or is empty). Bind the placeholders to specific courses first, then re-run materialize_sections.`;
             const out: MaterializeSectionsOutput = {
                 state: "unavailable",
-                message:
-                    `No concrete courses are scheduled in ${input.targetTerm} ` +
-                    `(target semester contains only placeholders or is empty). ` +
-                    `Bind the placeholders to specific courses first, then ` +
-                    `re-run materialize_sections.`,
+                message: reason,
                 schedulingPreferenceCheck: { kind: "absent" },
                 targetTerm: input.targetTerm,
             };
@@ -197,9 +212,14 @@ export const materializeSectionsTool = buildTool({
         });
 
         // For non-"full" states (unavailable / partial) the orchestrator
-        // has nothing to stage — pass the result through verbatim.
+        // has nothing to stage — pass the result through, appending the
+        // IP-section uncertainty caveat when applicable.
         if (result.state !== "full" || !result.semester) {
-            const out: MaterializeSectionsOutput = { ...result, targetTerm: input.targetTerm };
+            const out: MaterializeSectionsOutput = {
+                ...result,
+                message: result.message + ipWarning,
+                targetTerm: input.targetTerm,
+            };
             // Phase 15 Task 8 side-channel — populate even in non-full
             // states so the sidebar can render the partial / unavailable
             // banner with the orchestrator's message verbatim.
@@ -233,6 +253,12 @@ export const materializeSectionsTool = buildTool({
 
         const out: MaterializeSectionsOutput = {
             ...result,
+            // Append the IP-section uncertainty caveat to the
+            // orchestrator's result message so it propagates into the
+            // LLM summary. The conflict-free combinations only span the
+            // `specific_planned` courseIds we passed; pre-registered IP
+            // courses are absent from the conflict graph.
+            message: result.message + ipWarning,
             proposals,
             targetTerm: input.targetTerm,
         };
