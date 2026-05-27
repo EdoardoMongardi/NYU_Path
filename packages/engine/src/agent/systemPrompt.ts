@@ -381,8 +381,38 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
                 : s.declaredPrograms.map((d) => `${d.programType} ${d.programId}`).join(", ")}`,
         );
         if (s.visaStatus) lines.push(`- visaStatus: ${s.visaStatus}`);
+        // Surface the actual courseId list (not just a count) so the
+        // agent has a guardrail against re-suggesting a course the
+        // student already finished or is taking right now. The count-
+        // only signal forced the agent to call `run_full_audit` to
+        // know what was on the transcript — and when it didn't, it
+        // would suggest already-taken courses. List is deduped + capped
+        // at 80 ids so a maxed-out senior with retake history doesn't
+        // blow the prompt budget. The `coursesInProgress` block sits
+        // separately so the model can distinguish "already done" from
+        // "in flight this semester".
         if (s.coursesTaken.length > 0) {
-            lines.push(`- coursesTaken: ${s.coursesTaken.length} courses on file`);
+            const seen = new Set<string>();
+            const ids: string[] = [];
+            for (const c of s.coursesTaken) {
+                if (!seen.has(c.courseId)) {
+                    seen.add(c.courseId);
+                    ids.push(c.courseId);
+                }
+            }
+            const cap = 80;
+            const shown = ids.slice(0, cap).join(", ");
+            const overflow = ids.length > cap ? ` … (+${ids.length - cap} more — call run_full_audit for the full list)` : "";
+            lines.push(`- coursesTaken (${ids.length}): ${shown}${overflow}`);
+        }
+        if (s.currentSemester && s.currentSemester.courses.length > 0) {
+            const ips = s.currentSemester.courses.map((c) => c.courseId).join(", ");
+            lines.push(`- coursesInProgress (${s.currentSemester.term}): ${ips}`);
+        }
+        if (s.coursesTaken.length > 0 || (s.currentSemester && s.currentSemester.courses.length > 0)) {
+            lines.push(
+                "- When suggesting a course (elective, free slot, etc.), NEVER pick one already in `coursesTaken` or `coursesInProgress`. The student can't retake completed courses without an explicit retake intent; suggesting an in-progress course is a planning bug.",
+            );
         }
     }
     if (opts.today || opts.currentTerm || opts.nextTerm || opts.enrolledNowTerm || opts.graduationTerm) {
