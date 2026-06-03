@@ -66,9 +66,15 @@ async function main() {
     // ~636 chunks (12 sourcePaths, only economics-ba among program
     // pages); post-Phase-9 it should be ~5k+ chunks with ~860 program
     // pages indexed.
+    // Phase C — also flip on includePolicyTrees so the corpus indexes
+    // the internal-transfer-equivalencies + OGS (visa/immigration) trees
+    // that were previously skipped. Transfers + F-1/J-1/RCL/CPT/OPT
+    // become searchable via search_policy instead of relying on a single
+    // template + school config.
     const { chunks, skipped } = await buildCorpus(stubEmbedder, {
         warnOnSkip: false,
         includeProgramPages: true,
+        includePolicyTrees: true,
     });
     console.error(`Chunked ${chunks.length} chunks (${skipped.length} entries skipped)`);
 
