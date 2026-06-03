@@ -31,13 +31,13 @@ describe("agentStatusVerbs", () => {
 
     it("getActiveVerb returns the mapped active form", () => {
         expect(getActiveVerb("search_policy")).toBe("Looking up policy");
-        expect(getActiveVerb("plan_semester")).toBe("Planning your semester");
+        expect(getActiveVerb("plan_forward_degree")).toBe("Planning your full degree");
         expect(getActiveVerb("run_full_audit")).toBe("Running your degree audit");
     });
 
     it("getPastVerb returns the mapped past form", () => {
         expect(getPastVerb("search_policy")).toBe("Looked up policy");
-        expect(getPastVerb("plan_semester")).toBe("Planned a semester");
+        expect(getPastVerb("plan_forward_degree")).toBe("Planned your full degree");
     });
 
     it("falls back gracefully for unknown tool names", () => {
@@ -76,6 +76,6 @@ describe("agentStatusVerbs", () => {
 
     it("getThoughtSentence returns the mapped sentence for known tools", () => {
         expect(getThoughtSentence("search_policy")).toMatch(/policy|bulletin/i);
-        expect(getThoughtSentence("plan_semester")).toMatch(/semester|plan/i);
+        expect(getThoughtSentence("plan_forward_degree")).toMatch(/plan|degree/i);
     });
 });

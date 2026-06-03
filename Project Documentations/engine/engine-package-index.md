@@ -107,7 +107,7 @@ The agent barrel is itself a curated facade. Highlights of what it re-exports an
 | Agent-barrel export | Source file |
 |---------------------|-------------|
 | `buildTool`, `ToolRegistry`, types `Tool`, `ToolUseContext`, `ToolSession`, `ValidationResult` | `./tool.ts` |
-| `ALL_NYUPATH_TOOLS`, `buildDefaultRegistry`, every `*Tool` (`runFullAuditTool`, `planSemesterTool`, `checkTransferEligibilityTool`, `whatIfAuditTool`, `searchPolicyTool`, `updateProfileTool`, `confirmProfileUpdateTool`, `getCreditCapsTool`, `searchAvailabilityTool`, `getAcademicStandingTool`, `checkOverlapTool`, `searchCoursesTool`, `planForwardDegreeTool`, `proposePlanChangeTool`, `confirmPlanChangeTool`) | `./registry.ts` |
+| `ALL_NYUPATH_TOOLS`, `buildDefaultRegistry`, every `*Tool` (`runFullAuditTool`, `checkTransferEligibilityTool`, `whatIfAuditTool`, `searchPolicyTool`, `getProgramRequirementsTool`, `updateProfileTool`, `confirmProfileUpdateTool`, `getCreditCapsTool`, `searchAvailabilityTool`, `getAcademicStandingTool`, `checkOverlapTool`, `searchCoursesTool`, `planForwardDegreeTool`, `proposePlanChangeTool`, `confirmPlanChangeTool`) — `planSemesterTool` was **removed** in Phase F | `./registry.ts` |
 | `createSemanticCourseSearchFn`, types `SemanticCourseSearchOptions`, `CourseCatalogEntry` | `./tools/semanticCourseSearch.ts` |
 | `CourseSearchFn` type | `./tools/searchCourses.ts` |
 | `LLMClient`, `LLMCompletion`, `LLMMessage`, `LLMToolCall`, `LLMToolDef`, `LLMStreamEvent` | `./llmClient.ts` |

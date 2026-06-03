@@ -21,24 +21,16 @@
 // Phase 15 Task 7 additions:
 //   materialize_sections, confirm_section_combination
 //
-// DEPRECATED (May 2026 post-mortem):
-//   plan_semester — Phase 5 single-term planner. Superseded by Phase 13's
-//   `plan_forward_degree`, which (a) plans every remaining term, not just
-//   the immediate one, (b) writes `session.forwardSchedule` so the UI can
-//   display the schedule sidebar, and (c) cooperates with Phase 14's
-//   `propose_plan_change` for what-if analysis. Keeping `plan_semester`
-//   registered alongside the new tool caused the LLM to fall back to it
-//   for "what should I take next semester" questions, leaving the forward
-//   schedule unset and the sidebar empty. The tool's source file is kept
-//   for unit tests + future reference, but it is no longer wired into
-//   `ALL_NYUPATH_TOOLS` so the agent loop cannot invoke it.
+// REMOVED (improvement plan, Phase F decommission):
+//   plan_semester — the Phase 5 single-term planner + its `planFeasibility`
+//   verifier were deleted. They were superseded by Phase 13's
+//   `plan_forward_degree` (plans every remaining term, writes
+//   `session.forwardSchedule`, cooperates with `propose_plan_change`) and
+//   had been unregistered since May 2026. Per the strangler-fig
+//   decommission, the dead twin is now gone so there is one way to plan.
 // ============================================================
 import { ToolRegistry, type Tool } from "./tool.js";
 import { runFullAuditTool } from "./tools/runFullAudit.js";
-// Deprecated — kept as a named export for back-compat with unit tests and
-// future migration tooling, but NOT included in ALL_NYUPATH_TOOLS.
-// See header comment for rationale.
-import { planSemesterTool } from "./tools/planSemester.js";
 import { checkTransferEligibilityTool } from "./tools/checkTransferEligibility.js";
 import { whatIfAuditTool } from "./tools/whatIfAudit.js";
 import { searchPolicyTool } from "./tools/searchPolicy.js";
@@ -65,7 +57,6 @@ import type { ZodTypeAny } from "zod";
 
 export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     runFullAuditTool as unknown as Tool<ZodTypeAny, unknown>,
-    // planSemesterTool intentionally NOT registered — see header.
     checkTransferEligibilityTool as unknown as Tool<ZodTypeAny, unknown>,
     whatIfAuditTool as unknown as Tool<ZodTypeAny, unknown>,
     searchPolicyTool as unknown as Tool<ZodTypeAny, unknown>,
@@ -99,7 +90,6 @@ export function buildDefaultRegistry(): ToolRegistry {
 
 export {
     runFullAuditTool,
-    planSemesterTool,
     checkTransferEligibilityTool,
     whatIfAuditTool,
     searchPolicyTool,
