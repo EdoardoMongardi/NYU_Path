@@ -5,6 +5,7 @@ import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { policySearch } from "../../rag/policySearch.js";
 import { matchTemplate } from "../../rag/policyTemplate.js";
+import { reassembleSection, type ReassembledUnit } from "../../rag/sectionRetrieval.js";
 import {
     detectCoreUaReferences,
     detectRequirementReferences,
@@ -29,6 +30,11 @@ export const searchPolicyTool = buildTool({
         "Returns BOTH (when both apply): a curated operator-verified verbatim " +
         "bulletin quote (\"CURATED TEMPLATE\") AND the top RAG chunks for " +
         "additional context. The agent decides what to quote.\n\n" +
+        "The result also reassembles the TOP hit's FULL bulletin section " +
+        "(\"FULL SECTION\") so you can read the complete rule, not just the " +
+        "matched ~500-token fragment. For a program's ENTIRE requirement set " +
+        "(a whole major/minor/core-curriculum page), prefer the dedicated " +
+        "`get_program_requirements` tool instead.\n\n" +
         "Use this for:\n" +
         "  POLICY QUESTIONS:\n" +
         "    • Pass/Fail rules (per-term limit, career cap, deadline, eligibility)\n" +
@@ -147,6 +153,23 @@ export const searchPolicyTool = buildTool({
             envelopeConfidence = "medium";
         }
 
+        // Phase B (improvement plan) — wholeSection expansion. The top
+        // reranked hit is one ~500-token FRAGMENT; when its section was
+        // split across several chunks, the fragment alone can omit the
+        // rest of the rule (e.g., a multi-paragraph P/F policy). Reassemble
+        // the top hit's FULL section so the agent reasons over the whole
+        // section, not just the matched window. Additive — the per-hit
+        // fragments still render below for cross-section breadth.
+        let wholeSection: ReassembledUnit | null = null;
+        const topHit = result.hits?.[0];
+        if (topHit) {
+            wholeSection = reassembleSection(
+                rag.store,
+                topHit.chunk.meta.sourcePath,
+                topHit.chunk.meta.section,
+            );
+        }
+
         return {
             ...result,
             transferIntent: session.transferIntent === true,
@@ -154,11 +177,29 @@ export const searchPolicyTool = buildTool({
             coreUaRequirements,
             disclaimers,
             confidence: envelopeConfidence,
+            wholeSection,
         };
     },
     summarizeResult(result) {
         const transferTag = result.transferIntent ? " (transferIntent=on)" : "";
         const lines: string[] = [];
+
+        // Phase B — render the top hit's FULL reassembled section (capped
+        // so it can't crowd out the per-hit fragments + the envelope under
+        // the result-char budget). Empty when there was no RAG hit.
+        const ws = (result as { wholeSection?: ReassembledUnit | null }).wholeSection;
+        const renderWholeSection = (): string[] => {
+            if (!ws) return [];
+            const CAP = 3000;
+            const body = ws.text.length > CAP ? ws.text.slice(0, CAP) + "… (section truncated)" : ws.text;
+            return [
+                ``,
+                `-- FULL SECTION (top hit, reassembled — read this for the complete rule) --`,
+                `${ws.source} › ${ws.sections.join(" / ")} [${ws.school}]`,
+                body,
+                `   Source: ${ws.sourcePath} (${ws.chunkCount} chunk${ws.chunkCount === 1 ? "" : "s"})`,
+            ];
+        };
 
         // Phase 10 Stage 2 — emit deterministic CORE-UA classifications
         // FIRST when present. The agent must surface these per posture
@@ -213,6 +254,7 @@ export const searchPolicyTool = buildTool({
                     lines.push(`    Source: ${h.chunk.meta.source} (${h.chunk.meta.sourcePath}:${h.chunk.meta.sourceLine})`);
                 }
             }
+            lines.push(...renderWholeSection());
             if (result.notes.length > 0) lines.push(``, `Notes: ${result.notes.join(" | ")}`);
             // Phase 10 envelope rendering — disclaimers + confidence
             const env = renderEnvelopeMeta({
@@ -241,6 +283,7 @@ export const searchPolicyTool = buildTool({
             lines.push(`    ${snippet}…`);
             lines.push(`    Source: ${h.chunk.meta.source} (${h.chunk.meta.sourcePath}:${h.chunk.meta.sourceLine})`);
         }
+        lines.push(...renderWholeSection());
         if (result.notes.length > 0) lines.push(`Notes: ${result.notes.join(" | ")}`);
         if (result.transferIntent) {
             lines.push(`Notes: User is exploring an internal transfer — target-school catalog rules may also apply; consider check_transfer_eligibility.`);

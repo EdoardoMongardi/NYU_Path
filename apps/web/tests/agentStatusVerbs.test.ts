@@ -12,6 +12,8 @@ describe("agentStatusVerbs", () => {
             "what_if_audit", "search_policy", "update_profile",
             "confirm_profile_update", "get_credit_caps", "search_availability",
             "get_academic_standing", "check_overlap", "search_courses",
+            // Improvement-plan Phase B
+            "get_program_requirements",
             // Phase 13
             "plan_forward_degree", "view_forward_plan",
             // Phase 14

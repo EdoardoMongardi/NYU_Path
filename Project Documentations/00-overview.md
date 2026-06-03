@@ -27,7 +27,7 @@ graph LR
     GUARD -.fails: redo it.-> BRAIN
 ```
 
-That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 21 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
+That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 22 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy/curriculum lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
 
 ---
 
@@ -131,7 +131,7 @@ graph TB
     subgraph Engine["The brain + tools (packages/engine)"]
         AGENT[Agent loop<br/>orchestrates LLM + tools]
         VALIDATOR[Response validator<br/>7 safety checks]
-        TOOLS[21 tools]
+        TOOLS[22 tools]
         ALGOS[Audit, planner,<br/>section materializer,<br/>RAG retriever,<br/>DPR parser]
         SESSION[Session state<br/>the shared bag every<br/>tool reads from]
     end
@@ -235,7 +235,8 @@ The phased plan to fix the gaps the audit surfaced (section-complete retrieval, 
 | `bind_pool_slot` | "Use this course for my major-elective pool slot" |
 | `materialize_sections` | Fetches real class sections (CRN, time, instructor) for the next term |
 | `confirm_section_combination` | "I pick this conflict-free combo of sections" — pins them into the plan |
-| `search_policy` | Looks up policy in the bulletin (e.g. pass/fail rules) |
+| `search_policy` | Looks up policy in the bulletin (e.g. pass/fail rules); now also expands the top hit to its full section |
+| `get_program_requirements` | Returns a program/major/minor/Core-Curriculum's **entire** requirement page (every section, reassembled) with a confidence band |
 | `search_courses` | Semantic course search ("courses about quantum computing") |
 | `search_availability` | Are sections of this course actually being offered next term? |
 | `check_transfer_eligibility` | Can I transfer from CAS to Stern/Tandon/etc.? |
@@ -264,7 +265,7 @@ sequenceDiagram
     Student->>Web: "What's my GPA and how many credits do I need?"
     Web->>DB: Load profile, saved plan, chat history
     DB-->>Web: Here you go
-    Web->>Brain: System prompt + history + question + 21 tools available
+    Web->>Brain: System prompt + history + question + 22 tools available
     Brain->>Brain: This needs the audit tool
     Brain->>Web: Please run `run_full_audit`
     Web->>Tool: Run it

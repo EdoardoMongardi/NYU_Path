@@ -21,7 +21,7 @@ flowchart LR
 
 ---
 
-This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 21 live tools.
+This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 22 live tools.
 
 ---
 
@@ -95,30 +95,31 @@ The agent loop calls `registry.list()` once at the start of each turn to build t
 
 ## 5. `ALL_NYUPATH_TOOLS` — the wired set
 
-`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS`, containing 21 tools in this fixed order:
+`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS`, containing 22 tools in this fixed order:
 
 ```
 1.  run_full_audit
 2.  check_transfer_eligibility
 3.  what_if_audit
 4.  search_policy
-5.  update_profile
-6.  confirm_profile_update
-7.  get_credit_caps
-8.  search_availability
-9.  get_academic_standing
-10. check_overlap
-11. search_courses
-12. plan_forward_degree
-13. view_forward_plan
-14. propose_plan_change
-15. confirm_plan_change
-16. simulate_alternatives
-17. bind_free_elective
-18. bind_pool_slot
-19. compare_plan_alternatives
-20. materialize_sections
-21. confirm_section_combination
+5.  get_program_requirements   (improvement plan, Phase B)
+6.  update_profile
+7.  confirm_profile_update
+8.  get_credit_caps
+9.  search_availability
+10. get_academic_standing
+11. check_overlap
+12. search_courses
+13. plan_forward_degree
+14. view_forward_plan
+15. propose_plan_change
+16. confirm_plan_change
+17. simulate_alternatives
+18. bind_free_elective
+19. bind_pool_slot
+20. compare_plan_alternatives
+21. materialize_sections
+22. confirm_section_combination
 ```
 
 `plan_semester` is **exported but not in the registry**. The source file is still present and unit-tested, but `ALL_NYUPATH_TOOLS` omits it so the model can never invoke it. See [`deprecated/plan_semester.md`](../deprecated/plan_semester.md) for what it does and why it was removed.
@@ -138,7 +139,7 @@ sequenceDiagram
     participant Tool as Tool.call
 
     Route->>Reg: buildDefaultRegistry()
-    Reg-->>Route: registry (21 tools)
+    Reg-->>Route: registry (22 tools)
     Route->>Loop: runAgentTurnStreaming(client, registry, session, msg, opts)
     Loop->>Reg: registry.list()
     Reg-->>Loop: [Tool, …]
