@@ -6,7 +6,9 @@
 
 ## 1. What NYU Path is, in one paragraph
 
-NYU Path is a **chat-based academic advisor** for undergraduate students in NYU's **College of Arts & Science (CAS)**. A student logs in, uploads their official Albert Degree Progress Report (DPR) — the sole accepted onboarding artifact — and starts chatting. The system can answer "how many credits do I still need?", build a term-by-term graduation plan, simulate hypotheticals like "what if I added a math minor?", pull live class sections from NYU's class search, and check if the student is eligible to transfer to another NYU school like Stern or Tandon. The DPR is **required** to reach the agent: the chat route returns an "upload your DPR" error if it's missing, and the personal-record tools (`run_full_audit`, `get_academic_standing`) refuse without it (the legacy unofficial-transcript upload path has been removed; there is no authored-rules fallback). Impersonal lookups (policy search, course search) don't need a DPR at the tool level, but the product flow gates the whole conversation on one anyway. Although it knows about other NYU schools, **it only advises CAS students** — only CAS degree programs are loaded; the other-school configs exist purely to evaluate internal-transfer destinations.
+NYU Path is a **chat-based academic advisor** for **NYU undergraduates**. A student logs in, uploads their official Albert Degree Progress Report (DPR) — the sole accepted onboarding artifact — and starts chatting. The system can answer "how many credits do I still need?", build a term-by-term graduation plan, simulate hypotheticals like "what if I added a math minor?", pull live class sections from NYU's class search, and check internal-transfer eligibility between NYU schools. The DPR is **required** to reach the agent: the chat route returns an "upload your DPR" error if it's missing, and the personal-record tools (`run_full_audit`, `get_academic_standing`) refuse without it (the legacy unofficial-transcript upload path has been removed; there is no authored-rules fallback). Impersonal lookups (policy search, course search) don't need a DPR at the tool level, but the product flow gates the whole conversation on one anyway.
+
+> **Scope — intent vs. current state (important).** The **intended** scope is *all* NYU undergraduate schools, and the architecture's spine supports it: the student's home school is read from their DPR (not hardcoded), school config is loaded by that home school, and the policy RAG corpus already covers every undergrad school. **However, the system is currently CAS-*pinned* in several specific, fixable spots** — the agent's system prompt hardcodes "College of Arts & Science"; only 3 of ~9 school configs exist (`cas`, `stern`, `tandon`); a few audit/planner rules (academic-standing dismissal, graduation-risk, credit-cap) use CAS-only defaults; and `deriveHomeSchool` falls back to `"cas"`. So today it behaves **CAS-first**, with non-CAS schools partially supported or degrading. Making it work equally for all schools is a **data-population + de-hardcoding effort, not an architecture rewrite** — see the implementation plan ([improvement-plan.md](improvement-plan.md)).
 
 ---
 
@@ -183,7 +185,7 @@ graph TB
 
 The audit is split into four folders:
 
-### `engine/` — 31 documents
+### `engine/` — 28 documents
 Every subsystem of the AI brain. The most important ones:
 - **`agent-loop.md`** — the central orchestrator that runs the AI in a loop with the tools
 - **`system-prompt.md`** — the instructions the AI is given before every turn
@@ -192,14 +194,14 @@ Every subsystem of the AI brain. The most important ones:
 - **`session-state.md`** — the shared data bag every tool reads from
 - **`dpr.md`** — how the official transcript (Albert DPR) is parsed
 - **`audit.md`** — the degree-audit engine (does it satisfy your major?)
-- **`planner.md`** and **`forward-schedule.md`** — the multi-term planning solver
+- **`forward-schedule.md`** — the live multi-term planning solver
 - **`rag.md`** — how policy text is retrieved when the AI needs to cite the bulletin
 - **`section-materialization.md`** — how a structural plan becomes a real schedule with sections
 
 Plus smaller pieces: the clarifier (handles ambiguous questions), the template matcher (curated answers for FAQs), the LLM clients (OpenAI/Anthropic adapters), and various data loaders.
 
-### `tools/` — 22 documents (21 live + 1 deprecated)
-One file per tool the AI can call. Each explains: what it does, what it needs, the algorithm, what it returns, and what other tools it works with. See the [tool catalog table](#8-quick-tool-catalog) below.
+### `tools/` — 21 documents
+One file per **live** tool the AI can call. Each explains: what it does, what it needs, the algorithm, what it returns, and what other tools it works with. See the [tool catalog table](#8-quick-tool-catalog) below.
 
 ### `web/` — 12 documents
 The Next.js website pieces: the chat endpoint, the chat UI, the plan-edit endpoints, the login flow, the database schema and stores, the sidebar components, the rate limiter.
@@ -209,6 +211,12 @@ The Next.js website pieces: the chat endpoint, the chat UI, the plan-edit endpoi
 - The shared types package
 - The build-time `tools/` pipeline
 - The `data/` directory layout
+
+### `deprecated/` — docs for superseded / dead code
+Segregated so the live docs stay clean: the legacy single-term planner (`plan_semester` tool + `planner` subsystem + `plan-feasibility-verifier`) and the dead unofficial-transcript parser (`transcript`). These describe code that still exists but has no production role — Phase F decommission candidates. See [`deprecated/README.md`](deprecated/README.md).
+
+### `improvement-plan.md` — the roadmap
+The phased plan to fix the gaps the audit surfaced (section-complete retrieval, embedding the missing bulletin trees, confidence-scored estimates, de-CAS scope, and the gated legacy decommission). See [`improvement-plan.md`](improvement-plan.md).
 
 ---
 
@@ -238,7 +246,7 @@ The Next.js website pieces: the chat endpoint, the chat UI, the plan-edit endpoi
 | `update_profile` | Proposes a profile change (school, catalog year, programs, visa) |
 | `confirm_profile_update` | Applies a proposed profile change |
 
-Plus `plan_semester` — a deprecated single-term planner that's been replaced by `plan_forward_degree`. It's still in the source for reference but the AI can never call it.
+Plus `plan_semester` — a deprecated single-term planner that's been replaced by `plan_forward_degree`. It's still in the source for reference but the AI can never call it (docs in [`deprecated/`](deprecated/README.md)).
 
 ---
 

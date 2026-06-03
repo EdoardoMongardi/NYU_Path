@@ -34,6 +34,8 @@ flowchart TD
     CONF -- no --> E
 ```
 
+> **Reality check — retrieval is single-shot and fragment-level, so multi-section policies can lose their exceptions.** One vector pass (top-20) → rerank → the tool returns the **top 5 chunks** (and `summarizeResult` renders only the top **3** of those, sliced to 1400 chars each — see §9.1). The corpus chunker splits each bulletin page into ~500-token fragments on `#/##/###` headings, so a single program or policy page fragments into a **median of ~13 chunks** (largest pages 73–98). A policy whose parts are scattered across one page — e.g. Pass/Fail = a career cap + a per-term cap + a Core exception + a foreign-language exception + a major-course restriction — can have some of those parts fall outside the top-5/top-3 window and **never reach the agent**. There is **no section-complete retrieval**: the tool returns ranked fragments, not the whole section/page. Each chunk carries `sourcePath` + `section` in `meta`, so whole-section retrieval is *implementable*, but `search_policy` does **not** expose it today. Compounding this, the input schema has no result-count knob and the system prompt discourages re-querying (rule 7), so the agent generally can't widen the net on a single question. Treat a confident `search_policy` answer to a known multi-part policy as "the parts that ranked top-3", not "the complete rule".
+
 ---
 
 ## 1. Purpose
@@ -185,7 +187,7 @@ The explicit-override patterns match literal school names: `cas`, `stern`, `tand
 - If a template matched, return `kind: "template"`, confidence `"high"`, `candidateCount: 0`, with a note that no RAG context was available.
 - Otherwise return `kind: "escalate"`, confidence `"low"`, an empty `hits` array, and a note that the scope had nothing to retrieve from.
 
-**Step 5 — Rerank.** `reranker.rerank(query, hits)` returns the same hits each tagged with a `rerankScore` in `[0, 1]` (`policySearch.ts:169`). Top `topKRerank = 5` are kept (`policySearch.ts:170`).
+**Step 5 — Rerank.** `reranker.rerank(query, hits)` returns the same hits each tagged with a `rerankScore` in `[0, 1]` (`policySearch.ts:169`). Top `topKRerank = 5` are kept (`policySearch.ts:170`). **This `5` (and the further down-slice to 3 in `summarizeResult`) is the hard ceiling that makes retrieval fragment-level rather than section-complete** — see the reality-check box at the top. Fragments of the same policy that the reranker ranks 6th+ are discarded here even though they belong to the same `section`.
 
 **Step 6 — Confidence gate.** The top hit's `rerankScore` (`topScore`) is compared to the active bands (`policySearch.ts:171-192`):
 

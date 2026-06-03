@@ -31,6 +31,8 @@ flowchart TD
     DATA -- yes --> PREREQ --> OUT
 ```
 
+> **Reality check — this is a lookup, not a discovery engine.** "Do we have authored requirements for that pair?" means literally: does the file `data/transfers/<homeSchool>_to_<targetSchool>.json` exist? There is **no runtime discovery** — the tool does not crawl the bulletin, query the RAG corpus, or infer requirements; it reads a hand-authored JSON file or it doesn't. As of today `data/transfers/` contains exactly **one** route file — `cas_to_stern.json` (plus the NYU-wide `_nyu_internal_transfer_policy.json`). So **`cas → stern` is the only from→to pair that returns a real prereq/deadline verdict.** Every other destination (CAS→Tandon, CAS→Tisch, Stern→anything, etc.) returns `status: "unsupported"` with the "not yet authored, contact Admissions" message and the NYU-wide policy block. The one thing that *does* fire for unauthored pairs is the senior short-circuit (≥96 credits → `ineligible`), which runs before the file lookup.
+
 ---
 
 ## 1. Purpose
@@ -121,7 +123,9 @@ If `creditsCompletedEarly >= 96` (the `SENIOR_FLOOR_CREDITS` constant at line 10
 
 ### Step C — School-eligibility table load
 
-Call `loadTransferRequirements(homeSchool, targetSchool)`. If it does not return `ok: true`, return `unsupported` with the NYU-wide policy block attached and reason `"Specific transfer requirements from <home> to <target> are not yet authored in the data set. The general NYU-wide policy applies."` (lines 118-133). The tool never invents requirements for a pair that has no authored JSON file — the philosophy is to defer to the bulletin and an adviser instead.
+Call `loadTransferRequirements(homeSchool, targetSchool)`, which simply attempts to read `data/transfers/<homeSchool>_to_<targetSchool>.json`. If the file is absent (i.e. it does not return `ok: true`), return `unsupported` with the NYU-wide policy block attached and reason `"Specific transfer requirements from <home> to <target> are not yet authored in the data set. The general NYU-wide policy applies."` (lines 118-133). The tool never invents requirements for a pair that has no authored JSON file — the philosophy is to defer to the bulletin and an adviser instead.
+
+> **Today there is exactly one authored route file: `cas_to_stern.json`.** Every other `<from>_to_<to>` combination hits this `unsupported` branch. There is no fallback to RAG or to the program corpus here — transfer eligibility is intentionally JSON-table-driven, not retrieval-driven (and note from the RAG docs that `internal-transfer-equivalencies/` is not even embedded into the policy corpus).
 
 ### Step D — Disqualifier check
 
