@@ -16,7 +16,7 @@ import type {
     PlanState,
 } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
-import { walkRequirements } from "../../dpr/schema.js";
+import { walkRequirements, notSatisfiedRequirements } from "../../dpr/schema.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -86,7 +86,17 @@ function checkRequirementGroupsSatisfied(
     plan: ForwardSchedule,
     dpr: DegreeProgressReport,
 ): ValidationResult {
-    const leaves = walkRequirements(dpr.requirementGroups);
+    // Use the same actionable-unmet filter the solver uses (build.ts).
+    // `notSatisfiedRequirements` (a) drops DPR-satisfied leaves, (b) drops
+    // synthetic `*/_summary` roll-ups, and (c) dedupes parent-vs-leaf so
+    // that a leaf rId "X/n" supersedes its parent "X". Walking the raw
+    // tree instead would (i) flag non-degree bookkeeping containers like
+    // R1659/10 (Courses Taken Outside the Undergraduate Career — DPR-
+    // satisfied with zero coursesUsed) as graduation blockers, and (ii)
+    // require every plan slot to list BOTH the parent and the leaf rId
+    // in `satisfiesRules`, since the parent's "overall_not_satisfied"
+    // status would never be cleared by a child-only satisfier.
+    const leaves = notSatisfiedRequirements(dpr.requirementGroups);
 
     // Build a set of IP course IDs from plan.assumptions
     const ipCourseIds = new Set<string>();
@@ -96,7 +106,13 @@ function checkRequirementGroupsSatisfied(
         }
     }
 
-    // Build a map: rId → set of courseIds in plan slots that satisfy it
+    // Build a map: rId → set of satisfier identifiers in plan slots.
+    // Both `specific_planned` (course bound) and `placeholder` (course
+    // not yet bound, but the slot is staked out for this requirement)
+    // count. The solver emits placeholder slots with `satisfiesRules`
+    // populated when an unmet requirement is reserved against a future
+    // term — ignoring them here would mean every feasible plan that
+    // still has an open placeholder gets flagged as infeasible.
     const planSatisfiers = new Map<string, Set<string>>();
     for (const sem of plan.semesters) {
         for (const slot of sem.slots) {
@@ -104,6 +120,11 @@ function checkRequirementGroupsSatisfied(
                 for (const rId of slot.satisfiesRules) {
                     if (!planSatisfiers.has(rId)) planSatisfiers.set(rId, new Set());
                     planSatisfiers.get(rId)!.add(slot.courseId);
+                }
+            } else if (slot.kind === "placeholder") {
+                for (const rId of slot.satisfiesRules) {
+                    if (!planSatisfiers.has(rId)) planSatisfiers.set(rId, new Set());
+                    planSatisfiers.get(rId)!.add(slot.placeholderId ?? `placeholder(${slot.category})`);
                 }
             }
         }
@@ -116,7 +137,7 @@ function checkRequirementGroupsSatisfied(
     for (const req of leaves) {
         // Satisfied via DPR coursesUsed?
         if (req.coursesUsed.length > 0) {
-            continue; // satisfied
+            continue; // partial satisfaction; trust DPR for now
         }
 
         // Satisfied via plan slot?

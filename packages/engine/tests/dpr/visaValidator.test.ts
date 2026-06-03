@@ -238,6 +238,54 @@ describe("visaValidator — onlineLimitSatisfied / inPersonMinimumSatisfied (PRE
     });
 });
 
+// ---- schedulingPreferenceSatisfied (Phase 15 — Decision #43) ----
+
+describe("visaValidator — schedulingPreferenceSatisfied", () => {
+    it("absent input → assumed-pass with documented assumption + whatWouldFlipIt strings", () => {
+        const r = visaValidator(makeCtx());
+        expect(r.schedulingPreferenceSatisfied.status).toBe("assumed-pass");
+        if (r.schedulingPreferenceSatisfied.status === "assumed-pass") {
+            expect(r.schedulingPreferenceSatisfied.assumption).toBe("no scheduling preferences set");
+            expect(r.schedulingPreferenceSatisfied.whatWouldFlipIt).toBe(
+                "if the student adds a strict avoidDay or avoidTimeWindow",
+            );
+        }
+    });
+
+    it("explicit { kind: 'absent' } → same assumed-pass shape", () => {
+        const r = visaValidator(makeCtx({ schedulingPreferenceCheck: { kind: "absent" } }));
+        expect(r.schedulingPreferenceSatisfied.status).toBe("assumed-pass");
+    });
+
+    it("{ kind: 'satisfied' } → pass verifiedFrom: 'FOSE'", () => {
+        const r = visaValidator(makeCtx({ schedulingPreferenceCheck: { kind: "satisfied" } }));
+        expect(r.schedulingPreferenceSatisfied.status).toBe("pass");
+        if (r.schedulingPreferenceSatisfied.status === "pass") {
+            expect(r.schedulingPreferenceSatisfied.verifiedFrom).toBe("FOSE");
+        }
+        // No Decision #43 citation when the axis passes.
+        expect(r.citations.some(c => /Decision #43/.test(c))).toBe(false);
+    });
+
+    it("{ kind: 'violated', reason } → fail with reason verbatim, citation appears, warning is 'high'", () => {
+        const reason = "all sections of CSCI-UA 102 meet on Friday and student set strict avoidDay F";
+        const r = visaValidator(makeCtx({
+            schedulingPreferenceCheck: { kind: "violated", reason },
+        }));
+        expect(r.schedulingPreferenceSatisfied.status).toBe("fail");
+        if (r.schedulingPreferenceSatisfied.status === "fail") {
+            expect(r.schedulingPreferenceSatisfied.reason).toBe(reason);
+        }
+        expect(r.citations.some(c => /Decision #43/.test(c))).toBe(true);
+        expect(r.overallWarningLevel).toBe("high");
+    });
+
+    it("absent input does NOT add the Decision #43 citation", () => {
+        const r = visaValidator(makeCtx());
+        expect(r.citations.some(c => /Decision #43/.test(c))).toBe(false);
+    });
+});
+
 // ---- overallWarningLevel + citations ----
 
 describe("visaValidator — overallWarningLevel + citations", () => {

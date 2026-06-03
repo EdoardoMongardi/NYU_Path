@@ -1,20 +1,19 @@
 // ============================================================
-// /api/onboard — DPR-first onboarding (Phase 7-E W2.1)
+// /api/onboard — DPR-only onboarding
 // ============================================================
 // Accepts a single PDF upload of the student's Albert Degree
 // Progress Report (DPR). Parses deterministically via the engine's
 // dpr-parser (no LLM); returns the parsed `DegreeProgressReport`
 // for the chat session to inject as `session.degreeProgressReport`.
 //
-// Backward compatibility: when the upload field is `transcript`
-// (legacy) instead of `dpr`, the route falls back to the original
-// unpdf + gpt-4o-mini transcript-parsing flow. Stays in place
-// through cohort A in case a student can't get their DPR but does
-// have a transcript; planned for removal in cohort-B prep.
+// The DPR is the ONLY accepted onboarding artifact. The legacy
+// unofficial-transcript upload path has been removed — the DPR
+// carries everything the transcript did (coursework, grades,
+// in-progress, transfer/AP credit) plus declared programs and
+// NYU's pre-computed audit, which the transcript could not.
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import { extractText } from "unpdf";
 import { parseDpr, type DegreeProgressReport } from "@nyupath/engine";
 import { consumeRequest } from "../../../lib/rateLimit";
@@ -66,16 +65,10 @@ export async function POST(req: NextRequest) {
     try {
         const formData = await req.formData();
         const dprFile = formData.get("dpr") as File | null;
-        const transcriptFile = formData.get("transcript") as File | null;
 
-        // ---- DPR path (primary) ----
+        // ---- DPR path (the only accepted onboarding artifact) ----
         if (dprFile) {
             return await handleDprUpload(dprFile);
-        }
-
-        // ---- Transcript path (legacy fallback) ----
-        if (transcriptFile) {
-            return await handleTranscriptUpload(transcriptFile);
         }
 
         return NextResponse.json(
@@ -155,8 +148,7 @@ async function handleDprUpload(file: File): Promise<NextResponse> {
                 message:
                     "I extracted the text but couldn't recognize the Degree Progress Report layout. " +
                     "This might happen if Albert's format changed or you uploaded a different document. " +
-                    "Double-check that you uploaded the **Degree Progress Report** (not the Academic Planner or What-If Plan), then try again. " +
-                    "If the problem persists, you can fall back to your unofficial transcript by re-uploading under the 'transcript' option.",
+                    "Double-check that you uploaded the **Degree Progress Report** (not the Academic Planner or What-If Plan), then try again.",
                 onboardingStep: "awaiting_dpr",
                 error: result.error,
             },
@@ -220,164 +212,3 @@ function buildDprSummary(report: DegreeProgressReport, fileName: string, sizeMB:
     lines += `\nDoes this look right? (**yes** / **no**)`;
     return lines;
 }
-
-// ============================================================
-// Transcript upload handler — legacy fallback (LLM-based)
-// ============================================================
-
-async function handleTranscriptUpload(file: File): Promise<NextResponse> {
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-        return NextResponse.json(
-            { message: "Please upload a PDF file (your unofficial transcript).", onboardingStep: "awaiting_transcript" },
-            { status: 400 },
-        );
-    }
-
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const sizeMB = (bytes.byteLength / 1024 / 1024).toFixed(1);
-
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-        return NextResponse.json({
-            message: `Got it! Received **${file.name}** (${sizeMB} MB)\n\n` +
-                `**Demo Mode** — The full transcript parser requires an OpenAI API key.\n\n` +
-                `Here's what the real experience looks like:\n\n` +
-                `**Your Name**\n` +
-                `College of Arts and Science — Computer Science, BA\n` +
-                `**64 credits** earned (GPA: 3.50)\n\n` +
-                `Does this look right? (**yes** / **no**)`,
-            onboardingStep: "confirming_data",
-        });
-    }
-
-    let rawText: string;
-    try {
-        const { text } = await extractText(new Uint8Array(buffer));
-        rawText = Array.isArray(text) ? text.join("\n") : text;
-    } catch (pdfErr) {
-        console.error("PDF parse error:", pdfErr);
-        return NextResponse.json({
-            message: "I couldn't read that PDF. Please make sure it's a proper PDF file (not a screenshot or scanned image).\n\nTry downloading your unofficial transcript again from **Albert → Student Center → Academics → View Unofficial Transcript**.",
-            onboardingStep: "awaiting_transcript",
-        });
-    }
-
-    const openai = new OpenAI({ apiKey });
-    let parsed: TranscriptData;
-    try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                { role: "system", content: PARSE_SYSTEM_PROMPT },
-                { role: "user", content: rawText },
-            ],
-            temperature: 0,
-            max_tokens: 2048,
-            response_format: { type: "json_object" },
-        });
-        const content = response.choices[0]?.message?.content?.trim() ?? "{}";
-        parsed = JSON.parse(content) as TranscriptData;
-    } catch (llmErr) {
-        console.error("LLM parse error:", llmErr);
-        return NextResponse.json({
-            message: "I had trouble analyzing the transcript text. Please try uploading again.",
-            onboardingStep: "awaiting_transcript",
-        });
-    }
-
-    // Build confirmation message
-    const testCredits = (parsed.testCredits ?? []).reduce((s, tc) => s + tc.credits, 0);
-    const courseCount = (parsed.semesters ?? []).reduce((s, sem) => s + sem.courses.length, 0);
-
-    let msg = `Got it! Here's what I found:\n\n`;
-    msg += `**${parsed.name}**\n`;
-    msg += `${parsed.school} — ${parsed.major}, ${parsed.degree}\n`;
-    msg += `**${parsed.totalCreditsEarned} credits** earned (GPA: ${parsed.cumulativeGPA?.toFixed(2)})\n`;
-    if (testCredits > 0) {
-        const testNames = parsed.testCredits!.map((tc) => tc.component).join(", ");
-        msg += `${testCredits} AP/transfer credits (${testNames})\n`;
-    }
-    msg += `${courseCount} courses completed across ${parsed.semesters?.length ?? 0} semesters\n`;
-
-    if (parsed.currentSemester) {
-        msg += `\nCurrently enrolled (${parsed.currentSemester.term}):\n`;
-        for (const c of parsed.currentSemester.courses) {
-            msg += `   • ${c.courseId} — ${c.title}\n`;
-        }
-    }
-    msg += `\nDoes this look right? (**yes** / **no**)`;
-
-    return NextResponse.json({
-        message: msg,
-        onboardingStep: "confirming_data",
-        parsedData: { kind: "transcript", transcript: parsed },
-    });
-}
-
-// ============================================================
-// Legacy types + prompt (transcript fallback)
-// ============================================================
-
-interface TranscriptData {
-    name: string;
-    studentId: string;
-    school: string;
-    major: string;
-    degree: string;
-    cumulativeGPA: number;
-    totalCreditsEarned: number;
-    testCredits?: Array<{ testName: string; component: string; credits: number }>;
-    semesters?: Array<{
-        term: string;
-        school: string;
-        major: string;
-        courses: Array<{ title: string; courseId: string; credits: number; grade: string }>;
-        semesterGPA: number;
-        semesterCredits: number;
-    }>;
-    currentSemester?: {
-        term: string;
-        courses: Array<{ title: string; courseId: string; credits: number }>;
-    };
-}
-
-const PARSE_SYSTEM_PROMPT = `You are a transcript parser for NYU (New York University). Parse the raw text from an unofficial transcript PDF into structured JSON.
-
-Extract:
-1. Student info: name, studentId, current school, current major, degree type
-2. Test credits (AP/IB/transfer): each with testName (e.g. "ADV_PL"), component (e.g. "Calculus BC"), credits
-3. All semesters with courses: for each course extract title, courseId (e.g. "CSCI-UA 102"), credits (number), grade
-4. Current semester (if grades show "***" or are missing): list courses without grades
-5. Cumulative GPA and total credits earned (from the LAST semester's cumulative line)
-
-Rules:
-- Course IDs look like "DEPT-XX NNN" (e.g., "CSCI-UA 101", "MATH-UA 120", "IMNY-UT 101")
-- Section numbers after the course ID (e.g., "-001", "-007") should NOT be included in the courseId
-- Grades: A, A-, B+, B, B-, C+, C, C-, D+, D, F, P, W, "***" = in-progress
-- For the "school" and "major", use the MOST RECENT semester's school/major (students can transfer)
-- Credits are usually 4.0 — parse as numbers
-
-Respond ONLY with valid JSON matching this structure:
-{
-  "name": "string",
-  "studentId": "string",
-  "school": "string",
-  "major": "string",
-  "degree": "string",
-  "cumulativeGPA": number,
-  "totalCreditsEarned": number,
-  "testCredits": [{"testName": "string", "component": "string", "credits": number}],
-  "semesters": [{
-    "term": "string",
-    "school": "string",
-    "major": "string",
-    "courses": [{"title": "string", "courseId": "string", "credits": number, "grade": "string"}],
-    "semesterGPA": number,
-    "semesterCredits": number
-  }],
-  "currentSemester": {
-    "term": "string",
-    "courses": [{"title": "string", "courseId": "string", "credits": number}]
-  }
-}`;

@@ -1,21 +1,17 @@
 // ============================================================
-// run_full_audit (Phase 5 §7.2 + Phase 7-E W3.1)
+// run_full_audit
 // ============================================================
-// Two paths:
-//   1. DPR primary (post-pivot): when session.degreeProgressReport
-//      is present, return NYU's pre-computed audit numbers as the
-//      authoritative answer. The LLM does wording, not computation.
-//   2. Authored-rules fallback: when no DPR is loaded, run the
-//      deterministic rule engine against authored Program JSON
-//      files. Used by the legacy onboarding path (transcript
-//      upload), the just-in-time what-if backend, and the test
-//      suite. Same shape returned to the agent either way.
+// DPR-only: when session.degreeProgressReport is present, return
+// NYU's pre-computed audit numbers as the authoritative answer. The
+// LLM does wording, not computation. There is NO no-DPR fallback —
+// validateInput requires a DPR and refuses otherwise (the student is
+// asked to upload one). The transcript-upload + authored-rules
+// fallback paths were removed in the DPR-only pivot.
 // ============================================================
 
 import { z } from "zod";
 import { buildTool } from "../tool.js";
-import { degreeAudit } from "../../audit/degreeAudit.js";
-import { calculateStanding, type StandingResult } from "../../audit/academicStanding.js";
+import type { StandingResult } from "../../audit/academicStanding.js";
 import type { AuditResult } from "@nyupath/shared";
 import {
     notSatisfiedRequirements,
@@ -125,10 +121,11 @@ interface RunFullAuditOutput {
 export const runFullAuditTool = buildTool({
     name: "run_full_audit",
     description:
-        "Returns the student's degree audit. When their Albert Degree " +
-        "Progress Report (DPR) is loaded, returns NYU's pre-computed " +
-        "audit verdicts (deterministic, authoritative). Otherwise runs " +
-        "the local rule engine against authored programs.\n\n" +
+        "Returns the student's degree audit from their Albert Degree " +
+        "Progress Report (DPR) — NYU's pre-computed, authoritative " +
+        "verdicts (deterministic). A DPR MUST be loaded; if none is, " +
+        "this tool refuses and the student is asked to upload one. " +
+        "There is no transcript or authored-rules fallback.\n\n" +
         "Use this for ANY of these question types (Cardinal Rule §2.1):\n" +
         "  • GPA, cumulative credits, credits-required, credits-remaining\n" +
         "  • Requirements satisfied / remaining / unmet for any program\n" +
@@ -151,10 +148,10 @@ export const runFullAuditTool = buildTool({
         "\"my Spring 2024 transcript?\" — result envelope includes the most " +
         "recent ~60 `dprCourseHistory` rows with grade + type. Search them " +
         "by courseId or term before deferring to Albert.\n\n" +
-        "PREFER THIS OVER `get_academic_standing` and `get_credit_caps` " +
-        "whenever the DPR is loaded — those tools can't see the DPR and " +
-        "return defaults like GPA 0.00. Their validateInput will refuse " +
-        "and tell you to call this tool instead.\n\n" +
+        "This is the single source of truth for GPA, cumulative credits, " +
+        "and requirement status — it reads the DPR's authoritative " +
+        "numbers. Use it for those questions rather than re-deriving " +
+        "them elsewhere.\n\n" +
         "If the user references themselves (\"how many credits do I have?\", " +
         "\"have I met X?\"), call this. Quoting bulletin policy without the " +
         "student's specific numbers is incomplete.\n\n" +
@@ -177,27 +174,25 @@ export const runFullAuditTool = buildTool({
     // deterministic verdicts the validator must guard against drift.
     outputMode: "semi_hardened",
     async validateInput(_input, { session }) {
-        // DPR primary path requires only a DPR + the synthesized
-        // student profile (which W2's buildStudentProfileFromDpr
-        // gives us). Authored fallback needs the full student +
-        // courses + programs trio.
-        if (session.degreeProgressReport && session.student) return { ok: true };
-        if (!session.student) {
-            return { ok: false, userMessage: "I need your transcript or Degree Progress Report loaded before I can run an audit." };
-        }
-        if (!session.courses || session.courses.length === 0) {
-            return { ok: false, userMessage: "Course catalog is not loaded; cannot run audit." };
-        }
-        if (!session.programs || session.programs.size === 0) {
-            return { ok: false, userMessage: "Program data is not loaded; cannot run audit." };
+        // DPR-only: every audit answer must trace to the student's
+        // Albert Degree Progress Report. No transcript / authored-rules
+        // fallback. When the DPR is absent, refuse and ask for it.
+        if (!session.degreeProgressReport || !session.student) {
+            return {
+                ok: false,
+                userMessage:
+                    "I can only run an audit from your Albert Degree Progress Report (DPR). " +
+                    "Please upload your DPR and try again.",
+            };
         }
         return { ok: true };
     },
     prompt: () =>
-        `Run a degree audit. Returns rules, courses-satisfying, remaining counts, ` +
-        `cumulative GPA, total credits completed, and warnings. Optional input ` +
-        `'programId' restricts to one program. Reads from the DPR when present; ` +
-        `otherwise falls back to the local rule engine.`,
+        `Run a degree audit from the student's Albert Degree Progress Report (DPR). ` +
+        `Returns rules, courses-satisfying, remaining counts, cumulative GPA, total ` +
+        `credits completed, and warnings. Optional input 'programId' restricts to one ` +
+        `program. Requires a DPR — if none is loaded the tool refuses and the student ` +
+        `is asked to upload one.`,
     async call(input, { session }): Promise<RunFullAuditOutput> {
         // ---- DPR primary path ----
         if (session.degreeProgressReport && session.student) {
@@ -349,18 +344,13 @@ export const runFullAuditTool = buildTool({
             };
         }
 
-        // ---- Authored-rules fallback (legacy) ----
-        const student = session.student!;
-        const declared = student.declaredPrograms;
-        const targetIds = input.programId ? [input.programId] : declared.map((d) => d.programId);
-        const audits: AuditResult[] = [];
-        for (const id of targetIds) {
-            const program = session.programs!.get(id);
-            if (!program) continue;
-            audits.push(degreeAudit(student, program, session.courses!, session.schoolConfig ?? null));
-        }
-        const standing = calculateStanding(student.coursesTaken, declared.length, session.schoolConfig ?? null);
-        return { audits, standing, source: "authored" };
+        // DPR-only: validateInput guarantees a DPR is present, so the
+        // path above always returns. This is unreachable; throw rather
+        // than silently fabricate an audit without DPR data.
+        throw new Error(
+            "run_full_audit reached its no-DPR branch — this should be impossible because " +
+            "validateInput requires a Degree Progress Report. Ask the student to upload their DPR.",
+        );
     },
     summarizeResult(output) {
         const lines: string[] = [];

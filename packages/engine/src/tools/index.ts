@@ -1,9 +1,11 @@
 // ============================================================
-// Tool Registry — Phase 0 Boot
+// Tool Types — legacy Phase 0 surface
 // ============================================================
-// Phase 0 registers exactly one tool: search_availability.
-// Phase 5 will register the full set: run_full_audit, plan_semester,
-// search_policy, etc.
+// Phase 0 originally registered a `searchAvailability` tool here.
+// That tool has been superseded by the live agent registry under
+// `src/agent/`. This module now exists only to re-export the legacy
+// `Tool` / `ToolDef` / `ToolContext` shapes so that `src/index.ts`
+// can keep its public type surface stable for downstream consumers.
 // ============================================================
 
 export {
@@ -16,15 +18,3 @@ export {
     type ToolDef,
     type ValidationResult,
 } from "./types.js";
-export {
-    searchAvailability,
-    type SearchAvailabilityInput,
-    type SearchAvailabilityOutput,
-    type SectionView,
-} from "./searchAvailability.js";
-
-// Boot the Phase 0 registry. Importing this module registers the tool.
-import { registerTool } from "./types.js";
-import { searchAvailability } from "./searchAvailability.js";
-
-registerTool(searchAvailability);

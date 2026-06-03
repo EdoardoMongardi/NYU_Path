@@ -148,13 +148,13 @@ export interface SystemPromptOptions {
     /** Inject extra instructions for tests (test-only escape hatch) */
     appendInstructions?: string;
     /**
-     * Phase 7-E W8 fix — flags whether the student's parsed Albert
-     * Degree Progress Report is loaded into the session. When true,
-     * the prompt instructs the agent to call `run_full_audit` for any
-     * audit/credit/GPA/requirement question (because that tool reads
-     * the DPR's pre-computed verdicts directly), and to NOT use
-     * fallback tools like `get_academic_standing` or `get_credit_caps`
-     * which can't see the DPR data and return zeros.
+     * Flags whether the student's parsed Albert Degree Progress Report
+     * is loaded into the session. When true, the prompt routes every
+     * audit/credit/GPA/requirement question to `run_full_audit` (which
+     * reads the DPR's pre-computed verdicts directly). When false, the
+     * prompt instructs the agent to ask the student to upload their DPR
+     * before answering any personal/record question — there is no
+     * transcript or authored-rules fallback.
      */
     dprLoaded?: boolean;
     /**
@@ -306,13 +306,59 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "- ANY question about GPA, credits, requirements satisfied/remaining,",
             "  graduation eligibility, P/F usage, outside-CAS usage, or",
             "  residency → call `run_full_audit`. That tool reads the DPR.",
-            "- DO NOT call `get_academic_standing` or `get_credit_caps` when the",
-            "  DPR is loaded. They DON'T see the DPR and return defaults like",
-            "  GPA 0.00 or empty caps. Calling them produces wrong answers.",
-            "- For 'plan my next semester' or 'what should I take' → call",
-            "  `plan_semester`. It reads the DPR's not-satisfied requirements.",
-            "- For 'what if I switched majors / added a minor' → call",
-            "  `what_if_audit`. The DPR provides the transcript context.",
+            "- For GPA, cumulative credits, and requirement status, `run_full_audit`",
+            "  is the single source of truth (it reads the DPR's authoritative",
+            "  numbers). `get_academic_standing` is for probation / SAP standing",
+            "  detail and ALSO requires the DPR. `get_credit_caps` returns the",
+            "  school's caps (per-semester ceiling, F-1 floor) from config — call",
+            "  it for credit-load / overload / full-time questions.",
+            "- For ANY semester planning question — 'what should I take next",
+            "  semester', 'plan my Fall 2026', 'plan my full degree', 'show me",
+            "  my graduation roadmap', 'when can I graduate', 'plan every",
+            "  semester through graduation' — call `plan_forward_degree`.",
+            "  This is the canonical Phase 13 forward planner: it places EVERY",
+            "  remaining unmet requirement across EVERY remaining term up to",
+            "  the target graduation, balances credit load, respects prereq",
+            "  ordering, and writes the result to `session.forwardSchedule`",
+            "  so the UI can display the schedule sidebar. (`plan_semester`,",
+            "  the legacy single-term planner, was deprecated in May 2026 and",
+            "  is no longer registered — never try to call it.)",
+            "  After `plan_forward_degree` runs, call `view_forward_plan` to",
+            "  read the stored plan when the student asks follow-up questions",
+            "  about a term you already planned.",
+            "  AUTO-CHAIN (Phase 17 Task E): when `plan_forward_degree`",
+            "  succeeds and the resulting schedule has at least one",
+            "  non-locked future semester, IMMEDIATELY follow up with",
+            "  `materialize_sections({targetTerm: <first non-locked",
+            "  semester>})` in the SAME turn. This fills in section-level",
+            "  data (CRN, meeting times, instructor) for the immediate",
+            "  registration term so the student gets the full picture in",
+            "  one ask. Other future terms stay structural-only by design",
+            "  — FOSE has no section data for terms more than ~6 months",
+            "  out, so calling `materialize_sections` for them is wasted",
+            "  work.",
+            "- When the user EXPLICITLY NAMES a tool (e.g. 'call",
+            "  plan_forward_degree', 'use propose_plan_change'), call that tool",
+            "  exactly. Trust the user's choice over your own routing instinct.",
+            "- For HYPOTHETICAL plan changes ('what if I dropped Texts &",
+            "  Ideas', 'what if I added a minor', 'what if I studied abroad",
+            "  Spring 2027', 'swap CSCI-UA 421 to Fall 2026') → if a forward",
+            "  plan EXISTS in this session, call `propose_plan_change` (it",
+            "  models the change against the existing plan and returns a",
+            "  structured impact diff). For multi-alternative comparisons",
+            "  ('show me 3 different load styles') call `simulate_alternatives`",
+            "  or `compare_plan_alternatives`. Use `what_if_audit` only when",
+            "  the change is to programs/transfer (different major / school)",
+            "  rather than to the schedule itself.",
+            "- For applying a previously-proposed plan change → call",
+            "  `confirm_plan_change` with the pendingMutationId.",
+            "- For binding a specific course into a free-elective or pool slot",
+            "  ('use CSCI-UA 480 for that elective slot') → call",
+            "  `bind_free_elective` or `bind_pool_slot`.",
+            "- For getting the LIVE section grid ('show me actual sections',",
+            "  'find conflict-free meeting times for Fall 2026') → call",
+            "  `materialize_sections`. After the user picks a combination,",
+            "  call `confirm_section_combination` with the proposalId.",
             "- For policy questions (P/F deadline, withdrawal window, etc.) the",
             "  DPR is silent — call `search_policy` as usual.",
             "",
@@ -322,6 +368,25 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "- Do NOT paraphrase '3.402' as 'around 3.4' or 'roughly 3.4'.",
             "- Do NOT round '138 credits' to '~140 credits'.",
             "- The validator rejects replies that omit DPR-anchored values.",
+        );
+    } else {
+        lines.push(
+            "",
+            "## NO DEGREE PROGRESS REPORT LOADED (mandatory)",
+            "",
+            "The student has NOT uploaded their Albert Degree Progress Report (DPR).",
+            "Every answer about the student's own record — GPA, credits, requirements,",
+            "academic standing, transfer eligibility, degree planning, what-if audits —",
+            "depends on the DPR, and the corresponding tools will refuse without it.",
+            "",
+            "- For ANY personal/record question, do NOT guess or use general knowledge.",
+            "  Tell the student you need their DPR and ask them to upload it (Albert →",
+            "  Student Center → Academics → Degree Progress Report), then stop.",
+            "- You MAY still answer impersonal questions that need no personal data:",
+            "  general policy lookups (`search_policy`), course catalog search",
+            "  (`search_courses`), live section availability (`search_availability`),",
+            "  and the school's credit caps (`get_credit_caps`).",
+            "- Never fabricate the student's numbers from training data.",
         );
     }
 
@@ -338,8 +403,38 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
                 : s.declaredPrograms.map((d) => `${d.programType} ${d.programId}`).join(", ")}`,
         );
         if (s.visaStatus) lines.push(`- visaStatus: ${s.visaStatus}`);
+        // Surface the actual courseId list (not just a count) so the
+        // agent has a guardrail against re-suggesting a course the
+        // student already finished or is taking right now. The count-
+        // only signal forced the agent to call `run_full_audit` to
+        // know what was on the transcript — and when it didn't, it
+        // would suggest already-taken courses. List is deduped + capped
+        // at 80 ids so a maxed-out senior with retake history doesn't
+        // blow the prompt budget. The `coursesInProgress` block sits
+        // separately so the model can distinguish "already done" from
+        // "in flight this semester".
         if (s.coursesTaken.length > 0) {
-            lines.push(`- coursesTaken: ${s.coursesTaken.length} courses on file`);
+            const seen = new Set<string>();
+            const ids: string[] = [];
+            for (const c of s.coursesTaken) {
+                if (!seen.has(c.courseId)) {
+                    seen.add(c.courseId);
+                    ids.push(c.courseId);
+                }
+            }
+            const cap = 80;
+            const shown = ids.slice(0, cap).join(", ");
+            const overflow = ids.length > cap ? ` … (+${ids.length - cap} more — call run_full_audit for the full list)` : "";
+            lines.push(`- coursesTaken (${ids.length}): ${shown}${overflow}`);
+        }
+        if (s.currentSemester && s.currentSemester.courses.length > 0) {
+            const ips = s.currentSemester.courses.map((c) => c.courseId).join(", ");
+            lines.push(`- coursesInProgress (${s.currentSemester.term}): ${ips}`);
+        }
+        if (s.coursesTaken.length > 0 || (s.currentSemester && s.currentSemester.courses.length > 0)) {
+            lines.push(
+                "- When suggesting a course (elective, free slot, etc.), NEVER pick one already in `coursesTaken` or `coursesInProgress`. The student can't retake completed courses without an explicit retake intent; suggesting an in-progress course is a planning bug.",
+            );
         }
     }
     if (opts.today || opts.currentTerm || opts.nextTerm || opts.enrolledNowTerm || opts.graduationTerm) {

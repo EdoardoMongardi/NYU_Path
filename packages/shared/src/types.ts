@@ -898,6 +898,21 @@ export interface ScheduleSlotSpecificPlanned {
         blockingConstraints?: string[];
     };
     approvalAuthority?: ApprovalAuthority;
+    /**
+     * Phase 15 Task 7 — concrete-section fields populated by
+     * `confirm_section_combination` after the student picks a
+     * proposalId. Strict additive extension; absent until a section
+     * is pinned. Surface in Task 8's sidebar UI.
+     *
+     * `crn` is the FOSE Course Registration Number; `meetingPatterns`
+     * is the parsed weekly grid; `instructor` / `schd` / `sectionNumber`
+     * mirror FOSE's `instr` / `schd` / `no` fields verbatim.
+     */
+    crn?: string;
+    meetingPatterns?: MeetingPattern[];
+    instructor?: string;
+    schd?: string;
+    sectionNumber?: string;
 }
 
 /** placeholder slot — reserved credits with rich rationale, pending course binding */
@@ -1047,6 +1062,23 @@ export interface ForwardSchedule {
  */
 export type Day = "M" | "Tu" | "W" | "Th" | "F" | "Sa" | "Su";
 
+/**
+ * Phase 15 — A single weekly meeting time for a section. Used by the
+ * section-materializer (`packages/engine/src/agent/sectionMaterialization/`)
+ * AND surfaced into `ScheduleSlotSpecificPlanned` once a concrete CRN has
+ * been pinned via `confirm_section_combination` (Task 7).
+ *
+ * `startMin` / `endMin` are minutes since midnight (e.g. 9:30 AM = 570).
+ * Day shape mirrors `Day` above. Engine's
+ * `sectionMaterialization/types.ts` re-exports this type — shared is the
+ * single source of truth.
+ */
+export interface MeetingPattern {
+    day: Day;
+    startMin: number;
+    endMin: number;
+}
+
 export interface SchedulingPreferences {
     avoidDays?: Array<{ day: Day; strict: boolean }>;
     avoidTimeWindows?: Array<{ days: Day[]; startMin: number; endMin: number; strict: boolean }>;
@@ -1115,9 +1147,56 @@ export interface AlternativeCandidate {
  * shape stable across phases.
  */
 export type PlanMutation =
-    | { kind: "pin"; courseId: string; term: string }
+    | {
+          kind: "pin";
+          courseId: string;
+          term: string;
+          /**
+           * Phase 17 — Whether this pin is a permanent solver freeze.
+           *
+           * `true` (default when omitted): write to
+           * `SchedulePreferences.pins[]`. The solver will respect this on
+           * every future re-plan — backwards-compatible with Phase 14's
+           * single semantic where every pin was a freeze. The Phase 17
+           * "Lock" sidebar verb sends this value.
+           *
+           * `false`: do NOT write to `SchedulePreferences.pins[]`. The
+           * Phase 17 "Add" sidebar verb sends this value to express the
+           * intent "place this course in this term right now, but don't
+           * lock the solver against moving it on a future re-plan". The
+           * actual placement is achieved by the route layer (Task B);
+           * this flag carries the user's freeze-vs-place intent through
+           * the engine.
+           */
+          freeze?: boolean;
+      }
     | { kind: "exclude"; courseId: string; term?: string }
     | { kind: "swap"; drop: string; add: string; term: string }
+    /**
+     * Phase 17 — Drag-to-move a course from one future term to another.
+     *
+     * Semantically equivalent to `[{kind: "exclude", courseId},
+     * {kind: "pin", courseId, term: toTerm, freeze: false}]` — the
+     * single-mutation form keeps audit-log entries readable
+     * ("move CSCI-UA 421 from 2026-fall to 2027-spring") and lets the
+     * solver treat the gesture atomically.
+     *
+     * Unlike `pin` with `freeze: true`, `move` does NOT write to
+     * `SchedulePreferences.pins[]` — moving a course is a transient
+     * placement gesture, not a request to freeze the solver against
+     * future re-plans.
+     */
+    | { kind: "move"; courseId: string; fromTerm: string; toTerm: string }
+    /**
+     * Phase 17 Task B — Inverse of `pin` with `freeze: true`. Removes
+     * the matching `(courseId, term)` entry from
+     * `SchedulePreferences.pins[]` so a previously locked slot becomes
+     * solver-eligible for re-placement on the next re-plan.
+     *
+     * Sent by the sidebar's `Lock` verb when the student toggles
+     * `locked: false`. No-ops when no matching pin exists.
+     */
+    | { kind: "unpin"; courseId: string; term: string }
     | { kind: "addTerm"; term: string }
     | { kind: "loadStyleOverride"; term?: string; style: "balanced" | "frontload" | "backload" | "light" | "heavy" }
     | { kind: "bindFreeElective"; slotId: string; courseId: string }

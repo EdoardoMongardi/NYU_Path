@@ -56,9 +56,7 @@ import {
     type DegreeProgressReport,
 } from "@nyupath/engine";
 import {
-    buildStudentProfileV2,
     buildStudentProfileFromDpr,
-    type TranscriptData,
 } from "../../../../lib/buildSession";
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
 import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
@@ -66,6 +64,7 @@ import { getStores } from "../../../../lib/db/store";
 import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
 import { consumeRequest } from "../../../../lib/rateLimit";
 import { readSessionFromRequest } from "../../../../lib/auth/session";
+import { extractPendingMutationId } from "../../../../lib/chatV2Client";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -98,19 +97,11 @@ function getFallbackSink(): FallbackSink {
     return FALLBACK_SINK;
 }
 
-/** Phase 7-E onboarding shape: discriminated union. The DPR variant
- *  is the post-pivot canonical artifact; the transcript variant stays
- *  as the cohort-A fallback for students whose DPR isn't accessible.
- *
- *  IMPORTANT: the `dpr` discriminator is recognized but not yet
- *  consumed at this route until Workstream 3 lands the
- *  `session.degreeProgressReport` injection + tool refactor. Until
- *  then we reject DPR-shaped requests early so the failure mode is
- *  loud, never silent profile-corruption. */
-type ParsedDataPayload =
-    | (TranscriptData & { kind?: undefined })
-    | { kind: "transcript"; transcript: TranscriptData }
-    | { kind: "dpr"; report: unknown };
+/** Onboarding artifact. DPR-only: the Albert Degree Progress Report is
+ *  the sole accepted onboarding artifact. The legacy transcript variant
+ *  has been removed — the DPR carries everything the transcript did plus
+ *  declared programs and NYU's pre-computed audit. */
+type ParsedDataPayload = { kind: "dpr"; report: unknown };
 
 interface V2RequestBody {
     message: string;
@@ -138,52 +129,42 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (!body.message || typeof body.message !== "string") {
         return NextResponse.json({ error: "`message` is required and must be a string." }, { status: 400 });
     }
-    if (!body.parsedData) {
+    // DPR-only: a valid Degree Progress Report is required to reach the
+    // agent. There is no transcript fallback — if the client hasn't
+    // completed DPR onboarding, ask them to do so and stop here.
+    const pd = body.parsedData;
+    const isDprPayload = (
+        pd: ParsedDataPayload | undefined,
+    ): pd is { kind: "dpr"; report: DegreeProgressReport } =>
+        !!pd && typeof pd === "object" && "kind" in pd && pd.kind === "dpr";
+
+    if (!isDprPayload(pd)) {
         return NextResponse.json(
-            { error: "`parsedData` is required. Onboarding must complete before /chat/v2 is reachable." },
+            {
+                error:
+                    "I need your Albert Degree Progress Report (DPR) before we can chat about your record. " +
+                    "Please upload it through onboarding (Albert → Academics → Planning Tools → Degree Progress Report).",
+                onboardingStep: "awaiting_dpr",
+            },
             { status: 400 },
         );
     }
-    // Phase 7-E W3.4 — discriminated parsedData. The DPR path is the
-    // post-pivot canonical onboarding artifact; the transcript path
-    // remains as the cohort-A fallback.
-    const pd = body.parsedData;
-    const isDprPayload = (
-        pd: ParsedDataPayload,
-    ): pd is { kind: "dpr"; report: DegreeProgressReport } =>
-        pd && typeof pd === "object" && "kind" in pd && pd.kind === "dpr";
-    const isTranscriptPayload = (
-        pd: ParsedDataPayload,
-    ): pd is { kind: "transcript"; transcript: TranscriptData } =>
-        pd && typeof pd === "object" && "kind" in pd && pd.kind === "transcript";
 
     // Validate DPR payload shape lazily (the engine schema lives in the
     // engine package; we re-validate here to fail loudly on a bad
     // client rather than at the first tool call).
-    let parsedDpr: DegreeProgressReport | undefined;
-    if (isDprPayload(pd)) {
-        const v = degreeProgressReportSchema.safeParse(pd.report);
-        if (!v.success) {
-            return NextResponse.json(
-                {
-                    error:
-                        "DPR payload failed schema validation. Re-upload your DPR through onboarding " +
-                        `(${v.error.issues.map((i) => i.path.join(".")).slice(0, 3).join(", ")}).`,
-                },
-                { status: 400 },
-            );
-        }
-        parsedDpr = v.data;
+    const v = degreeProgressReportSchema.safeParse(pd.report);
+    if (!v.success) {
+        return NextResponse.json(
+            {
+                error:
+                    "DPR payload failed schema validation. Re-upload your DPR through onboarding " +
+                    `(${v.error.issues.map((i) => i.path.join(".")).slice(0, 3).join(", ")}).`,
+            },
+            { status: 400 },
+        );
     }
-
-    // Unwrap the transcript-shaped discriminator so the legacy builder
-    // sees the same flat shape it expected pre-W2. Pre-W2 callers
-    // (no `kind`) continue to work unchanged.
-    const transcriptPayload: TranscriptData = isTranscriptPayload(pd)
-        ? pd.transcript
-        : isDprPayload(pd)
-            ? ({} as TranscriptData) // DPR path doesn't use this; legacy builder gets a stub
-            : (pd as TranscriptData);
+    const parsedDpr: DegreeProgressReport = v.data;
 
     const primary = createPrimaryClient();
     if (!primary) {
@@ -235,22 +216,25 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const stores = getStores();
 
-    // Build the student profile. DPR path takes precedence; transcript
-    // path is the fallback. When neither has a usable shape, we still
-    // build a stub via the transcript builder for the legacy tests.
-    const student = parsedDpr
-        ? buildStudentProfileFromDpr(parsedDpr, {
-            ...(body.visaStatus === "f1" || body.visaStatus === "domestic"
-                ? { visaStatus: body.visaStatus }
-                : {}),
-        })
-        : buildStudentProfileV2(transcriptPayload, body.visaStatus);
+    // Build the student profile from the DPR (the only onboarding artifact).
+    const student = buildStudentProfileFromDpr(parsedDpr, {
+        // RC: studentIdOverride MUST track the auth subject so every
+        // persistence write keys on the SAME id the restore route
+        // reads from. Without this, tools persist under the slugified
+        // DPR-name id while restore reads from auth.sub → split rows
+        // in `students` / `forward_schedules` / `chat_messages`.
+        // See May 2026 post-mortem (DB-split bug).
+        studentIdOverride: userId,
+        ...(body.visaStatus === "f1" || body.visaStatus === "domestic"
+            ? { visaStatus: body.visaStatus }
+            : {}),
+    });
     const searchCoursesFn = getCourseSearchFn();
     const ragBundle = getPolicyRagBundle();
     // Phase 7-E reviewer-followup — load the home-school's config so
-    // get_credit_caps + plan_semester can answer cap/floor questions.
-    // Without this every tool that needs school-level data fell over
-    // with "School config not loaded".
+    // get_credit_caps + plan_forward_degree can answer cap/floor
+    // questions. Without this every tool that needs school-level data
+    // fell over with "School config not loaded".
     const schoolConfig = (() => {
         try {
             return loadSchoolConfig(student.homeSchool);
@@ -261,6 +245,14 @@ export async function POST(req: NextRequest): Promise<Response> {
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
+        // Phase 16 Task A — durable schedule + chat-history. The
+        // schedule store is read by plan_forward_degree +
+        // confirm_plan_change after a successful tool call (no-throw
+        // persistence). The chat-history store is written by this
+        // route AFTER the agent loop finishes (post-`done` event)
+        // — tools never write to it directly.
+        scheduleStore: stores.scheduleStore,
+        chatHistoryStore: stores.chatHistoryStore,
         // Phase 11 follow-up — thread the latest user message so
         // tool validateInput hooks can apply scope guards (e.g.,
         // reject check_transfer_eligibility when the message keys
@@ -273,6 +265,36 @@ export async function POST(req: NextRequest): Promise<Response> {
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
     };
+
+    // RC: persist the parsed DPR + profile at session bootstrap so it
+    // survives a refresh / new login. Previously, persistence only
+    // landed when the user confirmed a profile mutation (the
+    // `confirm_profile_update` two-step flow). Initial onboarding
+    // never triggers that flow, so `students.profile` and
+    // `students.parsed_dpr` stayed null and `/api/session/restore`
+    // returned an empty payload on every refresh.
+    //
+    // No-throw: persistence failures don't break the live turn.
+    if (parsedDpr && userId !== "anonymous") {
+        try {
+            await stores.profileStore.persistMutation(
+                student,
+                {
+                    pendingMutationId: `bootstrap-${Date.now()}`,
+                    field: "homeSchool" as const, // discriminator unused at restore — we just need a row
+                    before: null,
+                    after: student.homeSchool,
+                    confirmedAt: new Date().toISOString(),
+                },
+                parsedDpr,
+            );
+        } catch (err) {
+            console.warn(
+                `[v2 route] bootstrap persistMutation failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+
     // Phase 7-E + Phase 8 calendar fix — temporal context.
     // currentTerm + nextTerm come from the wall clock + NYU calendar
     // (independent of the DPR), so "next semester" resolves correctly
@@ -285,6 +307,17 @@ export async function POST(req: NextRequest): Promise<Response> {
         ? deriveTemporalContext(parsedDpr, { now })
         : { currentTerm: undefined, nextTerm: undefined };
     const graduationTerm = normalizeGraduationTarget(body.graduationTarget);
+    // Stash the normalized term on the session so plan_forward_degree
+    // can default `graduationTermOverride` to the student's onboarding-
+    // stated value when the LLM forgets to pass it. Without this fall-
+    // back the planner derives graduationTerm from creditsEarned alone,
+    // which collapses to currentTerm+1 for any student already past
+    // their credit minimum and produces a too-narrow window that flips
+    // the schedule to `infeasible-draft` for spurious credit-ceiling
+    // reasons. (See May 2026 graduation-term-default post-mortem.)
+    if (graduationTerm) {
+        session.graduationTarget = graduationTerm;
+    }
     const todayIso = now.toISOString().slice(0, 10);
     const systemPrompt = buildSystemPrompt({
         student,
@@ -485,11 +518,30 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         // and the terminal `done` event yields the full ChatTurnResult.
         const invocationsSoFar: ToolInvocation[] = [];
         let finalResult: import("@nyupath/engine").ChatTurnResult | null = null;
+        // Phase 16 Task A — accumulate thinking-delta text so it can be
+        // persisted alongside the assistant turn. The stream emits
+        // thinking_delta events inline; we only need the joined string
+        // for the chat_messages.thinking_text column.
+        const thinkingChunks: string[] = [];
 
         // Phase 13 Task 9 — capture forwardSchedule.computedAt before
         // the agent runs so we can detect when plan_forward_degree (or
         // any tool) writes a new schedule to session.forwardSchedule.
         const beforeComputedAt = session.forwardSchedule?.computedAt;
+        // RC-5 (May 2026 post-mortem) — same snapshot for the
+        // infeasible-draft slot per Decision #32. When the solver
+        // produces an infeasible plan it lands in `session.studentDraftPlan`,
+        // not `session.forwardSchedule`. Without this snapshot the UI never
+        // surfaces the draft and the student has no way to inspect why
+        // their plan failed feasibility (e.g. credit-cap overflow). Sidebar
+        // already renders the infeasible-draft banner from `state`.
+        const beforeDraftComputedAt = session.studentDraftPlan?.computedAt;
+        // Phase 15 Task 8 — same pattern for the materialization
+        // side-channel. `materialize_sections.call()` writes to
+        // `session.lastMaterializationResult` as a side-effect of
+        // staging proposals. Capture the timestamp now so we can detect
+        // when the agent ran the tool this turn.
+        const beforeMaterializationComputedAt = session.lastMaterializationResult?.computedAt;
 
         for await (const ev of runAgentTurnStreaming(
             primary,
@@ -557,6 +609,7 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                     break;
                 case "thinking_delta":
                     writer.write({ kind: "thinking", text: ev.text });
+                    thinkingChunks.push(ev.text);
                     break;
                 case "text_delta":
                     writer.write({ kind: "token", text: ev.text });
@@ -572,14 +625,50 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         // written to session.forwardSchedule by plan_forward_degree /
         // reconcile tools. Emit before the done/error path so the UI
         // sidebar can display the plan before the final text is written.
+        //
+        // RC-5: when only the infeasible-draft slot changed (Decision #32),
+        // emit the draft so the student can still inspect what went wrong.
+        // The sidebar's existing 4-state banner (valid-clean /
+        // valid-with-trade-offs / infeasible-draft / student-preferred-
+        // invalid-draft) keys off `schedule.state`, so the same event
+        // shape works for both slots. Prefer the valid plan when both
+        // changed in the same turn (rare but possible with reconcile).
         const afterComputedAt = session.forwardSchedule?.computedAt;
         const scheduleChanged =
             session.forwardSchedule !== undefined
             && (beforeComputedAt === undefined || beforeComputedAt !== afterComputedAt);
+        const afterDraftComputedAt = session.studentDraftPlan?.computedAt;
+        const draftChanged =
+            session.studentDraftPlan !== undefined
+            && (beforeDraftComputedAt === undefined || beforeDraftComputedAt !== afterDraftComputedAt);
         if (scheduleChanged) {
             writer.write({
                 kind: "forward_schedule_update",
                 schedule: session.forwardSchedule!,
+            });
+        } else if (draftChanged) {
+            writer.write({
+                kind: "forward_schedule_update",
+                schedule: session.studentDraftPlan!,
+            });
+        }
+
+        // Phase 15 Task 8 — emit forward_materialization_update when
+        // materialize_sections ran this turn. The tool writes its
+        // result (full / partial / unavailable) to
+        // session.lastMaterializationResult so the route doesn't have
+        // to inspect each invocation's args/result manually. The page's
+        // sidebar reads the event into `forwardMaterialization` state
+        // and switches the immediate term's render path accordingly.
+        const afterMaterializationComputedAt = session.lastMaterializationResult?.computedAt;
+        const materializationChanged =
+            session.lastMaterializationResult !== undefined
+            && (beforeMaterializationComputedAt === undefined
+                || beforeMaterializationComputedAt !== afterMaterializationComputedAt);
+        if (materializationChanged) {
+            writer.write({
+                kind: "forward_materialization_update",
+                result: session.lastMaterializationResult!,
             });
         }
 
@@ -668,6 +757,67 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             finalText: finalTextOut,
             modelUsedId: finalResult.modelUsedId,
         });
+
+        // Phase 16 Task A — append the user message + assistant
+        // response (plus tool invocations + validator violations +
+        // thinking text) to the durable chat-history store so a
+        // returning student sees the same transcript next session.
+        // Authenticated user only — anonymous "userId === 'anonymous'"
+        // should not write to shared storage. Failures must NOT break
+        // the live turn.
+        if (userId !== "anonymous" && session.chatHistoryStore) {
+            try {
+                const nowIso = new Date().toISOString();
+                // Persist the user's message first so the timeline
+                // ordering (user → assistant) is preserved on restore.
+                await session.chatHistoryStore.appendMessage(userId, {
+                    role: "user",
+                    content: userMessage,
+                    createdAt: nowIso,
+                });
+                // pendingMutationId — surfaced by `update_profile`. Mirror
+                // the client-side extractor in chatV2Client so the page's
+                // restore path sees the same id and can re-render the
+                // confirm button without recomputing.
+                const updateProfileInvocation = finalResult.invocations.find(
+                    (i) => i.toolName === "update_profile",
+                );
+                const pendingMutationId = updateProfileInvocation
+                    ? extractPendingMutationId(updateProfileInvocation.summary)
+                    : null;
+                const assistantRecord: import("@nyupath/engine").ChatMessageRecord = {
+                    role: "assistant",
+                    content: finalTextOut,
+                    createdAt: new Date().toISOString(),
+                };
+                const thinkingText = thinkingChunks.join("");
+                if (thinkingText.length > 0) {
+                    assistantRecord.thinkingText = thinkingText;
+                }
+                if (finalResult.invocations.length > 0) {
+                    assistantRecord.toolInvocations = finalResult.invocations;
+                }
+                if (allViolations.length > 0) {
+                    assistantRecord.validatorViolations = allViolations.map((v) => {
+                        const out: { kind: string; detail: string; caveatId?: string } = {
+                            kind: v.kind,
+                            detail: v.detail,
+                        };
+                        if ("caveatId" in v && typeof v.caveatId === "string") {
+                            out.caveatId = v.caveatId;
+                        }
+                        return out;
+                    });
+                }
+                if (pendingMutationId) {
+                    assistantRecord.pendingMutationId = pendingMutationId;
+                }
+                await session.chatHistoryStore.appendMessage(userId, assistantRecord);
+            } catch (e) {
+                // A failed transcript write must NOT break the live turn.
+                console.error("[v2 route] chatHistoryStore.appendMessage failed:", e);
+            }
+        }
 
         // Phase 7-E W12.5 — persist a short rolling session summary so
         // the next chat sees minimal cross-session context. We DON'T

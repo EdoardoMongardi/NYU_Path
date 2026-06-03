@@ -36,6 +36,13 @@ export const students = pgTable("students", {
     flags: jsonb("flags").notNull().default("[]"),
     /** Full StudentProfile snapshot persisted by confirm_profile_update. */
     profile: jsonb("profile"),
+    /**
+     * Phase 16 Task A — most-recent parsed DegreeProgressReport for the
+     * student. Written by `confirm_profile_update` (initial onboarding)
+     * and `/api/onboard/refresh-dpr` (Update-DPR). Read by the Phase 16
+     * login-restore route so a returning student doesn't re-upload.
+     */
+    parsedDpr: jsonb("parsed_dpr"),
     lastSessionDate: timestamp("last_session_date", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -88,4 +95,57 @@ export const emailOtps = pgTable("email_otps", {
 }, (t) => ({
     pk: primaryKey({ columns: [t.email, t.issuedAt] }),
     byEmail: index("email_otps_email_idx").on(t.email),
+}));
+
+/**
+ * Phase 16 Task A — durable forward-schedule history. Soft-delete via
+ * `superseded_at`; the latest non-superseded row is the live plan that
+ * the login-restore route hydrates back into the session. Older rows
+ * stay in the DB for analytics + cohort eval.
+ */
+export const forwardSchedules = pgTable("forward_schedules", {
+    id: serial("id").primaryKey(),
+    studentId: text("student_id").notNull().references(() => students.studentId, { onDelete: "cascade" }),
+    schedule: jsonb("schedule").notNull(),
+    state: text("state").notNull(),
+    dprFingerprint: text("dpr_fingerprint").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull(),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+}, (t) => ({
+    byStudentActive: index("forward_schedules_student_active_idx").on(t.studentId, t.computedAt),
+}));
+
+/**
+ * Phase 16 Task A — single SchedulePreferences row per student
+ * (upsert). Preferences are *intent*, not history; the latest write
+ * replaces the prior version. Audit trail of pref changes goes to
+ * the existing `audit_log` table separately.
+ */
+export const schedulePreferences = pgTable("schedule_preferences", {
+    studentId: text("student_id").primaryKey().references(() => students.studentId, { onDelete: "cascade" }),
+    preferences: jsonb("preferences").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Phase 16 Task A — append-only chat transcript. Each row is one
+ * message (user / assistant / system) the student saw. JSONB columns
+ * carry the structured side-effects (tool invocations, validator
+ * violations) so the rendered transcript matches what the student saw
+ * last session, including the click-to-confirm UI for any still-
+ * pending profile mutations. The monotonically-increasing `id` orders
+ * the timeline.
+ */
+export const chatMessages = pgTable("chat_messages", {
+    id: serial("id").primaryKey(),
+    studentId: text("student_id").notNull().references(() => students.studentId, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    content: text("content").notNull(),
+    thinkingText: text("thinking_text"),
+    toolInvocations: jsonb("tool_invocations"),
+    validatorViolations: jsonb("validator_violations"),
+    pendingMutationId: text("pending_mutation_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+    byStudent: index("chat_messages_student_idx").on(t.studentId, t.id),
 }));

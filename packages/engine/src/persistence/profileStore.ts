@@ -13,6 +13,7 @@
 
 import type { StudentProfile } from "@nyupath/shared";
 import type { PendingProfileMutation } from "../agent/tool.js";
+import type { DegreeProgressReport } from "../dpr/schema.js";
 
 export interface ProfileMutationAuditEntry {
     /** Stable id from the original `PendingProfileMutation`. */
@@ -39,16 +40,31 @@ export interface ProfileStore {
      * row in one operation. Implementations are expected to be
      * transactional where possible. Failures should NOT throw — the
      * agent loop's session is the source of truth for the live turn.
+     *
+     * Phase 16 Task A — the optional `parsedDpr` argument lets the
+     * caller co-persist the parsed DPR onto `students.parsed_dpr` in
+     * the same transaction as the profile mutation. Used by
+     * `confirm_profile_update` when the DPR is loaded for the first
+     * time (the onboarding flow). When omitted, the existing column
+     * is left untouched.
      */
     persistMutation(
         profile: StudentProfile,
         audit: ProfileMutationAuditEntry,
+        parsedDpr?: DegreeProgressReport,
     ): Promise<void>;
+    /**
+     * Phase 16 Task A — read the parsed DPR persisted by a prior
+     * `persistMutation` call. Returns `null` when none. Used by the
+     * Phase 16 login-restore route (Task 16.B).
+     */
+    getParsedDpr?(studentId: string): Promise<DegreeProgressReport | null>;
 }
 
 /** In-memory implementation. Tests + dev only — clears on process exit. */
 export class InMemoryProfileStore implements ProfileStore {
     private readonly profiles = new Map<string, StudentProfile>();
+    private readonly parsedDprs = new Map<string, DegreeProgressReport>();
     /** Test-only: read the audit log (chronological). */
     public readonly auditLog: ProfileMutationAuditEntry[] = [];
 
@@ -59,13 +75,22 @@ export class InMemoryProfileStore implements ProfileStore {
     async persistMutation(
         profile: StudentProfile,
         audit: ProfileMutationAuditEntry,
+        parsedDpr?: DegreeProgressReport,
     ): Promise<void> {
         this.profiles.set(profile.id, profile);
         this.auditLog.push(audit);
+        if (parsedDpr !== undefined) {
+            this.parsedDprs.set(profile.id, parsedDpr);
+        }
+    }
+
+    async getParsedDpr(studentId: string): Promise<DegreeProgressReport | null> {
+        return this.parsedDprs.get(studentId) ?? null;
     }
 
     clear(): void {
         this.profiles.clear();
+        this.parsedDprs.clear();
         this.auditLog.length = 0;
     }
 }

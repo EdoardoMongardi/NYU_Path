@@ -599,11 +599,35 @@ const COURSE_ROW_RE = new RegExp(
     `^${TERM_RE}\\s+(${SUBJECT_RE})\\s+(\\S+)\\s+(.+?)(?:\\s+([A-Z][A-Z+\\-]?))?\\s+(\\d+(?:\\.\\d+)?)\\s+([A-Z]{1,3})\\s*$`,
 );
 
+// PDF text-extraction frequently concatenates the page footer
+// ("Page 9 of 9") with the first content line of the next page
+// when the PDF lacks a hard newline between them. Without
+// stripping the prefix, the row regex fails (the line starts with
+// "Page", not a 4-digit year) and the DPR silently loses the
+// affected row. Real example from SAA_STD_DS.pdf May 2026:
+//   "Page 9 of 92025 Fall CSCI-UA 472 Artificial Intelligence A 4.00 EN"
+// → without strip: warning + row dropped (CSCI-UA 472 missing from
+//   the parsed history).
+// → with strip: regex matches the cleaned tail and the row lands.
+//
+// The second `\d+?` is NON-GREEDY because the page-total digit
+// often abuts a content year ("Page 9 of 9" + "2025" → "of 92025").
+// A greedy `\d+` would consume "92025" and leave only "5 Fall..."
+// after stripping. Non-greedy + lookahead anchors on the next
+// recognizable content shape (a 4-digit year + season, OR the
+// column header "Term ").
+const PAGE_FOOTER_PREFIX_RE =
+    /^Page\s+\d+\s+of\s+\d+?(?=\d{4}\s+(?:Fall|Spring|Spr|Summer|J-Term|January)|Term\s)/;
+
+function stripPageFooterPrefix(s: string): string {
+    return s.replace(PAGE_FOOTER_PREFIX_RE, "");
+}
+
 function parseCourseTable(body: string[], warnings: string[]): DPRCourseRow[] {
     const out: DPRCourseRow[] = [];
     for (let i = 0; i < body.length; i++) {
         const line = body[i]!;
-        const trimmed = line.trim();
+        const trimmed = stripPageFooterPrefix(line.trim());
         if (trimmed === "") continue;
 
         // Continuation lines start with leading whitespace.

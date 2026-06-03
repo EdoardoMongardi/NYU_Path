@@ -1,3 +1,14 @@
+/* ==========================================================
+   Phase 16 Task D — sidebar polish tokens
+   ----------------------------------------------------------
+   The workload-tier palette (`--tier-*`) is defined in
+   apps/web/app/globals.css alongside the rest of the design
+   tokens. CSS Modules in Next 16 reject any top-level pseudo-
+   class block (`:root`, `:global(:root)`), so token definitions
+   must live in the global stylesheet. The `.slotTier_*` rules
+   below consume the tokens via `var(...)`.
+   ========================================================== */
+
 .chatPage {
     height: 100vh;
     display: flex;
@@ -600,9 +611,20 @@ button.reasoningHeader:focus-visible {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
+    padding: 4px 0;
+    /* Phase 16 Task D's per-card sticky-header was REVERTED in the May
+       2026 post-mortem — when the outer .scheduleSidebarHeader is also
+       sticky (as it has been since Phase 13), the two compete for the
+       top of the viewport and visually overlap each subsequent card
+       AND the outer header. Sticky stays only on the outer wrapper. */
 }
 .semesterCardHeader h3 { margin: 0; font-size: 0.95em; font-weight: 600; }
-.semesterCredits { font-size: 0.8em; color: var(--text-secondary); }
+.semesterCredits {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    /* Phase 16 Task D — credit columns line up across cards. */
+    font-variant-numeric: tabular-nums;
+}
 .semesterNotes {
     list-style: disc;
     margin: 0 0 8px 16px;
@@ -625,10 +647,23 @@ button.reasoningHeader:focus-visible {
 .slotList li:last-child { border-bottom: none; }
 
 .slotIcon { flex: 0 0 16px; text-align: center; opacity: 0.7; }
-.slotCourseId { font-family: var(--font-mono); font-weight: 600; }
+/* Phase 16 Task D — course IDs read as code; mono font + tabular nums
+   so two adjacent courses (e.g. "CSCI-UA 102" / "CSCI-UA 421") stack
+   on the digit column. */
+.slotCourseId {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
 .slotTitle, .slotPlaceholderCategory { flex: 1 1 auto; color: var(--text-primary); }
 .slot_placeholder .slotPlaceholderCategory { font-style: italic; color: var(--text-secondary); }
-.slotMeta { flex: 0 0 auto; font-size: 0.8em; color: var(--text-secondary); }
+.slotMeta {
+    flex: 0 0 auto;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    /* Phase 16 Task D — credit numbers align across rows. */
+    font-variant-numeric: tabular-nums;
+}
 .slotFlag { color: #b58000; font-size: 0.85em; margin-left: 4px; }
 
 .slot_completed { background: rgba(40, 167, 69, 0.06); }
@@ -702,3 +737,548 @@ button.reasoningHeader:focus-visible {
     color: var(--text-primary);
 }
 .slotPopover button:hover { background: var(--bg-secondary); }
+
+/* Phase 16 Task B — Update DPR + Clear sidebar buttons.
+   Both inherit the loadStylePill aesthetic (rounded pill, subtle
+   border, hover swap) so the new affordances feel native. The
+   Update DPR pill sits at the top of the sidebar above the body;
+   the Clear pill sits at the very bottom, slightly offset so it
+   reads as "destructive / test-only" rather than primary. */
+.sidebarToolbar {
+    padding: 12px 20px 0;
+    display: flex;
+    gap: 8px;
+}
+
+.sidebarToolbarBottom {
+    padding: 12px 20px 20px;
+    margin-top: 8px;
+    border-top: 1px dashed var(--border-light);
+    display: flex;
+    justify-content: center;
+}
+
+.sidebarToolbarHiddenInput {
+    display: none;
+}
+
+.sidebarToolbarBtn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    color: var(--text-primary);
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sidebarToolbarBtn:hover:not(:disabled) {
+    background: var(--bg-hover, var(--bg-secondary));
+    border-color: var(--nyu-violet);
+}
+
+.sidebarToolbarBtn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.sidebarToolbarBtn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+    border-color: var(--nyu-violet);
+}
+
+.sidebarClearBtn {
+    background: transparent;
+    border: 1px solid #f5c2c7;
+    color: #842029;
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    font-size: 0.8em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.sidebarClearBtn:hover {
+    background: #f8d7da;
+    border-color: #842029;
+}
+
+.sidebarClearBtn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(132, 32, 41, 0.2);
+}
+
+/* Phase 15 Task 8 — Sections view (immediate term, when materialization is full) */
+.materializationBanner {
+    background: #fff3cd;
+    border: 1px solid #ffe69c;
+    color: #664d03;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    margin-bottom: 8px;
+}
+.sectionsView {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 4px;
+}
+.sectionsViewHeader {
+    margin: 0 0 4px 0;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.combinationPicker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+.combinationTab {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    color: var(--text-primary);
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    font-size: 0.8em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    min-width: 28px;
+}
+.combinationTab:hover {
+    background: var(--bg-hover, var(--bg-secondary));
+    border-color: var(--nyu-violet);
+}
+.combinationTabActive {
+    background: var(--nyu-violet);
+    color: #fff;
+    border-color: var(--nyu-violet);
+}
+.sectionCard {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    background: rgba(13, 110, 253, 0.04);
+    font-size: 0.85em;
+    line-height: 1.4;
+}
+.sectionMeta {
+    font-family: var(--font-mono);
+    font-size: 0.78em;
+    color: var(--text-secondary);
+}
+.sectionPatterns {
+    font-size: 0.82em;
+    color: var(--text-primary);
+}
+.sectionInstructor {
+    font-size: 0.78em;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+.applyCombinationBtn {
+    margin-top: 4px;
+    background: var(--nyu-violet);
+    color: #fff;
+    border: 1px solid var(--nyu-violet);
+    padding: 6px 12px;
+    border-radius: var(--radius-full);
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.applyCombinationBtn:hover {
+    opacity: 0.92;
+}
+.truncatedNote {
+    margin: 4px 0 0 0;
+    font-size: 0.78em;
+    color: var(--text-tertiary, var(--text-secondary));
+    font-style: italic;
+}
+
+/* ==========================================================
+   Phase 16 Task C — full-degree sidebar render
+   ----------------------------------------------------------
+   Prior Credits card (TE/AP/IB) + per-slot grade column +
+   locked-completed-row visual treatment. Task 16.D layers tier
+   colors / sticky headers / a summary card on top of these.
+   ========================================================== */
+
+.priorCreditsCard {
+    margin-bottom: 16px;
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: rgba(0, 123, 255, 0.04);
+}
+
+.priorCreditsRow {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 4px 6px;
+    font-size: 0.85em;
+    line-height: 1.4;
+    border-bottom: 1px dashed rgba(0, 0, 0, 0.04);
+    border-radius: 4px;
+    color: var(--text-primary);
+}
+
+.priorCreditsRow:last-child {
+    border-bottom: none;
+}
+
+/* Fixed-width final column appended to every slot row so the grade /
+   status text aligns vertically across history / IP / future cards. */
+.slotGradeCell {
+    flex: 0 0 36px;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 0.78em;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Completed (history) rows: muted, non-interactive cursor, no hover
+   tint. The 🔒 icon at the row's right edge tells the student why. */
+.slotLocked {
+    cursor: default;
+    opacity: 0.78;
+}
+.slotLocked:hover {
+    background: inherit !important;
+}
+
+/* Phase 16 Task D — fixed-width lock-icon slot. Sits to the right of
+   the grade column, so rows with and without the icon still line up
+   on their grade text. */
+.slotLockIcon {
+    flex: 0 0 14px;
+    width: 14px;
+    margin-left: 4px;
+    font-size: 0.78em;
+    line-height: 1;
+    text-align: center;
+    opacity: 0.6;
+}
+
+/* ==========================================================
+   Phase 16 Task D — summary card + workload-tier tints
+   ----------------------------------------------------------
+   Top-of-sidebar identity card (name / programs / school /
+   visa / GPA / credits / graduation) + the per-slot left-
+   border tints driven by `slot.workloadTier`.
+   ========================================================== */
+
+.summaryCard {
+    margin: 0 0 16px 0;
+    padding: 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--nyu-violet-faint);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.summaryCardHeader {
+    margin: 0 0 4px 0;
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.25;
+}
+
+.summaryCardRow {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    /* Numbers (GPA + credit ratios) align cleanly across rows. */
+    font-variant-numeric: tabular-nums;
+}
+
+.summaryCardRow strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.summaryCardProgressBar {
+    margin-top: 6px;
+    height: 6px;
+    background: rgba(87, 6, 140, 0.12);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.summaryCardProgressFill {
+    height: 100%;
+    background: var(--nyu-violet);
+    border-radius: var(--radius-full);
+    transition: width 0.25s ease-out;
+}
+
+/* Per-slot left-border tint per `slot.workloadTier`. The base class
+   sets the border style + width; the tier-specific classes only
+   override the color, so the layout never shifts when the tier
+   changes (or is absent — see `.slot_completed` / `.slot_in_progress`,
+   which simply don't add a tier class). */
+.slotTier {
+    border-left-width: 4px;
+    border-left-style: solid;
+    /* Account for the new left border so the row's content stays
+       aligned with non-tinted (history / IP) rows. */
+    padding-left: 6px;
+}
+
+.slotTier_major-required   { border-left-color: var(--tier-major-required); }
+.slotTier_major-elective   { border-left-color: var(--tier-major-elective); }
+.slotTier_school-core      { border-left-color: var(--tier-school-core); }
+.slotTier_free-elective    { border-left-color: var(--tier-free-elective); }
+.slotTier_general-elective { border-left-color: var(--tier-general-elective); }
+
+/* ==========================================================
+   Phase 17 Task C — 4-verb sidebar affordances
+   ----------------------------------------------------------
+   Drag-to-move (slot pill draggable + term-card drop target),
+   nested submenus inside the slot popover (Swap / Move),
+   per-term-card "+ Add course" affordance, in-flight slot
+   spinner replacing the grade cell during the Stage-1 round
+   trip, and a small lock toggle for the Lock verb.
+   ========================================================== */
+
+/* Pill cursor — distinct from `.slotClickable` (the popover-opening
+   cursor) so the student knows they can EITHER click for the popover
+   OR drag the pill to a different term card. */
+.slotDraggable {
+    cursor: grab;
+}
+.slotDraggable:active { cursor: grabbing; }
+
+/* Highlight ring shown on a term card while a draggable slot pill is
+   hovering above it. Pure visual cue — the JS `onDragOver` /
+   `onDragLeave` handlers toggle this class. */
+.termCardDropTarget {
+    outline: 2px dashed var(--nyu-violet);
+    outline-offset: -2px;
+    background: rgba(87, 6, 140, 0.06);
+}
+
+/* Submenu container shared by Swap + Move. Sits below the verb row
+   inside the slot popover. */
+.slotPopoverSubmenu {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border-light);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.slotPopoverSubmenuHeading {
+    font-size: 0.72em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    margin: 4px 0 2px;
+    padding: 0 4px;
+}
+
+/* Free-search input rendered at the bottom of the Swap submenu and
+   inside the per-term-card "+ Add course" affordance. Reused by both
+   for layout consistency. */
+.swapSubmenu, .moveSubmenu {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.addCourseAffordance {
+    margin-top: 8px;
+    padding: 6px 4px 0;
+    border-top: 1px dashed var(--border-light);
+}
+
+.addCourseButton {
+    width: 100%;
+    background: transparent;
+    border: 1px dashed var(--border-light);
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.82em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.addCourseButton:hover:not(:disabled) {
+    background: rgba(87, 6, 140, 0.06);
+    color: var(--text-primary);
+    border-color: var(--nyu-violet);
+}
+
+.addCourseButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.addCourseInputWrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 0;
+}
+
+.addCourseInput {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}
+
+.addCourseInput:focus {
+    outline: none;
+    border-color: var(--nyu-violet);
+    box-shadow: 0 0 0 2px var(--nyu-violet-glow);
+}
+
+.addCourseSuggestions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+    background: var(--bg-primary);
+}
+
+.addCourseSuggestion {
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 0.82em;
+    border-bottom: 1px dashed var(--border-light);
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+}
+
+.addCourseSuggestion:last-child { border-bottom: none; }
+.addCourseSuggestion:hover { background: rgba(87, 6, 140, 0.06); }
+
+.addCourseInputRow {
+    display: flex;
+    gap: 4px;
+}
+
+.addCourseSubmitBtn {
+    background: var(--nyu-violet);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.78em;
+    cursor: pointer;
+}
+
+.addCourseSubmitBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.addCourseCancelBtn {
+    background: transparent;
+    border: 1px solid var(--border-light);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.78em;
+    cursor: pointer;
+}
+
+/* Inline spinner that replaces the grade cell while a Stage-1 propose
+   round-trip is in flight for that slot. Sized to the grade cell's
+   width so the row layout stays stable. */
+.slotSpinner {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.slotSpinner::after {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border-light);
+    border-top-color: var(--nyu-violet);
+    border-radius: 50%;
+    animation: slotSpin 0.7s linear infinite;
+}
+
+@keyframes slotSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* (Phase 17 Task C originally added .slotLockToggle / .slotLockToggleActive
+   here as a click-target for an inline lock icon, but the popover-driven
+   Lock verb makes a separate icon-button redundant. Removed in the
+   May 2026 code-review pass to drop the dead style declarations. The
+   popover label "Lock / Unlock" carries the affordance instead.) */
+
+/* Phase 17 Task D — sidebar-bottom toast. Appears when ANY slot's
+   spinner has been on for 600ms+; surfaces "Validating plan change…"
+   so the student knows the click registered when the round-trip is
+   slower than typical. Pinned to the sidebar's bottom edge so it
+   never displaces term cards. */
+.sidebarToastContainer {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 8px 12px;
+    background: linear-gradient(
+        to top,
+        var(--bg-primary) 0%,
+        var(--bg-primary) 60%,
+        rgba(255, 255, 255, 0) 100%
+    );
+    z-index: 5;
+    pointer-events: none;
+}
+
+.sidebarToast {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--nyu-violet-faint);
+    border: 1px solid var(--nyu-violet-glow);
+    border-radius: var(--radius-md);
+    color: var(--nyu-violet);
+    font-size: 0.82rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+    animation: fadeInUp 0.2s ease-out both;
+}
+
+.sidebarToast::before {
+    content: "⏳";
+    font-size: 0.95em;
+}

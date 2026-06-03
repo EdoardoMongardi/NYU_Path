@@ -67,7 +67,16 @@ export const whatIfAuditTool = buildTool({
     // estimate, the disclaimer must appear verbatim in the reply.
     outputMode: "semi_hardened",
     async validateInput(input, { session }) {
-        if (!session.student) return { ok: false, userMessage: "I need your transcript / profile first." };
+        // DPR-only: a hypothetical audit compares against the student's
+        // real coursework, which comes from the DPR. Refuse without it.
+        if (!session.degreeProgressReport || !session.student) {
+            return {
+                ok: false,
+                userMessage:
+                    "I need your Albert Degree Progress Report (DPR) to run a what-if comparison. " +
+                    "Please upload your DPR and try again.",
+            };
+        }
         if (input.hypotheticalPrograms.length === 0) {
             return { ok: false, userMessage: "hypotheticalPrograms must be non-empty." };
         }

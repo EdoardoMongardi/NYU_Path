@@ -7,7 +7,20 @@
 
 import { encodeFoseTerm } from "../data/foseTerm.js";
 
-/** Raw search result from the FOSE API */
+/**
+ * Raw search result from the FOSE API.
+ *
+ * Field set verified against 27 recorded fixtures (514 rows total) under
+ * `packages/engine/tests/fixtures/fose/`. Every field below was either
+ * present in 100% of recorded rows (for the required ones) or is consumed
+ * by current code (for the optional ones). Optionality reflects defensive
+ * handling: FOSE may omit any field, and consumers should not crash.
+ *
+ * Fields observed in fixtures but NOT consumed by any current code path
+ * are intentionally OMITTED (no-invention rule): `mpkey`, `start_date`,
+ * `end_date`, `offsets`, `total`, `hide`, `isCancelled`, `rank`. Add them
+ * here only when a real consumer needs them.
+ */
 export interface FoseSearchResult {
     /** Internal key for details lookup, e.g. "4930" */
     key: string;
@@ -19,9 +32,29 @@ export interface FoseSearchResult {
     crn: string;
     /** Source database (term code), e.g. "1254" */
     srcdb: string;
-    /** Enrollment status: "O" = open, "W" = waitlist, "C" = closed */
+    /** Enrollment status: "O" = open, "W" = waitlist, "C" = closed, "A" = active (pre-reg). */
     stat: string;
-    /** Meeting times as formatted HTML */
+    /** Section type from FOSE: "LEC", "LAB", "RCT", "TUT", "SEM", "IND", etc. */
+    schd?: string;
+    /** Section number from FOSE `no` field, e.g. "002". */
+    no?: string;
+    /** Human-readable meeting string from FOSE, e.g. "TR 8-9:15a", "MTWR 11:10a-1:15p". */
+    meets?: string;
+    /**
+     * Structured JSON array string from FOSE.
+     * Shape: `[{"meet_day":"0","start_time":"800","end_time":"915"}, ...]`
+     * meet_day: "0"=Mon, "1"=Tue, "2"=Wed, "3"=Thu, "4"=Fri, "5"=Sat, "6"=Sun.
+     * start_time / end_time: 24h, 3-4 chars (e.g. "800" = 08:00, "1045" = 10:45).
+     */
+    meetingTimes?: string;
+    /**
+     * @deprecated Use `meets` instead. The FOSE search endpoint does not
+     * actually return an `hours` field on search rows (verified across 27
+     * fixtures / 514 rows). This optional slot is retained only because
+     * two legacy `search_availability` tool wrappers still pass-through
+     * `r.hours` in their output shape; in practice it is always undefined
+     * on real FOSE responses. Remove once those wrappers stop reading it.
+     */
     hours?: string;
     /** Instructor name(s) */
     instr?: string;

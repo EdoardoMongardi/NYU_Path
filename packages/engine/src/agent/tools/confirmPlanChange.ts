@@ -21,6 +21,7 @@ import {
     buildPlanDiff,
     PlanMutationSchema,
 } from "../forwardSchedule/planChangeHelpers.js";
+import { computeDprFingerprint } from "../../dpr/fingerprint.js";
 import type {
     PlanChangeOutcome,
     PlanDiff,
@@ -142,6 +143,34 @@ export const confirmPlanChangeTool = buildTool({
             session.studentDraftPlan = newSchedule;
             // Keep the last valid forwardSchedule — do NOT delete it.
             storedIn = "studentDraftPlan";
+        }
+
+        // Phase 16 Task A — durable persistence of both the schedule
+        // (so login restore can replay the latest plan) AND the
+        // preferences (so pins / load-style / exclusions survive across
+        // sessions). Failures do NOT throw — the in-memory mutation
+        // already landed and the live turn is the source of truth.
+        if (session.scheduleStore && session.student) {
+            try {
+                const fingerprint = computeDprFingerprint(dpr);
+                await session.scheduleStore.persistSchedule(
+                    session.student.id,
+                    newSchedule,
+                    fingerprint,
+                );
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.warn(`[confirm_plan_change] persistSchedule failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+            try {
+                await session.scheduleStore.persistPreferences(
+                    session.student.id,
+                    newPrefs,
+                );
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.warn(`[confirm_plan_change] persistPreferences failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
         }
 
         // Step 4: Build outcome.

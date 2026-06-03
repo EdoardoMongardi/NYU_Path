@@ -10,6 +10,7 @@ import {
     type ToolSession,
 } from "../../src/agent/index.js";
 import type { Course, Program, StudentProfile } from "@nyupath/shared";
+import { mkDpr } from "../helpers/mkDpr.js";
 
 const ctx = (session: ToolSession) => ({ signal: new AbortController().signal, session });
 
@@ -110,10 +111,22 @@ describe("check_overlap tool (Phase 7-A P-3 / Appendix A rule #4)", () => {
     ];
 
     it("rejects when programs catalog is missing", async () => {
-        const v = await checkOverlapTool.validateInput!({}, ctx({ student: STUDENT }));
+        // A DPR is present (it's now required first); the programs
+        // catalog is still missing, which is the branch under test.
+        const v = await checkOverlapTool.validateInput!(
+            {},
+            ctx({ student: STUDENT, degreeProgressReport: mkDpr() }),
+        );
         expect(v.ok).toBe(false);
         if (v.ok) return;
         expect(v.userMessage).toMatch(/programs catalog/i);
+    });
+
+    it("rejects when no DPR is loaded", async () => {
+        const v = await checkOverlapTool.validateInput!({}, ctx({ student: STUDENT }));
+        expect(v.ok).toBe(false);
+        if (v.ok) return;
+        expect(v.userMessage).toMatch(/degree progress report/i);
     });
 
     it("returns per-program statuses + sharedCourses on a 2-program student", async () => {

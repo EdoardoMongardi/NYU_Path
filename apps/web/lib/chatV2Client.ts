@@ -12,6 +12,37 @@
 // ============================================================
 
 import type { ForwardSchedule } from "@nyupath/shared";
+import type { MaterializationResult, MaterializedSemester } from "@nyupath/engine";
+
+/**
+ * Phase 15 Task 8 — section shape carried by the materialization
+ * payload. Derived from `MaterializedSemester["courses"][number]["sections"][number]`
+ * so the UI doesn't need a deep import into engine internals (the
+ * engine barrel does not re-export `SectionView` directly because it
+ * collides with the search-availability `SectionView` shape).
+ */
+export type MaterializationSectionView =
+    MaterializedSemester["courses"][number]["sections"][number];
+
+/**
+ * Phase 15 Task 8 — payload of the `forward_materialization_update`
+ * SSE event. Mirrors `session.lastMaterializationResult` (the engine
+ * side-channel populated by `materialize_sections.call()`): the
+ * orchestrator's `MaterializationResult` plus the `targetTerm` and
+ * `proposals` array (one entry per conflict-free combination, ordered
+ * to match `result.semester.combinations`).
+ */
+export type ForwardMaterializationPayload =
+    & MaterializationResult
+    & {
+        targetTerm: string;
+        proposals?: Array<{
+            proposalId: string;
+            sections: MaterializationSectionView[];
+            weeklyHours: number;
+        }>;
+        computedAt: number;
+    };
 
 export type ChatV2Event =
     | { kind: "template_match"; templateId: string; body: string; source: string }
@@ -21,8 +52,31 @@ export type ChatV2Event =
     | { kind: "thinking"; text: string }
     | { kind: "validator_block"; violations: Array<{ kind: string; detail: string; caveatId?: string; number?: string }> }
     | { kind: "forward_schedule_update"; schedule: ForwardSchedule }
+    | { kind: "forward_materialization_update"; result: ForwardMaterializationPayload }
     | { kind: "done"; finalText: string; modelUsedId: string }
     | { kind: "error"; message: string };
+
+/**
+ * Phase 17 Task D — events emitted by `/api/plan/explain-polish` (LLM
+ * polish) and the Stage 2 enrichment fork (`/api/plan/stage2`). These
+ * stream into the same `plan_action_bubble` chat-thread message kind
+ * the Task D sidebar surface populates after a successful Stage 1
+ * route response. They live on a dedicated event union so the polish
+ * + enrichment fetches never accidentally consume `done` events meant
+ * for the chat stream (and vice versa).
+ */
+export type PlanActionBubbleSseEvent =
+    | { kind: "plan_action_explanation_polish_chunk"; slotKey: string; deltaText: string }
+    | { kind: "plan_action_explanation_polish_done"; slotKey: string; polishedText: string }
+    | { kind: "plan_action_explanation_polish_error"; slotKey: string; message: string }
+    /** Stage 2 enrichment carried by /api/plan/stage2. One event per
+     *  term in the request's `futureTerms[]`. The `message` field
+     *  starts with `[<term>] ` so a downstream UI reducer can route
+     *  per-term without re-parsing the term out of it. */
+    | { kind: "plan_action_stage2_enrichment"; slotKey: string; term?: string; status: "pending" | "ok" | "warn" | "unavailable"; message: string }
+    /** Terminator for the Stage 2 stream. Emitted after every term
+     *  in the input list has produced an enrichment event. */
+    | { kind: "plan_action_stage2_done"; slotKey: string };
 
 export interface ChatV2Request {
     message: string;
@@ -136,4 +190,178 @@ export function extractPendingMutationId(summary: string | undefined): string | 
     if (!summary) return null;
     const m = summary.match(/pendingMutationId:\s*(pm_[a-zA-Z0-9_]+)/);
     return m ? m[1]! : null;
+}
+
+/**
+ * Phase 17 Task D — POST to /api/plan/explain-polish and yield
+ * parsed polish events. Mirrors `streamChatV2`'s SSE parser. Returns
+ * empty (no events) when the route returns 204 (env-flag gated off).
+ */
+export async function* streamPlanActionPolish(
+    body: { slotKey: string; templateText: string; structuredDiff?: unknown },
+    init: { endpoint?: string; signal?: AbortSignal } = {},
+): AsyncGenerator<PlanActionBubbleSseEvent, void, void> {
+    const endpoint = init.endpoint ?? "/api/plan/explain-polish";
+    let response: Response;
+    try {
+        response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            credentials: "same-origin",
+            signal: init.signal,
+        });
+    } catch (err) {
+        yield {
+            kind: "plan_action_explanation_polish_error",
+            slotKey: body.slotKey,
+            message: err instanceof Error ? err.message : String(err),
+        };
+        return;
+    }
+    if (response.status === 204) return; // ENV-gated off — no events.
+    if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+            const j = await response.json();
+            if (j?.error) detail = j.error;
+        } catch { /* fall through */ }
+        yield {
+            kind: "plan_action_explanation_polish_error",
+            slotKey: body.slotKey,
+            message: detail,
+        };
+        return;
+    }
+    if (!response.body) return;
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let sep = buffer.indexOf("\n\n");
+            while (sep !== -1) {
+                const block = buffer.slice(0, sep);
+                buffer = buffer.slice(sep + 2);
+                const ev = parseBubbleBlock(block);
+                if (ev) yield ev;
+                sep = buffer.indexOf("\n\n");
+            }
+        }
+        buffer += decoder.decode();
+        if (buffer.trim().length > 0) {
+            const ev = parseBubbleBlock(buffer);
+            if (ev) yield ev;
+        }
+    } catch (err) {
+        if (init.signal?.aborted) return;
+        yield {
+            kind: "plan_action_explanation_polish_error",
+            slotKey: body.slotKey,
+            message: err instanceof Error ? err.message : String(err),
+        };
+    }
+}
+
+function parseBubbleBlock(block: string): PlanActionBubbleSseEvent | null {
+    let dataLine: string | null = null;
+    for (const raw of block.split("\n")) {
+        const line = raw.replace(/\r$/, "");
+        if (line.startsWith("data: ")) dataLine = line.slice("data: ".length);
+    }
+    if (!dataLine) return null;
+    try {
+        return JSON.parse(dataLine) as PlanActionBubbleSseEvent;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Phase 17 Task D follow-up — POST to /api/plan/stage2 with the
+ * `futureTerms[]` from a propose-stage response. The route runs
+ * `materializeSections` per term in the background and streams one
+ * `plan_action_stage2_enrichment` event per term, terminated by a
+ * `plan_action_stage2_done` event. The slotKey echoed on every
+ * event matches `bubbleSlotKey(pendingMutationId)` so the
+ * page-side reducer can route the signal to the right bubble.
+ */
+export async function* streamPlanActionStage2(
+    body: { slotKey: string; futureTerms: string[] },
+    init: { endpoint?: string; signal?: AbortSignal } = {},
+): AsyncGenerator<PlanActionBubbleSseEvent, void, void> {
+    const endpoint = init.endpoint ?? "/api/plan/stage2";
+    let response: Response;
+    try {
+        response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            credentials: "same-origin",
+            signal: init.signal,
+        });
+    } catch (err) {
+        // Stage 2 failures are best-effort — surface as a single
+        // "unavailable" enrichment so the bubble can show the
+        // section-data-unavailable signal rather than nothing.
+        yield {
+            kind: "plan_action_stage2_enrichment",
+            slotKey: body.slotKey,
+            status: "unavailable",
+            message: `[stage2] section data unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        };
+        return;
+    }
+    if (response.status === 204) return;
+    if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+            const j = await response.json();
+            if (j?.error) detail = j.error;
+        } catch { /* fall through */ }
+        yield {
+            kind: "plan_action_stage2_enrichment",
+            slotKey: body.slotKey,
+            status: "unavailable",
+            message: `[stage2] ${detail}`,
+        };
+        return;
+    }
+    if (!response.body) return;
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let sep = buffer.indexOf("\n\n");
+            while (sep !== -1) {
+                const block = buffer.slice(0, sep);
+                buffer = buffer.slice(sep + 2);
+                const ev = parseBubbleBlock(block);
+                if (ev) yield ev;
+                sep = buffer.indexOf("\n\n");
+            }
+        }
+        buffer += decoder.decode();
+        if (buffer.trim().length > 0) {
+            const ev = parseBubbleBlock(buffer);
+            if (ev) yield ev;
+        }
+    } catch (err) {
+        if (init.signal?.aborted) return;
+        yield {
+            kind: "plan_action_stage2_enrichment",
+            slotKey: body.slotKey,
+            status: "unavailable",
+            message: `[stage2] ${err instanceof Error ? err.message : String(err)}`,
+        };
+    }
 }

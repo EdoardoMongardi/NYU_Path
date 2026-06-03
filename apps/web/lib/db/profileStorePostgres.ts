@@ -8,6 +8,7 @@
 // ============================================================
 
 import type { ProfileStore, ProfileMutationAuditEntry } from "@nyupath/engine";
+import type { DegreeProgressReport } from "@nyupath/engine";
 import type { StudentProfile } from "@nyupath/shared";
 import { eq } from "drizzle-orm";
 import type { Database } from "./client.js";
@@ -30,8 +31,17 @@ export class PostgresProfileStore implements ProfileStore {
     async persistMutation(
         profile: StudentProfile,
         audit: ProfileMutationAuditEntry,
+        parsedDpr?: DegreeProgressReport,
     ): Promise<void> {
         await this.db.transaction(async (tx) => {
+            // Phase 16 Task A — when `parsedDpr` is supplied, it is
+            // co-persisted onto students.parsed_dpr via the same upsert.
+            // When omitted, the column is intentionally left untouched
+            // (a profile-only mutation should not wipe a previously
+            // stored DPR).
+            const dprPatch = parsedDpr !== undefined
+                ? { parsedDpr }
+                : ({} as Record<string, never>);
             await tx
                 .insert(students)
                 .values({
@@ -43,6 +53,7 @@ export class PostgresProfileStore implements ProfileStore {
                     flags: profile.flags,
                     profile: profile,
                     updatedAt: new Date(),
+                    ...dprPatch,
                 })
                 .onConflictDoUpdate({
                     target: students.studentId,
@@ -54,6 +65,7 @@ export class PostgresProfileStore implements ProfileStore {
                         flags: profile.flags,
                         profile: profile,
                         updatedAt: new Date(),
+                        ...dprPatch,
                     },
                 });
 
@@ -66,5 +78,16 @@ export class PostgresProfileStore implements ProfileStore {
                 confirmedAt: new Date(audit.confirmedAt),
             });
         });
+    }
+
+    async getParsedDpr(studentId: string): Promise<DegreeProgressReport | null> {
+        const rows = await this.db
+            .select({ parsedDpr: students.parsedDpr })
+            .from(students)
+            .where(eq(students.studentId, studentId))
+            .limit(1);
+        const row = rows[0];
+        if (!row || !row.parsedDpr) return null;
+        return row.parsedDpr as DegreeProgressReport;
     }
 }

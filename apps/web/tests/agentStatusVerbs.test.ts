@@ -3,11 +3,22 @@ import { getActiveVerb, getPastVerb, getThoughtSentence, IDLE_VERB, TOOL_THOUGHT
 
 describe("agentStatusVerbs", () => {
     it("maps every tool name registered in the engine to an active verb", () => {
+        // Keep in lock-step with packages/engine/src/agent/registry.ts
+        // (ALL_NYUPATH_TOOLS). When that array grows, add the new name here
+        // AND add an entry in TOOL_VERBS + TOOL_THOUGHT_SENTENCES.
         const registered = [
-            "run_full_audit", "plan_semester", "check_transfer_eligibility",
+            // Phase 0–11 (legacy minus plan_semester, which was deprecated May 2026)
+            "run_full_audit", "check_transfer_eligibility",
             "what_if_audit", "search_policy", "update_profile",
             "confirm_profile_update", "get_credit_caps", "search_availability",
             "get_academic_standing", "check_overlap", "search_courses",
+            // Phase 13
+            "plan_forward_degree", "view_forward_plan",
+            // Phase 14
+            "propose_plan_change", "confirm_plan_change", "simulate_alternatives",
+            "bind_free_elective", "bind_pool_slot", "compare_plan_alternatives",
+            // Phase 15
+            "materialize_sections", "confirm_section_combination",
         ];
         for (const t of registered) {
             expect(TOOL_VERBS[t], `missing verb for ${t}`).toBeDefined();

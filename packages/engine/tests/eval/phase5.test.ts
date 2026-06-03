@@ -74,10 +74,9 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 20 NYU Path tools (§7.1 complete after Phase 14 Task 7)", () => {
+    it("buildDefaultRegistry exposes the 21 LIVE NYU Path tools (plan_semester deprecated May 2026)", () => {
         // Phase 13 Task 6 added two new tools alongside the original 12:
-        //   - plan_forward_degree  (replaces plan_semester for multi-term planning;
-        //                            old tool kept registered for back-compat)
+        //   - plan_forward_degree  (canonical planner — replaced plan_semester)
         //   - view_forward_plan    (read-only inspection of session.forwardSchedule)
         // Phase 14 Task 5 adds three more:
         //   - propose_plan_change  (read-only preview of mutations)
@@ -88,6 +87,14 @@ describe("buildTool + ToolRegistry", () => {
         //   - bind_pool_slot       (read-only preview of requirement-pool slot binding)
         // Phase 14 Task 7 adds one more:
         //   - compare_plan_alternatives (read-only Tier B fallback, Decision #42)
+        // Phase 15 Task 7 adds two more (two-step section-materialization pair):
+        //   - materialize_sections          (read-only — stages proposalIds)
+        //   - confirm_section_combination   (write — pins CRNs onto specific_planned slots)
+        // May 2026 post-mortem deprecation:
+        //   - plan_semester REMOVED from the live registry. The Phase 5 single-term
+        //     planner conflicted with `plan_forward_degree` for "what should I take
+        //     next semester" routing, leaving session.forwardSchedule unset and the
+        //     schedule sidebar empty. The tool's source file is kept for unit tests.
         const reg = buildDefaultRegistry();
         const names = reg.list().map((t) => t.name).sort();
         expect(names).toEqual([
@@ -98,10 +105,11 @@ describe("buildTool + ToolRegistry", () => {
             "compare_plan_alternatives",
             "confirm_plan_change",
             "confirm_profile_update",
+            "confirm_section_combination",
             "get_academic_standing",
             "get_credit_caps",
+            "materialize_sections",
             "plan_forward_degree",
-            "plan_semester",
             "propose_plan_change",
             "run_full_audit",
             "search_availability",
@@ -114,18 +122,26 @@ describe("buildTool + ToolRegistry", () => {
         ]);
     });
 
-    it("write tools are confirm_profile_update + plan_forward_degree + confirm_plan_change only", () => {
+    it("write tools are confirm_profile_update + plan_forward_degree + confirm_plan_change + confirm_section_combination only", () => {
         // Phase 13 Task 6 added plan_forward_degree as a state-mutating tool.
         // Phase 14 Task 5 adds confirm_plan_change (writes session.schedulePreferences
         // + schedule slot). propose_plan_change and simulate_alternatives are
         // isReadOnly:true.
         // Phase 14 Task 6: bind_free_elective and bind_pool_slot are both isReadOnly:true.
         // Phase 14 Task 7: compare_plan_alternatives is isReadOnly:true.
-        // So the non-read-only set stays at:
-        // {confirm_plan_change, confirm_profile_update, plan_forward_degree}.
+        // Phase 15 Task 7 adds confirm_section_combination (write — pins CRN +
+        // meeting times onto specific_planned slots in-place).
+        // materialize_sections itself is isReadOnly:true (stages proposalIds only).
+        // So the non-read-only set is now:
+        // {confirm_plan_change, confirm_profile_update, confirm_section_combination, plan_forward_degree}.
         const reg = buildDefaultRegistry();
         const writes = reg.list().filter((t) => !t.isReadOnly).map((t) => t.name).sort();
-        expect(writes).toEqual(["confirm_plan_change", "confirm_profile_update", "plan_forward_degree"]);
+        expect(writes).toEqual([
+            "confirm_plan_change",
+            "confirm_profile_update",
+            "confirm_section_combination",
+            "plan_forward_degree",
+        ]);
     });
 });
 
@@ -170,6 +186,22 @@ describe("buildSystemPrompt", () => {
         expect(out).toContain("homeSchool: cas");
         expect(out).toContain("major cs_major_ba");
         expect(out).toContain("visaStatus: f1");
+    });
+
+    // Phase 17 Task E — auto-chain plan_forward_degree → materialize_sections.
+    // The system prompt MUST instruct the agent to follow plan_forward_degree
+    // with materialize_sections for the immediate registration term so the
+    // student gets section-level data without a separate ask.
+    it("contains Phase 17 Task E auto-chain instruction", () => {
+        const dprPrompt = buildSystemPrompt({ dprLoaded: true });
+        expect(dprPrompt).toContain("AUTO-CHAIN");
+        expect(dprPrompt).toContain("materialize_sections");
+        expect(dprPrompt).toContain("first non-locked");
+        // The instruction explains why other future terms stay structural-only
+        // (FOSE has no data for them yet) — this anchor prevents the agent
+        // from materializing every future term and burning rate-limit on
+        // empty FOSE responses.
+        expect(dprPrompt).toMatch(/FOSE has no section data|wasted work|6 months/);
     });
 
     // Phase 14 Task 8 — Tier-A modeled extraction rules are present
@@ -444,6 +476,53 @@ describe("responseValidator", () => {
             ],
         });
         expect(verdict.violations.some((v) => v.caveatId === "low_confidence_consult_adviser")).toBe(false);
+    });
+
+    // RC-2 regression: planning-recommendation rule must accept the Phase 13
+    // forward planner as well, not just the Phase 5 single-term planner.
+    // See May 2026 post-mortem: when the user explicitly asked for
+    // `plan_forward_degree`, the validator forced a retry that called
+    // `plan_semester` instead, and the schedule sidebar never appeared.
+    it("ALLOWS planning recommendation when plan_forward_degree was invoked", () => {
+        const verdict = validateResponse({
+            assistantText: "Next semester you should take CSCI-UA 421 (4 cr) and CORE-UA 400 (4 cr).",
+            invocations: [
+                { toolName: "plan_forward_degree", args: {}, summary: "schedule built" },
+            ],
+        });
+        expect(verdict.violations.some((v) => v.kind === "missing_invocation")).toBe(false);
+    });
+
+    it("ALLOWS planning recommendation when view_forward_plan was invoked", () => {
+        const verdict = validateResponse({
+            assistantText: "Next semester you should take CSCI-UA 421 (4 cr) and CORE-UA 400 (4 cr).",
+            invocations: [
+                { toolName: "view_forward_plan", args: {}, summary: "schedule recap" },
+            ],
+        });
+        expect(verdict.violations.some((v) => v.kind === "missing_invocation")).toBe(false);
+    });
+
+    it("BLOCKS planning recommendation when plan_forward_degree (or view_forward_plan) was not invoked", () => {
+        // The planning trigger fires on "next semester … take/enroll/register"
+        // or "plan(ning) … fall/spring/summer". The reply uses the first form.
+        const verdict = validateResponse({
+            assistantText: "Next semester you should take CSCI-UA 421 (4 cr) and CORE-UA 400 (4 cr).",
+            invocations: [
+                { toolName: "search_policy", args: { query: "anything" }, summary: "irrelevant" },
+            ],
+        });
+        expect(verdict.violations.some((v) => v.kind === "missing_invocation")).toBe(true);
+    });
+
+    it("ALLOWS what-if reply when propose_plan_change was invoked", () => {
+        const verdict = validateResponse({
+            assistantText: "What if you skipped Texts & Ideas? You'd defer 4 credits to Summer 2027.",
+            invocations: [
+                { toolName: "propose_plan_change", args: {}, summary: "swap modeled" },
+            ],
+        });
+        expect(verdict.violations.some((v) => v.kind === "missing_invocation")).toBe(false);
     });
 
     it("flags BOTH F-1 and internal-transfer caveats when both apply", () => {

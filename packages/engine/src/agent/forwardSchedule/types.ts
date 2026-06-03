@@ -47,8 +47,14 @@ export interface SolverInput {
     visaStatus: string | undefined;
     /** Already-completed (DPR + AP/IB synth). */
     coursesTaken: Set<string>;
-    /** Currently-IP per DPR. */
-    coursesInProgress: Set<string>;
+    /** Currently-IP per DPR. Keys are courseIds ("CSCI-UA 4");
+     *  values carry the solver-shape term ("2026-spring", "2026-fall")
+     *  the row was tagged with on the DPR. The solver places each IP
+     *  row in ITS OWN term — without per-row terms, the May 2026 post-
+     *  mortem bug bucketed every IP course (current-term + pre-
+     *  registered future terms) into a single fictitious 28-credit
+     *  current term. */
+    coursesInProgress: Map<string, { term: string }>;
     /** e.g. "2026-fall" */
     currentTerm: string;
     graduationTerm: string;

@@ -24,6 +24,15 @@ export {
     getAcademicStandingTool,
     checkOverlapTool,
     searchCoursesTool,
+    // Phase 16 Task B — exposed so the Update-DPR route can re-plan
+    // programmatically without having to spin up the full agent loop.
+    planForwardDegreeTool,
+    // Phase 17 Task B — exposed so the deterministic plan-action
+    // routes (/api/plan/add|swap|drop|lock|move|confirm) can run the
+    // structural validation + persist pipeline without going through
+    // the agent loop.
+    proposePlanChangeTool,
+    confirmPlanChangeTool,
 } from "./registry.js";
 
 export { createSemanticCourseSearchFn } from "./tools/semanticCourseSearch.js";
@@ -119,6 +128,30 @@ export type {
 export { RecordingLLMClient } from "./recordingClient.js";
 export { RecorderLLMClient } from "./recorderClient.js";
 export type { RecorderOptions, RecorderMatchStrategy } from "./recorderClient.js";
+
+// Phase 15 Task 8 — surface the section-materialization domain types
+// so the apps/web sidebar can type the SSE `forward_materialization_update`
+// payload without reaching deep into engine internals.
+//
+// NOTE: `SectionView` is intentionally NOT re-exported here — there is
+// already an unrelated `SectionView` shape exported via
+// `tools/searchAvailability.ts` and adding both would create a name
+// collision in the `@nyupath/engine` barrel. The materialization-type
+// `SectionView` is referenced through `MaterializedSemester["courses"]`
+// for the UI use case; consumers needing the bare shape can import it
+// directly from the `sectionMaterialization/types.js` module.
+export type {
+    AvailabilityState,
+    MaterializationResult,
+    MaterializedSemester,
+    SchedulingPreferenceCheck,
+} from "./sectionMaterialization/types.js";
+
+// Phase 17 Task D follow-up — exposed so the /api/plan/stage2 route
+// can run the section-materialization pipeline directly per term in
+// `futureTerms[]` without spinning up the agent loop.
+export { materializeSections } from "./sectionMaterialization/materialize.js";
+export type { MaterializeArgs } from "./sectionMaterialization/materialize.js";
 
 export { OpenAIEngineClient, toOpenAIMessage } from "./clients/openaiClient.js";
 export type { OpenAIClientOptions } from "./clients/openaiClient.js";
