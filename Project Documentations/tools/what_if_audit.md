@@ -25,6 +25,8 @@ flowchart TD
     AUTH -- no --> EST
 ```
 
+> **⚠️ Reality check — in production this tool is an *estimate*, never an *audit*.** The authored (deterministic) path requires both `session.programs` and `session.courses`, but the deployed chat route (`apps/web/app/api/chat/v2/route.ts:245-267`) populates **neither**. So `allInCatalog && session.programs && session.courses` is never true in production and **every** call routes to the **unauthored "best-effort estimate + verbatim disclaimer" path** — the student never gets audit numbers (no courses-transferred count, no remaining-requirements delta), only the DPR-derived guidance string and the pinned adviser disclaimer. On top of that, the authored catalog itself is essentially empty: `data/programs/` has exactly **one** promoted program (`cas/cas_econ_ba.json`), so even if the route *did* load `programs`, only a hypothetical that is exactly `cas_econ_ba` could ever take the authored path. Net: read this tool as "look up the bulletin and talk to an adviser", framed as an estimate — not a structured what-if audit.
+
 ---
 
 ## 1. Purpose
@@ -96,6 +98,8 @@ allInCatalog = every(hypotheticalPrograms, id => session.programs?.has(id))
 
 - If `allInCatalog` is true AND both `session.programs` and `session.courses` are set → **Authored Path**.
 - Otherwise → **Unauthored Path**.
+
+> **Production note:** because the chat route never sets `session.programs` or `session.courses` (route.ts:245-267), `session.programs?.has(id)` is always `undefined`/falsy in production, so `allInCatalog` is always false and the Authored Path is **dead code on the live agent**. Path 2 (unauthored) is the only path that runs. Path 1 is exercised only by tests and direct engine callers that populate the catalogs themselves.
 
 ### Path 1 — Authored program path
 

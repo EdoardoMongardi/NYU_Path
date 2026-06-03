@@ -33,6 +33,8 @@ A disk cache (`policyCorpusCache.ts`) lets callers skip the cold-start embed pas
 
 The barrel export at `packages/engine/src/rag/index.ts:1-59` lists everything the rest of the engine is allowed to import from this module.
 
+> **Reality check — retrieval is single-shot and fragment-level, not section-complete.** The orchestrator runs one vector pass (top-20) → rerank → returns the **top 5 chunks** (see §7). The chunker (§3) splits each bulletin page into ~500-token fragments on `#/##/###` headings, so a single program or policy page fragments into a **median of ~13 chunks** (the largest pages fragment into 73–98). A multi-part policy whose pieces are spread across one page — e.g. Pass/Fail = a career cap + a per-term cap + a Core exception + a foreign-language exception + a major-course restriction — can have some of its parts land outside the top-5 window and be silently dropped from the answer. Each chunk carries `sourcePath` + `section` in its metadata (see §2), so whole-section / whole-page retrieval **is implementable**, but the current `search_policy` tool does not expose it; it returns only the reranked fragments. The system prompt even discourages re-querying (rule 7 tells the agent to make one `search_policy` call and otherwise defer to an adviser), so the missed-exception risk is not mitigated by retries.
+
 ---
 
 ## 2. Corpus
@@ -44,6 +46,8 @@ The corpus is the set of bulletin markdown files that get chunked, embedded, and
 ### Source location
 
 The bulletin lives at the monorepo root under `data/bulletin-raw/`. The path is computed from the file's own location (`corpus.ts:27-29`): four `..` up from `packages/engine/src/rag/`, then `data/bulletin-raw/`.
+
+> **Reality check — what is and isn't in the policy corpus.** The production policy corpus (`data/policy-corpus/policy_chunks.jsonl`, **5,400 chunks**, of which **4,727 are tagged `category:program`**) is built from the **`undergraduate/` tree only** — i.e. undergraduate program pages and academic-policy pages, across all undergrad schools. It is **rich on program requirements**: it does contain program-requirement pages (with course-list tables) for every undergraduate school. What is **NOT** embedded into this corpus: `internal-transfer-equivalencies/` (9 raw files — transfer equivalencies), `ogs/` (160 files — F-1 / visa depth), `graduate/`, and the NYU-wide `nyu/` tree. Course descriptions are **embedded separately** (`data/course-catalog/course_embeddings_openai.jsonl`, **17,122 vectors**) for the `search_courses` tool — they are not part of this policy corpus. So a visa-depth or transfer-equivalency question has no embedded bulletin text to retrieve, and transfer eligibility is answered from authored JSON instead (see `check_transfer_eligibility`).
 
 ### Default entries
 
@@ -150,6 +154,8 @@ A "token" here is a whitespace-delimited word — not a real subword tokenizer, 
 ### chunkId format
 
 Each chunk's `chunkId` is `${slug}_${pad3(runningIndex)}` (`chunker.ts:94`, `chunker.ts:107`). `pad3` (`chunker.ts:218-220`) zero-pads to three digits. So `"CAS Academic Policies"` becomes slug `cas_academic_policies`, and its chunks are `cas_academic_policies_001`, `cas_academic_policies_002`, etc.
+
+> **Consequence — pages fragment heavily.** Because the section split is per-heading and oversized sections are further window-split at 500 tokens, a single bulletin page does not stay one chunk. In the production corpus a program/policy page fragments into a **median of ~13 chunks** (the largest pages reach 73–98). Since retrieval returns only the top-5 fragments (§7), the parts of a long policy that don't rank in the top 5 are never seen by the agent. The `section` heading is preserved on every chunk, so the *location* of a missed fragment is recoverable — but the chunker itself does not group fragments back into their parent section at retrieval time.
 
 ### Heading-only sections
 
