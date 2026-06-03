@@ -121,7 +121,7 @@ The agent loop calls `registry.list()` once at the start of each turn to build t
 21. confirm_section_combination
 ```
 
-`plan_semester` is **exported but not in the registry**. The source file is still present and unit-tested, but `ALL_NYUPATH_TOOLS` omits it so the model can never invoke it. See [`tools/plan_semester.md`](../tools/plan_semester.md) for what it does and why it was removed.
+`plan_semester` is **exported but not in the registry**. The source file is still present and unit-tested, but `ALL_NYUPATH_TOOLS` omits it so the model can never invoke it. See [`deprecated/plan_semester.md`](../deprecated/plan_semester.md) for what it does and why it was removed.
 
 `buildDefaultRegistry()` constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls this once per session.
 

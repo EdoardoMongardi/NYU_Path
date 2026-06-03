@@ -46,10 +46,17 @@ After the DPR-only pivot, the **personal tools** (anything that answers a questi
 The **impersonal tools** are unchanged and remain DPR-free at the tool level: `search_policy`, `search_courses`, `search_availability`, `get_credit_caps`, `update_profile`, `confirm_profile_update`. (`get_credit_caps` reads the DPR opportunistically when present but does not require it.)
 
 ### Catalog data
-- **`courses?: Course[]`** — full course catalog with subject/catalog/title/credits/level. Loaded once at server boot from `data/course-catalog/*.json`.
-- **`prereqs?: Prerequisite[]`** — prereq groups per course. Loaded with courses.
-- **`programs?: Map<string, Program>`** — declared-program rules indexed by `programId`. Used by audit + planner.
-- **`schoolConfig?: SchoolConfig | null`** — per-school numeric config (`maxCreditsPerSemester`, `f1FullTimeMinCredits`, `minGraduationCredits`, etc.). Loaded from `data/schools/<school>.json`.
+- **`courses?: Course[]`** — full course catalog with subject/catalog/title/credits/level. **Reality check: the production chat route (`apps/web/app/api/chat/v2/route.ts:245-267`) does NOT set this field.** It is read opportunistically by tools that expect it (e.g. `check_overlap`, `what_if_audit`'s authored path), which then fail their `validateInput` or fall back to a degraded path. (Course *search* is served via a separate `searchCoursesFn` the route DOES wire in, not via this in-memory array.)
+- **`prereqs?: Prerequisite[]`** — prereq groups per course. **Also NOT set by the production chat route** (route.ts:245-267).
+- **`programs?: Map<string, Program>`** — declared-program rules indexed by `programId`. Used by audit + planner. **Reality check: the production chat route does NOT set this field either** (route.ts:245-267). This is the single most consequential gap — see the box below.
+- **`schoolConfig?: SchoolConfig | null`** — per-school numeric config (`maxCreditsPerSemester`, `f1FullTimeMinCredits`, `minGraduationCredits`, etc.). Loaded from `data/schools/<school>.json` via `loadSchoolConfig(student.homeSchool)` (route.ts:238-244). **This one IS set** when a config file exists. Only three exist today: `cas.json`, `stern.json`, `tandon.json` — so a student in any other undergrad school gets `schoolConfig: null` and tools fall back to CAS defaults.
+
+> **Reality check — `programs` / `courses` / `prereqs` are not populated in production.** The chat route's `ToolSession` literal (`apps/web/app/api/chat/v2/route.ts:245-267`) sets only `student`, `profileStore`, `scheduleStore`, `chatHistoryStore`, `lastUserMessage`, `schoolConfig`, `rag`, `searchCoursesFn`, and `degreeProgressReport`. It never assigns `programs`, `courses`, or `prereqs`. Direct consequences for the tools that depend on them:
+> - **`check_overlap`** requires `session.programs` (and `session.courses`) in its `validateInput`, so in production it **always rejects** with `"Programs catalog not loaded."` — it is effectively non-functional.
+> - **`what_if_audit`'s authored path** is gated on `session.programs` + `session.courses` being present, so it is **unreachable** in production. Every call falls through to the unauthored "best-effort estimate + verbatim disclaimer" path — never a deterministic audit.
+> - Any planner/audit code that reads these fields directly degrades the same way.
+>
+> This is a data-wiring gap, not a logic bug: the loaders exist and the field types are correct; the route simply doesn't attach them.
 
 ### User intent flags
 - **`transferIntent?: boolean`** — true when the user is exploring a transfer. Toggles a system-prompt line and some template applicability checks.
@@ -123,6 +130,8 @@ graph LR
     MS -->|pendingMaterializations[proposalId]<br/>+ lastMaterializationResult| ToolSession
     CSC -->|apply + clear pendingMaterializations<br/>+ pin CRNs into forwardSchedule| ToolSession
 ```
+
+> **Caveat on the diagram's `dataLoader → courses/prereqs/programs` edge.** That edge reflects the *intended* boot-time wiring (and what test fixtures / direct engine callers do), **not** what the deployed chat route does. The production route (`apps/web/app/api/chat/v2/route.ts:245-267`) attaches `schoolConfig` (via `loadSchoolConfig`) and `searchCoursesFn`, but does **not** call a loader for `programs`, `courses`, or `prereqs` — those three arrive on the session only outside the chat path. Read the edge as "where these fields *would* come from", with the §1 reality-check box as the authority on production behavior.
 
 ---
 
