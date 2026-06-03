@@ -115,6 +115,15 @@ A claim is grounded if:
 
 Numbers are extracted with the regex `-?\d+(?:\.\d+)?`, so negatives are included.
 
+### Tier-2 estimate exemption (improvement plan, Phase D)
+
+A reasoned **integer** count that isn't grounded by the rule above is **exempt** when ALL hold:
+1. a **Tier-2 estimate tool** ran this turn with a non-high-confidence / estimate result — i.e. an invocation of `search_policy`, `get_program_requirements`, `what_if_audit`, or `check_transfer_eligibility` whose summary matches `confidence[:=](low|medium|uncertain)`, `(low|medium) confidence`, `POLICY UNCERTAINTY`, or `(estimate`;
+2. the claim is **explicitly hedged** in the reply — immediately preceded by `about` / `approximately` / `roughly` / `around` / `estimated?` / `ballpark` / `on the order of` / `~`;
+3. the claim is an **integer** — decimals (GPAs, percentages) are **never** exempt.
+
+This lets a Tier-2 answer ship a labeled estimate ("per the bulletin, about 5 requirements remain") that the agent reasoned from cited text but that isn't verbatim in the tool summary, **without** weakening Tier-1: DPR-grade numbers (from `run_full_audit`) aren't hedged and aren't backed by a Tier-2 estimate tool, so they stay hard-grounded. The exemption **interlocks** with the `low_confidence_consult_adviser` caveat (§5): an exempt estimate that omits the consult-adviser caveat still fails completeness — so an ungroundable number can only ship when it is hedged **and** cited **and** adviser-caveated.
+
 ### Why the ε comparison
 
 Strict equality would fail for things like `0.1 + 0.2 ≠ 0.3` in IEEE-754, which would falsely flag GPA-delta claims like "your GPA rises by 0.3 (3.1 → 3.4)". Using ε = 1e-9 sidesteps this without permitting arbitrary numbers.
@@ -171,7 +180,7 @@ The rules live in `CAVEAT_RULES`.
 |---|---|---|---|---|
 | `f1_visa` | `student.visaStatus === "f1"` | `(credit load\|semester credits\|withdraw(al)?\|part-time\|full-time)` OR `\b\d{1,2}\s+credits\s+(this\|per\|next)\s+(term\|semester)\b` OR `(drop(ping)?\|leave\|leaving\|reduce(d)?\|reducing\|enroll(ing\|ed)?)…\d{1,2}\s+credits` | `\bf-?1\b` | F-1 students need an explicit F-1 mention whenever the agent discusses credit load, withdrawal, or part-time/full-time status. |
 | `internal_transfer_gpa_note` | always | `internal transfer` / `transfer (to\|into) (cas\|stern\|tandon\|tisch\|steinhardt)` | `\bgpa\b` AND `(not published\|aren't published\|isn't published\|do(es)?n't (publish\|disclose)\|not (public\|disclosed))` | Internal-transfer replies must note that GPA thresholds are not published. |
-| `low_confidence_consult_adviser` | a `search_policy` invocation's summary matches `\b(confidence\s*[:=]\s*(low\|medium)\|(low\|medium)\s+confidence)\b` | any reply | `(adviser\|advisor\|consult)` | When the RAG retrieval was low/medium confidence, the reply must direct the student to consult their adviser. |
+| `low_confidence_consult_adviser` | any **Tier-2 estimate tool** (`search_policy`, `get_program_requirements`, `what_if_audit`, `check_transfer_eligibility`) returned a non-high-confidence / estimate result this turn — summary matches `confidence[:=](low\|medium\|uncertain)`, `(low\|medium) confidence`, `POLICY UNCERTAINTY`, or `(estimate` (Phase D generalized this from search_policy-only) | any reply | `(adviser\|advisor\|consult)` | When a Tier-2 lookup was low/medium confidence (or an estimate), the reply must direct the student to consult their adviser. Also the interlock for the grounding exemption (§3). |
 
 The same negation guard from §4 applies to the reply pattern.
 
