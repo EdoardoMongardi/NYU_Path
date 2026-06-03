@@ -74,9 +74,9 @@ export interface ToolSession {
     };
     /**
      * Phase 7-E W3 — parsed Albert Degree Progress Report. When present,
-     * `run_full_audit` and `plan_semester` read deterministic audit
-     * verdicts from here (NYU's pre-computed numbers) instead of running
-     * the local rule engine. `what_if_audit` uses it as the transcript
+     * `run_full_audit` reads deterministic audit verdicts from here
+     * (NYU's pre-computed numbers) instead of running the local rule
+     * engine. `what_if_audit` uses it as the transcript
      * source when projecting against just-in-time-extracted hypothetical
      * programs. Cardinal Rule §2.1 holds because every numerical claim
      * traces to a field on this object.

@@ -24,7 +24,6 @@ import {
     type ToolSession,
 } from "../../src/index.js";
 import { runFullAuditTool } from "../../src/agent/tools/runFullAudit.js";
-import { planSemesterTool } from "../../src/agent/tools/planSemester.js";
 
 const ABORT = new AbortController().signal;
 
@@ -141,62 +140,10 @@ describe("run_full_audit consumes mkDpr fixtures", () => {
     });
 });
 
-describe("plan_semester consumes mkDpr fixtures", () => {
-    it("almost-done DPR yields a plan that names CSCI-UA 421", async () => {
-        const dpr = mkAlmostDoneDpr();
-        const out = await planSemesterTool.call(
-            { targetSemester: "2027-spring" },
-            { signal: ABORT, session: dprSession(dpr) },
-        );
-        expect(out.source).toBe("dpr");
-        expect(out.suggestions.map((s) => s.courseId)).toContain("CSCI-UA 421");
-    });
-
-    it("satisfied DPR yields only free-elective suggestions (no required-course suggestions)", async () => {
-        // Phase 12 Task 5: after dropping the semestersUntilGrad > 1 gate,
-        // a fully-satisfied DPR with remaining budget produces free-elective
-        // slots (not required-course slots). The assertion is updated from
-        // "zero suggestions" to "every suggestion is a free elective" —
-        // zero required-course suggestions is the meaningful invariant.
-        const dpr = mkSatisfiedDpr();
-        const out = await planSemesterTool.call(
-            { targetSemester: "2027-spring" },
-            { signal: ABORT, session: dprSession(dpr) },
-        );
-        const requiredSuggestions = out.suggestions.filter((s) => s.category === "required");
-        expect(requiredSuggestions).toHaveLength(0);
-        // All suggestions, if any, should be free electives.
-        for (const s of out.suggestions) {
-            expect(s.category).toBe("elective");
-        }
-    });
-
-    it("custom requirement with descriptive course IDs surfaces them", async () => {
-        const dpr = mkDpr({
-            requirementGroups: [
-                mkGroup({
-                    rgId: "RG_CUSTOM",
-                    status: "not_satisfied",
-                    children: [
-                        mkRequirement({
-                            rId: "R_CUSTOM/10",
-                            status: "not_satisfied",
-                            description: "Complete MATH-UA 343 Algebra and MATH-UA 251 Math Modeling.",
-                            counter: { kind: "courses", required: 2, used: 0, needed: 2 },
-                        }),
-                    ],
-                }),
-            ],
-        });
-        const out = await planSemesterTool.call(
-            { targetSemester: "2027-spring" },
-            { signal: ABORT, session: dprSession(dpr) },
-        );
-        const ids = out.suggestions.map((s) => s.courseId);
-        expect(ids).toContain("MATH-UA 343");
-        expect(ids).toContain("MATH-UA 251");
-    });
-});
+// "plan_semester consumes mkDpr fixtures": REMOVED in the Phase F
+// decommission (the plan_semester tool was deleted). The mkDpr helper's
+// fixtures stay covered by the run_full_audit block above + the schema
+// invariants below.
 
 describe("mkDpr — schema invariants for downstream code", () => {
     it("findRequirementById round-trip", () => {

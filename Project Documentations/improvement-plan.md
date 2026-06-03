@@ -1,6 +1,6 @@
 # NYU Path — Improvement Plan
 
-> **Status:** in progress. **Phases A ✅, B ✅ (core), C ✅ (pipeline; corpus regen is a separate ops step), D ✅, and E ✅ (E1+E2; E3 gated on PII fixtures) are implemented and merged**; Phase F pending. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work). Each shipped phase carries a **Status** callout under its heading.
+> **Status:** in progress. **Phases A ✅, B ✅ (core), C ✅ (pipeline; corpus regen is a separate ops step), D ✅, and E ✅ (E1+E2; E3 gated on PII fixtures) are implemented and merged. Phase F ◑ started** — the first decommission (the `plan_semester` tool + `planFeasibility` verifier) is done; the entangled planner *library*, the orphaned `transcript/` module, and the gated authored-rule-engine / standing removals remain as follow-ups. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work). Each shipped phase carries a **Status** callout under its heading.
 
 ---
 
@@ -167,7 +167,11 @@ flowchart LR
 
 ---
 
-### Phase F — Decommission legacy (gated, LAST)  · **Effort: S–M per removal**
+### Phase F — Decommission legacy (gated, LAST)  · **Effort: S–M per removal** · ◑ **STARTED (first removal done)**
+
+> **Status: first removal shipped.** Deleted the **`plan_semester` tool + its `planFeasibility` verifier** — the agent-facing twins of `plan_forward_degree` (unregistered since May 2026, the exact "agent falls back to the deprecated path" risk this phase targets). Removed: 2 source files, 2 dedicated tests, the barrel/registry exports, and the dead `plan_semester` status-verb; excised the `plan_semester` describe-blocks from 2 mixed test files; refreshed stale comments/prompt text. Verified: full engine suite shows only the 5 known pre-existing failures (zero new), web green, no new typecheck errors, and `grep` confirms no live consumer remains.
+>
+> **Deferred (verified-dead but entangled):** the planner *library* (`semesterPlanner`, `balancedSelector`, `priorityScorer`, `multiSemesterProjector`, `crossProgramPlanner`, `enrollmentValidator`, `explorePlanner`, `transferPrepPlanner`) has no live (`apps/web` / registered-tool) consumer, but its modules import each other (`explorePlanner`/`transferPrepPlanner` → `semesterPlanner`) and removing them needs surgery across **9 mixed test files** — its own follow-up PR (`graduationRisk` stays: independent + barrel-exported). The orphaned `transcript/` module and the gated authored-rule-engine / standing removals remain as listed below.
 
 **Goal:** once the DPR-first + RAG paths are proven, remove the superseded *parallel* implementations so there's **one way to do each thing**. This codebase has repeatedly been bitten by dual paths (the legacy planner vs forward-schedule, the two transcript parsers, `schoolConfig` caps vs the DPR) — removing the dead twin prevents future confusion and the "agent falls back to the deprecated path" class of bug.
 

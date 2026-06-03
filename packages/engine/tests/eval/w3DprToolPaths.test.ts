@@ -16,7 +16,6 @@ import {
     type ToolSession,
 } from "../../src/index.js";
 import { runFullAuditTool } from "../../src/agent/tools/runFullAudit.js";
-import { planSemesterTool } from "../../src/agent/tools/planSemester.js";
 import { whatIfAuditTool } from "../../src/agent/tools/whatIfAudit.js";
 
 const SAMPLE_TEXT = readFileSync(
@@ -117,47 +116,10 @@ describe("W3.1 — run_full_audit DPR-primary path", () => {
     });
 });
 
-describe("W3.2 — plan_semester DPR-primary path", () => {
-    it("emits suggestions from the DPR not-satisfied requirements (source=dpr)", async () => {
-        const { session } = buildDprSession();
-        const out = await planSemesterTool.call(
-            { targetSemester: "2027-spring" },
-            { signal: ABORT, session },
-        );
-        expect(out.source).toBe("dpr");
-        expect(out.suggestions.length).toBeGreaterThan(0);
-        // The R1142/20 unsatisfied requirement should surface CSCI-UA 421 as a suggestion.
-        const ids = out.suggestions.map((s) => s.courseId);
-        expect(ids).toContain("CSCI-UA 421");
-    });
-
-    it("estimatedSemestersLeft is non-negative and uses DPR credit totals", async () => {
-        const { session } = buildDprSession();
-        const out = await planSemesterTool.call(
-            { targetSemester: "2027-spring", maxCredits: 16 },
-            { signal: ABORT, session },
-        );
-        expect(out.estimatedSemestersLeft).toBeGreaterThanOrEqual(1);
-    });
-
-    it("respects maxCourses cap", async () => {
-        const { session } = buildDprSession();
-        const out = await planSemesterTool.call(
-            { targetSemester: "2027-spring", maxCourses: 2 },
-            { signal: ABORT, session },
-        );
-        expect(out.suggestions.length).toBeLessThanOrEqual(2);
-    });
-
-    it("validates input under DPR-only sessions (no programs/courses required)", async () => {
-        const { session } = buildDprSession();
-        const v = await planSemesterTool.validateInput!(
-            { targetSemester: "2027-spring" },
-            { signal: ABORT, session },
-        );
-        expect(v.ok).toBe(true);
-    });
-});
+// W3.2 — plan_semester DPR-primary path: REMOVED in the Phase F
+// decommission (the plan_semester tool was deleted; plan_forward_degree
+// is the canonical planner). run_full_audit (W3.1) and what_if_audit
+// (W3.3) DPR paths remain covered below.
 
 describe("W3.3 — what_if_audit unauthored-program path", () => {
     it("returns an estimate envelope with the verbatim disclaimer when programs are not in the catalog", async () => {
