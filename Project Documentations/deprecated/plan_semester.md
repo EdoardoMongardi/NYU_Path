@@ -1,8 +1,8 @@
-# `plan_semester` — DEPRECATED
+# `plan_semester` — REMOVED (historical)
 
-> **DEPRECATION STATUS.** As of the current source tree, `plan_semester` is **not registered** in `ALL_NYUPATH_TOOLS` (the engine's agent-facing tool registry). The agent loop cannot invoke it. The tool definition is kept as a named export so unit-test harnesses and the underlying credit-fill / suggestion-ranking helpers remain available, but the live agent uses `plan_forward_degree` instead. `plan_forward_degree` solves the full remaining-degree horizon (every term to graduation), writes the result to `session.forwardSchedule` for the sidebar to consume, and cooperates with `propose_plan_change` for what-if exploration. `plan_semester` plans only the immediate next term and does not write a schedule.
+> **REMOVED (improvement plan, Phase F).** `plan_semester` and its `planFeasibility` verifier have been **deleted** from the source tree (`tools/planSemester.ts` + `verifiers/planFeasibility.ts` are gone, along with the barrel exports and dedicated tests). It had been unregistered since May 2026 and is fully superseded by `plan_forward_degree`, which solves the full remaining-degree horizon (every term to graduation), writes `session.forwardSchedule` for the sidebar, and cooperates with `propose_plan_change` for what-if exploration. `plan_semester` only planned the immediate next term and wrote no schedule.
 >
-> This document is provided for completeness because the tool's mechanics are still load-bearing for the test suites and exhibit a non-trivial set of fallback algorithms.
+> This document is retained as a **historical record** of the tool's mechanics; the code it describes no longer exists.
 
 Source: `packages/engine/src/agent/tools/planSemester.ts`, with helpers from `packages/engine/src/planner/semesterPlanner.ts`, `packages/engine/src/planner/balancedSelector.ts`, `packages/engine/src/planner/priorityScorer.ts`, and `packages/engine/src/planner/enrollmentValidator.ts`.
 

@@ -16,7 +16,6 @@ export type ToolVerb = { active: string; past: string };
 export const TOOL_VERBS: Record<string, ToolVerb> = {
     // Phase 0–11 (legacy 12-tool surface)
     run_full_audit:             { active: "Running your degree audit",        past: "Ran your degree audit" },
-    plan_semester:              { active: "Planning your semester",           past: "Planned a semester" },
     check_transfer_eligibility: { active: "Checking transfer eligibility",    past: "Checked transfer eligibility" },
     what_if_audit:              { active: "Running a what-if audit",          past: "Ran a what-if audit" },
     search_policy:              { active: "Looking up policy",                past: "Looked up policy" },
@@ -70,7 +69,6 @@ export function getPastVerb(toolName: string): string {
 export const TOOL_THOUGHT_SENTENCES: Record<string, string> = {
     // Phase 0–11
     run_full_audit:             "Let me pull up your degree audit so I'm working from your actual progress, not assumptions.",
-    plan_semester:              "Now I'll sketch a semester plan based on what's still unmet and how the workload should balance.",
     check_transfer_eligibility: "I should check the transfer eligibility rules first — there are credit and GPA thresholds to verify.",
     what_if_audit:              "Let me run a what-if audit to see how that hypothetical change would affect your remaining requirements.",
     search_policy:              "Let me look up the relevant NYU policy and bulletin pages so my answer is grounded in source material.",
