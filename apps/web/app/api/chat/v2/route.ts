@@ -60,6 +60,7 @@ import {
 } from "../../../../lib/buildSession";
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
 import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
+import { getCatalog } from "../../../../lib/loadCatalog";
 import { getStores } from "../../../../lib/db/store";
 import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
 import { consumeRequest } from "../../../../lib/rateLimit";
@@ -242,6 +243,18 @@ export async function POST(req: NextRequest): Promise<Response> {
             return null;
         }
     })();
+    // Phase A (improvement plan) — load the engine catalog (programs +
+    // courses + prereqs) into the session. Without this, check_overlap
+    // rejected with "Programs catalog not loaded" and any rule-engine
+    // path was unreachable. Module-cached; file-read failures degrade
+    // to an empty catalog so a missing data file can't break the turn.
+    const catalog = (() => {
+        try {
+            return getCatalog();
+        } catch {
+            return null;
+        }
+    })();
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
@@ -259,6 +272,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         // on "minor"). Generic across all tools.
         lastUserMessage: body.message,
         ...(schoolConfig ? { schoolConfig } : {}),
+        ...(catalog ? { programs: catalog.programs, courses: catalog.courses, prereqs: catalog.prereqs } : {}),
         ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
         ...(parsedDpr ? { degreeProgressReport: parsedDpr } : {}),
