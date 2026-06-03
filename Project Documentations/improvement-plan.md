@@ -1,6 +1,6 @@
 # NYU Path — Improvement Plan
 
-> **Status:** in progress. **Phase A ✅ and Phase B ✅ (core) are implemented and merged**; Phases C–F pending. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work). Each shipped phase carries a **Status** callout under its heading.
+> **Status:** in progress. **Phase A ✅, Phase B ✅ (core), and Phase C ✅ (pipeline; corpus regen is a separate ops step) are implemented and merged**; Phases D–F pending. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work). Each shipped phase carries a **Status** callout under its heading.
 
 ---
 
@@ -91,7 +91,13 @@ flowchart LR
 
 ---
 
-### Phase C — Embed the missing bulletin trees  · **Effort: M**
+### Phase C — Embed the missing bulletin trees  · **Effort: M** · ✅ **DONE (pipeline); regen is ops**
+
+> **Status: pipeline shipped.** `buildCorpus` gained an `includePolicyTrees` option (`packages/engine/src/rag/corpus.ts`) that walks `internal-transfer-equivalencies/` (3 `.md` → school `all`, `category:admissions`) and `ogs/` (80 `.md` → school `all`, `category:academic_policy`); the embed script (`tools/policy-corpus-embed/embed.ts`) flips it on. 2 new tests (real trees ingest with the right tags; opt-in off → no tree chunks). Gated behind the default-false flag, so existing `buildCorpus` callers are unchanged.
+>
+> ⚠️ **The runtime corpus is a gitignored build artifact** (`data/policy-corpus/policy_chunks.jsonl`). The code is live, but the new trees only become searchable after the embed pipeline is **re-run** with an OpenAI embedding key (an ops/deploy step — not run here; not part of the diff; cost is negligible). Until then `search_policy` still can't retrieve transfer/OGS text.
+>
+> **Correction to the original plan note below:** the `parsedDataValidation` "16 curated entries" snapshot is about **prereqs.json** curated *course IDs* with a `/tmp` snapshot file — it is **unrelated** to the bulletin corpus and is a pre-existing `/tmp`-snapshot infrastructure failure, NOT a "16 vs 19 corpus entries" mismatch. It was left untouched (out of scope for Phase C). `graduate/` stays out; `nyu/` left optional.
 
 **Goal:** make transfers and visa policy actually searchable.
 
