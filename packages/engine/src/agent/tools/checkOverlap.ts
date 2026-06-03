@@ -25,7 +25,16 @@ export const checkOverlapTool = buildTool({
     isReadOnly: true,
     maxResultChars: 2000,
     async validateInput(_input, { session }) {
-        if (!session.student) return { ok: false, userMessage: "No student profile loaded." };
+        // DPR-only: overlap is computed against the student's real
+        // declared programs + coursework, which come from the DPR.
+        if (!session.degreeProgressReport || !session.student) {
+            return {
+                ok: false,
+                userMessage:
+                    "I need your Albert Degree Progress Report (DPR) to check cross-program overlap. " +
+                    "Please upload your DPR and try again.",
+            };
+        }
         if (!session.programs || session.programs.size === 0) {
             return { ok: false, userMessage: "Programs catalog not loaded." };
         }

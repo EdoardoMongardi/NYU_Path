@@ -21,25 +21,27 @@ import { calculateStanding } from "../../audit/academicStanding.js";
 export const getAcademicStandingTool = buildTool({
     name: "get_academic_standing",
     description:
-        "Returns the student's cumulative GPA, per-semester GPAs, " +
-        "and SAP/probation/dismissal standing level per the home " +
-        "school's thresholds. Call this BEFORE answering ANY question " +
-        "about GPA, academic progress, probation, or risk-of-dismissal. " +
-        "Read-only.",
+        "Returns the student's SAP / probation / dismissal standing level " +
+        "per the home school's thresholds, computed from their DPR-derived " +
+        "coursework. Requires a Degree Progress Report (DPR) to be loaded; " +
+        "refuses otherwise. For authoritative GPA, cumulative credits, and " +
+        "requirement status, prefer `run_full_audit` (it reads the DPR's " +
+        "pre-computed numbers directly). Use this tool for probation / " +
+        "academic-standing detail. Read-only.",
     inputSchema: z.object({}),
     isReadOnly: true,
     maxResultChars: 1500,
     async validateInput(_input, { session }) {
         if (!session.student) return { ok: false, userMessage: "No student profile loaded." };
-        // Phase 7-E W10 reviewer P1-5 — mechanical enforcement of the
-        // DPR-loaded routing rule. Without this, an LLM that ignores
-        // the system-prompt directive can call this tool and get a
-        // GPA-from-coursesTaken answer that contradicts the DPR.
-        if (session.degreeProgressReport) {
+        // DPR-only: standing is computed from the student's DPR-derived
+        // coursework. With no DPR there is no authoritative record to
+        // read, so refuse and ask for it (no transcript fallback).
+        if (!session.degreeProgressReport) {
             return {
                 ok: false,
                 userMessage:
-                    "DPR is loaded — academic standing, GPA, and credits come from run_full_audit's dprCumulative output (the DPR is NYU's pre-computed authoritative audit). Re-call run_full_audit instead.",
+                    "I need your Albert Degree Progress Report (DPR) to report academic standing. " +
+                    "Please upload your DPR and try again.",
             };
         }
         return { ok: true };

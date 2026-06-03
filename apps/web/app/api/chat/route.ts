@@ -99,7 +99,7 @@ function handleOnboardingStep(message: string, step: string) {
                         "- **Credits** — e.g. \"I have 80 credits not 64\"\n" +
                         "- **GPA** — e.g. \"My GPA is 3.7\"\n" +
                         "- **Missing courses** — e.g. \"CSCI-UA 301 is missing\"\n\n" +
-                        "Or if it's significantly wrong, you can **upload a new transcript**.",
+                        "Or if it's significantly wrong, you can **upload a new DPR**.",
                     onboardingStep: "correcting_data",
                 });
             }
@@ -110,11 +110,11 @@ function handleOnboardingStep(message: string, step: string) {
         }
 
         case "correcting_data": {
-            const isReupload = lower.includes("upload") || lower.includes("new transcript") || lower.includes("try again");
+            const isReupload = lower.includes("upload") || lower.includes("new dpr") || lower.includes("new transcript") || lower.includes("try again");
             if (isReupload) {
                 return NextResponse.json({
-                    message: "Sure! Go ahead and upload the corrected transcript using the 📎 button.",
-                    onboardingStep: "awaiting_transcript",
+                    message: "Sure! Go ahead and upload the corrected DPR using the 📎 button.",
+                    onboardingStep: "awaiting_dpr",
                 });
             }
             const isDone = lower === "done" || lower === "proceed" || lower === "continue" || lower.includes("that's it") || lower.includes("that's all");

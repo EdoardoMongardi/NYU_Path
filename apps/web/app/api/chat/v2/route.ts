@@ -56,9 +56,7 @@ import {
     type DegreeProgressReport,
 } from "@nyupath/engine";
 import {
-    buildStudentProfileV2,
     buildStudentProfileFromDpr,
-    type TranscriptData,
 } from "../../../../lib/buildSession";
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
 import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
@@ -99,19 +97,11 @@ function getFallbackSink(): FallbackSink {
     return FALLBACK_SINK;
 }
 
-/** Phase 7-E onboarding shape: discriminated union. The DPR variant
- *  is the post-pivot canonical artifact; the transcript variant stays
- *  as the cohort-A fallback for students whose DPR isn't accessible.
- *
- *  IMPORTANT: the `dpr` discriminator is recognized but not yet
- *  consumed at this route until Workstream 3 lands the
- *  `session.degreeProgressReport` injection + tool refactor. Until
- *  then we reject DPR-shaped requests early so the failure mode is
- *  loud, never silent profile-corruption. */
-type ParsedDataPayload =
-    | (TranscriptData & { kind?: undefined })
-    | { kind: "transcript"; transcript: TranscriptData }
-    | { kind: "dpr"; report: unknown };
+/** Onboarding artifact. DPR-only: the Albert Degree Progress Report is
+ *  the sole accepted onboarding artifact. The legacy transcript variant
+ *  has been removed — the DPR carries everything the transcript did plus
+ *  declared programs and NYU's pre-computed audit. */
+type ParsedDataPayload = { kind: "dpr"; report: unknown };
 
 interface V2RequestBody {
     message: string;
@@ -139,52 +129,42 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (!body.message || typeof body.message !== "string") {
         return NextResponse.json({ error: "`message` is required and must be a string." }, { status: 400 });
     }
-    if (!body.parsedData) {
+    // DPR-only: a valid Degree Progress Report is required to reach the
+    // agent. There is no transcript fallback — if the client hasn't
+    // completed DPR onboarding, ask them to do so and stop here.
+    const pd = body.parsedData;
+    const isDprPayload = (
+        pd: ParsedDataPayload | undefined,
+    ): pd is { kind: "dpr"; report: DegreeProgressReport } =>
+        !!pd && typeof pd === "object" && "kind" in pd && pd.kind === "dpr";
+
+    if (!isDprPayload(pd)) {
         return NextResponse.json(
-            { error: "`parsedData` is required. Onboarding must complete before /chat/v2 is reachable." },
+            {
+                error:
+                    "I need your Albert Degree Progress Report (DPR) before we can chat about your record. " +
+                    "Please upload it through onboarding (Albert → Academics → Planning Tools → Degree Progress Report).",
+                onboardingStep: "awaiting_dpr",
+            },
             { status: 400 },
         );
     }
-    // Phase 7-E W3.4 — discriminated parsedData. The DPR path is the
-    // post-pivot canonical onboarding artifact; the transcript path
-    // remains as the cohort-A fallback.
-    const pd = body.parsedData;
-    const isDprPayload = (
-        pd: ParsedDataPayload,
-    ): pd is { kind: "dpr"; report: DegreeProgressReport } =>
-        pd && typeof pd === "object" && "kind" in pd && pd.kind === "dpr";
-    const isTranscriptPayload = (
-        pd: ParsedDataPayload,
-    ): pd is { kind: "transcript"; transcript: TranscriptData } =>
-        pd && typeof pd === "object" && "kind" in pd && pd.kind === "transcript";
 
     // Validate DPR payload shape lazily (the engine schema lives in the
     // engine package; we re-validate here to fail loudly on a bad
     // client rather than at the first tool call).
-    let parsedDpr: DegreeProgressReport | undefined;
-    if (isDprPayload(pd)) {
-        const v = degreeProgressReportSchema.safeParse(pd.report);
-        if (!v.success) {
-            return NextResponse.json(
-                {
-                    error:
-                        "DPR payload failed schema validation. Re-upload your DPR through onboarding " +
-                        `(${v.error.issues.map((i) => i.path.join(".")).slice(0, 3).join(", ")}).`,
-                },
-                { status: 400 },
-            );
-        }
-        parsedDpr = v.data;
+    const v = degreeProgressReportSchema.safeParse(pd.report);
+    if (!v.success) {
+        return NextResponse.json(
+            {
+                error:
+                    "DPR payload failed schema validation. Re-upload your DPR through onboarding " +
+                    `(${v.error.issues.map((i) => i.path.join(".")).slice(0, 3).join(", ")}).`,
+            },
+            { status: 400 },
+        );
     }
-
-    // Unwrap the transcript-shaped discriminator so the legacy builder
-    // sees the same flat shape it expected pre-W2. Pre-W2 callers
-    // (no `kind`) continue to work unchanged.
-    const transcriptPayload: TranscriptData = isTranscriptPayload(pd)
-        ? pd.transcript
-        : isDprPayload(pd)
-            ? ({} as TranscriptData) // DPR path doesn't use this; legacy builder gets a stub
-            : (pd as TranscriptData);
+    const parsedDpr: DegreeProgressReport = v.data;
 
     const primary = createPrimaryClient();
     if (!primary) {
@@ -236,23 +216,19 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const stores = getStores();
 
-    // Build the student profile. DPR path takes precedence; transcript
-    // path is the fallback. When neither has a usable shape, we still
-    // build a stub via the transcript builder for the legacy tests.
-    const student = parsedDpr
-        ? buildStudentProfileFromDpr(parsedDpr, {
-            // RC: studentIdOverride MUST track the auth subject so every
-            // persistence write keys on the SAME id the restore route
-            // reads from. Without this, tools persist under the slugified
-            // DPR-name id while restore reads from auth.sub → split rows
-            // in `students` / `forward_schedules` / `chat_messages`.
-            // See May 2026 post-mortem (DB-split bug).
-            studentIdOverride: userId,
-            ...(body.visaStatus === "f1" || body.visaStatus === "domestic"
-                ? { visaStatus: body.visaStatus }
-                : {}),
-        })
-        : buildStudentProfileV2(transcriptPayload, body.visaStatus);
+    // Build the student profile from the DPR (the only onboarding artifact).
+    const student = buildStudentProfileFromDpr(parsedDpr, {
+        // RC: studentIdOverride MUST track the auth subject so every
+        // persistence write keys on the SAME id the restore route
+        // reads from. Without this, tools persist under the slugified
+        // DPR-name id while restore reads from auth.sub → split rows
+        // in `students` / `forward_schedules` / `chat_messages`.
+        // See May 2026 post-mortem (DB-split bug).
+        studentIdOverride: userId,
+        ...(body.visaStatus === "f1" || body.visaStatus === "domestic"
+            ? { visaStatus: body.visaStatus }
+            : {}),
+    });
     const searchCoursesFn = getCourseSearchFn();
     const ragBundle = getPolicyRagBundle();
     // Phase 7-E reviewer-followup — load the home-school's config so

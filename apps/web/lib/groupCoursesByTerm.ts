@@ -189,11 +189,11 @@ function dprRowToSlot(row: DPRCourseRow, isIPTerm: boolean): ScheduleSlot {
 }
 
 /**
- * Legacy fallback for the transcript-only onboarding path (no DPR).
- * Same shape as the DPR-driven builder but produces less-accurate slots
- * (no real titles; IP rows render as completed with whatever grade
- * `buildStudentProfileV2` stamped). Removed once cohort A retires the
- * transcript flow.
+ * Defensive fallback that groups a profile's `coursesTaken` into term
+ * buckets when a raw DPR isn't available to the sidebar. Produces
+ * less-accurate slots than the DPR-driven builder (no real titles; IP
+ * rows render as completed). In the DPR-only flow this path is not
+ * normally reached, but it keeps the sidebar resilient.
  */
 function buildTermsFromCoursesTaken(
     coursesTaken: CourseTaken[],
