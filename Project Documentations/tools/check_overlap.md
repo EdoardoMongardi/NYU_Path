@@ -22,6 +22,8 @@ flowchart TD
     Q --> PROGS --> INDEX --> SHARED --> POLICY --> OUT
 ```
 
+> **⚠️ Reality check — this tool is currently NON-FUNCTIONAL in production.** `validateInput` requires `session.programs` (and `session.courses`), but the deployed chat route (`apps/web/app/api/chat/v2/route.ts:245-267`) never populates either field — it attaches `student`, `schoolConfig`, `rag`, `searchCoursesFn`, and `degreeProgressReport`, and nothing else. So in production every `check_overlap` call short-circuits at the second guard and returns **`"Programs catalog not loaded."`** The algorithm below is correct and the engine (`crossProgramAudit`) works when given a populated session (tests/fixtures do this) — but the live agent can never reach it until the route wires in the program + course catalogs. Treat the rest of this doc as "how it behaves once `session.programs`/`session.courses` are loaded".
+
 ---
 
 ## 1. Purpose
@@ -64,8 +66,8 @@ Defined at `checkOverlap.ts:24`.
 `validateInput` (lines 27-44) rejects the call if:
 
 1. **No DPR loaded (or no student)** (`session.degreeProgressReport` or `session.student` missing). Returns: `"I need your Albert Degree Progress Report (DPR) to check cross-program overlap. Please upload your DPR and try again."` This check runs FIRST, before the programs/courses checks — overlap is computed against the student's real declared programs and coursework, which come from the DPR.
-2. **Programs catalog missing or empty** (`session.programs` undefined or `size === 0`). Returns: `"Programs catalog not loaded."`
-3. **Courses catalog missing or empty** (`session.courses` undefined or `length === 0`). Returns: `"Courses catalog not loaded."`
+2. **Programs catalog missing or empty** (`session.programs` undefined or `size === 0`). Returns: `"Programs catalog not loaded."` **In production this is the guard that always trips** — the chat route never sets `session.programs` (see the reality-check box above), so a DPR-loaded student passes guard #1 and is then rejected here.
+3. **Courses catalog missing or empty** (`session.courses` undefined or `length === 0`). Returns: `"Courses catalog not loaded."` (Also never populated by the route — but execution never reaches this guard in production because guard #2 already fails.)
 
 A student with zero declared programs is NOT rejected here — the tool will still run and the engine will return an empty `programs[]` and empty `sharedCourses[]`.
 
