@@ -1,6 +1,6 @@
 # NYU Path — Improvement Plan
 
-> **Status:** proposal / not yet implemented. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work).
+> **Status:** in progress. **Phase A ✅ and Phase B ✅ (core) are implemented and merged**; Phases C–F pending. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work). Each shipped phase carries a **Status** callout under its heading.
 
 ---
 
@@ -38,7 +38,9 @@ flowchart TD
 
 ## 2. Phases (ordered by dependency + value)
 
-### Phase A — Wiring fix: load the catalog into the session  · **Effort: S**
+### Phase A — Wiring fix: load the catalog into the session  · **Effort: S** · ✅ **DONE**
+
+> **Status: shipped.** Added `apps/web/lib/loadCatalog.ts` (module-cached `getCatalog()` over the engine loaders) and wired `programs`/`courses`/`prereqs` onto the `ToolSession` in `apps/web/app/api/chat/v2/route.ts` (try/catch → null fallback). 3 new tests; web suite green. `check_overlap` and any rule-engine path are no longer dead in production.
 
 **Goal:** stop `check_overlap` rejecting and make any authored rule-engine path reachable.
 
@@ -52,7 +54,15 @@ flowchart TD
 
 ---
 
-### Phase B — Section-complete retrieval (the core upgrade)  · **Effort: M–L**
+### Phase B — Section-complete retrieval (the core upgrade)  · **Effort: M–L** · ✅ **DONE (core)**
+
+> **Status: shipped.** `packages/engine/src/rag/sectionRetrieval.ts` adds `reassembleSource` (whole page), `reassembleSection` (whole section), and `locateBestSource` (scope → vector → rerank → pick the best *source*, with a soft `program`/`core_curriculum`/`school_overview` category preference). Two surfaces use them:
+> - **B1** — new `get_program_requirements` tool: locate the program's page → return the **entire** reassembled page + a confidence band (high/medium/low from the locate score) + disclaimers when weak. Registered (#5), routed in the system prompt (DPR-loaded + no-DPR branches), UI status verb added. See [tools/get_program_requirements.md](tools/get_program_requirements.md).
+> - **B2** — `search_policy` now expands its **top** hit to its full section (the `FULL SECTION` block), additive + budget-guarded. See [tools/search_policy.md](tools/search_policy.md).
+>
+> 14 new tests; full engine suite shows only the 5 known pre-existing failures; zero new typecheck errors.
+>
+> **Deferred to later phases:** the "applicability framing" step (#4 below) and the grounding-validator treatment of reasoned conclusions as estimates land in **Phase D** (confidence + validator). Multi-section *gathering* across many headings in one turn (#3) is still bounded by the top-5 fragment limit for non-top sections + the rule-7 "don't re-query" guidance — `get_program_requirements` covers the whole-*page* case; broader multi-section policy gathering is a follow-up.
 
 **Goal:** the agent can locate one or more **full** relevant bulletin sections/pages, not top-5 fragments, and reason over them.
 
