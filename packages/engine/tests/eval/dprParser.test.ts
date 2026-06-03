@@ -292,3 +292,60 @@ describe("DPR parser — failure paths", () => {
         }
     });
 });
+
+describe("DPR parser — page-footer prefix strip (May 2026 post-mortem)", () => {
+    // PDF text-extraction often concatenates the page footer ("Page 9 of 9")
+    // with the first content line of the next page. Without stripping, the
+    // course-row regex fails and the row is silently dropped. Real example
+    // from SAA_STD_DS.pdf May 2026: CSCI-UA 472 Artificial Intelligence
+    // disappeared because its row landed as
+    // "Page 9 of 92025 Fall CSCI-UA 472 Artificial Intelligence A 4.00 EN".
+    it("strips Page-N-of-M prefix when concatenated with a course-row line", () => {
+        const dprText = [
+            "Degree Progress Report",
+            "For Test Student prepared on 04/27/2026",
+            "Course History",
+            "Term Subject Catalog Nbr Title Grade Units Type",
+            "2025 Fall ACCT-UB 1 Prin of Financial Acctg A 4.00 EN",
+            // Page-footer concatenated with a real course row — the bug
+            // shape that caused CSCI-UA 472 to disappear in production.
+            "Page 9 of 92025 Fall CSCI-UA 472 Artificial Intelligence A 4.00 EN",
+            "2025 Fall MATH-UA 333 Theory of Probability B- 4.00 EN",
+        ].join("\n");
+        const r = parseDpr(dprText, { nowIso: "2026-05-01T00:00:00Z" });
+        expect(r.ok).toBe(true);
+        if (r.ok) {
+            const fall25 = r.report.courseHistory.filter((c) => c.term === "2025 Fall");
+            expect(fall25).toHaveLength(3);
+            const codes = fall25.map((c) => `${c.subject} ${c.catalogNbr}`);
+            expect(codes).toContain("CSCI-UA 472");
+            const ai = fall25.find((c) => c.subject === "CSCI-UA" && c.catalogNbr === "472");
+            expect(ai?.courseTitle).toBe("Artificial Intelligence");
+            expect(ai?.grade).toBe("A");
+            expect(ai?.units).toBe(4);
+        }
+    });
+
+    it("does NOT consume part of a year when page-total digit abuts content", () => {
+        // The old greedy regex chewed "Page 9 of 9" → "Page 9 of 9202"
+        // (because \d+ greedy ate "9202" of "92025"), leaving "5 Fall …"
+        // — the row still failed to parse. The fix uses a non-greedy
+        // \d+? bounded by a lookahead for "YYYY Season" or "Term ".
+        const dprText = [
+            "Degree Progress Report",
+            "For Test Student prepared on 04/27/2026",
+            "Course History",
+            "Term Subject Catalog Nbr Title Grade Units Type",
+            "Page 9 of 92025 Fall CSCI-UA 472 Artificial Intelligence A 4.00 EN",
+        ].join("\n");
+        const r = parseDpr(dprText, { nowIso: "2026-05-01T00:00:00Z" });
+        expect(r.ok).toBe(true);
+        if (r.ok) {
+            const ai = r.report.courseHistory.find(
+                (c) => c.subject === "CSCI-UA" && c.catalogNbr === "472",
+            );
+            expect(ai).toBeDefined();
+            expect(ai!.term).toBe("2025 Fall");
+        }
+    });
+});

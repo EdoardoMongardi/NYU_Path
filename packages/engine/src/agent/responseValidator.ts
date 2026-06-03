@@ -280,9 +280,14 @@ const INVOCATION_RULES: InvocationRule[] = [
             "Reply discusses remaining requirements; this requires `run_full_audit`.",
     },
     {
+        // Planning recommendation trigger. Since the May 2026 deprecation,
+        // `plan_semester` is no longer registered; `plan_forward_degree`
+        // (Phase 13) is the canonical entry point and `view_forward_plan`
+        // its read-back companion. Both satisfy the gate because they
+        // produce term-level recommendations grounded in the audit.
         triggers: [/\bnext semester\b.+\b(take|enroll|register)\b/i, /\bplan(?:ning)? .* (?:fall|spring|summer)\b/i],
-        requiresAnyOf: ["plan_semester"],
-        description: "Reply makes a planning recommendation; this requires `plan_semester`.",
+        requiresAnyOf: ["plan_forward_degree", "view_forward_plan"],
+        description: "Reply makes a planning recommendation; this requires `plan_forward_degree` (or `view_forward_plan` if the plan was built earlier this session).",
     },
     {
         triggers: [/\binternal[- ]transfer\b/i, /\btransfer to (?:cas|stern|tandon|tisch|steinhardt)\b/i, /\bswitch (?:my )?school\b/i],
@@ -291,10 +296,16 @@ const INVOCATION_RULES: InvocationRule[] = [
             "Reply discusses an internal transfer; this requires `check_transfer_eligibility`.",
     },
     {
+        // Hypothetical / what-if trigger. `propose_plan_change` (Phase 14)
+        // also satisfies this rule because it models a counterfactual
+        // change against the existing forward plan and surfaces a
+        // structured impact diff — same intent as `what_if_audit`,
+        // different return shape. `simulate_alternatives` (Phase 14)
+        // covers the multi-alternative case.
         triggers: [/\bwhat if\b/i, /\bcompar(?:e|ing) [a-z ]+ (?:vs|to|with)\b/i, /\bif i (?:added|switched|dropped) /i],
-        requiresAnyOf: ["what_if_audit"],
+        requiresAnyOf: ["what_if_audit", "propose_plan_change", "simulate_alternatives"],
         description:
-            "Reply runs a hypothetical comparison; this requires `what_if_audit`.",
+            "Reply runs a hypothetical comparison; this requires `what_if_audit`, `propose_plan_change`, or `simulate_alternatives`.",
     },
     {
         // Policy-claim invocation rule (Phase 5 reviewer P0c). Catches

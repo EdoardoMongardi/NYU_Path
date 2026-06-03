@@ -574,7 +574,7 @@ function buildIpAssumptions(
     dependentsIndex: Map<string, string[]>,
 ): Assumption[] {
     const assumptions: Assumption[] = [];
-    for (const ipCourseId of input.coursesInProgress) {
+    for (const ipCourseId of input.coursesInProgress.keys()) {
         // Only emit an assumption if this IP course is a prereq for at least one placed slot
         const dependents = dependentsIndex.get(ipCourseId) ?? [];
         const affectedPlaced = dependents.filter(d => placedCourses.has(d));
@@ -668,27 +668,33 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
         perTermCredits.set(t, 0);
     }
 
-    // Pre-populate the current term with in-progress slots so that slack
-    // accounting is correct during placement. In the full build.ts flow,
-    // the solver receives IP courses via `coursesInProgress`; here we mint
-    // in_progress ScheduleSlots for each IP course using the catalog (when
-    // the course is known) so credit counts are accurate.
-    const currentTermSlots = perTermSlots.get(input.currentTerm);
-    if (currentTermSlots !== undefined) {
-        for (const ipCourseId of input.coursesInProgress) {
-            const meta = input.courseCatalog.get(ipCourseId);
-            const ipCredits = meta?.credits ?? 4; // default 4cr when catalog absent
-            currentTermSlots.push({
-                kind: "in_progress",
-                courseId: ipCourseId,
-                title: meta?.title ?? ipCourseId,
-                credits: ipCredits,
-            });
-            perTermCredits.set(
-                input.currentTerm,
-                (perTermCredits.get(input.currentTerm) ?? 0) + ipCredits
-            );
-        }
+    // Pre-populate each IP course's term with an in_progress slot so
+    // that slack accounting is correct during placement. Each IP row
+    // carries its own term (current-semester IPs vs pre-registered
+    // future-semester IPs) — see types.ts for the May 2026 post-mortem
+    // context. We mint in_progress ScheduleSlots using the catalog
+    // (when the course is known) so credit counts are accurate.
+    //
+    // Fall back to currentTerm when the row's term is outside the
+    // planning horizon (e.g. a stale Spring IP whose grade hasn't
+    // posted yet but wall-clock has rolled into Fall). Anything else
+    // would silently drop a real DPR row.
+    for (const [ipCourseId, { term: ipTerm }] of input.coursesInProgress) {
+        const targetTerm = perTermSlots.has(ipTerm) ? ipTerm : input.currentTerm;
+        const targetSlots = perTermSlots.get(targetTerm);
+        if (targetSlots === undefined) continue;
+        const meta = input.courseCatalog.get(ipCourseId);
+        const ipCredits = meta?.credits ?? 4; // default 4cr when catalog absent
+        targetSlots.push({
+            kind: "in_progress",
+            courseId: ipCourseId,
+            title: meta?.title ?? ipCourseId,
+            credits: ipCredits,
+        });
+        perTermCredits.set(
+            targetTerm,
+            (perTermCredits.get(targetTerm) ?? 0) + ipCredits,
+        );
     }
 
     // plannedPlacements: courseId → term (for isPrereqSatisfied's future-placement path)

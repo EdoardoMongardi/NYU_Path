@@ -59,7 +59,7 @@ function makeInput(overrides: Partial<SolverInput> = {}): SolverInput {
         homeSchoolId: "cas",
         visaStatus: "domestic",
         coursesTaken: new Set(),
-        coursesInProgress: new Set(),
+        coursesInProgress: new Map(),
         currentTerm: "2026-fall",
         graduationTerm: "2027-spring",
         creditTargetPerSemester: 16,

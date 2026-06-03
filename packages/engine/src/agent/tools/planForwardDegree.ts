@@ -12,7 +12,30 @@
 import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { buildForwardSchedule } from "../forwardSchedule/build.js";
+import { computeDprFingerprint } from "../../dpr/fingerprint.js";
 import type { ForwardSchedule } from "@nyupath/shared";
+
+/** Convert a display-form ("Spring 2027" / "2027 Spring" / "spring2027") or
+ *  PeopleSoft ("2027 Spr") graduation term to the solver's "{year}-{season}"
+ *  shape. Pass-through when already in solver shape. Returns undefined when
+ *  the input is undefined or unparseable so the caller falls through to
+ *  build.ts's credit-derived default. */
+function toSolverShape(raw: string | undefined): string | undefined {
+    if (!raw) return undefined;
+    const trimmed = raw.trim();
+    if (/^\d{4}-(?:fall|spring|summer|january)$/i.test(trimmed)) return trimmed.toLowerCase();
+    const m = trimmed.match(/^(\d{4})\s+(Fall|Spring|Summer|J Term|J-Term|January|Spr|Sum)$/i)
+        ?? trimmed.match(/^(Fall|Spring|Summer|J Term|J-Term|January|Spr|Sum)\s+(\d{4})$/i);
+    if (!m) return undefined;
+    const yearStr = /^\d{4}$/.test(m[1]!) ? m[1]! : m[2]!;
+    const seasonRaw = (/^\d{4}$/.test(m[1]!) ? m[2]! : m[1]!).toLowerCase();
+    const season =
+        seasonRaw.startsWith("fa") ? "fall" :
+        seasonRaw.startsWith("sp") ? "spring" :
+        seasonRaw.startsWith("su") ? "summer" :
+        seasonRaw.startsWith("j")  ? "january" : null;
+    return season ? `${yearStr}-${season}` : undefined;
+}
 
 // ---------------------------------------------------------------------------
 // Output type
@@ -82,10 +105,24 @@ export const planForwardDegreeTool = buildTool({
     async call(input, { session }): Promise<PlanForwardDegreeOutput> {
         const dpr = session.degreeProgressReport!;
 
+        // Resolve the graduation target the schedule should aim at.
+        // Priority:
+        //   1. explicit `graduationTermOverride` from the LLM (hypothetical
+        //      "what if I graduate Fall 2027" probes)
+        //   2. `session.graduationTarget` — the onboarding-stated term the
+        //      student typed at sign-up, threaded by the chat route
+        //   3. nothing → build.ts derives from credits remaining
+        // The session value is in display form ("Spring 2027"); the
+        // solver needs "{year}-{season}" — the local converter accepts
+        // both shapes plus the PeopleSoft "2027 Spring" form.
+        const resolvedOverride =
+            input.graduationTermOverride
+            ?? toSolverShape(session.graduationTarget);
+
         const schedule = buildForwardSchedule({
             session,
             dpr,
-            graduationTermOverride: input.graduationTermOverride,
+            graduationTermOverride: resolvedOverride,
         });
 
         // Decision #32 state-routing
@@ -100,6 +137,27 @@ export const planForwardDegreeTool = buildTool({
         } else {
             session.forwardSchedule = schedule;
             storedIn = "forwardSchedule";
+        }
+
+        // Phase 16 Task A — durable schedule persistence. The fingerprint
+        // is content-only (course history + cumulative + programs) so the
+        // Update-DPR route (Task 16.B) can detect meaningful re-uploads
+        // by comparing against the stored row's `dprFingerprint`. Failures
+        // do NOT throw — the in-memory write already landed and the live
+        // turn is the source of truth (mirrors confirm_profile_update's
+        // no-throw persistence pattern).
+        if (session.scheduleStore && session.student) {
+            try {
+                const fingerprint = computeDprFingerprint(dpr);
+                await session.scheduleStore.persistSchedule(
+                    session.student.id,
+                    schedule,
+                    fingerprint,
+                );
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.warn(`[plan_forward_degree] persistSchedule failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
         }
 
         const summary = buildSummary(schedule, storedIn);

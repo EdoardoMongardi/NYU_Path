@@ -105,9 +105,21 @@ function findSlotWithTerm(
 // ---------------------------------------------------------------------------
 
 function isCourseAlreadyBound(schedule: ForwardSchedule, courseId: string): boolean {
+    // Match any slot that already accounts for this courseId — including
+    // in_progress (the student is taking it right now) and completed
+    // (finished + graded). Pre-fix this only checked specific_planned,
+    // so the binder would happily allow CSCI-UA 473 to be pinned in
+    // Fall 2026 even if the student was actively enrolled in it this
+    // Spring 2026. The duplicate-courseId conflict surfaces as a hard
+    // refusal to confirm so the LLM has to pick a different course.
     for (const sem of schedule.semesters) {
         for (const slot of sem.slots) {
-            if (slot.kind === "specific_planned" && slot.courseId === courseId) {
+            if (
+                (slot.kind === "specific_planned"
+                    || slot.kind === "in_progress"
+                    || slot.kind === "completed")
+                && slot.courseId === courseId
+            ) {
                 return true;
             }
         }

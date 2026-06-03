@@ -40,22 +40,24 @@ export const searchCoursesTool = buildTool({
         "filters by department prefix (e.g., 'CSCI-UA' for CS courses).\n\n" +
         "Use this for:\n" +
         "  • \"Find courses about [topic]\" / \"what ML courses exist?\"\n" +
-        "  • \"Suggest a CS elective I haven't taken\" — pass `excludeCompleted: true`\n" +
+        "  • \"Suggest a CS elective I haven't taken\" — default behavior drops completed + IP\n" +
         "  • \"What 4000-level math courses are offered?\"\n" +
-        "  • Verifying a specific course exists in the catalog\n\n" +
-        "PASS `excludeCompleted: true` whenever the user asks for " +
-        "courses they HAVEN'T taken / could TAKE / NEW courses to consider. " +
-        "When set AND the student's DPR is loaded, courses they've already " +
-        "completed are filtered out of the result set.\n\n" +
-        "DO NOT call this for \"plan my next semester\" — that's `plan_semester`'s " +
-        "job. search_courses returns the broader catalog; plan_semester walks " +
-        "the student's specific not-yet-satisfied requirements.",
+        "  • Verifying a specific course exists in the catalog (pass `excludeCompleted: false` for raw catalog browse)\n\n" +
+        "DEFAULT BEHAVIOR (when the student's DPR is loaded): drops " +
+        "courses they have already completed (DPR type=EN or TE) AND " +
+        "courses they're currently taking (type=IP). You almost always " +
+        "want this — the only time to pass `excludeCompleted: false` is " +
+        "raw catalog browsing (\"does CSCI-UA 480 exist?\"). For any " +
+        "\"suggest\", \"pick\", or \"recommend\" intent, leave the default.\n\n" +
+        "DO NOT call this for \"plan my next semester\" — that's `plan_forward_degree`'s " +
+        "job. search_courses returns the broader catalog; plan_forward_degree walks " +
+        "the student's specific not-yet-satisfied requirements across every remaining term.",
     inputSchema: z.object({
         query: z.string().min(2).describe("Keyword to search for in course titles + ids."),
         departmentPrefix: z.string().optional().describe("e.g., 'CSCI-UA' to limit to CS"),
         limit: z.number().int().min(1).max(50).optional(),
         excludeCompleted: z.boolean().optional()
-            .describe("When true AND the student's DPR is loaded, drops courses they have already completed (DPR type=EN or TE)."),
+            .describe("Drops courses the student has already completed OR is currently taking (IP). Defaults to TRUE when the DPR is loaded. Pass false ONLY for raw catalog browsing."),
     }),
     isReadOnly: true,
     maxResultChars: 2500,
@@ -105,23 +107,29 @@ export const searchCoursesTool = buildTool({
             }
         }
 
-        // Phase 8 A4 — when excludeCompleted is true AND the DPR is
-        // loaded, drop any course the student has already finished.
-        // Build a normalized completed-courseId set from the DPR's
-        // courseHistory (excluding IP rows; only EN / TE / similar
-        // count as "already taken").
+        // When the DPR is loaded, drop courses the student has already
+        // completed OR is currently taking (IP). Default-on: the LLM
+        // can opt out with `excludeCompleted: false` for catalog
+        // browsing, but for any "suggest/pick/recommend" intent the
+        // student should never be offered a course already on their
+        // transcript — completed OR in-progress. The pre-fix
+        // implementation excluded only EN/TE, so a student mid-semester
+        // would see their own in-flight course re-suggested.
         let completedFiltered = raw;
         let droppedAsCompleted = 0;
-        if (input.excludeCompleted && session.degreeProgressReport) {
+        const excludeCompleted = input.excludeCompleted ?? !!session.degreeProgressReport;
+        if (excludeCompleted && session.degreeProgressReport) {
             const dpr = session.degreeProgressReport;
-            const completedIds = new Set<string>();
+            const skipIds = new Set<string>();
             for (const c of dpr.courseHistory) {
-                if (c.type === "IP") continue; // in-progress doesn't count as completed
-                completedIds.add(`${c.subject} ${c.catalogNbr}`.trim().toUpperCase());
+                // Both completed (EN/TE) AND currently in-progress (IP)
+                // are courses the student is or has been registered for
+                // — neither should resurface as a "new" suggestion.
+                skipIds.add(`${c.subject} ${c.catalogNbr}`.trim().toUpperCase());
             }
             const before = completedFiltered.length;
             completedFiltered = completedFiltered.filter(
-                (c) => !completedIds.has(c.courseId.trim().toUpperCase()),
+                (c) => !skipIds.has(c.courseId.trim().toUpperCase()),
             );
             droppedAsCompleted = before - completedFiltered.length;
         }
@@ -171,7 +179,7 @@ export const searchCoursesTool = buildTool({
             matches,
             homeSchool: homeSchool ?? null,
             notes,
-            ...(input.excludeCompleted ? { excludedCompletedCount: droppedAsCompleted } : {}),
+            ...(excludeCompleted ? { excludedCompletedCount: droppedAsCompleted } : {}),
         };
     },
     summarizeResult(out) {

@@ -48,7 +48,16 @@ export const checkTransferEligibilityTool = buildTool({
     }),
     maxResultChars: 2500,
     async validateInput(input, { session }) {
-        if (!session.student) return { ok: false, userMessage: "I need your transcript / profile first." };
+        // DPR-only: eligibility keys on the student's completed credits +
+        // prereqs, which come from the DPR. Refuse without it.
+        if (!session.degreeProgressReport || !session.student) {
+            return {
+                ok: false,
+                userMessage:
+                    "I need your Albert Degree Progress Report (DPR) to check transfer eligibility. " +
+                    "Please upload your DPR and try again.",
+            };
+        }
         if (session.student.homeSchool === input.targetSchool) {
             return {
                 ok: false,

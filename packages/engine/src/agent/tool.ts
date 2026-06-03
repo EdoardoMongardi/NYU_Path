@@ -91,6 +91,39 @@ export interface ToolSession {
      */
     profileStore?: import("../persistence/profileStore.js").ProfileStore;
 
+    /**
+     * Phase 16 Task A — durable schedule + preferences storage. When
+     * present, `plan_forward_degree` and `confirm_plan_change` persist
+     * the schedule (and any pref mutation) through this store after a
+     * successful tool call. The route layer reads `loadLatestSchedule`
+     * + `loadPreferences` on session bootstrap so a returning student
+     * lands back in their last plan. Failures are swallowed.
+     */
+    scheduleStore?: import("../persistence/scheduleStore.js").ScheduleStore;
+
+    /**
+     * Phase 16 Task A — append-only chat history. The route layer
+     * calls `appendMessage` after each chat turn finishes; the page
+     * loads the most-recent N messages on mount via `/api/session/restore`.
+     * Tool implementations DO NOT write here (the route owns the
+     * write because it has the assistant's final text); the field is
+     * exposed on `ToolSession` so future tools that want to retrieve
+     * prior turns can read through `loadRecentMessages`.
+     */
+    chatHistoryStore?: import("../persistence/chatHistoryStore.js").ChatHistoryStore;
+
+    /** Onboarding-stated target graduation term in display form (e.g.
+     *  "Spring 2027"). Set by the chat v2 route after normalizing the
+     *  free-form student input. `plan_forward_degree` reads it as the
+     *  implicit default for `graduationTermOverride` when the LLM
+     *  doesn't pass one explicitly — without this fallback the planner
+     *  derives a graduation term from `creditsEarned >= minimum`,
+     *  which collapses to currentTerm+1 for any student already at the
+     *  credit floor and produces a too-narrow window that flips the
+     *  schedule to `infeasible-draft` for spurious credit-ceiling
+     *  reasons. Solver shape conversion happens at read time. */
+    graduationTarget?: string;
+
     /** Phase 13 — solved forward schedule. Set by `plan_forward_degree`
      *  when state ∈ { "valid-clean", "valid-with-trade-offs" }. Read by
      *  `view_forward_plan`, the SSE route, and the chat sidebar. */
@@ -109,6 +142,50 @@ export interface ToolSession {
      *  `solveForwardSchedule` when computing the next plan. In-memory;
      *  lost on session end. */
     schedulePreferences?: import("@nyupath/shared").SchedulePreferences;
+
+    /**
+     * Phase 15 Task 7 — section-materialization previews staged by
+     * `materialize_sections`, awaiting an explicit
+     * `confirm_section_combination` call. Each entry maps a
+     * proposalId to the chosen termCode + section combination so the
+     * confirm step can pin CRNs without re-running FOSE. Two-step
+     * write contract per §7.2; mirrors `pendingMutations` for
+     * `update_profile`.
+     */
+    pendingMaterializations?: Map<
+        string,
+        {
+            termCode: string;
+            sections: import("./sectionMaterialization/types.js").SectionView[];
+        }
+    >;
+
+    /**
+     * Phase 15 Task 8 — side-channel for the SSE route to detect when
+     * a `materialize_sections` invocation produced a fresh result this
+     * turn. Populated by the tool's `call()` as a side-effect of
+     * staging proposals; read by `/api/chat/v2/route.ts` after the
+     * agent loop to emit `forward_materialization_update`. The
+     * `computedAt` timestamp is checked against a snapshot taken
+     * before the turn ran, mirroring the staleness-detection pattern
+     * `forwardSchedule.computedAt` uses for `forward_schedule_update`.
+     *
+     * Carries the `targetTerm` + `proposals` (one per conflict-free
+     * combination) alongside the orchestrator's `MaterializationResult`
+     * so the sidebar's combination picker can address each proposal
+     * by its stable id.
+     */
+    lastMaterializationResult?:
+        & import("./sectionMaterialization/types.js").MaterializationResult
+        & {
+            targetTerm: string;
+            proposals?: Array<{
+                proposalId: string;
+                sections: import("./sectionMaterialization/types.js").SectionView[];
+                weeklyHours: number;
+            }>;
+            computedAt: number;
+        };
 }
 
 export type ValidationResult =

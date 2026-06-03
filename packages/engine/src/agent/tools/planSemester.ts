@@ -1,6 +1,23 @@
 // ============================================================
-// plan_semester (Phase 5 §7.2 + Phase 7-E W3.2)
+// plan_semester — DEPRECATED (Phase 5 §7.2 + Phase 7-E W3.2)
 // ============================================================
+// As of May 2026 this tool is NO LONGER REGISTERED in
+// `packages/engine/src/agent/registry.ts` (`ALL_NYUPATH_TOOLS`).
+// Phase 13's `plan_forward_degree` superseded it: the new tool plans
+// every remaining term (not just the immediate next one), writes
+// `session.forwardSchedule` so the schedule sidebar can display the
+// plan, and cooperates with Phase 14's `propose_plan_change` for
+// what-if analysis.
+//
+// The tool is kept as a named export for unit-test harnesses
+// (planSemesterCreditFill.test.ts, w3DprToolPaths.test.ts,
+// w5MkDprHelper.test.ts, groundingArithmetic.test.ts) and as a
+// reference for the underlying credit-fill / suggestion-ranking
+// logic, but the agent loop cannot invoke it.
+// ============================================================
+//
+// (Original Phase 5 implementation notes follow.)
+//
 // Two paths:
 //   1. DPR primary (post-pivot): read not-satisfied requirements
 //      from session.degreeProgressReport, extract candidate

@@ -1,17 +1,11 @@
 // ============================================================
-// buildSession (Phase 6.1 WS2)
+// buildSession
 // ============================================================
-// Converts the v2 chat-route request body into a typed `ToolSession`
-// the agent loop can consume. Lives in apps/web/lib because the
-// transcript-parser shape is web-specific (the engine's StudentProfile
-// is canonical, but the parsedData → StudentProfile mapping has
-// historically lived inside the chat route).
-//
-// Distinction from the legacy `buildStudentProfile` in
-// apps/web/app/api/chat/route.ts: that function emits a profile with
-// `declaredPrograms: ["cs_major_ba"]` (legacy string-array shape).
-// The Phase-1+ engine expects `ProgramDeclaration[]`. This helper
-// emits the canonical shape.
+// Builds the canonical `StudentProfile` the agent loop consumes from
+// the parsed Albert Degree Progress Report (DPR). DPR-only: the legacy
+// unofficial-transcript builder has been removed — the DPR is the sole
+// onboarding artifact and carries everything the transcript did plus
+// declared programs and NYU's pre-computed audit.
 // ============================================================
 
 import type {
@@ -21,112 +15,13 @@ import type {
 } from "@nyupath/shared";
 import type { DegreeProgressReport, DPRCourseRow } from "@nyupath/engine";
 
-export interface TranscriptSemester {
-    term: string;
-    courses: Array<{ courseId: string; title: string; credits: number; grade: string }>;
-}
-
-export interface TranscriptData {
-    name?: string;
-    semesters?: TranscriptSemester[];
-    currentSemester?: {
-        term: string;
-        courses: Array<{ courseId: string; title: string; credits: number }>;
-    };
-    testCredits?: Array<{ credits: number; component: string }>;
-    declaredPrograms?: ProgramDeclaration[];
-    homeSchool?: string;
-}
-
-/** Strip "CSCI-UA 0101" → "CSCI-UA 101" to match the engine catalog. */
-function normalizeCourseId(id: string): string {
-    return id.replace(/([A-Z]+-[A-Z]+\s*)0+(\d+)/, "$1$2");
-}
-
-/** Build a canonical StudentProfile from a parsed-transcript payload. */
-export function buildStudentProfileV2(
-    parsedData: TranscriptData,
-    visaStatus?: string,
-    catalogYearOverride?: string,
-): StudentProfile {
-    const coursesTaken: CourseTaken[] = [];
-    for (const sem of parsedData.semesters ?? []) {
-        for (const c of sem.courses) {
-            coursesTaken.push({
-                courseId: normalizeCourseId(c.courseId),
-                grade: c.grade,
-                semester: sem.term,
-                credits: c.credits,
-            });
-        }
-    }
-
-    const pendingCourses: Array<{ courseId: string; title: string; credits: number }> = [];
-    if (parsedData.currentSemester?.courses) {
-        for (const c of parsedData.currentSemester.courses) {
-            const normalizedId = normalizeCourseId(c.courseId);
-            coursesTaken.push({
-                courseId: normalizedId,
-                grade: "C", // Assumed passing — satisfies major reqs + prereqs
-                semester: parsedData.currentSemester.term ?? "current",
-                credits: c.credits,
-            });
-            pendingCourses.push({ courseId: normalizedId, title: c.title, credits: c.credits });
-        }
-    }
-
-    // P3 reviewer fix: emit a `YYYY-YYYY` range (matching the engine's
-    // canonical catalogYear format used in school configs and the
-    // override path) instead of a bare start year. The earliest
-    // semester year defines the start of the range.
-    const years = (parsedData.semesters ?? [])
-        .map((s) => s.term.match(/(\d{4})/))
-        .filter((m): m is RegExpMatchArray => m !== null)
-        .map((m) => parseInt(m[1]!, 10));
-    const catalogYear = catalogYearOverride
-        ?? (years.length > 0
-            ? `${Math.min(...years)}-${Math.min(...years) + 1}`
-            : "2025-2026");
-
-    const transferCourses = (parsedData.testCredits ?? []).map((tc) => ({
-        source: `AP: ${tc.component}`,
-        originalCourse: tc.component,
-        credits: tc.credits,
-    }));
-    const genericTransferCredits = transferCourses.reduce((sum, tc) => sum + tc.credits, 0);
-
-    // Default declared program (CS BA, CAS) is preserved from the
-    // legacy route but emitted as a canonical `ProgramDeclaration[]`.
-    const declaredPrograms: ProgramDeclaration[] = parsedData.declaredPrograms ?? [
-        { programId: "cs_major_ba", programType: "major" },
-    ];
-
-    return {
-        id: "web-user",
-        catalogYear,
-        homeSchool: parsedData.homeSchool ?? "cas",
-        declaredPrograms,
-        coursesTaken,
-        genericTransferCredits,
-        flags: [],
-        visaStatus: visaStatus === "f1" ? "f1" : "domestic",
-        currentSemester: pendingCourses.length > 0
-            ? {
-                term: parsedData.currentSemester?.term ?? "current",
-                courses: pendingCourses,
-            }
-            : undefined,
-    };
-}
-
 // ============================================================
 // DPR-driven session builder (Phase 7-E W2.4)
 // ============================================================
-// Produces a `StudentProfile` from the parsed Albert DPR. This
-// is the post-pivot canonical onboarding path; the transcript
-// builder above is the fallback when DPR is unavailable.
+// Produces a `StudentProfile` from the parsed Albert DPR. This is the
+// only onboarding path.
 //
-// Key differences from buildStudentProfileV2:
+// What the DPR provides:
 //   - declaredPrograms come from the DPR's Programs table (not
 //     hardcoded to cs_major_ba)
 //   - homeSchool is derived from the program label (e.g.,
@@ -151,6 +46,19 @@ export interface BuildSessionFromDprOptions {
     declaredProgramsOverride?: ProgramDeclaration[];
     /** Override homeSchool (defaults to derived from CAS/Tisch/Tandon/etc. label). */
     homeSchoolOverride?: string;
+    /**
+     * Override student.id (the canonical identifier used as a Postgres FK
+     * across `students`, `forward_schedules`, `schedule_preferences`,
+     * `chat_messages`, `audit_log`, and `session_summaries`).
+     *
+     * MUST be set to the auth-session subject (`auth.sub`) when the user
+     * is logged in. When omitted, the legacy slugified-name fallback
+     * (`deriveStudentId(report)`) runs — but that diverges from the auth
+     * studentId and silently splits persistence across two phantom
+     * student rows. The May 2026 post-mortem traced the "schedule
+     * disappears on refresh" bug to exactly this divergence.
+     */
+    studentIdOverride?: string;
 }
 
 export function buildStudentProfileFromDpr(
@@ -161,9 +69,18 @@ export function buildStudentProfileFromDpr(
     //    (type=EN with grade=null but no IP designation isn't expected,
     //    but we guard against it). Skip the synthetic ELECTIVE CREDIT
     //    rows because they have no real course id the engine can use.
+    //
+    // FIX (May 2026 post-mortem): the prior loop pushed EVERY IP row into
+    // `pendingCourses` regardless of term, then picked the latest IP term
+    // as `currentSemester.term`. When a student is mid-Spring with Fall
+    // pre-registered, the DPR carries IP rows for BOTH terms — so
+    // `currentSemester.courses` ended up mixing 4 Spring IP rows with 3
+    // Fall IP rows, and the agent surfaced "7 courses for Fall 2026."
+    // We now collect IP rows into a per-term map first, pick the latest
+    // term, and only THEN populate `pendingCourses` from that single
+    // term's rows.
     const coursesTaken: CourseTaken[] = [];
-    const pendingCourses: Array<{ courseId: string; title: string; credits: number }> = [];
-    let currentTerm: string | undefined;
+    const ipRowsByTerm: Record<string, Array<{ courseId: string; title: string; credits: number }>> = {};
 
     for (const row of report.courseHistory) {
         if (row.subject === "ELECTIVE") continue; // synthetic transfer-credit row, no audit value
@@ -176,17 +93,21 @@ export function buildStudentProfileFromDpr(
             credits: row.units,
         });
         if (row.type === "IP") {
-            pendingCourses.push({
+            (ipRowsByTerm[row.term] ??= []).push({
                 courseId,
                 title: row.courseTitle,
                 credits: row.units,
             });
-            // Pick the latest IP term as currentSemester.
-            if (!currentTerm || compareTerms(row.term, currentTerm) > 0) {
-                currentTerm = row.term;
-            }
         }
     }
+
+    // Pick the latest IP term as `currentSemester.term`; populate
+    // `pendingCourses` ONLY from that term's IP rows.
+    let currentTerm: string | undefined;
+    for (const term of Object.keys(ipRowsByTerm)) {
+        if (!currentTerm || compareTerms(term, currentTerm) > 0) currentTerm = term;
+    }
+    const pendingCourses = currentTerm ? ipRowsByTerm[currentTerm] ?? [] : [];
 
     // 2. Declared programs from DPR Programs table (filter to Major /
     //    Minor / Concentration types — skip the Career + Program rows
@@ -205,7 +126,7 @@ export function buildStudentProfileFromDpr(
     const genericTransferCredits = transferRows.reduce((sum, r) => sum + r.units, 0);
 
     return {
-        id: deriveStudentId(report),
+        id: opts.studentIdOverride ?? deriveStudentId(report),
         catalogYear,
         homeSchool,
         declaredPrograms,

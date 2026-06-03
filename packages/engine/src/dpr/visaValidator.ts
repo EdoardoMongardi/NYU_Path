@@ -28,6 +28,19 @@ export interface VisaValidationResult {
     rclEligible: ValidationResult;
     cptConflict: ValidationResult;
     finalTermExceptionPossible: ValidationResult;
+    /**
+     * Phase 15 — Decision #43. Returns `pass FOSE` when scheduling
+     * preferences are present AND a section combination satisfies
+     * every strict constraint, `fail` when an unsatisfiable strict
+     * filter has no swap candidate, and `assumed-pass` when no
+     * scheduling preferences are set.
+     *
+     * The validator is pure — it does NOT call FOSE itself; the
+     * caller (Phase 15's materialize_sections orchestrator)
+     * supplies the precomputed result via
+     * `VisaInputContext.schedulingPreferenceCheck`.
+     */
+    schedulingPreferenceSatisfied: ValidationResult;
     overallWarningLevel: "none" | "low" | "medium" | "high";
     citations: string[];
 }
@@ -56,6 +69,28 @@ export interface VisaInputContext {
     domesticPartTimeFloor: number | null;
     /** F-1 online-credit cap per term (typically 3). Null when unset. */
     f1OnlineCreditsPerTermCap: number | null;
+    /**
+     * Phase 15 — Decision #43. Precomputed result of
+     * applySchedulingPreferences against this term's section pool.
+     *
+     *   - omitted / undefined  → axis returns `assumed-pass`
+     *                            (no scheduling preferences to verify).
+     *   - { kind: "absent" }   → same as omitted. Caller may use this
+     *                            kind explicitly when surfacing the
+     *                            decision to downstream UI.
+     *   - { kind: "satisfied" }→ axis returns `pass` `verifiedFrom: "FOSE"`.
+     *   - { kind: "violated", reason }
+     *                          → axis returns `fail` with the supplied
+     *                            reason verbatim (caller is responsible
+     *                            for a concrete student-facing string).
+     *
+     * The validator stays pure by accepting a precomputed kind here
+     * rather than calling FOSE itself.
+     */
+    schedulingPreferenceCheck?:
+        | { kind: "absent" }
+        | { kind: "satisfied" }
+        | { kind: "violated"; reason: string };
 }
 
 // ---- Axis helpers ----
@@ -146,6 +181,22 @@ function evalCptConflict(ctx: VisaInputContext): ValidationResult {
     return { status: "pass", verifiedFrom: "DPR" };
 }
 
+function evalSchedulingPreferenceSatisfied(ctx: VisaInputContext): ValidationResult {
+    const check = ctx.schedulingPreferenceCheck;
+    if (check === undefined || check.kind === "absent") {
+        return {
+            status: "assumed-pass",
+            assumption: "no scheduling preferences set",
+            whatWouldFlipIt: "if the student adds a strict avoidDay or avoidTimeWindow",
+        };
+    }
+    if (check.kind === "satisfied") {
+        return { status: "pass", verifiedFrom: "FOSE" };
+    }
+    // kind === "violated"
+    return { status: "fail", reason: check.reason };
+}
+
 function evalFinalTermExceptionPossible(ctx: VisaInputContext): ValidationResult {
     const { termCredits, profile, f1Floor } = ctx;
     const floor = f1Floor ?? 12;
@@ -203,6 +254,12 @@ function deriveCitations(
     ) {
         cites.push("OGS Policy: F-1 Online Course Limit (3 credits per term)");
     }
+    // Phase 15 — Decision #43 citation only fires on a hard fail; the
+    // assumed-pass shape (no preferences set) and the pass shape (preferences
+    // satisfied) carry no schedule-preference citation.
+    if (result.schedulingPreferenceSatisfied.status === "fail") {
+        cites.push("Decision #43: Student-supplied scheduling preferences");
+    }
     return cites;
 }
 
@@ -216,6 +273,7 @@ export function visaValidator(ctx: VisaInputContext): VisaValidationResult {
     const rclEligible = evalRclEligible(ctx);
     const cptConflict = evalCptConflict(ctx);
     const finalTermExceptionPossible = evalFinalTermExceptionPossible(ctx);
+    const schedulingPreferenceSatisfied = evalSchedulingPreferenceSatisfied(ctx);
 
     const partialResult = {
         fullTimeSatisfied,
@@ -225,6 +283,7 @@ export function visaValidator(ctx: VisaInputContext): VisaValidationResult {
         rclEligible,
         cptConflict,
         finalTermExceptionPossible,
+        schedulingPreferenceSatisfied,
     };
 
     const allAxes: ValidationResult[] = [
@@ -235,6 +294,7 @@ export function visaValidator(ctx: VisaInputContext): VisaValidationResult {
         rclEligible,
         cptConflict,
         finalTermExceptionPossible,
+        schedulingPreferenceSatisfied,
     ];
 
     return {

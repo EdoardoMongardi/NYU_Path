@@ -8,18 +8,21 @@
 // Key API field corrections vs. original plan:
 //   • `rawHours` → `rawMeets`  (FOSE field is `meets`, not `hours`)
 //   • Added `meetingTimes`, `schd`, `section` to SectionView
-//   • `hours?` on FoseSearchResult kept as deprecation slot only
+//   • `hours?` on FoseSearchResult marked @deprecated (FOSE search rows
+//     never carry it; two legacy search_availability wrappers still
+//     pass-through `r.hours` for back-compat — see nyuClassSearch.ts).
 // ============================================================
 
 export type DayOfWeek = "M" | "Tu" | "W" | "Th" | "F" | "Sa" | "Su";
 
-export interface MeetingPattern {
-    day: DayOfWeek;
-    /** Minutes since midnight — e.g. 9:30 AM = 570. */
-    startMin: number;
-    /** Minutes since midnight — e.g. 10:45 AM = 645. */
-    endMin: number;
-}
+// Phase 15 Task 7 — `MeetingPattern` was promoted to shared (single source
+// of truth) when `ScheduleSlotSpecificPlanned` started carrying it directly
+// post-confirm. `DayOfWeek` is a structural alias for shared's `Day` (same
+// 7-string union). Imported + re-exported so engine call sites can keep
+// using `./types.js` without reaching into shared, AND so we can name
+// `MeetingPattern` in the local interfaces below.
+import type { MeetingPattern } from "@nyupath/shared";
+export type { MeetingPattern };
 
 export type ParseResult =
     | { kind: "ok"; patterns: MeetingPattern[] }
@@ -98,6 +101,25 @@ export interface MaterializedSemester {
 
 export type AvailabilityState = "full" | "partial" | "unavailable";
 
+/**
+ * Phase 15 Task 6 (Decision #43) — precomputed verdict surfaced from
+ * the orchestrator into the visa validator's
+ * `VisaInputContext.schedulingPreferenceCheck` axis. The shape mirrors
+ * the discriminated union defined in `visaValidator.ts:90-93`.
+ *
+ *   - "absent"    → no prefs supplied (or supplied but empty per `isPrefsEmpty`)
+ *                   OR FOSE state is unavailable/partial (no data to verify
+ *                   against); visa axis returns assumed-pass.
+ *   - "satisfied" → preferences supplied AND ≥1 strict-passing combination exists post-cascade.
+ *   - "violated"  → a strict filter eliminated all sections of some course AND
+ *                   the swap cascade exhausted alternatives. `reason` names the
+ *                   eliminated course + filter type for downstream display.
+ */
+export type SchedulingPreferenceCheck =
+    | { kind: "absent" }
+    | { kind: "satisfied" }
+    | { kind: "violated"; reason: string };
+
 export interface MaterializationResult {
     state: AvailabilityState;
     /** Populated when state === "full". */
@@ -110,4 +132,14 @@ export interface MaterializationResult {
     partialCourses?: Array<{ courseId: string; title: string; sections: SectionView[] }>;
     /** Always populated: explanation for the student. */
     message: string;
+    /**
+     * Precomputed Decision-#43 verdict for the visa validator. Always
+     * present when the orchestrator runs to completion; the caller
+     * (Task 7's `materialize_sections` tool wrapper) feeds this verbatim
+     * into `VisaInputContext.schedulingPreferenceCheck`.
+     *
+     * Optional because callers that bypass the orchestrator (e.g. legacy
+     * structural-only flows) won't populate it.
+     */
+    schedulingPreferenceCheck?: SchedulingPreferenceCheck;
 }

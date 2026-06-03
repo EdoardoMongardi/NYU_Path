@@ -47,16 +47,12 @@ export {
     type DepartmentConfig,
 } from "./data/departmentLoader.js";
 
-// Phase 0: Tool registry + first tool
+// Tool registry types (legacy Phase 0 surface, still consumed downstream)
 export {
     buildTool,
     getTool,
     listTools,
     registerTool,
-    searchAvailability,
-    type SearchAvailabilityInput,
-    type SearchAvailabilityOutput,
-    type SectionView,
     type Tool,
     type ToolContext,
     type ToolDef,
@@ -108,6 +104,13 @@ export {
     confirmProfileUpdateTool,
     getCreditCapsTool,
     searchAvailabilityTool,
+    // Phase 16 Task B — Update-DPR route invokes this programmatically.
+    planForwardDegreeTool,
+    // Phase 17 Task B — deterministic plan-action routes invoke these
+    // programmatically (no agent loop) for the sidebar's Add/Swap/
+    // Drop/Lock/Move/Confirm verbs.
+    proposePlanChangeTool,
+    confirmPlanChangeTool,
 } from "./agent/index.js";
 export type {
     AgentTurnOptions,
@@ -129,7 +132,19 @@ export type {
     PreLoopResult,
     PreLoopOptions,
     SystemPromptOptions,
+    // Phase 15 Task 8 — section-materialization types surfaced for
+    // the apps/web sidebar (forward_materialization_update payload).
+    AvailabilityState,
+    MaterializationResult,
+    MaterializedSemester,
+    SchedulingPreferenceCheck,
+    // Phase 17 Task D follow-up — `MaterializeArgs` shape used by the
+    // /api/plan/stage2 route to call the orchestrator directly.
+    MaterializeArgs,
 } from "./agent/index.js";
+
+// Phase 17 Task D follow-up — exposed for the /api/plan/stage2 route.
+export { materializeSections } from "./agent/index.js";
 
 // Phase 7-E: Degree Progress Report (DPR) module — the canonical
 // audit ingestion path. The DPR is a structured rendering of NYU's
@@ -256,3 +271,16 @@ export type {
     ProfileStore,
     ProfileMutationAuditEntry,
 } from "./persistence/profileStore.js";
+
+// Phase 16 Task A: schedule + chat-history persistence + DPR fingerprint
+export {
+    InMemoryScheduleStore,
+    pruneCompletedPins,
+} from "./persistence/scheduleStore.js";
+export type { ScheduleStore } from "./persistence/scheduleStore.js";
+export { InMemoryChatHistoryStore } from "./persistence/chatHistoryStore.js";
+export type {
+    ChatHistoryStore,
+    ChatMessageRecord,
+} from "./persistence/chatHistoryStore.js";
+export { computeDprFingerprint } from "./dpr/fingerprint.js";
