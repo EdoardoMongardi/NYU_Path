@@ -34,7 +34,17 @@ flowchart TD
     CONF -- no --> E
 ```
 
-> **Reality check — retrieval is single-shot and fragment-level, so multi-section policies can lose their exceptions.** One vector pass (top-20) → rerank → the tool returns the **top 5 chunks** (and `summarizeResult` renders only the top **3** of those, sliced to 1400 chars each — see §9.1). The corpus chunker splits each bulletin page into ~500-token fragments on `#/##/###` headings, so a single program or policy page fragments into a **median of ~13 chunks** (largest pages 73–98). A policy whose parts are scattered across one page — e.g. Pass/Fail = a career cap + a per-term cap + a Core exception + a foreign-language exception + a major-course restriction — can have some of those parts fall outside the top-5/top-3 window and **never reach the agent**. There is **no section-complete retrieval**: the tool returns ranked fragments, not the whole section/page. Each chunk carries `sourcePath` + `section` in `meta`, so whole-section retrieval is *implementable*, but `search_policy` does **not** expose it today. Compounding this, the input schema has no result-count knob and the system prompt discourages re-querying (rule 7), so the agent generally can't widen the net on a single question. Treat a confident `search_policy` answer to a known multi-part policy as "the parts that ranked top-3", not "the complete rule".
+> **Update (improvement plan, Phase B) — section-complete retrieval now exists.** The reality-check below described the *pre-Phase-B* behavior. Two changes closed the fragment-level gap:
+> 1. **`search_policy` now expands the top hit to its FULL section.** After the rerank, the tool reassembles every chunk that shares the top hit's `(sourcePath, section)` and renders the complete section under a `FULL SECTION` block (`searchPolicy.ts` → `reassembleSection` in `rag/sectionRetrieval.ts`; see §9.1). So even when a policy section was split into several ~500-token windows, the agent now sees the whole section, not just the one window that won the rerank. The per-hit fragments still render below for cross-section breadth.
+> 2. **A dedicated `get_program_requirements` tool** returns an entire program/major/minor/Core-Curriculum **page** (every requirement section reassembled in order) with a confidence band — see [get_program_requirements.md](get_program_requirements.md). For "what are ALL the requirements for major X" the agent uses that tool instead of `search_policy`.
+>
+> The original caveat still applies in spirit for **cross-section** policies whose parts live under *different* headings (e.g. Pass/Fail = a career cap under one heading + a Core exception under another): `search_policy` expands only the **top** hit's section in full, and the other sections still arrive as top-3 fragments. The whole-*page* tool covers that case for program pages; for multi-section *policies* the agent reads the expanded top section plus the fragment hits.
+
+<details><summary>Pre-Phase-B reality check (historical)</summary>
+
+> **Retrieval was single-shot and fragment-level, so multi-section policies could lose their exceptions.** One vector pass (top-20) → rerank → the tool returns the **top 5 chunks** (and `summarizeResult` renders only the top **3** of those, sliced to 1400 chars each — see §9.1). The corpus chunker splits each bulletin page into ~500-token fragments on `#/##/###` headings, so a single program or policy page fragments into a **median of ~13 chunks** (largest pages 73–98). A policy whose parts are scattered across one page — e.g. Pass/Fail = a career cap + a per-term cap + a Core exception + a foreign-language exception + a major-course restriction — could have some of those parts fall outside the top-5/top-3 window and **never reach the agent**. There was **no section-complete retrieval**: the tool returned ranked fragments, not the whole section/page. Each chunk carries `sourcePath` + `section` in `meta`, so whole-section retrieval was *implementable* — Phase B implemented it. Compounding this, the input schema has no result-count knob and the system prompt discourages re-querying (rule 7), so the agent generally can't widen the net on a single question.
+
+</details>
 
 ---
 
@@ -187,7 +197,7 @@ The explicit-override patterns match literal school names: `cas`, `stern`, `tand
 - If a template matched, return `kind: "template"`, confidence `"high"`, `candidateCount: 0`, with a note that no RAG context was available.
 - Otherwise return `kind: "escalate"`, confidence `"low"`, an empty `hits` array, and a note that the scope had nothing to retrieve from.
 
-**Step 5 — Rerank.** `reranker.rerank(query, hits)` returns the same hits each tagged with a `rerankScore` in `[0, 1]` (`policySearch.ts:169`). Top `topKRerank = 5` are kept (`policySearch.ts:170`). **This `5` (and the further down-slice to 3 in `summarizeResult`) is the hard ceiling that makes retrieval fragment-level rather than section-complete** — see the reality-check box at the top. Fragments of the same policy that the reranker ranks 6th+ are discarded here even though they belong to the same `section`.
+**Step 5 — Rerank.** `reranker.rerank(query, hits)` returns the same hits each tagged with a `rerankScore` in `[0, 1]` (`policySearch.ts:169`). Top `topKRerank = 5` are kept (`policySearch.ts:170`). This `5` (and the further down-slice to 3 in `summarizeResult`) bounds how many *distinct* fragments are surfaced. **Phase B mitigates the within-section loss**: after the rerank, `searchPolicy.call` reassembles the **top** hit's entire section (`reassembleSection`) and renders it under a `FULL SECTION` block, so fragments of the *top* hit's section that ranked 6th+ are recovered. Fragments belonging to *other* sections that rank outside the top-5 are still dropped — for a whole program page, route to `get_program_requirements` instead.
 
 **Step 6 — Confidence gate.** The top hit's `rerankScore` (`topScore`) is compared to the active bands (`policySearch.ts:171-192`):
 
@@ -297,6 +307,16 @@ PolicySearchResult + envelope:
   }
   disclaimers: array of { id, text, reason }
   confidence: "high" | "medium" | "low" | "uncertain"   (envelope band — OVERWRITES the RAG band)
+
+  # Phase B overlay (added in searchPolicy.call):
+  wholeSection?: {                         (the TOP hit's full reassembled section; null when no RAG hit)
+    sourcePath: string
+    source: string
+    school: string
+    sections: string[]                     (heading(s) reassembled)
+    chunkCount: integer                    (how many chunks were stitched)
+    text: string                           (the complete section, headings + bodies, overlap stripped)
+  }
 ```
 
 Note the overwrite at `searchPolicy.ts:156`: the spread `...result` writes the three-state RAG band, then `confidence: envelopeConfidence` overrides it with the four-state envelope band. Downstream consumers of the tool result see the four-state version; the RAG band is no longer accessible after this step.
@@ -346,6 +366,11 @@ When `coreUaClassifications` or `coreUaRequirements` are non-empty, the summariz
 4. **Escalation block** (when `kind === "escalate"`) — `searchPolicy.ts:225-234`. Renders as:
    - `POLICY UNCERTAINTY[ (transferIntent=on)]: confidence=[band]. [notes joined by " | "]`
    - `Recommend: contact your academic adviser.`
+4b. **FULL SECTION block** (Phase B; when a RAG hit exists) — the top hit's complete reassembled section, capped at 3000 chars so it can't crowd out the fragments or the envelope. Renders as:
+   - `-- FULL SECTION (top hit, reassembled — read this for the complete rule) --`
+   - `<source> › <section(s)> [<school>]`
+   - the full section text (headings + bodies, splitter overlap removed)
+   - `   Source: <sourcePath> (<n> chunks)`
 5. **Notes block** — appended on every path with the joined `notes`.
 6. **Envelope block** — `renderEnvelopeMeta` output appended last (`searchPolicy.ts:217-223`, `:226-234`, `:251-255`). When disclaimers exist they are rendered here.
 
