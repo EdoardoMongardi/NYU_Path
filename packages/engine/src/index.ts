@@ -100,6 +100,7 @@ export {
     checkTransferEligibilityTool,
     whatIfAuditTool,
     searchPolicyTool,
+    getProgramRequirementsTool,
     updateProfileTool,
     confirmProfileUpdateTool,
     getCreditCapsTool,
@@ -210,6 +211,18 @@ export {
     DEFAULT_ENTRIES,
     loadPolicyCorpusFromCache,
 } from "./rag/index.js";
+// Improvement-plan Phase B — section-complete (whole-page) retrieval.
+export {
+    locateBestSource,
+    reassembleSource,
+    reassembleSection,
+} from "./rag/sectionRetrieval.js";
+export type {
+    ReassembledUnit,
+    LocatedSource,
+    LocateOptions,
+    LocateDeps,
+} from "./rag/sectionRetrieval.js";
 export type {
     PolicySearchResult,
     PolicySearchOptions,

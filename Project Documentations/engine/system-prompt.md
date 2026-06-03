@@ -231,7 +231,7 @@ flowchart TD
 
 ## 9. What the prompt deliberately doesn't include
 
-- No tool-by-tool routing table for the 21 tools. Each tool's `description` carries its own routing hints; the prompt's `TOOL ROUTING` paragraph just says "read them, decide, the validator will reject misroutes".
+- No tool-by-tool routing table for the 22 tools. Each tool's `description` carries its own routing hints; the prompt's `TOOL ROUTING` paragraph just says "read them, decide, the validator will reject misroutes" (the DPR-loaded ROUTING block does carry a handful of explicit per-tool bullets, e.g. `run_full_audit` vs `search_policy` vs `get_program_requirements`).
 - No few-shot examples.
 - No persona / personality instructions beyond "precise, factual, and helpful".
 - No safety / content-policy text.

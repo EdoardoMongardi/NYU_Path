@@ -1,11 +1,15 @@
 // ============================================================
-// Default ToolRegistry — wires the 21 LIVE NYU Path tools
+// Default ToolRegistry — wires the 22 LIVE NYU Path tools
 // ============================================================
 // §7.1 tools (Phase 0–11):
 //   run_full_audit, check_transfer_eligibility, what_if_audit,
 //   search_policy, update_profile, confirm_profile_update,
 //   get_credit_caps, search_availability, get_academic_standing,
 //   check_overlap, search_courses
+// Improvement-plan Phase B addition:
+//   get_program_requirements — whole-PAGE bulletin retrieval for a
+//   program/major/minor (every requirement section reassembled in
+//   order), complementing search_policy's fragment retrieval.
 // Phase 13 Task 6 additions:
 //   plan_forward_degree, view_forward_plan
 // Phase 14 Task 5 additions:
@@ -38,6 +42,7 @@ import { planSemesterTool } from "./tools/planSemester.js";
 import { checkTransferEligibilityTool } from "./tools/checkTransferEligibility.js";
 import { whatIfAuditTool } from "./tools/whatIfAudit.js";
 import { searchPolicyTool } from "./tools/searchPolicy.js";
+import { getProgramRequirementsTool } from "./tools/getProgramRequirements.js";
 import { updateProfileTool, confirmProfileUpdateTool } from "./tools/updateProfile.js";
 import { getCreditCapsTool } from "./tools/getCreditCaps.js";
 import { searchAvailabilityTool } from "./tools/searchAvailability.js";
@@ -64,6 +69,7 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     checkTransferEligibilityTool as unknown as Tool<ZodTypeAny, unknown>,
     whatIfAuditTool as unknown as Tool<ZodTypeAny, unknown>,
     searchPolicyTool as unknown as Tool<ZodTypeAny, unknown>,
+    getProgramRequirementsTool as unknown as Tool<ZodTypeAny, unknown>,
     updateProfileTool as unknown as Tool<ZodTypeAny, unknown>,
     confirmProfileUpdateTool as unknown as Tool<ZodTypeAny, unknown>,
     getCreditCapsTool as unknown as Tool<ZodTypeAny, unknown>,
@@ -97,6 +103,7 @@ export {
     checkTransferEligibilityTool,
     whatIfAuditTool,
     searchPolicyTool,
+    getProgramRequirementsTool,
     updateProfileTool,
     confirmProfileUpdateTool,
     getCreditCapsTool,
