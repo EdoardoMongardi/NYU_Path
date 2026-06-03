@@ -18,7 +18,7 @@
 // ============================================================
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chunkMarkdown, type PolicyChunk } from "./chunker.js";
 import type { Embedder } from "./embedder.js";
@@ -92,6 +92,16 @@ export interface BuildCorpusOptions {
      *  questions. Defaults to false for back-compat — the embed
      *  script flips it on. */
     includeProgramPages?: boolean;
+    /** Improvement plan, Phase C — when true, the corpus also indexes
+     *  the previously-skipped NYU-wide policy trees:
+     *    - `internal-transfer-equivalencies/` (internal-transfer
+     *      requirements) → category "admissions"
+     *    - `ogs/` (Office of Global Services: F-1/J-1/RCL/CPT/OPT visa
+     *      + immigration rules) → category "academic_policy"
+     *  Both are tagged school "all" (NYU-wide) so every student's scope
+     *  admits them. Defaults to false for back-compat; the embed script
+     *  flips it on. */
+    includePolicyTrees?: boolean;
 }
 
 /** Phase 9 Stage 1 — map a program-directory location → school id.
@@ -186,6 +196,76 @@ function discoverCoreCurriculumEntries(bulletinDir: string): CorpusEntry[] {
     return out;
 }
 
+/** Phase C — recursively collect every `.md` file under `dir`, returned
+ *  as paths relative to `bulletinDir` (the form CorpusEntry.relPath
+ *  expects). Symlink-free, depth-first; unreadable entries are skipped. */
+function walkMarkdownRelPaths(dir: string, bulletinDir: string): string[] {
+    const out: string[] = [];
+    let names: string[];
+    try {
+        names = readdirSync(dir);
+    } catch {
+        return out;
+    }
+    for (const name of names) {
+        const full = join(dir, name);
+        let st;
+        try {
+            st = statSync(full);
+        } catch {
+            continue;
+        }
+        if (st.isDirectory()) {
+            out.push(...walkMarkdownRelPaths(full, bulletinDir));
+        } else if (name.endsWith(".md")) {
+            out.push(relative(bulletinDir, full));
+        }
+    }
+    return out;
+}
+
+/** Phase C — derive a human-readable source label from a tree-relative
+ *  markdown path. Uses the directory that owns an `_index.md` (or the
+ *  filename otherwise), title-cased: ".../student-visa-and-immigration/
+ *  _index.md" → "Student Visa And Immigration". */
+function policyTreeLabel(relPath: string): string {
+    const parts = relPath.split(/[\\/]/);
+    const file = parts[parts.length - 1]!;
+    const slug = file === "_index.md"
+        ? (parts[parts.length - 2] ?? parts[0]!)
+        : file.replace(/\.md$/, "");
+    return slug
+        .split("-")
+        .map((p) => (p.length === 0 ? p : p[0]!.toUpperCase() + p.slice(1)))
+        .join(" ");
+}
+
+/** Phase C — entries for the NYU-wide policy trees that the default
+ *  corpus skipped: internal-transfer requirements and OGS visa /
+ *  immigration rules. Every file is tagged school "all" so it is in
+ *  scope for any student; the category lets the reranker prefer the
+ *  right kind of source. */
+function discoverPolicyTreeEntries(bulletinDir: string): CorpusEntry[] {
+    const trees: Array<{ dir: string; category: NonNullable<CorpusEntry["category"]>; prefix: string }> = [
+        { dir: "internal-transfer-equivalencies", category: "admissions", prefix: "NYU Internal Transfer" },
+        { dir: "ogs", category: "academic_policy", prefix: "NYU OGS (Global Services)" },
+    ];
+    const out: CorpusEntry[] = [];
+    for (const tree of trees) {
+        const root = join(bulletinDir, tree.dir);
+        if (!existsSync(root)) continue;
+        for (const relPath of walkMarkdownRelPaths(root, bulletinDir)) {
+            out.push({
+                school: "all",
+                source: `${tree.prefix}: ${policyTreeLabel(relPath)}`,
+                relPath,
+                category: tree.category,
+            });
+        }
+    }
+    return out;
+}
+
 export interface BuildCorpusResult {
     store: VectorStore;
     chunks: PolicyChunk[];
@@ -211,6 +291,14 @@ export async function buildCorpus(
         const programEntries = discoverProgramEntries(bulletinDir).filter((e) => !seen.has(e.relPath));
         const coreEntries = discoverCoreCurriculumEntries(bulletinDir).filter((e) => !seen.has(e.relPath));
         entries = [...entries, ...programEntries, ...coreEntries];
+    }
+    if (options.includePolicyTrees) {
+        // Phase C — append the NYU-wide internal-transfer + OGS trees,
+        // deduped against whatever is already in `entries` (including the
+        // program pages added just above).
+        const seen = new Set(entries.map((e) => e.relPath));
+        const treeEntries = discoverPolicyTreeEntries(bulletinDir).filter((e) => !seen.has(e.relPath));
+        entries = [...entries, ...treeEntries];
     }
     const store = new VectorStore(embedder);
     const allChunks: PolicyChunk[] = [];
