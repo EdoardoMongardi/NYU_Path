@@ -139,7 +139,15 @@ export const searchPolicyTool = buildTool({
                     "search_policy returned uncertainty (no template + low RAG confidence). " +
                     "Surface this verbatim instead of inventing a bulletin quote.",
             });
-        } else if (result.kind === "rag" && (result.confidence ?? 0) < 0.5) {
+        } else if (result.kind === "rag" && (result.topScore ?? 0) < 0.5) {
+            // Phase D fix — band on the NUMERIC top rerank score
+            // (`result.topScore`), not the `confidence` band string. The
+            // old `(result.confidence ?? 0) < 0.5` compared a string
+            // ("high"/"medium") to a number, which is always false, so
+            // this low-confidence branch (and the medium one below) never
+            // fired and search_policy could only ever report "high" or
+            // "uncertain". Now a weak-but-present RAG hit correctly ships
+            // as a low/medium-confidence, adviser-caveated estimate.
             envelopeConfidence = "low";
             disclaimers.push({
                 id: "policy_low_confidence_no_fabrication",
@@ -147,9 +155,9 @@ export const searchPolicyTool = buildTool({
                     "I found related bulletin text but my confidence is moderate; " +
                     "treat the citation below as approximate and verify with your academic adviser before relying on it.",
                 reason:
-                    `RAG confidence is ${(result.confidence ?? 0).toFixed(2)}; do NOT format the snippet as a § verbatim quote.`,
+                    `RAG top rerank score is ${(result.topScore ?? 0).toFixed(2)}; do NOT format the snippet as a § verbatim quote.`,
             });
-        } else if (result.kind === "rag" && (result.confidence ?? 0) < 0.7) {
+        } else if (result.kind === "rag" && (result.topScore ?? 0) < 0.7) {
             envelopeConfidence = "medium";
         }
 

@@ -177,6 +177,64 @@ function extractAllNumbers(text: string): string[] {
     return matches ?? [];
 }
 
+// ============================================================
+// Phase D — Tier-2 estimate detection
+// ============================================================
+// Tier-2 tools answer from confidence-scored bulletin retrieval, not
+// the authoritative DPR. When one of them returns a non-high-confidence
+// (or explicitly "estimate") result this turn, the reply is allowed to
+// ship a *labeled, hedged, adviser-caveated estimate* — see the
+// grounding exemption in `checkGrounding` and the consult-adviser caveat
+// rule. Tier-1 (DPR) answers stay hard-grounded.
+
+/** Tools whose output is a Tier-2 (bulletin-cited, confidence-scored)
+ *  estimate rather than an authoritative DPR audit. */
+const TIER2_ESTIMATE_TOOLS = new Set([
+    "search_policy",
+    "get_program_requirements",
+    "what_if_audit",
+    "check_transfer_eligibility",
+]);
+
+/** Markers a Tier-2 tool's summary carries when its result is a
+ *  non-high-confidence / estimate answer. */
+const TIER2_LOW_CONF_RE =
+    /\b(?:confidence\s*[:=]\s*(?:low|medium|uncertain)|(?:low|medium)\s+confidence|POLICY UNCERTAINTY)\b|\(estimate/i;
+
+/** True when a Tier-2 estimate tool returned a non-high-confidence /
+ *  estimate result this turn. Drives both the grounding exemption and
+ *  the consult-adviser caveat. */
+function tier2EstimateInvoked(ctx: ValidatorContext): boolean {
+    return ctx.invocations.some(
+        (inv) => TIER2_ESTIMATE_TOOLS.has(inv.toolName) && TIER2_LOW_CONF_RE.test(inv.summary ?? ""),
+    );
+}
+
+/** Hedge words that, immediately before a number, mark it as an explicit
+ *  estimate ("about 5 requirements", "~3 semesters", "roughly 18 credits"). */
+const HEDGE_BEFORE_RE = /(?:\babout|\bapproximately|\broughly|\baround|\bestimated?|\bballpark|\bon the order of|~)\s*$/i;
+
+/** True when `num` appears in `text` immediately preceded by hedge
+ *  language at least once, at a standalone numeric boundary. */
+function isHedgedEstimate(text: string, num: string): boolean {
+    const lower = text.toLowerCase();
+    let from = 0;
+    for (;;) {
+        const idx = lower.indexOf(num, from);
+        if (idx < 0) return false;
+        const before = idx > 0 ? lower[idx - 1] : undefined;
+        const after = lower[idx + num.length];
+        const standalone =
+            (before === undefined || !/[0-9.]/.test(before)) &&
+            (after === undefined || !/[0-9.]/.test(after));
+        if (standalone) {
+            const pre = lower.slice(Math.max(0, idx - 20), idx);
+            if (HEDGE_BEFORE_RE.test(pre)) return true;
+        }
+        from = idx + num.length;
+    }
+}
+
 /**
  * Check whether every claim number in `assistantText` appears verbatim
  * in at least one tool invocation's summary or args this turn.
@@ -233,17 +291,34 @@ function checkGrounding(ctx: ValidatorContext): Violation[] {
         return false;
     }
 
+    // Phase D — when a Tier-2 estimate tool returned a non-high-confidence
+    // result this turn, the reply may ship an explicitly-hedged INTEGER
+    // estimate ("about 5 requirements", "~3 semesters") that the agent
+    // reasoned from the cited bulletin text but that isn't verbatim in
+    // the tool summary. Such a number is exempt from the hard grounding
+    // rule. Guard rails keep Tier-1 intact:
+    //   - decimals (GPAs, percentages) are NEVER exempt;
+    //   - the number must be explicitly hedged as an estimate;
+    //   - a Tier-2 estimate tool must have actually run this turn.
+    // The mandatory consult-adviser caveat (checkCompleteness) interlocks:
+    // an exempt estimate that ISN'T adviser-caveated still fails the
+    // completeness check. So an ungroundable number can only ship when
+    // it is hedged AND cited AND adviser-caveated — the Tier-2 contract.
+    const tier2 = tier2EstimateInvoked(ctx);
+
     for (const claim of claims) {
-        if (!isDerivable(claim)) {
-            violations.push({
-                kind: "ungrounded_number",
-                number: claim,
-                detail:
-                    `Number "${claim}" appears in the reply but does not appear verbatim ` +
-                    `in any tool result this turn, nor is it a sum or difference of two ` +
-                    `grounded numbers. Either call the tool that returns it or remove the claim.`,
-            });
+        if (isDerivable(claim)) continue;
+        if (tier2 && !claim.includes(".") && isHedgedEstimate(ctx.assistantText, claim)) {
+            continue; // labeled Tier-2 estimate — allowed
         }
+        violations.push({
+            kind: "ungrounded_number",
+            number: claim,
+            detail:
+                `Number "${claim}" appears in the reply but does not appear verbatim ` +
+                `in any tool result this turn, nor is it a sum or difference of two ` +
+                `grounded numbers. Either call the tool that returns it or remove the claim.`,
+        });
     }
     return violations;
 }
@@ -400,25 +475,19 @@ const CAVEAT_RULES: CaveatRule[] = [
     },
     {
         id: "low_confidence_consult_adviser",
-        triggerCondition: (ctx) => {
-            // Strict pattern: only fires when the search_policy summary
-            // marks the result with `confidence=low|medium` OR
-            // `low confidence` / `medium confidence`. The earlier
-            // `.includes("low")` check produced false positives — the
-            // word "low" appears in unrelated contexts (e.g.,
-            // "follow", "below"), and "medium" is also brittle.
-            const CONFIDENCE_RE = /\b(?:confidence\s*[:=]\s*(?:low|medium)|(?:low|medium)\s+confidence)\b/i;
-            for (const inv of ctx.invocations) {
-                if (inv.toolName !== "search_policy") continue;
-                if (CONFIDENCE_RE.test(inv.summary ?? "")) return true;
-            }
-            return false;
-        },
+        // Phase D — fires when ANY Tier-2 estimate tool (search_policy,
+        // get_program_requirements, what_if_audit, check_transfer_
+        // eligibility) returned a non-high-confidence / estimate result
+        // this turn, not just search_policy. The reply must then direct
+        // the student to consult their adviser. This is also the
+        // interlock for the grounding exemption: a hedged Tier-2 estimate
+        // that skips the grounding rule still has to carry this caveat.
+        triggerCondition: (ctx) => tier2EstimateInvoked(ctx),
         triggerPatterns: [/.*/], // any reply
         requiredSubstrings: [/\b(?:adviser|advisor|consult)\b/i],
         description:
-            "Low/medium-confidence policy lookup detected; the reply must direct " +
-            "the student to consult their adviser.",
+            "Low/medium-confidence (Tier-2 estimate) lookup detected; the reply must " +
+            "direct the student to consult their adviser.",
     },
 ];
 
