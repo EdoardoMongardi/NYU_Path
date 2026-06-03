@@ -8,9 +8,11 @@ Source files:
 
 ---
 
+> **Update (improvement plan, Phase E — DPR-first, de-CAS).** This tool is no longer schoolConfig-only. The authoritative caps — **degree total**, **GPA floor**, **residency**, **Pass/Fail career cap**, **outside-home-school cap**, **time limit** — now come from the student's **DPR cumulative block first** (per-student, authoritative, already specialized to their school + catalog year), falling back to `schoolConfig` only when the DPR omits a field. The two DPR-absent registration constants (**per-semester ceiling ~18**, **F-1 floor ~12**) come from `schoolConfig` or a shared NYU-undergrad default (`data/schoolDefaults.ts`). `validateInput` now requires `student` **plus EITHER a `schoolConfig` OR a DPR** — it only refuses when both are missing. Net effect: a non-CAS student with just their DPR gets correct caps **without any per-school config file**. The result carries a `capsSource` tag (`dpr` / `config` / `dpr+config`) and the school name is derived from `homeSchool` (not hardcoded CAS). The sections below describe the original schoolConfig-only behavior; treat the callout as the current contract where they differ.
+
 ## TL;DR
 
-When a student asks "how many credits can I take next semester?", "I'm on an F-1 visa — what's my minimum?", "can I take 4 courses at Tandon if I'm in CAS?", or anything about credit limits, this tool looks up the deterministic numbers from the school's config. It returns the per-semester ceiling (typically 18 for CAS, varies by school), the F-1 full-time floor (typically 12) when the student is on an F-1 visa, all the cross-school caps (e.g. how many non-home-school credits count, online cap, transfer cap), overload requirements, the total degree credit requirement, and the minimum GPA for good standing. The numeric ceiling and F-1 floor are pinned verbatim — the assistant literally cannot paraphrase those numbers. It requires both a loaded student profile and a loaded school config. It's the canonical first call before answering anything about credit load or overload permissions.
+When a student asks "how many credits can I take next semester?", "I'm on an F-1 visa — what's my minimum?", "can I take 4 courses at Tandon if I'm in CAS?", or anything about credit limits, this tool returns the deterministic numbers — **DPR-first** (per-student) with a `schoolConfig` / shared-default fallback. It returns the per-semester ceiling (~18, shared NYU default), the F-1 full-time floor (~12) when the student is on an F-1 visa, the cross-school caps, overload requirements, the total degree credit requirement, the minimum GPA, and (from the DPR) residency, Pass/Fail career cap, outside-home cap, and time limit. The numeric ceiling and F-1 floor are pinned verbatim — the assistant literally cannot paraphrase those numbers. It requires a loaded student profile plus **either** a DPR **or** a school config. It's the canonical first call before answering anything about credit load or overload permissions.
 
 ```mermaid
 flowchart TD
@@ -67,9 +69,9 @@ Defined at `getCreditCaps.ts:32`. Everything the tool needs comes from `session.
 `validateInput` (lines 38-48) rejects the call if:
 
 1. **No student loaded** (`session.student` missing). Returns: `"No student profile loaded."`
-2. **No school config loaded** (`session.schoolConfig` missing). Returns: `"School config not loaded."`
+2. **(Phase E)** **Neither a schoolConfig NOR a DPR loaded** — i.e. there is no source for any cap at all. Returns: `"No school config or DPR loaded — I can't determine your credit caps."` (Before Phase E this rejected whenever `schoolConfig` was missing, even with a DPR present.)
 
-Notably, the validator **does NOT reject when the DPR is loaded** — the tool always runs whether or not the DPR is present. (An earlier behavior rejected when the DPR was loaded, which produced contradictory reasoning iterations; the current behavior keeps the tool running and instead attaches a `suggestedFollowUps` pointing to `search_policy`.)
+Notably, the validator **does NOT reject when the DPR is loaded** — the DPR is now the *preferred* cap source. (An earlier behavior rejected when the DPR was loaded, which produced contradictory reasoning iterations; the current behavior keeps the tool running, reads caps from the DPR, and attaches a `suggestedFollowUps` pointing to `search_policy` for the narrative policy text.)
 
 ---
 

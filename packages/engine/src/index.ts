@@ -8,6 +8,14 @@ export { PrereqGraph } from "./graph/prereqGraph.js";
 export { EquivalenceResolver } from "./equivalence/equivalenceResolver.js";
 export { loadCourses, loadPrereqs, loadPrograms, loadProgram, loadSchoolConfig } from "./dataLoader.js";
 export { resolveExamCredit, EXAM_GENERAL_RULES } from "./data/examEquivalencies.js";
+// Phase E (de-CAS) — shared NYU-undergrad registration defaults + school names.
+export {
+    DEFAULT_PER_SEMESTER_CEILING,
+    DEFAULT_F1_FULLTIME_MIN_CREDITS,
+    perSemesterCeilingFor,
+    schoolDisplayName,
+    SCHOOL_DISPLAY_NAMES,
+} from "./data/schoolDefaults.js";
 
 // Phase 1: Planner
 export { planNextSemester } from "./planner/semesterPlanner.js";
