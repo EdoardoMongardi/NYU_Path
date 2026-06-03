@@ -355,11 +355,11 @@ const INVOCATION_RULES: InvocationRule[] = [
             "Reply discusses remaining requirements; this requires `run_full_audit`.",
     },
     {
-        // Planning recommendation trigger. Since the May 2026 deprecation,
-        // `plan_semester` is no longer registered; `plan_forward_degree`
-        // (Phase 13) is the canonical entry point and `view_forward_plan`
-        // its read-back companion. Both satisfy the gate because they
-        // produce term-level recommendations grounded in the audit.
+        // Planning recommendation trigger. The legacy `plan_semester` was
+        // removed (Phase F decommission); `plan_forward_degree` (Phase 13)
+        // is the canonical entry point and `view_forward_plan` its
+        // read-back companion. Both satisfy the gate because they produce
+        // term-level recommendations grounded in the audit.
         triggers: [/\bnext semester\b.+\b(take|enroll|register)\b/i, /\bplan(?:ning)? .* (?:fall|spring|summer)\b/i],
         requiresAnyOf: ["plan_forward_degree", "view_forward_plan"],
         description: "Reply makes a planning recommendation; this requires `plan_forward_degree` (or `view_forward_plan` if the plan was built earlier this session).",

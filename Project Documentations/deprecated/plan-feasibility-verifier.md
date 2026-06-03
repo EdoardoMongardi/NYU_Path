@@ -1,6 +1,6 @@
-# Plan-Feasibility Verifier
+# Plan-Feasibility Verifier — REMOVED (historical)
 
-> **Source file:** `packages/engine/src/agent/verifiers/planFeasibility.ts`
+> **REMOVED (improvement plan, Phase F).** `packages/engine/src/agent/verifiers/planFeasibility.ts` has been **deleted**. Its only consumer was the (now also removed) `plan_semester` tool, so it had no live consumer. This document is retained as a historical record of the five hard-constraint checks it performed.
 
 ## TL;DR
 

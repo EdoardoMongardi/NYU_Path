@@ -13,7 +13,6 @@ export {
     ALL_NYUPATH_TOOLS,
     buildDefaultRegistry,
     runFullAuditTool,
-    planSemesterTool,
     checkTransferEligibilityTool,
     whatIfAuditTool,
     searchPolicyTool,
