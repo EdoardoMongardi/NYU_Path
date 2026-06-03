@@ -8,8 +8,23 @@
 // ============================================================
 
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { POST } from "../app/api/chat/v2/route";
-import { setCohortAssignment, reviewCompleteness } from "@nyupath/engine";
+import { setCohortAssignment, reviewCompleteness, parseDpr } from "@nyupath/engine";
+
+// DPR-only: the route now requires a valid Degree Progress Report
+// payload. Parse the shared fixture once and wrap it in the canonical
+// `{ kind: "dpr", report }` onboarding shape for request bodies.
+const DPR_FIXTURE = readFileSync(
+    join(__dirname, "..", "..", "..", "packages/engine/tests/fixtures/dpr_sample.redacted.txt"),
+    "utf-8",
+);
+function validDprPayload(): { kind: "dpr"; report: unknown } {
+    const r = parseDpr(DPR_FIXTURE, { pageCount: 9, nowIso: "2026-04-27T00:00:00Z" });
+    if (!r.ok) throw new Error("DPR fixture failed to parse");
+    return { kind: "dpr", report: r.report };
+}
 
 // Helper: synthesize a minimal NextRequest-shaped object.
 function fakeRequest(body: unknown | string): { json: () => Promise<unknown> } {
@@ -48,11 +63,18 @@ describe("v2 route input validation (Phase 6.1 WS2)", () => {
         expect(res.status).toBe(400);
     });
 
-    it("returns 400 when `parsedData` is missing", async () => {
+    it("returns 400 (asks for the DPR) when `parsedData` is missing", async () => {
         const res = await POST(fakeRequest({ message: "hi" }) as never);
         expect(res.status).toBe(400);
         const json = await res.json();
-        expect(json.error).toMatch(/parsedData.*required/i);
+        expect(json.error).toMatch(/degree progress report/i);
+    });
+
+    it("returns 400 (asks for the DPR) when `parsedData` is not a DPR payload", async () => {
+        const res = await POST(fakeRequest({ message: "hi", parsedData: { semesters: [] } }) as never);
+        expect(res.status).toBe(400);
+        const json = await res.json();
+        expect(json.error).toMatch(/degree progress report/i);
     });
 
     it("returns 503 when the configured primary's API key is not configured", async () => {
@@ -65,7 +87,7 @@ describe("v2 route input validation (Phase 6.1 WS2)", () => {
         delete process.env.ANTHROPIC_API_KEY;
         const res = await POST(fakeRequest({
             message: "hi",
-            parsedData: { semesters: [] },
+            parsedData: validDprPayload(),
         }) as never);
         expect(res.status).toBe(503);
         const json = await res.json();
@@ -105,7 +127,7 @@ describe("v2 route cohort gating (Phase 7-A P-1)", () => {
         });
         const res = await POST(fakeRequest({
             message: "Can I take a major course P/F?",
-            parsedData: { semesters: [] },
+            parsedData: validDprPayload(),
             userId: "u-limited",
         }) as never);
         expect(res.status).toBe(200);

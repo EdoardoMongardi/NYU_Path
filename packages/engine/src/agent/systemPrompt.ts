@@ -148,13 +148,13 @@ export interface SystemPromptOptions {
     /** Inject extra instructions for tests (test-only escape hatch) */
     appendInstructions?: string;
     /**
-     * Phase 7-E W8 fix — flags whether the student's parsed Albert
-     * Degree Progress Report is loaded into the session. When true,
-     * the prompt instructs the agent to call `run_full_audit` for any
-     * audit/credit/GPA/requirement question (because that tool reads
-     * the DPR's pre-computed verdicts directly), and to NOT use
-     * fallback tools like `get_academic_standing` or `get_credit_caps`
-     * which can't see the DPR data and return zeros.
+     * Flags whether the student's parsed Albert Degree Progress Report
+     * is loaded into the session. When true, the prompt routes every
+     * audit/credit/GPA/requirement question to `run_full_audit` (which
+     * reads the DPR's pre-computed verdicts directly). When false, the
+     * prompt instructs the agent to ask the student to upload their DPR
+     * before answering any personal/record question — there is no
+     * transcript or authored-rules fallback.
      */
     dprLoaded?: boolean;
     /**
@@ -306,9 +306,12 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "- ANY question about GPA, credits, requirements satisfied/remaining,",
             "  graduation eligibility, P/F usage, outside-CAS usage, or",
             "  residency → call `run_full_audit`. That tool reads the DPR.",
-            "- DO NOT call `get_academic_standing` or `get_credit_caps` when the",
-            "  DPR is loaded. They DON'T see the DPR and return defaults like",
-            "  GPA 0.00 or empty caps. Calling them produces wrong answers.",
+            "- For GPA, cumulative credits, and requirement status, `run_full_audit`",
+            "  is the single source of truth (it reads the DPR's authoritative",
+            "  numbers). `get_academic_standing` is for probation / SAP standing",
+            "  detail and ALSO requires the DPR. `get_credit_caps` returns the",
+            "  school's caps (per-semester ceiling, F-1 floor) from config — call",
+            "  it for credit-load / overload / full-time questions.",
             "- For ANY semester planning question — 'what should I take next",
             "  semester', 'plan my Fall 2026', 'plan my full degree', 'show me",
             "  my graduation roadmap', 'when can I graduate', 'plan every",
@@ -365,6 +368,25 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "- Do NOT paraphrase '3.402' as 'around 3.4' or 'roughly 3.4'.",
             "- Do NOT round '138 credits' to '~140 credits'.",
             "- The validator rejects replies that omit DPR-anchored values.",
+        );
+    } else {
+        lines.push(
+            "",
+            "## NO DEGREE PROGRESS REPORT LOADED (mandatory)",
+            "",
+            "The student has NOT uploaded their Albert Degree Progress Report (DPR).",
+            "Every answer about the student's own record — GPA, credits, requirements,",
+            "academic standing, transfer eligibility, degree planning, what-if audits —",
+            "depends on the DPR, and the corresponding tools will refuse without it.",
+            "",
+            "- For ANY personal/record question, do NOT guess or use general knowledge.",
+            "  Tell the student you need their DPR and ask them to upload it (Albert →",
+            "  Student Center → Academics → Degree Progress Report), then stop.",
+            "- You MAY still answer impersonal questions that need no personal data:",
+            "  general policy lookups (`search_policy`), course catalog search",
+            "  (`search_courses`), live section availability (`search_availability`),",
+            "  and the school's credit caps (`get_credit_caps`).",
+            "- Never fabricate the student's numbers from training data.",
         );
     }
 

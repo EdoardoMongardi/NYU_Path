@@ -21,7 +21,7 @@ export default function Home() {
           <span className={styles.heroAccent}>with AI</span>
         </h1>
         <p className={styles.heroSubtitle}>
-          Upload your transcript, get personalized course recommendations,
+          Upload your Degree Progress Report, get personalized course recommendations,
           and track your degree progress — all in one conversation.
         </p>
         <div className={styles.heroCtas}>
@@ -36,8 +36,8 @@ export default function Home() {
         <div className={styles.featureGrid}>
           <div className={styles.featureCard}>
             <div className={styles.featureIcon}>📋</div>
-            <h3>Transcript Upload</h3>
-            <p>Drop your unofficial transcript PDF and watch as AI parses every course, credit, and grade in seconds.</p>
+            <h3>Degree Progress Report Upload</h3>
+            <p>Drop your Albert Degree Progress Report PDF and watch as it parses every course, credit, requirement, and grade in seconds.</p>
           </div>
           <div className={styles.featureCard}>
             <div className={styles.featureIcon}>🔍</div>

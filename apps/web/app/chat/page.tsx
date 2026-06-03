@@ -129,7 +129,7 @@ interface Message {
     hasRealThinking?: boolean;
 }
 
-type OnboardingStep = "awaiting_dpr" | "awaiting_transcript" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation" | "complete" | "unsupported_major";
+type OnboardingStep = "awaiting_dpr" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation" | "complete" | "unsupported_major";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ParsedTranscript = Record<string, any>;
@@ -1031,15 +1031,13 @@ export default function ChatPage() {
         addMessage("user", `📎 Uploaded: ${file.name}`);
         setIsLoading(true);
 
-        // Phase 7-E W2.1: primary path uploads under the "dpr" form
-        // field. The route detects DPR vs transcript by field name;
-        // if the deterministic DPR parser fails, the route returns
-        // an error message and we surface it to the user, who can
-        // then re-upload as a transcript via the fallback button.
+        // DPR-only: the file is always uploaded under the "dpr" form
+        // field. If the deterministic DPR parser fails, the route
+        // returns an error message and we surface it so the student can
+        // re-export and re-upload their DPR.
         try {
-            const fieldName = onboardingStep === "awaiting_transcript" ? "transcript" : "dpr";
             const formData = new FormData();
-            formData.append(fieldName, file);
+            formData.append("dpr", file);
 
             const res = await fetch("/api/onboard", {
                 method: "POST",
@@ -1055,14 +1053,6 @@ export default function ChatPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [onboardingStep]);
-
-    const switchToTranscriptFallback = useCallback(() => {
-        setOnboardingStep("awaiting_transcript");
-        addMessage(
-            "assistant",
-            "OK — please upload your **unofficial transcript** PDF instead. From Albert: **Student Center → Academics → View Unofficial Transcript**, then save the page as PDF and drop it here.",
-        );
     }, []);
 
     const handleDrop = (e: React.DragEvent) => {
@@ -1076,12 +1066,8 @@ export default function ChatPage() {
     // Phase 16 Task C — derive sidebar inputs (raw DPR + built profile).
     // ============================================================
     // Both restore (`{ kind: "dpr", report }`) and the live onboarding
-    // route emit `parsedData` in the discriminated shape. Only the DPR
-    // variant carries the data the new full-degree sidebar needs; for
-    // a transcript-fallback session the page still has parsedData but
-    // not a DPR, so the sidebar gets `null` and falls through to its
-    // future-only render path. The build runs at most once per
-    // parsedData / visaStatus change.
+    // route emit `parsedData` in the discriminated DPR shape. The build
+    // runs at most once per parsedData / visaStatus change.
     const sidebarDpr = useMemo<DegreeProgressReport | null>(() => {
         if (!parsedData || parsedData.kind !== "dpr") return null;
         return (parsedData.report ?? null) as DegreeProgressReport | null;
@@ -1440,11 +1426,11 @@ export default function ChatPage() {
             {/* Input area */}
             <div className={styles.inputArea}>
                 <div className={styles.inputContainer}>
-                    {(onboardingStep === "awaiting_dpr" || onboardingStep === "awaiting_transcript") && (
+                    {onboardingStep === "awaiting_dpr" && (
                         <button
                             className={styles.uploadBtn}
                             onClick={() => fileInputRef.current?.click()}
-                            title={onboardingStep === "awaiting_dpr" ? "Upload Degree Progress Report PDF" : "Upload unofficial transcript PDF"}
+                            title="Upload Degree Progress Report PDF"
                         >
                             📎
                         </button>
@@ -1455,8 +1441,6 @@ export default function ChatPage() {
                         placeholder={
                             onboardingStep === "awaiting_dpr"
                                 ? "Upload your DPR (or type a message)…"
-                                : onboardingStep === "awaiting_transcript"
-                                ? "Upload your transcript (or type a message)…"
                                 : "Type your message..."
                         }
                         value={input}
@@ -1473,15 +1457,6 @@ export default function ChatPage() {
                         ↑
                     </button>
                 </div>
-                {onboardingStep === "awaiting_dpr" && (
-                    <button
-                        className={styles.fallbackLink}
-                        onClick={switchToTranscriptFallback}
-                        type="button"
-                    >
-                        Can&rsquo;t access your DPR? Upload an unofficial transcript instead
-                    </button>
-                )}
                 <input
                     ref={fileInputRef}
                     type="file"
