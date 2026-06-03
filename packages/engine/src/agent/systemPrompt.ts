@@ -16,6 +16,7 @@
 // ============================================================
 
 import type { StudentProfile } from "@nyupath/shared";
+import { schoolDisplayName } from "../data/schoolDefaults.js";
 
 // ============================================================
 // Phase 14 — preference extraction (Tier-A modeled mappings)
@@ -215,9 +216,17 @@ export interface SystemPromptOptions {
 export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
     const lines: string[] = [];
 
+    // Phase E (de-CAS) — NYU Path serves ALL NYU undergraduate schools.
+    // Introduce with the STUDENT's school (derived from homeSchool), not a
+    // hardcoded "College of Arts & Science". Falls back to a generic "NYU"
+    // when the school is unknown rather than asserting a school we can't
+    // confirm.
+    const schoolName = opts.student ? schoolDisplayName(opts.student.homeSchool) : "NYU";
     lines.push(
         "ROLE:",
-        "You are NYU Path, an AI academic adviser for NYU College of Arts & Science.",
+        `You are NYU Path, an AI academic adviser for ${schoolName}.`,
+        "You serve undergraduates across all NYU schools; advise THIS student",
+        "according to their own school, catalog year, and DPR — never assume CAS.",
         "You help students understand their degree progress, plan semesters, and",
         "navigate academic policies. You are precise, factual, and helpful.",
         "",

@@ -1,6 +1,6 @@
 # NYU Path — Improvement Plan
 
-> **Status:** in progress. **Phase A ✅, Phase B ✅ (core), Phase C ✅ (pipeline; corpus regen is a separate ops step), and Phase D ✅ are implemented and merged**; Phases E–F pending. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work). Each shipped phase carries a **Status** callout under its heading.
+> **Status:** in progress. **Phases A ✅, B ✅ (core), C ✅ (pipeline; corpus regen is a separate ops step), D ✅, and E ✅ (E1+E2; E3 gated on PII fixtures) are implemented and merged**; Phase F pending. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work). Each shipped phase carries a **Status** callout under its heading.
 
 ---
 
@@ -135,7 +135,16 @@ flowchart LR
 
 ---
 
-### Phase E — De-CAS the scope (all NYU undergrad)  · **Effort: M code, small data**
+### Phase E — De-CAS the scope (all NYU undergrad)  · **Effort: M code, small data** · ✅ **DONE (E1+E2); E3 gated**
+
+> **Status: shipped (code).**
+> - **E1** — `get_credit_caps` is **DPR-first**: degree total + GPA floor read from the DPR cumulative block (fallback to `schoolConfig`), and it now surfaces the DPR's residency / Pass-Fail cap / outside-home cap / time-limit. `validateInput` no longer hard-requires `schoolConfig` — it runs with a DPR **or** a config, refusing only when both are absent. A non-CAS student with just their DPR gets correct caps with **no per-school config file**.
+> - **E2** — new `data/schoolDefaults.ts` (shared per-semester ceiling ~18 + F-1 floor ~12 + full school display-name map); the system-prompt ROLE line interpolates the student's school (no hardcoded CAS, generic "NYU" when unknown); `deriveHomeSchool` **warns** on its CAS fallback instead of silently asserting it.
+> - **E3 — gated.** *Claiming* "equally good for school X" needs validation against a real non-CAS DPR, which is PII. Until sanitized non-CAS DPR fixtures exist, non-CAS support is marked **beta** honestly (overview + this plan).
+>
+> 16 new tests (DPR-first caps, shared defaults, dynamic prompt); 1 existing test updated to the new validateInput contract. Full engine suite: only the 5 known pre-existing failures.
+>
+> **Not done (intentionally):** `creditCapValidator` still takes `schoolConfig` for cross-school caps, and a few audit/planner rules keep CAS-flavored defaults — those are folded into Phase F's "one way to do each thing" cleanup or covered by the DPR/RAG when needed.
 
 **Goal:** non-CAS students get equal-quality answers, not degraded ones.
 
