@@ -1,6 +1,6 @@
 # NYU Path — Improvement Plan
 
-> **Status:** in progress. **Phase A ✅, Phase B ✅ (core), and Phase C ✅ (pipeline; corpus regen is a separate ops step) are implemented and merged**; Phases D–F pending. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work). Each shipped phase carries a **Status** callout under its heading.
+> **Status:** in progress. **Phase A ✅, Phase B ✅ (core), Phase C ✅ (pipeline; corpus regen is a separate ops step), and Phase D ✅ are implemented and merged**; Phases E–F pending. This plan turns the audit findings into a phased, buildable roadmap. Every "current state" claim below was verified against the code/data during the audit. Effort sizes are rough (S = hours, M = a focused day or two, L = multi-day + ongoing data work). Each shipped phase carries a **Status** callout under its heading.
 
 ---
 
@@ -113,7 +113,15 @@ flowchart LR
 
 ---
 
-### Phase D — Confidence-scored estimate output  · **Effort: M**
+### Phase D — Confidence-scored estimate output  · **Effort: M** · ✅ **DONE**
+
+> **Status: shipped.** Four parts:
+> - **D1** — fixed the `searchPolicy.ts` confidence-band bug: `policySearch` now exposes the numeric `topScore`, and the envelope bands on it. The old code compared the band *string* to a number (always false), so search_policy could only ever report `high`/`uncertain`; now a weak hit correctly ships `low`/`medium` with the right disclaimer. (Also cleared 3 standing TypeScript errors.)
+> - **D2** — the `low_confidence_consult_adviser` caveat now fires for **any** Tier-2 estimate tool (`search_policy`, `get_program_requirements`, `what_if_audit`, `check_transfer_eligibility`), not just `search_policy`.
+> - **D3** — grounding exemption (`responseValidator.ts`): a **hedged integer** estimate backed by a non-high-confidence Tier-2 tool is exempt from the hard number rule. **Guard rails:** decimals/GPAs never exempt; must be hedged; a Tier-2 tool must have run; and it **interlocks** with D2 (an exempt estimate that isn't adviser-caveated still fails completeness). Tier-1 (DPR) stays hard-grounded.
+> - **D4** — system-prompt ESTIMATE-FRAMING rule (Tier-2 reasoned counts must be hedged + cited + confidence-labeled + adviser-caveated; never hedge a real DPR number).
+>
+> 12 new tests (4 banding + 8 validator). Full engine suite shows only the 5 known pre-existing failures; typecheck debt dropped 8 → 5.
 
 **Goal:** Tier-2 answers ship as labeled, cited estimates — and the validator treats them as estimates, not ungrounded facts.
 

@@ -58,6 +58,11 @@ export interface PolicySearchResult {
     hits?: RerankedHit[];
     /** Confidence band derived from the top hit's rerankScore */
     confidence: ConfidenceBand;
+    /** Phase D — the numeric top rerank score in [0,1] the band was
+     *  derived from. Exposed so callers can compute a finer-grained
+     *  envelope confidence (the band alone collapses 0.3–0.6 into one
+     *  "medium"). 0 on the no-hit / template-only paths. */
+    topScore: number;
     /** Telemetry: which schools were in scope */
     scopedSchools: string[];
     /** Telemetry: did the query trigger an explicit-school override? */
@@ -145,6 +150,7 @@ export async function policySearch(
                 kind: "template",
                 template: templateMatch,
                 confidence: "high",
+                topScore: 0,
                 scopedSchools: scope.scopedSchools,
                 overrideTriggered: scope.overrideTriggered,
                 candidateCount: 0,
@@ -155,6 +161,7 @@ export async function policySearch(
             kind: "escalate",
             hits: [],
             confidence: "low",
+            topScore: 0,
             scopedSchools: scope.scopedSchools,
             overrideTriggered: scope.overrideTriggered,
             candidateCount: 0,
@@ -203,6 +210,7 @@ export async function policySearch(
             template: templateMatch,
             hits: top,
             confidence: "high",
+            topScore,
             scopedSchools: scope.scopedSchools,
             overrideTriggered: scope.overrideTriggered,
             candidateCount: hits.length,
@@ -214,6 +222,7 @@ export async function policySearch(
         kind,
         hits: top,
         confidence,
+        topScore,
         scopedSchools: scope.scopedSchools,
         overrideTriggered: scope.overrideTriggered,
         candidateCount: hits.length,
