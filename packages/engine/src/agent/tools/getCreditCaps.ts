@@ -15,11 +15,11 @@
 import { z } from "zod";
 import { buildTool } from "../tool.js";
 import type { SuggestedFollowUp } from "../toolEnvelope.js";
-
-// Phase 10 Stage 2 — F-1 floor moved to school config
-// (cfg.f1FullTimeMinCredits). Fallback default mirrors NYU OGS
-// guidance for the 2024-2026 catalog years.
-const DEFAULT_F1_FULLTIME_MIN_CREDITS = 12;
+import {
+    DEFAULT_F1_FULLTIME_MIN_CREDITS,
+    perSemesterCeilingFor,
+    schoolDisplayName,
+} from "../../data/schoolDefaults.js";
 
 export const getCreditCapsTool = buildTool({
     name: "get_credit_caps",
@@ -37,13 +37,17 @@ export const getCreditCapsTool = buildTool({
     outputMode: "semi_hardened",
     async validateInput(_input, { session }) {
         if (!session.student) return { ok: false, userMessage: "No student profile loaded." };
-        // Phase 12.5 Task 5 — dropped the DPR-loaded rejection. This tool
-        // always runs; when DPR is loaded the call() appends a
-        // suggestedFollowUp pointing at search_policy so the agent can
-        // chain automatically. Rejecting here caused two contradictory
-        // reasoning iterations (plan get_credit_caps → tool refuses → retry
-        // search_policy) and leaked the rejection text to the user.
-        if (!session.schoolConfig) return { ok: false, userMessage: "School config not loaded." };
+        // Phase E (de-CAS) — no longer hard-require schoolConfig. The
+        // authoritative caps (degree total, GPA floor, residency, P/F cap,
+        // cross-school cap, time limit) come from the student's DPR, which
+        // is already specialized to their school + catalog year. The two
+        // DPR-absent registration constants (per-semester ceiling, F-1
+        // floor) fall back to a shared NYU-undergrad default. So the tool
+        // runs with EITHER a schoolConfig OR a DPR; only reject when both
+        // are missing (no source for any cap at all).
+        if (!session.schoolConfig && !session.degreeProgressReport) {
+            return { ok: false, userMessage: "No school config or DPR loaded — I can't determine your credit caps." };
+        }
         return { ok: true };
     },
     prompt: () =>
@@ -52,13 +56,25 @@ export const getCreditCapsTool = buildTool({
         `student is on an F-1 visa. Read-only data lookup.`,
     async call(_input, { session }) {
         const student = session.student!;
-        const cfg = session.schoolConfig!;
+        const cfg = session.schoolConfig ?? null;
+        const dpr = session.degreeProgressReport?.cumulative ?? null;
         const isF1 = student.visaStatus === "f1";
 
-        const perSemesterCeiling = cfg.maxCreditsPerSemester ?? null;
-        const overloadRequirements = cfg.overloadRequirements ?? [];
-        const creditCaps = cfg.creditCaps ?? [];
-        const transferCreditLimits = cfg.transferCreditLimits ?? null;
+        // Per-semester ceiling + F-1 floor are NOT in the DPR — keep them
+        // from the authored config when present, else the shared
+        // NYU-undergrad default (school-agnostic).
+        const perSemesterCeiling = cfg?.maxCreditsPerSemester ?? perSemesterCeilingFor(student.homeSchool);
+        const overloadRequirements = cfg?.overloadRequirements ?? [];
+        const creditCaps = cfg?.creditCaps ?? [];
+        const transferCreditLimits = cfg?.transferCreditLimits ?? null;
+
+        // Phase E — degree total + GPA floor come from the DPR cumulative
+        // block FIRST (per-student, authoritative, already specialized to
+        // the student's school + catalog year), falling back to the
+        // authored config only when the DPR omits the field.
+        const totalCreditsRequired = dpr?.creditsRequired ?? cfg?.totalCreditsRequired ?? null;
+        const overallGpaMin = dpr?.cumulativeGpaRequired ?? cfg?.overallGpaMin ?? null;
+        const capsSource = dpr ? (cfg ? "dpr+config" : "dpr") : "config";
 
         const result: {
             schoolId: string;
@@ -70,19 +86,30 @@ export const getCreditCapsTool = buildTool({
             crossSchoolCaps: typeof creditCaps;
             transferCreditLimits: typeof transferCreditLimits;
             totalCreditsRequired: number | null;
-            overallGpaMin: number;
+            overallGpaMin: number | null;
+            // Phase E — caps the DPR carries per-student (school-agnostic).
+            residencyRequired: number | null;
+            passFailCapUnits: number | null;
+            outsideHomeCapUnits: number | null;
+            timeLimitYears: number | null;
+            capsSource: string;
             suggestedFollowUps?: SuggestedFollowUp[];
         } = {
-            schoolId: cfg.schoolId,
-            schoolName: cfg.name,
+            schoolId: cfg?.schoolId ?? student.homeSchool,
+            schoolName: cfg?.name ?? schoolDisplayName(student.homeSchool),
             perSemesterCeiling,
-            f1FullTimeFloor: isF1 ? (cfg.f1FullTimeMinCredits ?? DEFAULT_F1_FULLTIME_MIN_CREDITS) : null,
+            f1FullTimeFloor: isF1 ? (cfg?.f1FullTimeMinCredits ?? DEFAULT_F1_FULLTIME_MIN_CREDITS) : null,
             visaStatus: student.visaStatus ?? "domestic",
             overloadRequirements,
             crossSchoolCaps: creditCaps,
             transferCreditLimits,
-            totalCreditsRequired: cfg.totalCreditsRequired,
-            overallGpaMin: cfg.overallGpaMin,
+            totalCreditsRequired,
+            overallGpaMin,
+            residencyRequired: dpr?.residencyRequired ?? null,
+            passFailCapUnits: dpr?.passFailCapUnits ?? null,
+            outsideHomeCapUnits: dpr?.outsideHomeCapUnits ?? null,
+            timeLimitYears: dpr?.timeLimitYears ?? null,
+            capsSource,
         };
 
         // Phase 12.5 Task 5 — when DPR is loaded, the bulletin + OGS policy
@@ -127,7 +154,23 @@ export const getCreditCapsTool = buildTool({
         if (out.totalCreditsRequired !== null) {
             lines.push(`Degree total: ${out.totalCreditsRequired} credits required`);
         }
-        lines.push(`Overall GPA min: ${out.overallGpaMin}`);
+        if (out.overallGpaMin !== null) {
+            lines.push(`Overall GPA min: ${out.overallGpaMin}`);
+        }
+        // Phase E — per-student caps the DPR carries (school-agnostic).
+        if (out.residencyRequired !== null) {
+            lines.push(`Residency required: ${out.residencyRequired} credits in residence`);
+        }
+        if (out.passFailCapUnits !== null) {
+            lines.push(`Pass/Fail career cap: ${out.passFailCapUnits} units`);
+        }
+        if (out.outsideHomeCapUnits !== null) {
+            lines.push(`Outside-home-school cap: ${out.outsideHomeCapUnits} units`);
+        }
+        if (out.timeLimitYears !== null) {
+            lines.push(`Degree time limit: ${out.timeLimitYears} years`);
+        }
+        lines.push(`(caps source: ${out.capsSource})`);
         return lines.join("\n");
     },
     // Phase 7-B Step 15 — verbatim text the LLM must include

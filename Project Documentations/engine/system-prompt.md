@@ -20,7 +20,7 @@ flowchart LR
 
 This module builds the **system prompt** — the long instruction block the LLM sees before every turn. It is constructed fresh per request from a `SystemPromptOptions` bag.
 
-> **Reality check — the ROLE line is CAS-pinned.** The prompt opens with a hardcoded role declaration: `"You are NYU Path, an AI academic adviser for NYU College of Arts & Science."` (`systemPrompt.ts:219-220`). This string is a literal — it does **not** interpolate the student's `homeSchool`. The product is *intended* for all NYU undergraduate schools, and most of the spine is school-agnostic (home school is read from the DPR, `schoolConfig` is loaded per school, the policy RAG corpus covers every undergrad school). But this ROLE line is one of the concrete spots where the system is still pinned to CAS: a Stern or Tandon student is told the adviser is "for NYU College of Arts & Science." De-pinning it is a one-line change (interpolate the home-school label), not a redesign — but as written it is a CAS-first artifact.
+> **Fixed (improvement plan, Phase E) — the ROLE line is now school-aware.** The prompt previously opened with a hardcoded `"...an AI academic adviser for NYU College of Arts & Science."` that did not interpolate `homeSchool`, so a Stern or Tandon student was told the adviser was "for CAS." Phase E interpolates the student's school via `schoolDisplayName(opts.student.homeSchool)` (`data/schoolDefaults.ts`): a Stern student now reads "...for NYU Stern School of Business," and with no student loaded it falls back to a generic "...for NYU." (never asserting a school it can't confirm). The prompt also adds an explicit "never assume CAS — advise per THIS student's school/catalog/DPR" instruction.
 
 The prompt has three sections, assembled in order:
 
@@ -200,7 +200,7 @@ The block ends with three behavior rules:
 
 ```mermaid
 flowchart TD
-    OPTS[SystemPromptOptions] --> ROLE["ROLE block:<br/>You are NYU Path…<br/>(hardcoded 'College of Arts &amp; Science'<br/>— CAS pin, not interpolated)"]
+    OPTS[SystemPromptOptions] --> ROLE["ROLE block:<br/>You are NYU Path…<br/>(school name interpolated from<br/>homeSchool — Phase E, de-CAS)"]
     ROLE --> CORE[8 core static rules]
     CORE --> ROUT[TOOL ROUTING paragraph]
     ROUT --> PREF[PREFERENCE EXTRACTION:<br/>Tier-A mappings]
