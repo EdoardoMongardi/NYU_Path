@@ -76,7 +76,36 @@ packages/engine/src/**/*.js
 packages/engine/src/**/*.js.map
 packages/engine/src/**/*.d.ts
 packages/engine/src/**/*.d.ts.map
+# Same stale tsc-emit artifacts in the rest of the TS-source tree
+# (noEmit:true means none of these should ever be tracked).
+packages/engine/tests/**/*.js
+packages/engine/tests/**/*.js.map
+packages/engine/tests/**/*.d.ts
+packages/engine/tests/**/*.d.ts.map
+packages/engine/scripts/**/*.js
+packages/engine/scripts/**/*.js.map
+packages/engine/scripts/**/*.d.ts
+packages/engine/scripts/**/*.d.ts.map
+apps/cli/src/**/*.js
+apps/cli/src/**/*.js.map
+apps/cli/src/**/*.d.ts
+apps/cli/src/**/*.d.ts.map
+apps/web/*.js
+apps/web/*.js.map
+apps/web/*.d.ts
+apps/web/*.d.ts.map
+evals/**/*.js
+evals/**/*.js.map
+evals/**/*.d.ts
+evals/**/*.d.ts.map
 tsconfig.tsbuildinfo
+
+# Python bytecode cache (e.g. tools/bulletin-scraper)
+__pycache__/
+*.pyc
+
+# Claude Code local tooling / session state
+.claude/
 
 # apps/web/.env.local is a copy of the repo-root .env.local for
 # Next.js (which loads from its own cwd, not the monorepo root).
