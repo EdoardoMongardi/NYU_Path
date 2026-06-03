@@ -193,7 +193,17 @@ function deriveHomeSchool(report: DegreeProgressReport): string {
     if (programLabels.includes("gallatin") || programLabels.includes("individualized")) return "gallatin";
     if (programLabels.includes("liberal studies")) return "liberal_studies";
     if (programLabels.includes("sps") || programLabels.includes("professional studies")) return "sps";
-    return "cas"; // safe default for cohort A
+    // Phase E (de-CAS) — no school indicator matched. Don't SILENTLY assert
+    // CAS: warn (telemetry) so an operator sees the derivation was a guess.
+    // The home school should ideally be confirmed at onboarding rather than
+    // inferred from DPR program labels; non-CAS support is best-effort until
+    // then. We still return a functioning default so scope/audit work.
+    console.warn(
+        "[buildSession] deriveHomeSchool: no school indicator matched the DPR program " +
+        `labels (${programLabels.slice(0, 120)}); falling back to "cas". If this student ` +
+        "is not CAS, set their home school explicitly via onboarding.",
+    );
+    return "cas";
 }
 
 function deriveCatalogYear(report: DegreeProgressReport): string {

@@ -79,7 +79,7 @@ describe("get_credit_caps tool (Phase 6 WS7b)", () => {
         expect(out.visaStatus).toBe("f1");
     });
 
-    it("rejects when no schoolConfig is loaded", async () => {
+    it("rejects only when NEITHER a schoolConfig NOR a DPR is loaded (Phase E)", async () => {
         const session: ToolSession = {
             student: {
                 id: "u1",
@@ -92,7 +92,9 @@ describe("get_credit_caps tool (Phase 6 WS7b)", () => {
         const v = await getCreditCapsTool.validateInput!({}, ctx(session));
         expect(v.ok).toBe(false);
         if (v.ok) return;
-        expect(v.userMessage).toMatch(/school config not loaded/i);
+        // Phase E — message generalized: the tool is DPR-first and only
+        // refuses when there is no source for any cap at all.
+        expect(v.userMessage).toMatch(/no school config or dpr/i);
     });
 
     it("summarizeResult includes the F-1 floor only when applicable", async () => {
