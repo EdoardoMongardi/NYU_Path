@@ -241,11 +241,11 @@ Type `EnvelopeConfidence = "high" | "medium" | "low" | "uncertain"` (imported fr
 | Result shape | Envelope confidence |
 |---|---|
 | `kind === "escalate"` | `"uncertain"` plus a `policy_no_match_no_fabrication` disclaimer |
-| `kind === "rag"` and `result.confidence < 0.5` (i.e. numeric, not band) | `"low"` plus a `policy_low_confidence_no_fabrication` disclaimer |
-| `kind === "rag"` and `0.5 <= result.confidence < 0.7` | `"medium"` |
+| `kind === "rag"` and `result.topScore < 0.5` | `"low"` plus a `policy_low_confidence_no_fabrication` disclaimer |
+| `kind === "rag"` and `0.5 <= result.topScore < 0.7` | `"medium"` |
 | anything else (template OR high-confidence rag) | `"high"` |
 
-Note the mismatch between the numeric thresholds: the RAG band gating uses `topScore` against `bands.high / bands.medium`, while the envelope re-checks `result.confidence` against literal `0.5` and `0.7` (`searchPolicy.ts:136-148`). For the LocalLexical defaults the bands are aligned in practice; for Cohere the envelope's literal cutoffs are stricter than the RAG band thresholds in one region (`0.6-0.7` is RAG-medium but envelope-medium).
+> **Fixed (improvement plan, Phase D).** This table previously read `result.confidence < 0.5`, where `result.confidence` is a band **string** (`"high"`/`"medium"`) — comparing a string to a number is always false in JS, so the `low` and `medium` envelope branches **never fired**: search_policy could only ever emit `"high"` or `"uncertain"`. Phase D exposes the numeric `result.topScore` from `policySearch` and bands the envelope on **that**, so a weak-but-present RAG hit now correctly ships as a low/medium-confidence, adviser-caveated estimate. (The fix also cleared 3 standing TypeScript errors in `searchPolicy.ts`.)
 
 ### 6.3 Anti-hallucination disclaimers
 
@@ -291,6 +291,7 @@ PolicySearchResult + envelope:
     }
     rerankScore: number in [0, 1]
   confidence: "high" | "medium" | "low"   (RAG band, three-state)
+  topScore: number in [0, 1]              (Phase D — numeric top rerank score the band came from; 0 on no-hit/template-only paths)
   scopedSchools: string[]                 (e.g. ["cas", "all", "stern"])
   overrideTriggered: boolean              (true if an explicit school name flipped scope)
   candidateCount: integer                 (chunks after scope filter, before rerank cap)
@@ -427,9 +428,9 @@ The tool inherits the default `outputMode: "synthesis"` from `buildTool` (`tool.
 
 When top rerank score is below `bands.medium`, `policySearch.ts:186-191` returns `kind: "escalate"`. The envelope adds the `uncertain` disclaimer. When a template also matched, the template overrides escalation (`policySearch.ts:199-211`) and confidence is forced to `"high"`.
 
-### 11.5 Medium-confidence RAG (and the envelope mismatch)
+### 11.5 Medium-confidence RAG (envelope is finer-grained than the RAG band)
 
-If RAG returns `confidence` band `"medium"` but the **numeric** top score is < 0.5, the envelope still labels it `"low"` (`searchPolicy.ts:136-145`). This can disagree with the RAG band on the lexical reranker around the 0.3-0.5 region: the RAG result says "medium", the envelope says "low" plus a low-confidence disclaimer. The envelope's word wins downstream because of the spread-then-overwrite at `searchPolicy.ts:156`.
+Phase D bands the envelope on the numeric `result.topScore`, so it is intentionally **finer-grained** than the three-state RAG band: a RAG `"medium"` (topScore in `0.3–0.6`) splits into envelope `"low"` (`topScore < 0.5`, with a low-confidence disclaimer) vs envelope `"medium"` (`0.5 ≤ topScore < 0.7`). The envelope's word wins downstream because of the spread-then-overwrite at the end of `searchPolicy.call`. (Before Phase D this comparison was against the band string and silently never fired — see the §6.2 fix note.)
 
 ### 11.6 Context-pronoun queries
 
