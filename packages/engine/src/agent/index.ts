@@ -17,6 +17,7 @@ export {
     checkTransferEligibilityTool,
     whatIfAuditTool,
     searchPolicyTool,
+    getProgramRequirementsTool,
     updateProfileTool,
     confirmProfileUpdateTool,
     getCreditCapsTool,
