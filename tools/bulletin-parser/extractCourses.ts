@@ -195,6 +195,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
 const BULLETIN_DIR = join(REPO_ROOT, "data/bulletin-raw/courses");
 const OUTPUT_PATH = join(REPO_ROOT, "packages/engine/src/data/courses.json");
+// Step 8d PR-2 — off-catalog (graduate/professional) credit sidecar. Lets the
+// solver resolve an explicit student PIN of a non-undergrad course to real
+// bulletin credits instead of dropping it. NOT loaded for auto-planning.
+const OFF_CATALOG_PATH = join(REPO_ROOT, "packages/engine/src/data/off-catalog-credits.json");
+
+interface OffCatalogEntry {
+    title: string;
+    credits: number;
+    creditsMin: number;
+    creditsMax: number;
+}
 
 export function main(): void {
     // Overlay source: the existing courses.json. Preserves the handful of
@@ -210,6 +221,7 @@ export function main(): void {
     for (const c of prior) overlay.set(c.id, c);
 
     const byId = new Map<string, Course>();
+    const offCatalog = new Map<string, OffCatalogEntry>();
     let deptFiles = 0;
     let parsedCount = 0;
     let keptUndergrad = 0;
@@ -230,6 +242,15 @@ export function main(): void {
         for (const pc of parseCoursesFromMarkdown(content)) {
             parsedCount++;
             if (!isUndergradCourseId(pc.id)) {
+                // Off-catalog (grad/professional): credits-only sidecar for pin resolution.
+                if (!offCatalog.has(pc.id)) {
+                    offCatalog.set(pc.id, {
+                        title: pc.title,
+                        credits: pc.credits,
+                        creditsMin: pc.creditsMin,
+                        creditsMax: pc.creditsMax,
+                    });
+                }
                 skippedNonUndergrad++;
                 continue;
             }
@@ -249,6 +270,12 @@ export function main(): void {
     const carriedStubOnly = courses.length - bulletinCourses.length;
     writeFileSync(OUTPUT_PATH, JSON.stringify(courses, null, 2) + "\n");
 
+    const offCatalogObj: Record<string, OffCatalogEntry> = {};
+    for (const id of [...offCatalog.keys()].sort((a, b) => a.localeCompare(b))) {
+        offCatalogObj[id] = offCatalog.get(id)!;
+    }
+    writeFileSync(OFF_CATALOG_PATH, JSON.stringify(offCatalogObj, null, 2) + "\n");
+
     console.log(`Wrote ${OUTPUT_PATH}`);
     console.log(`  Dept _index.md read:    ${deptFiles}`);
     console.log(`  Course headers parsed:  ${parsedCount}`);
@@ -257,6 +284,8 @@ export function main(): void {
     console.log(`  Duplicate ids skipped:  ${dupes}`);
     console.log(`  Prior-only carried:     ${carriedStubOnly}`);
     console.log(`  Total written:          ${courses.length}`);
+    console.log(`Wrote ${OFF_CATALOG_PATH}`);
+    console.log(`  Off-catalog credits:    ${offCatalog.size} (grad/professional, for pin resolution)`);
 }
 
 // Only run when invoked directly (e.g. `npx tsx tools/bulletin-parser/extractCourses.ts`),

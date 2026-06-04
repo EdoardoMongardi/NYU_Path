@@ -775,14 +775,29 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             });
             continue;
         }
-        const meta = input.courseCatalog.get(pin.courseId);
+        // Step 8d PR-2 — soften the off-catalog pin path. An explicit
+        // student pin is honored even when the course isn't in the
+        // undergraduate planning catalog: resolve real credits from the
+        // bulletin (off-catalog/graduate courses), else place at 0 credits
+        // (never a guessed nonzero) with a "verify in Albert" caveat. Never
+        // silently drop. Auto-planning (candidate placement below) is
+        // unchanged — it still only places catalog courses.
+        let meta = input.courseCatalog.get(pin.courseId);
+        let pinCaveat: string | null = null;
         if (!meta) {
-            violations.push({
-                kind: "other",
-                course: pin.courseId,
-                detail: `Pinned course ${pin.courseId} not in catalog.`,
-            });
-            continue;
+            const offCatalog = input.offCatalogCredits?.get(pin.courseId);
+            if (offCatalog) {
+                meta = offCatalog;
+                pinCaveat =
+                    `${pin.courseId} is outside the undergraduate planning catalog ` +
+                    `(graduate/professional) — verify credits and eligibility in Albert.`;
+            } else {
+                meta = { title: pin.courseId, credits: 0 };
+                pinCaveat =
+                    `${pin.courseId} isn't in the current NYU bulletin — it may be ` +
+                    `discontinued or renumbered (e.g. an old course number). Verify the ` +
+                    `current course in Albert.`;
+            }
         }
         const offered = input.offerings.get(pin.courseId);
         const seasonOnly = (parseTerm(pin.term)?.season ?? "fall") as "fall" | "spring";
@@ -834,7 +849,7 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             title: meta.title,
             credits: meta.credits,
             satisfiesRules: [],
-            reason: `Pinned by student preference to ${pin.term}.`,
+            reason: `Pinned by student preference to ${pin.term}.${pinCaveat ? ` ${pinCaveat}` : ""}`,
             rationale: pinRationale,
             flexibility: pinFlexibility,
             downstreamImpact: pinDownstream,

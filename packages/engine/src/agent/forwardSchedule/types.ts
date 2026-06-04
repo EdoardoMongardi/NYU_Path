@@ -117,6 +117,16 @@ export interface SolverInput {
     offeringConfidence: Map<string, ConfidenceTier>;
     /** Course metadata: title + credits, indexed by courseId. */
     courseCatalog: Map<string, { title: string; credits: number }>;
+    /**
+     * Step 8d PR-2 — bulletin credits for courses OUTSIDE the undergraduate
+     * planning catalog (graduate/professional). Used only to resolve an
+     * explicit student PIN of an off-catalog course (e.g. an advanced
+     * undergrad pinning a grad course) so it places with real credits + a
+     * "verify in Albert" caveat instead of being dropped. Auto-planning
+     * never consults this. Absent → off-catalog pins fall to the 0-credit
+     * "may be discontinued/renumbered" caveat path.
+     */
+    offCatalogCredits?: Map<string, { title: string; credits: number }>;
     /** DPR.courseHistory hash for downstream reconciliation (Task 4). */
     dprCourseHistoryHash: string;
     /** DPR for prereq-satisfaction queries (Decision #4 helper). */
