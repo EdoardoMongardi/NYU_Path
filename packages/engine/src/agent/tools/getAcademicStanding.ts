@@ -57,6 +57,7 @@ export const getAcademicStandingTool = buildTool({
             student.coursesTaken,
             declaredCount,
             session.schoolConfig ?? null,
+            session.degreeProgressReport?.cumulative.cumulativeGpaRequired ?? null,
         );
         return {
             cumulativeGPA: standing.cumulativeGPA,
@@ -66,7 +67,7 @@ export const getAcademicStandingTool = buildTool({
             completionRate: standing.completionRate,
             message: standing.message,
             warnings: standing.warnings,
-            schoolFloor: session.schoolConfig?.overallGpaMin ?? null,
+            schoolFloor: session.degreeProgressReport?.cumulative.cumulativeGpaRequired ?? null,
         };
     },
     summarizeResult(out) {

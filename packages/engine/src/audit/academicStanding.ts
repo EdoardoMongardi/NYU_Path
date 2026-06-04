@@ -114,6 +114,13 @@ export function calculateStanding(
     coursesTaken: CourseTaken[],
     semestersCompleted: number = 0,
     schoolConfig: SchoolConfig | null = null,
+    /**
+     * The student's DPR-required cumulative GPA (`dpr.cumulative.cumulativeGpaRequired`).
+     * This is the per-student authoritative flat GPA floor; schoolConfig no
+     * longer carries `overallGpaMin`. A per-semester `gpaTierTable` (config)
+     * still supersedes it when present. Falls back to CAS 2.0 when absent.
+     */
+    dprGpaRequired: number | null = null,
 ): StandingResult {
     const warnings: string[] = [];
 
@@ -186,7 +193,7 @@ export function calculateStanding(
     // GPA table (e.g., Tandon L287-300), the active tier supersedes the
     // flat `overallGpaMin`. Tier lookup: largest row whose semestersCompleted
     // is ≤ the student's semestersCompleted; null = open-ended ">N" tier.
-    const flatGpaMin = schoolConfig?.overallGpaMin ?? CAS_DEFAULTS.overallGpaMin;
+    const flatGpaMin = dprGpaRequired ?? CAS_DEFAULTS.overallGpaMin;
     const gpaMin = resolveTieredGpaMin(schoolConfig?.gpaTierTable, semestersCompleted) ?? flatGpaMin;
     const dismissalThreshold = CAS_DEFAULTS.completionRate.dismissalThreshold;
     const dismissalAfter = CAS_DEFAULTS.completionRate.dismissalAfterSemesters;

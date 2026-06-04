@@ -17,7 +17,6 @@
   "courseSuffix": [
     "-UH"
   ],
-  "overallGpaMin": 2.0,
   "residency": {
     "type": "suffix_based",
     "suffix": "-UH",
@@ -74,15 +73,6 @@
   },
   "spsPolicy": {
     "allowed": false
-  },
-  "doubleCounting": {
-    "defaultMajorToMajor": null,
-    "defaultMajorToMinor": null,
-    "defaultMinorToMinor": null,
-    "noTripleCounting": true,
-    "requiresDepartmentApproval": true,
-    "overrideByProgram": true,
-    "note": "NYUAD double-counting is governed by uniqueness floors, not a fixed double-count count: each of two majors must include >=30 credits not counted toward the other major, and each minor must include >=2 courses not counted toward any other major or minor. No individual course may count for more than one Core category, and Art/Design/Technology, Cultural Exploration & Analysis, Data & Discovery, and Structures of Thought & Society Core courses may not simultaneously count toward a major or minor (Islamic Studies, Quantitative Reasoning, and Experimental Inquiry may). Colloquia cannot be double counted. The numeric default* fields are inferred placeholders pending per-program modeling."
   },
   "transferCreditLimits": {
     "firstYearMaxTotal": 0,
