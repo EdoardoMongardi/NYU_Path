@@ -1,11 +1,16 @@
 // ============================================================
-// Default ToolRegistry — wires the 22 LIVE NYU Path tools
+// Default ToolRegistry — wires the 21 LIVE NYU Path tools
 // ============================================================
 // §7.1 tools (Phase 0–11):
-//   run_full_audit, check_transfer_eligibility, what_if_audit,
+//   run_full_audit, what_if_audit,
 //   search_policy, update_profile, confirm_profile_update,
 //   get_credit_caps, search_availability, get_academic_standing,
 //   check_overlap, search_courses
+// REMOVED (improvement plan — pure-RAG decommission):
+//   check_transfer_eligibility — the authored CAS→Stern transfer route
+//   (data/transfers/*.json) is gone; internal-transfer questions are now
+//   answered by `search_policy` over the bulletin's internal-transfer
+//   pages (which cover every school, not just the one hardcoded route).
 // Improvement-plan Phase B addition:
 //   get_program_requirements — whole-PAGE bulletin retrieval for a
 //   program/major/minor (every requirement section reassembled in
@@ -31,7 +36,6 @@
 // ============================================================
 import { ToolRegistry, type Tool } from "./tool.js";
 import { runFullAuditTool } from "./tools/runFullAudit.js";
-import { checkTransferEligibilityTool } from "./tools/checkTransferEligibility.js";
 import { whatIfAuditTool } from "./tools/whatIfAudit.js";
 import { searchPolicyTool } from "./tools/searchPolicy.js";
 import { getProgramRequirementsTool } from "./tools/getProgramRequirements.js";
@@ -57,7 +61,6 @@ import type { ZodTypeAny } from "zod";
 
 export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     runFullAuditTool as unknown as Tool<ZodTypeAny, unknown>,
-    checkTransferEligibilityTool as unknown as Tool<ZodTypeAny, unknown>,
     whatIfAuditTool as unknown as Tool<ZodTypeAny, unknown>,
     searchPolicyTool as unknown as Tool<ZodTypeAny, unknown>,
     getProgramRequirementsTool as unknown as Tool<ZodTypeAny, unknown>,
@@ -90,7 +93,6 @@ export function buildDefaultRegistry(): ToolRegistry {
 
 export {
     runFullAuditTool,
-    checkTransferEligibilityTool,
     whatIfAuditTool,
     searchPolicyTool,
     getProgramRequirementsTool,

@@ -40,7 +40,6 @@ import {
 } from "../../src/transcript/confirmationFlow.js";
 import { projectMultiSemester, nextSemesterAfter } from "../../src/planner/multiSemesterProjector.js";
 import { planExploratory } from "../../src/planner/explorePlanner.js";
-import { planForTransferPrep } from "../../src/planner/transferPrepPlanner.js";
 import { planMultiProgram } from "../../src/planner/crossProgramPlanner.js";
 
 // ============================================================
@@ -554,81 +553,6 @@ describe("Step 3E — planExploratory (undeclared student)", () => {
             { targetSemester: "2025-fall", maxCourses: 4, maxCredits: 16 },
             cas,
             programs,
-        );
-        expect("kind" in r && r.kind === "unsupported").toBe(true);
-    });
-});
-
-// ============================================================
-// Step 3F — Transfer-prep mode
-// ============================================================
-describe("Step 3F — planForTransferPrep (CAS → Stern)", () => {
-    const courses = loadCourses();
-    const prereqs = loadPrereqs();
-    const cas = loadSchoolConfig("cas");
-    const csBA = loadProgram("cs_major_ba", "2023")!;
-
-    it("CAS student missing micro for Stern junior transfer → suggestion reason flags transfer-prereq", () => {
-        const student: StudentProfile = {
-            id: "tprep1",
-            catalogYear: "2023",
-            homeSchool: "cas",
-            declaredPrograms: [{ programId: "cs_major_ba", programType: "major" }],
-            coursesTaken: [
-                { courseId: "MATH-UA 121", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "EXPOS-UA 1", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "MATH-UA 235", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "ACCT-UB 1", grade: "A", semester: "2024-fall", credits: 4 },
-                // 64+ credits to be a junior; pad with electives
-                { courseId: "CSCI-UA 101", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "CSCI-UA 102", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CORE-UA 400", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CORE-UA 500", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CORE-UA 700", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CSCI-UA 201", grade: "A", semester: "2025-fall", credits: 4 },
-                { courseId: "CSCI-UA 202", grade: "A", semester: "2025-fall", credits: 4 },
-                { courseId: "CSCI-UA 310", grade: "A", semester: "2025-fall", credits: 4 },
-                { courseId: "MATH-UA 120", grade: "A", semester: "2025-fall", credits: 4 },
-                { courseId: "CSCI-UA 421", grade: "A", semester: "2025-fall", credits: 4 },
-                { courseId: "CSCI-UA 444", grade: "A", semester: "2025-fall", credits: 4 },
-                { courseId: "CSCI-UA 467", grade: "A", semester: "2026-spring", credits: 4 },
-            ],
-        };
-        const r = planForTransferPrep(
-            student,
-            csBA,
-            "stern",
-            courses,
-            prereqs,
-            { targetSemester: "2026-fall", maxCourses: 5, maxCredits: 18 },
-            cas,
-        );
-        expect("kind" in r && r.kind === "unsupported").toBe(false);
-        if ("kind" in r) return;
-        expect(r.transferDecision.status).toBe("not_yet_eligible");
-        expect(r.deadlineWarnings.some(w => w.includes("March 1"))).toBe(true);
-        expect(r.missingPrereqsAsCourses.some(m => m.category === "microeconomics")).toBe(true);
-    });
-
-    it("CAS → 'tisch' (no transfer file authored) → unsupported with NYU-wide policy notes", () => {
-        const student: StudentProfile = {
-            id: "tprep2",
-            catalogYear: "2023",
-            homeSchool: "cas",
-            declaredPrograms: [{ programId: "cs_major_ba", programType: "major" }],
-            coursesTaken: [
-                { courseId: "MATH-UA 121", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "EXPOS-UA 1", grade: "A", semester: "2024-fall", credits: 4 },
-            ],
-        };
-        const r = planForTransferPrep(
-            student,
-            csBA,
-            "tisch",
-            courses,
-            prereqs,
-            { targetSemester: "2025-fall", maxCourses: 4, maxCredits: 16 },
-            cas,
         );
         expect("kind" in r && r.kind === "unsupported").toBe(true);
     });

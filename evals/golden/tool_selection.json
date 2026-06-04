@@ -94,14 +94,13 @@
         {
             "id": "tool-006-transfer-to-stern",
             "userMessage": "I'm in CAS now but I want to move over to Stern. Walk me through what that takes.",
-            "expectedToolName": "check_transfer_eligibility",
+            "expectedToolName": "search_policy",
             "expectedArgsShape": {
                 "type": "object",
-                "required": ["targetSchool"],
+                "required": ["query"],
                 "properties": {
-                    "targetSchool": {
-                        "type": "string",
-                        "const": "stern"
+                    "query": {
+                        "type": "string"
                     }
                 }
             }
@@ -109,14 +108,13 @@
         {
             "id": "tool-007-transfer-to-tandon",
             "userMessage": "What would I need to switch into Tandon for engineering?",
-            "expectedToolName": "check_transfer_eligibility",
+            "expectedToolName": "search_policy",
             "expectedArgsShape": {
                 "type": "object",
-                "required": ["targetSchool"],
+                "required": ["query"],
                 "properties": {
-                    "targetSchool": {
-                        "type": "string",
-                        "const": "tandon"
+                    "query": {
+                        "type": "string"
                     }
                 }
             }

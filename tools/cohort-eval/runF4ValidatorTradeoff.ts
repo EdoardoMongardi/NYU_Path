@@ -77,7 +77,7 @@ interface ProposedRule {
 const PROPOSED_INVOCATION_RULES: ProposedRule[] = [
     {
         triggers: [/\binternal[- ]transfer\b/i, /\btransfer to (?:cas|stern|tandon|tisch|steinhardt)\b/i, /\bswitch (?:my )?school\b/i],
-        requiresAnyOf: ["check_transfer_eligibility"],
+        requiresAnyOf: ["search_policy"],
         description: "internal transfer mention",
     },
 ];
@@ -260,7 +260,7 @@ const TEST_CASES: TestCase[] = [
         expectFire: false,
         rationale:
             "The reply explicitly disclaims internal-transfer relevance. Validator should NOT require " +
-            "check_transfer_eligibility or the GPA-not-published caveat.",
+            "search_policy or the GPA-not-published caveat.",
     },
     {
         id: "neg02",
@@ -280,9 +280,9 @@ const TEST_CASES: TestCase[] = [
         assistantText:
             "An internal transfer to Stern Finance is possible if you meet the GPA bar. " +
             "Your GPA is 3.402.",
-        invocations: [fakeAuditInvocation], // NOTE: no check_transfer_eligibility
+        invocations: [fakeAuditInvocation], // NOTE: no search_policy
         expectFire: true,
-        rationale: "Real internal transfer claim without check_transfer_eligibility AND no GPA-not-published caveat.",
+        rationale: "Real internal transfer claim without search_policy AND no GPA-not-published caveat.",
     },
 
     // ---------- VERBATIM RELEVANCE CASES ----------

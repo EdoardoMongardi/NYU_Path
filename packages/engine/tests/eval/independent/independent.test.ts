@@ -15,7 +15,6 @@ import { describe, it, expect } from "vitest";
 import type { Course, Program, StudentProfile, SchoolConfig } from "@nyupath/shared";
 import { degreeAudit } from "../../../src/audit/degreeAudit.js";
 import { crossProgramAudit } from "../../../src/audit/crossProgramAudit.js";
-import { checkTransferEligibility } from "../../../src/audit/checkTransferEligibility.js";
 import { decideSpsEnrollment } from "../../../src/audit/spsEnrollmentGuard.js";
 import { calculateStanding } from "../../../src/audit/academicStanding.js";
 import { loadCourses, loadProgram, loadSchoolConfig } from "../../../src/dataLoader.js";
@@ -154,16 +153,6 @@ const PROFILE_3_STERN_ELIGIBLE: StudentProfile = {
     visaStatus: "domestic",
 };
 
-const PROFILE_4_MISSING_MICRO: StudentProfile = {
-    ...PROFILE_3_STERN_ELIGIBLE,
-    id: "synthetic-cas-junior-missing-micro",
-    coursesTaken: PROFILE_3_STERN_ELIGIBLE.coursesTaken.map((c) =>
-        c.courseId === "ECON-UA 2"
-            ? { ...c, courseId: "ECON-UA 1" } // swap micro for macro
-            : c,
-    ),
-};
-
 const PROFILE_5_PF_OVERCAP: StudentProfile = {
     id: "synthetic-cas-pf-overcap",
     catalogYear: "2023",
@@ -264,31 +253,6 @@ describe("Independent fixtures — bulletin-derived expectations", () => {
             expect(calc?.status).toBe("satisfied");
         });
 
-        it("checkTransferEligibility(stern): not_yet_eligible due to missing micro/stats/financial accounting", () => {
-            const d = checkTransferEligibility(s, "stern");
-            // Stern admissions L132-136: junior prereqs include micro, stats, financial accounting.
-            // Student has ECON-UA 1 (macro), no ACCT-UB, no completed stats.
-            expect(d.status).toBe("not_yet_eligible");
-            if (d.status === "not_yet_eligible" || d.status === "eligible") {
-                const cats = d.missingPrereqs.map((p) => p.category);
-                expect(cats).toContain("microeconomics");
-                expect(cats).toContain("financial_accounting");
-                expect(cats).toContain("statistics");
-            }
-        });
-
-        it("checkTransferEligibility(stern): writing prereq satisfied (EXPOS-UA 5 = Writing the Essay)", () => {
-            const d = checkTransferEligibility(s, "stern");
-            // Stern admissions L133: "1 semester of writing/composition". Bulletin says nothing about course numbers.
-            // EXPOS-UA 5 is "Writing the Essay: Art in the World" — clearly a writing course.
-            if (d.status === "not_yet_eligible" || d.status === "eligible") {
-                const writing = d.prereqStatus.find((p) => p.category === "writing_composition");
-                expect(writing?.satisfied).toBe(true);
-            } else {
-                throw new Error("expected eligible/not_yet_eligible");
-            }
-        });
-
         it("decideSpsEnrollment: CSCI-UA 102 is not an SPS course → allowed", () => {
             const d = decideSpsEnrollment("CSCI-UA 102", casCfg);
             // spsEnrollmentGuard contract: only -UC/-CE suffixes are SPS.
@@ -325,13 +289,6 @@ describe("Independent fixtures — bulletin-derived expectations", () => {
             expect(new Set(core?.coursesRemaining ?? [])).toEqual(new Set(["CSCI-UA 202", "CSCI-UA 310"]));
         });
 
-        it("checkTransferEligibility(stern): sophomore-eligible (has calc + writing)", () => {
-            const d = checkTransferEligibility(s, "stern");
-            // Stern admissions L125-128: sophomore prereqs = calc (MATH-UA 121 ✓) + writing (EXPOS-UA 1 ✓).
-            // 48 credits ≥ 32 minCreditsCompleted. NOT yet 64+ so should NOT be junior.
-            expect(d.status === "eligible" || d.status === "not_yet_eligible").toBe(true);
-        });
-
         it("calculateStanding: cumulative GPA ≈ 3.50", () => {
             const r = calculateStanding(s.coursesTaken, 3, casCfg);
             expect(r.cumulativeGPA).toBeGreaterThan(3.40);
@@ -344,36 +301,10 @@ describe("Independent fixtures — bulletin-derived expectations", () => {
     describe("Profile 3 — CAS junior nearly Stern-eligible", () => {
         const s = PROFILE_3_STERN_ELIGIBLE;
 
-        it("checkTransferEligibility(stern): eligible, no missing junior prereqs", () => {
-            const d = checkTransferEligibility(s, "stern");
-            // Stern admissions L132-136: junior prereqs = calc + writing + stats + fin accounting + micro.
-            // Student has all five via MATH-UA 121, EXPOS-UA 1, MATH-UA 235, ACCT-UB 1, ECON-UA 2.
-            expect(d.status).toBe("eligible");
-            if (d.status === "eligible") {
-                expect(d.entryYear).toBe("junior");
-                expect(d.missingPrereqs).toHaveLength(0);
-            }
-        });
-
         it("calculateStanding: GPA ≥ 3.5 (all grades A-/B+/A)", () => {
             const r = calculateStanding(s.coursesTaken, 4, casCfg);
             expect(r.cumulativeGPA).toBeGreaterThan(3.5);
             expect(r.level).toBe("good_standing");
-        });
-    });
-
-    // ---------- Profile 4: missing exactly micro ----------
-    describe("Profile 4 — missing exactly microeconomics", () => {
-        const s = PROFILE_4_MISSING_MICRO;
-
-        it("checkTransferEligibility(stern): not_yet_eligible, only micro missing", () => {
-            const d = checkTransferEligibility(s, "stern");
-            // Stern admissions L132-136: micro required. ECON-UA 1 is macro.
-            expect(d.status).toBe("not_yet_eligible");
-            if (d.status === "not_yet_eligible" || d.status === "eligible") {
-                expect(d.missingPrereqs).toHaveLength(1);
-                expect(d.missingPrereqs[0]?.category).toBe("microeconomics");
-            }
         });
     });
 

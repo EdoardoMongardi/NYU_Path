@@ -193,7 +193,6 @@ const TIER2_ESTIMATE_TOOLS = new Set([
     "search_policy",
     "get_program_requirements",
     "what_if_audit",
-    "check_transfer_eligibility",
 ]);
 
 /** Markers a Tier-2 tool's summary carries when its result is a
@@ -365,10 +364,14 @@ const INVOCATION_RULES: InvocationRule[] = [
         description: "Reply makes a planning recommendation; this requires `plan_forward_degree` (or `view_forward_plan` if the plan was built earlier this session).",
     },
     {
+        // Internal-transfer claims must be grounded in a bulletin
+        // retrieval. The authored `check_transfer_eligibility` tool was
+        // removed (pure-RAG decommission); `search_policy` over the
+        // internal-transfer pages is now the grounding source.
         triggers: [/\binternal[- ]transfer\b/i, /\btransfer to (?:cas|stern|tandon|tisch|steinhardt)\b/i, /\bswitch (?:my )?school\b/i],
-        requiresAnyOf: ["check_transfer_eligibility"],
+        requiresAnyOf: ["search_policy"],
         description:
-            "Reply discusses an internal transfer; this requires `check_transfer_eligibility`.",
+            "Reply discusses an internal transfer; this requires `search_policy` (over the bulletin's internal-transfer pages).",
     },
     {
         // Hypothetical / what-if trigger. `propose_plan_change` (Phase 14)
@@ -471,14 +474,14 @@ const CAVEAT_RULES: CaveatRule[] = [
         ],
         description:
             "Internal-transfer GPA caveat required: 'GPA thresholds for internal " +
-            "transfer are not published' (§7.2 check_transfer_eligibility).",
+            "transfer are not published' (from the internal-transfer bulletin pages via search_policy).",
     },
     {
         id: "low_confidence_consult_adviser",
         // Phase D — fires when ANY Tier-2 estimate tool (search_policy,
-        // get_program_requirements, what_if_audit, check_transfer_
-        // eligibility) returned a non-high-confidence / estimate result
-        // this turn, not just search_policy. The reply must then direct
+        // get_program_requirements, what_if_audit) returned a
+        // non-high-confidence / estimate result this turn, not just
+        // search_policy. The reply must then direct
         // the student to consult their adviser. This is also the
         // interlock for the grounding exemption: a hedged Tier-2 estimate
         // that skips the grounding rule still has to carry this caveat.
