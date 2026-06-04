@@ -644,19 +644,11 @@ function deriveAuditEnvelope(input: AuditEnvelopeInput): EnvelopeMeta {
     const disclaimers: Disclaimer[] = [];
     const followUps: SuggestedFollowUp[] = [];
 
-    // Major-grade-rule disclaimers — sourced from school config's
-    // gradeThresholds + passFail.countsForMajor, NOT from a prose
-    // rule. When the schema lacks the data, we don't fabricate one.
+    // Major-rule disclaimer — sourced from school config's
+    // passFail.countsForMajor. The grade-threshold rule ("major needs a C")
+    // is a static bulletin fact answered via search_policy (Step 8e), not a
+    // hardcoded gradeThresholds field.
     if (input.hasMajorRequirementGap && input.school) {
-        const majorGrade = input.school.gradeThresholds?.major;
-        if (majorGrade) {
-            disclaimers.push({
-                id: "school_major_grade_threshold",
-                text: `A grade of ${majorGrade} or better is required in any course used to fulfill major requirements.`,
-                reason: "Your reply references an unsatisfied major requirement; the school's bulletin grade-threshold rule applies.",
-                bulletinSource: `data/schools/${input.school.schoolId}.json#gradeThresholds.major`,
-            });
-        }
         if (input.school.passFail && input.school.passFail.countsForMajor === false) {
             disclaimers.push({
                 id: "school_pf_no_major",

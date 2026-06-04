@@ -1,6 +1,4 @@
 // Engine barrel export
-export { validateCreditCaps } from "./audit/creditCapValidator.js";
-export { checkPassFailViolations } from "./audit/passfailGuard.js";
 export { calculateStanding, computeSemesterGPA } from "./audit/academicStanding.js";
 export { PrereqGraph } from "./graph/prereqGraph.js";
 export { EquivalenceResolver } from "./equivalence/equivalenceResolver.js";
