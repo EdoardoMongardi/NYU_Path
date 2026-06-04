@@ -45,3 +45,6 @@ export {
     buildCorpus,
 } from "./corpus.js";
 export type { BuildCorpusOptions, BuildCorpusResult } from "./corpus.js";
+
+export { withRetry, isRetryableApiError } from "./retry.js";
+export type { RetryOptions } from "./retry.js";

@@ -51,9 +51,19 @@ export type { AnthropicClientOptions } from "./anthropicClient.js";
 /** Defaults baked from MODEL_SELECTION.md.
  *  Phase 5 bakeoff: openai:gpt-4.1-mini primary.
  *  Phase 8 bakeoff (post-architectural-cleanup): swapped to
- *  anthropic:claude-haiku-4-5 primary; gpt-4.1-mini moved to fallback. */
+ *  anthropic:claude-haiku-4-5 primary; gpt-4.1-mini moved to fallback.
+ *  Phase 9 live RAG eval (pure-RAG corpus): Haiku proved RELIABLE on
+ *  clean single-topic policy but VARIABLE on hard multi-part policy
+ *  questions — e.g. a CAS major/minor double-counting question where it
+ *  flipped between the authoritative "two courses" rule and a stricter
+ *  wrong-department "one course" rule across runs, and needed up to 12
+ *  tool calls to converge. Sonnet answered the same questions reliably,
+ *  in ~3 tool calls, with richer correct nuance — on the IDENTICAL
+ *  corpus (so the gap is model capability, not retrieval). For an
+ *  advising tool where wrong policy answers carry real consequences, the
+ *  primary is now claude-sonnet-4-6. Override via NYUPATH_PRIMARY_MODEL. */
 export const DEFAULT_PRIMARY_PROVIDER = "anthropic" as const;
-export const DEFAULT_PRIMARY_MODEL = "claude-haiku-4-5-20251001";
+export const DEFAULT_PRIMARY_MODEL = "claude-sonnet-4-6";
 export const DEFAULT_FALLBACK_PROVIDER = "openai" as const;
 export const DEFAULT_FALLBACK_MODEL = "gpt-4.1-mini";
 

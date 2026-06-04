@@ -302,9 +302,15 @@ export async function runAgentTurn(
                 role: "user",
                 content: "Continue from where you left off. Do not repeat earlier text.",
             };
+            // Preserve the text produced BEFORE truncation — the model
+            // continues from it, and the final reply must be the whole
+            // thing stitched together. (`textSoFar` already holds prior
+            // continuations on later loop iterations, so accumulation is
+            // automatic.)
+            const textSoFar = completionResult.completion.text;
             const retryConv = [...conversation, {
                 role: "assistant" as const,
-                content: completionResult.completion.text,
+                content: textSoFar,
             }, continuation];
             completionResult = await callWithFallback(
                 client,
@@ -319,12 +325,14 @@ export async function runAgentTurn(
                 },
             );
             if (completionResult.ok) {
-                // Stitch the recovered text onto the original.
+                // Stitch the recovered continuation onto the text so far,
+                // so the caller receives the COMPLETE reply rather than
+                // only the post-truncation tail.
                 completionResult = {
                     ok: true,
                     completion: {
                         ...completionResult.completion,
-                        text: completionResult.completion.text,
+                        text: textSoFar + completionResult.completion.text,
                     },
                     usedClientId: completionResult.usedClientId,
                 };

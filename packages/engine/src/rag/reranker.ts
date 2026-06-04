@@ -16,6 +16,7 @@
 // ============================================================
 
 import type { VectorSearchHit } from "./vectorStore.js";
+import { withRetry } from "./retry.js";
 
 export interface Reranker {
     readonly modelId: string;
@@ -140,12 +141,16 @@ export class CohereReranker implements Reranker {
         });
 
         const client = this.injectedClient ?? (await this.lazyCohereClient());
-        const response = await client.rerank({
+        // Retry transient 429 / 5xx / network blips with backoff. A burst
+        // of RAG tool calls in one agent turn can trip Cohere's rate
+        // limit; without backoff the reranker error surfaced to the model
+        // mid-retrieval and it answered from partial results.
+        const response = await withRetry(() => client.rerank({
             model: this.model,
             query,
             documents,
             top_n: hits.length,
-        });
+        }));
 
         const out: RerankedHit[] = hits.map((h) => ({ ...h, rerankScore: 0 }));
         for (const r of response.results) {

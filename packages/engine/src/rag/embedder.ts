@@ -14,6 +14,8 @@
 // is the same, and the rest of the pipeline doesn't care.
 // ============================================================
 
+import { withRetry } from "./retry.js";
+
 export interface Embedder {
     /** Embedding dimensionality (must be constant) */
     readonly dim: number;
@@ -117,10 +119,13 @@ export class OpenAIEmbedder implements Embedder {
         const BATCH = 100;
         for (let i = 0; i < texts.length; i += BATCH) {
             const slice = texts.slice(i, i + BATCH);
-            const response = await client.embeddings.create({
+            // Retry transient 429 / 5xx / network blips with backoff so a
+            // burst of RAG tool calls in one agent turn doesn't surface a
+            // rate-limit error to the model mid-retrieval.
+            const response = await withRetry(() => client.embeddings.create({
                 model: this.model,
                 input: slice,
-            });
+            }));
             for (const row of response.data) {
                 const arr = new Float32Array(row.embedding);
                 out.push(l2Normalize(arr));
