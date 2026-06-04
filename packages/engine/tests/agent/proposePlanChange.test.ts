@@ -275,33 +275,10 @@ describe("confirmPlanChangeTool — applies change and routes per Decision #32",
     });
 
     it("routes infeasible result to session.studentDraftPlan (Decision #32)", async () => {
-        // Use a DPR that makes the plan infeasible: 1000 credits required, 0 earned.
+        // Pin to a term OUTSIDE the plan window → a hard constraint violation
+        // → the solver's coarse state is infeasible-draft, which Decision #32
+        // routes to studentDraftPlan (the last valid forwardSchedule is kept).
         const session = makeSession({
-            degreeProgressReport: makeDpr({
-                cumulative: {
-                    creditsRequired: 1000,
-                    creditsUsed: 0,
-                    cumulativeGpa: 3.4,
-                    cumulativeGpaRequired: 2.0,
-                    residencyRequired: null,
-                    residencyUsed: null,
-                    passFailUsedUnits: 0,
-                    passFailCapUnits: 32,
-                    outsideHomeUsedUnits: 0,
-                    outsideHomeCapUnits: 16,
-                    timeLimitYears: 8,
-                },
-            }),
-            schoolConfig: {
-                schoolId: "cas",
-                name: "College of Arts and Science",
-                degreeType: "BA",
-                courseSuffix: ["-UA"],
-                totalCreditsRequired: 1000,
-                overallGpaMin: 2.0,
-                acceptsTransferCredit: true,
-                residency: { minCredits: null, note: null },
-            },
             // Pre-populate a valid forward schedule (so validateInput passes)
             forwardSchedule: makeMinimalFeasibleSchedule(),
         });
@@ -312,13 +289,12 @@ describe("confirmPlanChangeTool — applies change and routes per Decision #32",
                 mutations: [{
                     kind: "pin",
                     courseId: "CSCI-UA 102",
-                    term: "2026-fall",
+                    term: "2099-fall", // not a future term in the plan window
                 }],
             },
             ctx,
         );
 
-        // Solver should produce infeasible-draft with 1000 credits needed
         expect(output.storedIn).toBe("studentDraftPlan");
         expect(session.studentDraftPlan).toBeDefined();
         expect(session.studentDraftPlan!.state).toBe("infeasible-draft");
