@@ -121,7 +121,7 @@ describe("W3.1 — run_full_audit DPR-primary path", () => {
 // is the canonical planner). run_full_audit (W3.1) and what_if_audit
 // (W3.3) DPR paths remain covered below.
 
-describe("W3.3 — what_if_audit unauthored-program path", () => {
+describe("W3.3 — what_if_audit estimate path (pure RAG, no authored rules)", () => {
     it("returns an estimate envelope with the verbatim disclaimer when programs are not in the catalog", async () => {
         const { session } = buildDprSession();
         const out = await whatIfAuditTool.call(
@@ -153,18 +153,7 @@ describe("W3.3 — what_if_audit unauthored-program path", () => {
             { signal: ABORT, session },
         );
         const summary = whatIfAuditTool.summarizeResult(out);
-        expect(summary).toContain("estimate, no structured rules available");
+        expect(summary).toContain("there is no DPR for a hypothetical program");
         expect(summary).toContain("REQUIRED DISCLAIMER");
-    });
-
-    it("extractVerbatim returns null for authored-path results (no disclaimer needed)", async () => {
-        // Provide a synthetic authored result by mocking the shape.
-        const fakeAuthored = {
-            hypothetical: { programs: [] },
-            comparison: undefined,
-            warnings: [],
-        };
-        const verbatim = whatIfAuditTool.extractVerbatim?.(fakeAuthored as never);
-        expect(verbatim).toBeNull();
     });
 });
