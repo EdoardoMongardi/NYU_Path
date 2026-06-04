@@ -60,21 +60,12 @@ async function main() {
         embed: async () => new Float32Array(DIM),
         embedBatch: async (texts) => texts.map(() => new Float32Array(DIM)),
     };
-    // Phase 9 Stage 1 — flip on includeProgramPages so the corpus
-    // also indexes every CAS / Tisch / Stern / Tandon / etc. program
-    // page + the College Core Curriculum. Pre-Phase-9 the corpus had
-    // ~636 chunks (12 sourcePaths, only economics-ba among program
-    // pages); post-Phase-9 it should be ~5k+ chunks with ~860 program
-    // pages indexed.
-    // Phase C — also flip on includePolicyTrees so the corpus indexes
-    // the internal-transfer-equivalencies + OGS (visa/immigration) trees
-    // that were previously skipped. Transfers + F-1/J-1/RCL/CPT/OPT
-    // become searchable via search_policy instead of relying on a single
-    // template + school config.
+    // buildCorpus now walks the ENTIRE undergraduate bulletin tree +
+    // the NYU-wide internal-transfer / OGS / nyu trees by default —
+    // every page is ingested + auto-tagged (the "ingest all" / nothing-
+    // hardcoded pass). No flags needed.
     const { chunks, skipped } = await buildCorpus(stubEmbedder, {
         warnOnSkip: false,
-        includeProgramPages: true,
-        includePolicyTrees: true,
     });
     console.error(`Chunked ${chunks.length} chunks (${skipped.length} entries skipped)`);
 
