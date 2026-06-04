@@ -56,7 +56,8 @@ describe("get_credit_caps tool (Phase 6 WS7b)", () => {
         expect(out.f1FullTimeFloor).toBeNull();
         expect(out.crossSchoolCaps).toHaveLength(1);
         expect(out.crossSchoolCaps[0]!.type).toBe("non_home_school");
-        expect(out.totalCreditsRequired).toBe(128);
+        // Step 8c — no DPR loaded → no personalized degree total.
+        expect(out.totalCreditsRequired).toBeNull();
     });
 
     it("surfaces the F-1 full-time floor when visaStatus === 'f1'", async () => {

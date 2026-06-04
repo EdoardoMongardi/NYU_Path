@@ -321,7 +321,7 @@ export function buildSolverInputFromSession(
     const schoolConfig = session.schoolConfig ?? null;
 
     const creditsEarned = dpr.cumulative.creditsUsed ?? 0;
-    const graduationCreditMinimum = dpr.cumulative.creditsRequired ?? schoolConfig?.totalCreditsRequired ?? 128;
+    const graduationCreditMinimum = dpr.cumulative.creditsRequired ?? 128;
     const creditCeiling = schoolConfig?.maxCreditsPerSemester ?? 18;
     const creditTargetPerSemester = 16;
     const cumulativeGpa = dpr.cumulative.cumulativeGpa ?? 0;
