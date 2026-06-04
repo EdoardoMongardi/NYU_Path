@@ -104,7 +104,7 @@ describe.skipIf(!HAS_OPENAI)("agent-loop live integration (Phase 6.1 WS5)", () =
         expect(missingInvocations).toEqual([]);
     }, 60_000);
 
-    it("Scenario 3 — internal-transfer query calls check_transfer_eligibility", async () => {
+    it("Scenario 3 — internal-transfer query calls search_policy (pure RAG)", async () => {
         const result = await runAgentTurn(
             buildClient(),
             buildDefaultRegistry(),
@@ -115,7 +115,7 @@ describe.skipIf(!HAS_OPENAI)("agent-loop live integration (Phase 6.1 WS5)", () =
         expect(result.kind).toBe("ok");
         if (result.kind !== "ok") return;
         const calledTools = result.invocations.map((i) => i.toolName);
-        expect(calledTools).toContain("check_transfer_eligibility");
+        expect(calledTools).toContain("search_policy");
     }, 60_000);
 
     it("Scenario 4 — F-1 + credit-load reply triggers visa caveat (validator)", async () => {

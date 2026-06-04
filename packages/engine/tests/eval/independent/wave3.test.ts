@@ -28,7 +28,6 @@ import {
 
 import { projectMultiSemester } from "../../../src/planner/multiSemesterProjector.js";
 import { planExploratory } from "../../../src/planner/explorePlanner.js";
-import { planForTransferPrep } from "../../../src/planner/transferPrepPlanner.js";
 import { planMultiProgram } from "../../../src/planner/crossProgramPlanner.js";
 import {
     parseTranscript,
@@ -184,43 +183,6 @@ const PROFILE_3: StudentProfile = {
     onlineCredits: 0,
     passfailCredits: 0,
     matriculationYear: 2025,
-    visaStatus: "domestic",
-};
-
-// =============================================================================
-// Profile 4 — Transfer-prep eligible CAS junior (all 5 Stern junior prereqs)
-// =============================================================================
-
-const PROFILE_4: StudentProfile = {
-    id: "synthetic-cas-junior-stern-eligible-w3",
-    catalogYear: "2023",
-    homeSchool: "cas",
-    declaredPrograms: [
-        { programId: "cs_major_ba", programType: "major", declaredAt: "2023-fall", declaredUnderCatalogYear: "2023" },
-    ],
-    coursesTaken: [
-        { courseId: "CSCI-UA 101", grade: "A", semester: "2023-fall", credits: 4 },
-        { courseId: "MATH-UA 121", grade: "A-", semester: "2023-fall", credits: 4 },
-        { courseId: "EXPOS-UA 1", grade: "A-", semester: "2023-fall", credits: 4 },
-        { courseId: "CORE-UA 400", grade: "A-", semester: "2023-fall", credits: 4 },
-        { courseId: "CSCI-UA 102", grade: "B+", semester: "2024-spring", credits: 4 },
-        { courseId: "MATH-UA 120", grade: "B+", semester: "2024-spring", credits: 4 },
-        { courseId: "ECON-UA 2", grade: "A-", semester: "2024-spring", credits: 4 },
-        { courseId: "ACCT-UB 1", grade: "B+", semester: "2024-spring", credits: 4 },
-        { courseId: "CSCI-UA 201", grade: "A-", semester: "2024-fall", credits: 4 },
-        { courseId: "MATH-UA 235", grade: "B+", semester: "2024-fall", credits: 4 },
-        { courseId: "FREN-UA 1", grade: "A-", semester: "2024-fall", credits: 4 },
-        { courseId: "CORE-UA 500", grade: "A", semester: "2024-fall", credits: 4 },
-        { courseId: "CSCI-UA 202", grade: "A", semester: "2025-spring", credits: 4 },
-        { courseId: "MATH-UA 122", grade: "A", semester: "2025-spring", credits: 4 },
-        { courseId: "FREN-UA 2", grade: "A-", semester: "2025-spring", credits: 4 },
-        { courseId: "CORE-UA 760", grade: "B+", semester: "2025-spring", credits: 4 },
-    ],
-    uaSuffixCredits: 60,
-    nonCASNYUCredits: 4,
-    onlineCredits: 0,
-    passfailCredits: 0,
-    matriculationYear: 2023,
     visaStatus: "domestic",
 };
 
@@ -555,145 +517,6 @@ describe("Wave 3 — Independent fixtures (Phase 3 modules, bulletin-derived)", 
             expect(r.notes.length).toBeGreaterThan(0);
             const blob = r.notes.join(" | ").toLowerCase();
             expect(blob).toMatch(/exploratory|declared|undeclared/);
-        });
-    });
-
-    // ---------- Profile 4: Transfer-prep, eligible junior ----------
-    describe("Profile 4 — Transfer-prep eligible CAS junior", () => {
-        it("planForTransferPrep does NOT return unsupported (cas→stern data exists)", () => {
-            const r = planForTransferPrep(
-                PROFILE_4,
-                cs,
-                "stern",
-                COURSES,
-                PREREQS,
-                DEFAULT_PLANNER_CONFIG,
-                casCfg,
-            );
-            expect("kind" in r).toBe(false);
-        });
-
-        it("transferDecision.status === 'eligible'", () => {
-            const r = planForTransferPrep(
-                PROFILE_4,
-                cs,
-                "stern",
-                COURSES,
-                PREREQS,
-                DEFAULT_PLANNER_CONFIG,
-                casCfg,
-            );
-            if ("kind" in r) throw new Error("planForTransferPrep unexpectedly returned unsupported");
-            // 5 junior prereqs all satisfied: MATH-UA 121, EXPOS-UA 1, MATH-UA 235,
-            // ACCT-UB 1, ECON-UA 2. cas_to_stern.json L78-122.
-            expect(r.transferDecision.status).toBe("eligible");
-        });
-
-        it("transferDecision.entryYear === 'junior'", () => {
-            const r = planForTransferPrep(
-                PROFILE_4,
-                cs,
-                "stern",
-                COURSES,
-                PREREQS,
-                DEFAULT_PLANNER_CONFIG,
-                casCfg,
-            );
-            if ("kind" in r) throw new Error("planForTransferPrep unexpectedly returned unsupported");
-            const decision = r.transferDecision;
-            // Narrowing: entryYear is only on the eligible/not_yet_eligible variants.
-            if (decision.status !== "eligible" && decision.status !== "not_yet_eligible") {
-                throw new Error(`unexpected decision status ${decision.status}`);
-            }
-            expect(decision.entryYear).toBe("junior");
-        });
-
-        it("transferDecision.missingPrereqs is empty", () => {
-            const r = planForTransferPrep(
-                PROFILE_4,
-                cs,
-                "stern",
-                COURSES,
-                PREREQS,
-                DEFAULT_PLANNER_CONFIG,
-                casCfg,
-            );
-            if ("kind" in r) throw new Error("planForTransferPrep unexpectedly returned unsupported");
-            const decision = r.transferDecision;
-            if (decision.status !== "eligible" && decision.status !== "not_yet_eligible") {
-                throw new Error(`unexpected decision status ${decision.status}`);
-            }
-            expect(decision.missingPrereqs).toHaveLength(0);
-        });
-
-        it("deadlineWarnings include 'March 1' (Stern application deadline)", () => {
-            const r = planForTransferPrep(
-                PROFILE_4,
-                cs,
-                "stern",
-                COURSES,
-                PREREQS,
-                DEFAULT_PLANNER_CONFIG,
-                casCfg,
-            );
-            if ("kind" in r) throw new Error("planForTransferPrep unexpectedly returned unsupported");
-            // cas_to_stern.json applicationDeadline = "March 1".
-            // transferPrepPlanner.ts:93-96 always pushes one deadline warning when
-            // status is eligible/not_yet_eligible.
-            const blob = r.deadlineWarnings.join(" | ");
-            expect(blob).toContain("March 1");
-        });
-
-        it("deadlineWarnings include 'fall' (Stern accepted term)", () => {
-            const r = planForTransferPrep(
-                PROFILE_4,
-                cs,
-                "stern",
-                COURSES,
-                PREREQS,
-                DEFAULT_PLANNER_CONFIG,
-                casCfg,
-            );
-            if ("kind" in r) throw new Error("planForTransferPrep unexpectedly returned unsupported");
-            // cas_to_stern.json acceptedTerms = ["fall"].
-            const blob = r.deadlineWarnings.join(" | ").toLowerCase();
-            expect(blob).toContain("fall");
-        });
-
-        it("no plan suggestion's reason starts with '[transfer-prereq' (nothing missing)", () => {
-            const r = planForTransferPrep(
-                PROFILE_4,
-                cs,
-                "stern",
-                COURSES,
-                PREREQS,
-                DEFAULT_PLANNER_CONFIG,
-                casCfg,
-            );
-            if ("kind" in r) throw new Error("planForTransferPrep unexpectedly returned unsupported");
-            // transferPrepPlanner.ts:108-117 — the prefix is only added to
-            // suggestions whose courseId is in missingPrereqs. With 0 missing,
-            // the promotedIds set is empty.
-            for (const s of r.plan.suggestions) {
-                expect(s.reason.startsWith("[transfer-prereq")).toBe(false);
-            }
-        });
-
-        it("plan.enrollmentWarnings include the deadline string ('March 1')", () => {
-            const r = planForTransferPrep(
-                PROFILE_4,
-                cs,
-                "stern",
-                COURSES,
-                PREREQS,
-                DEFAULT_PLANNER_CONFIG,
-                casCfg,
-            );
-            if ("kind" in r) throw new Error("planForTransferPrep unexpectedly returned unsupported");
-            // transferPrepPlanner.ts:127 appends deadlineWarnings to the plan's
-            // enrollmentWarnings.
-            const blob = r.plan.enrollmentWarnings.join(" | ");
-            expect(blob).toContain("March 1");
         });
     });
 

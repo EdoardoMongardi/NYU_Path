@@ -99,7 +99,6 @@ describe("buildTool + ToolRegistry", () => {
             "bind_free_elective",
             "bind_pool_slot",
             "check_overlap",
-            "check_transfer_eligibility",
             "compare_plan_alternatives",
             "confirm_plan_change",
             "confirm_profile_update",
@@ -332,7 +331,7 @@ describe("responseValidator", () => {
         const verdict = validateResponse({
             assistantText: "For internal transfer to Stern you need calculus and writing.",
             invocations: [
-                { toolName: "check_transfer_eligibility", args: { targetSchool: "stern" }, summary: "Stern eligible" },
+                { toolName: "search_policy", args: { query: "internal transfer to stern" }, summary: "Stern eligible" },
             ],
         });
         const missing = verdict.violations.filter((v) => v.caveatId === "internal_transfer_gpa_note");
@@ -345,7 +344,7 @@ describe("responseValidator", () => {
                 "For internal transfer to Stern, GPA thresholds are not published. " +
                 "Required: calculus and writing.",
             invocations: [
-                { toolName: "check_transfer_eligibility", args: { targetSchool: "stern" }, summary: "Stern eligible" },
+                { toolName: "search_policy", args: { query: "internal transfer to stern" }, summary: "Stern eligible" },
             ],
         });
         expect(verdict.violations.some((v) => v.caveatId === "internal_transfer_gpa_note")).toBe(false);
@@ -355,13 +354,13 @@ describe("responseValidator", () => {
         const v1 = validateResponse({
             assistantText: "Internal transfer GPA thresholds aren't published. Stern requires calc.",
             invocations: [
-                { toolName: "check_transfer_eligibility", args: { targetSchool: "stern" }, summary: "Stern" },
+                { toolName: "search_policy", args: { query: "internal transfer to stern" }, summary: "Stern" },
             ],
         });
         const v2 = validateResponse({
             assistantText: "The GPA cutoff for transfer to Stern isn't published. Required: calc.",
             invocations: [
-                { toolName: "check_transfer_eligibility", args: { targetSchool: "stern" }, summary: "Stern" },
+                { toolName: "search_policy", args: { query: "internal transfer to stern" }, summary: "Stern" },
             ],
         });
         expect(v1.violations.some((v) => v.caveatId === "internal_transfer_gpa_note")).toBe(false);
@@ -492,7 +491,7 @@ describe("responseValidator", () => {
             assistantText:
                 "If you transfer to Stern with a 9-credit semester, you'll be on a part-time credit load.",
             invocations: [
-                { toolName: "check_transfer_eligibility", args: { targetSchool: "stern" }, summary: "Stern eligible" },
+                { toolName: "search_policy", args: { query: "internal transfer to stern" }, summary: "Stern eligible" },
                 { toolName: "run_full_audit", args: {}, summary: "credits 9" },
             ],
             student: {

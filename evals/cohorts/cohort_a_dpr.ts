@@ -552,7 +552,7 @@ export const COHORT_A_DPR_CASES: ConversationCase[] = [
         degreeProgressReport: DPR_ALMOST_DONE_PF_HEAVY,
         turns: [{
             userMessage: "What if I transferred to Stern Finance? Is it possible?",
-            expectedToolCalls: ["what_if_audit", "check_transfer_eligibility"],
+            expectedToolCalls: ["what_if_audit", "search_policy"],
             requiredCaveats: ["GPA", "not published", "adviser"],
         }],
     },
@@ -721,7 +721,7 @@ export const COHORT_A_DPR_CASES: ConversationCase[] = [
         degreeProgressReport: DPR_ECON_MIDWAY,
         turns: [{
             userMessage: "What prereqs do I need to internal-transfer to Stern?",
-            expectedToolCalls: ["check_transfer_eligibility"],
+            expectedToolCalls: ["search_policy"],
             requiredCaveats: ["GPA", "not published"],
         }],
     },
@@ -732,7 +732,7 @@ export const COHORT_A_DPR_CASES: ConversationCase[] = [
         degreeProgressReport: DPR_ALMOST_DONE_PF_HEAVY,
         turns: [{
             userMessage: "Can I transfer to Tandon as a senior, or is it too late?",
-            expectedToolCalls: ["check_transfer_eligibility"],
+            expectedToolCalls: ["search_policy"],
             requiresAdviserCaveat: true,
         }],
     },
@@ -743,7 +743,7 @@ export const COHORT_A_DPR_CASES: ConversationCase[] = [
         degreeProgressReport: DPR_ALMOST_DONE_PF_HEAVY,
         turns: [{
             userMessage: "If I transferred to Stern, how many of my CAS credits would carry over?",
-            expectedToolCalls: ["check_transfer_eligibility"],
+            expectedToolCalls: ["search_policy"],
         }],
     },
 ];

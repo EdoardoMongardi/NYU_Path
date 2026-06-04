@@ -41,14 +41,14 @@ describe("W5 — what_if disclaimer survives the validator gate", () => {
         expect(verbatim).toMatch(/Verify with an academic adviser/);
     });
 
-    // Both follow-up tests below include a stub `check_transfer_eligibility`
+    // Both follow-up tests below include a stub `search_policy`
     // invocation so the unrelated invocation-auditor + transfer-caveat
     // rules don't fire (they trigger on the "internal transfer" wording
     // inside the disclaimer, which is the intended phrasing — we just
     // need the test to isolate the verbatim_drift signal).
     const TRANSFER_STUB: ToolInvocation = {
-        toolName: "check_transfer_eligibility",
-        args: { targetSchool: "stern" },
+        toolName: "search_policy",
+        args: { query: "internal transfer to stern requirements" },
         summary:
             "GPA thresholds for internal transfer are not published; "
             + "decision is holistic. Confirm with the destination school.",

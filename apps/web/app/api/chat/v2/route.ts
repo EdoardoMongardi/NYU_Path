@@ -257,9 +257,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         scheduleStore: stores.scheduleStore,
         chatHistoryStore: stores.chatHistoryStore,
         // Phase 11 follow-up — thread the latest user message so
-        // tool validateInput hooks can apply scope guards (e.g.,
-        // reject check_transfer_eligibility when the message keys
-        // on "minor"). Generic across all tools.
+        // tool validateInput hooks can apply scope guards based on the
+        // user's intent. Generic across all tools.
         lastUserMessage: body.message,
         ...(schoolConfig ? { schoolConfig } : {}),
         ...(catalog ? { programs: catalog.programs, courses: catalog.courses, prereqs: catalog.prereqs } : {}),

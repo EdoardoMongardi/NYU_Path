@@ -157,7 +157,7 @@ const COHORT_A_LEGACY_CASES: ConversationCase[] = [
         student: CAS_CS_JUNIOR,
         turns: [{
             userMessage: "I'm thinking about transferring to Stern. What do I need to do?",
-            expectedToolCalls: ["check_transfer_eligibility"],
+            expectedToolCalls: ["search_policy"],
             // §7.2 gpaNote — required even when the user didn't ask about GPA.
             requiredCaveats: ["GPA", "not published"],
             // Tags for completeness (deadline + 32 credits if known).
