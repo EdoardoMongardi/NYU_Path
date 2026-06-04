@@ -6,8 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "audit:cli": "pnpm --filter @nyupath/cli audit"
+    "test": "pnpm -r test"
   },
   "engines": {
     "node": ">=18"
