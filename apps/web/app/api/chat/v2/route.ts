@@ -554,6 +554,15 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 // multiple gaps in one question (CS Required + Texts &
                 // Ideas + joint major roll-up) can chain through 4-6 calls.
                 maxTurns: 10,
+                // Phase 9 — the streaming loop has no output-truncation
+                // recovery (unlike the block path), so a final answer that
+                // exceeds maxTokens is simply cut off for the user. The old
+                // 1024 default truncated long advising replies (acute now
+                // that Sonnet — our new primary — writes richer, longer
+                // answers: the live eval's Q1/Q3 ran ~2-2.5k tokens). Lift
+                // the cap to 4096 so complete answers reach the user; it
+                // still bounds runaway output.
+                maxTokens: 4096,
                 // Phase 7-E W11 reviewer P1-2 — emit observability events
                 // to the JSONL sink so the operator dashboard at
                 // /admin/observability has signal during cohort A.

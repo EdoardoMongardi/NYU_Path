@@ -122,7 +122,7 @@ describe("Step 18 — Tier-3 graceful termination", () => {
 });
 
 describe("Step 20 — output truncation recovery", () => {
-    it("re-prompts with doubled max_tokens when finish_reason=length and a final text turn", async () => {
+    it("re-prompts with doubled max_tokens when finish_reason=length and stitches the recovered text onto the original", async () => {
         const sink = new InMemoryFallbackSink();
         // Custom client that returns finish_reason: "length" once, then success.
         let callCount = 0;
@@ -153,7 +153,11 @@ describe("Step 20 — output truncation recovery", () => {
             fallbackSink: sink,
         });
         expect(result.kind).toBe("ok");
-        if (result.kind === "ok") expect(result.finalText).toBe("RECOVERED");
+        // The final reply must be the PRE-truncation text stitched to the
+        // recovered continuation — not the continuation alone (that would
+        // silently drop everything the model said before it ran out of
+        // tokens).
+        if (result.kind === "ok") expect(result.finalText).toBe("PARTIALRECOVERED");
         expect(callCount).toBe(2);
         expect(sink.events.some((e) => e.kind === "output_truncation_recovery")).toBe(true);
     });
