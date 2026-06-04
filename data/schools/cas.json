@@ -90,8 +90,8 @@
   "overloadRequirements": [
     {
       "condition": "default",
-      "minGpa": 3.5,
-      "note": "Adviser approval required"
+      "minGpa": null,
+      "note": "Adviser approval/clearance required; no published overload GPA gate."
     }
   ],
   "goodStandingReturnThreshold": 0.75,
@@ -102,7 +102,9 @@
   "programExclusions": [],
   "deansListThreshold": {
     "minGpa": 3.65,
-    "note": "Traditionally 3.65; see CAS honors page"
+    "note": "3.65 GPA over >=28 graded credits, evaluated annually.",
+    "minCredits": 28,
+    "per": "year"
   },
   "advisingContact": {
     "name": "CAS Advising",

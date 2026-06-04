@@ -242,7 +242,6 @@
     }
   ],
   "finalProbationGpaFloor": 1.5,
-  "goodStandingReturnThreshold": 0.67,
   "maxCourseRepeats": 2,
   "sharedPrograms": [],
   "programExclusions": [
