@@ -1,0 +1,282 @@
+{
+  "_meta": {
+    "catalogYear": "2025-2026",
+    "sourceUrl": "https://bulletin.nyu.edu/undergraduate/engineering/academic-policies/",
+    "lastVerified": "2026-04-26",
+    "sourceHash": "sha256:18ab7fa2f2955c945af6fff46b9605f44e7700d061f390a58a306209a064f66c",
+    "extractedBy": "llm-assisted",
+    "verifiedBy": "spot-check",
+    "sourceRef": {
+      "anchor": "academic-policies",
+      "pdfPage": null
+    }
+  },
+  "_notes": [
+    "gradeThresholds field is intentionally OMITTED. The Tandon academic-policies bulletin only states a C floor for transfer credit (line 123), not for major-grade counting. Until a Tandon major-specific bulletin or department source establishes a per-major grade floor, degreeAudit's resolveGradeThresholds() will fall through to the CAS defaults (major≥C, core≥D). This is documented behavior, not a silent bug. Track for resolution before Tandon programs are authored.",
+    "residency.minCredits: 64 ASSUMES a 128-credit BS program (half = 64). The bulletin (line 111) defines residency as 'at least half of the required credits at Tandon', which for 131-credit Mechanical Engineering is 66 and for 134-credit ECE is 67. When the first non-128-credit Tandon program JSON is authored, replace this static field with a per-program override (or compute residency.minCredits = ceil(program.totalCreditsRequired / 2) at audit time)."
+  ],
+  "_provenance": [
+    {
+      "path": "residency.minCredits",
+      "claim": "students must complete a minimum of at least half of the required credits at Tandon in approved Tandon coursework (half of 128 = 64)",
+      "bulletinSection": "Residency Requirement",
+      "sourceLine": 111
+    },
+    {
+      "path": "residency.suffix",
+      "claim": "Tandon course IDs use the -UY suffix, observed in CP-UY internship designation and MA-UY math course IDs in this bulletin (e.g., MA-UY 914, MA-UY 1024). The Residency Requirement (line 111) defines residency as 'approved Tandon coursework' without naming the suffix.",
+      "bulletinSection": "Internships / Mathematics Diagnostic",
+      "sourceLine": 454
+    },
+    {
+      "path": "residency.finalCreditsInResidence",
+      "claim": "students must complete their final semester's worth of credits at the University (variable, not a fixed 32)",
+      "bulletinSection": "Residency Requirement",
+      "sourceLine": 111
+    },
+    {
+      "path": "residency.majorMinorResidencyPercent",
+      "claim": "In regards to Tandon minors, one-half of the coursework must be completed at the NYU Tandon School of Engineering",
+      "bulletinSection": "Residency Requirement",
+      "sourceLine": 111
+    },
+    {
+      "path": "creditCaps[type=non_home_school]",
+      "claim": "Students may take a total of 4 courses or 16 credits in other divisions",
+      "bulletinSection": "Coursework in Other Divisions of NYU and Outside Institutions",
+      "sourceLine": 155
+    },
+    {
+      "path": "creditCaps[type=non_home_school].excludes",
+      "claim": "first cross-school minor, study abroad coursework, and courses required for a major at Tandon do not count towards this 4 course/16 credit limit; nor do test credits and prior transfer credits",
+      "bulletinSection": "Coursework in Other Divisions of NYU and Outside Institutions",
+      "sourceLine": 165
+    },
+    {
+      "path": "creditCaps[type=transfer].maxCredits",
+      "claim": "maximum number of credits that can be granted is half of the degree (half of 128 = 64)",
+      "bulletinSection": "Transfer Credits from other Undergraduate Institutions",
+      "sourceLine": 123
+    },
+    {
+      "path": "passFail.canElect",
+      "claim": "Students cannot elect to change the grading scale of classes to P/F if it is not already set up that way",
+      "bulletinSection": "Pass/Fail Classes",
+      "sourceLine": 218
+    },
+    {
+      "path": "passFail.creditType",
+      "claim": "P/F course will count only as a Free Elective course and in no other way",
+      "bulletinSection": "Coursework in Other Divisions",
+      "sourceLine": 161
+    },
+    {
+      "path": "passFail.gradePassEquivalent",
+      "claim": "A grade of P indicates a 'Pass' (equivalent to a D or above) in a P/F graded class",
+      "bulletinSection": "Pass/Fail Classes",
+      "sourceLine": 218
+    },
+    {
+      "path": "passFail.failCountsInGpa",
+      "claim": "Passing grades in P/F courses do not count towards the GPA. However, F grades received in a P/F graded course will count towards the GPA",
+      "bulletinSection": "Computing the Grade-Point Average (GPA)",
+      "sourceLine": 212
+    },
+    {
+      "path": "spsPolicy.allowed",
+      "claim": "Excluded from credit toward the degree are also any courses taken in the School of Professional Studies once a student is matriculated into Tandon",
+      "bulletinSection": "Coursework in Other Divisions",
+      "sourceLine": 167
+    },
+    {
+      "path": "doubleCounting.note",
+      "claim": "some courses may be double counted towards both majors at the discretion of both academic departments",
+      "bulletinSection": "Second Major (Double Major)",
+      "sourceLine": 85
+    },
+    {
+      "path": "transferCreditLimits.transferStudentMaxTotal",
+      "claim": "maximum number of credits that can be granted is half of the degree (half of 128 = 64)",
+      "bulletinSection": "Transfer Credits from other Undergraduate Institutions",
+      "sourceLine": 123
+    },
+    {
+      "path": "<transfer-credit grade floor>",
+      "claim": "Undergraduate transfer credit is not given for any course in which a grade less than C or equivalent has been earned. Note: this is a transfer-credit floor, not a per-major grade threshold; gradeThresholds.major is intentionally omitted from this config until a major-specific bulletin source is identified.",
+      "bulletinSection": "Transfer Credits from other Undergraduate Institutions",
+      "sourceLine": 123
+    },
+    {
+      "path": "overallGpaMin",
+      "claim": "undergraduate students must maintain term and cumulative GPAs of 2.0 or greater",
+      "bulletinSection": "Academic Standing and Probation",
+      "sourceLine": 281
+    },
+    {
+      "path": "gpaTierTable",
+      "claim": "Tandon publishes a per-full-time-semester minimum cumulative GPA: sem 1: 1.501 / 8 credits, sem 2: 1.501 / 16, sem 3: 1.501 / 28, sem 4: 1.67 / 40, sem 5: 1.78 / 56, sem 6: 1.88 / 68, sem 7: 1.95 / 84, >8: 2.00 / 96.",
+      "bulletinSection": "Minimum Credits and Minimum GPA Required by Semester of Full-Time Study (table)",
+      "sourceLine": 291
+    },
+    {
+      "path": "finalProbationGpaFloor",
+      "claim": "Any time a student's cumulative GPA falls below 1.5 they are placed on Final Probation regardless of how many credits they have completed.",
+      "bulletinSection": "Minimum Credits and Minimum GPA — footnote",
+      "sourceLine": 303
+    },
+    {
+      "path": "maxCreditsPerSemester",
+      "claim": "the normal course load for full-time undergraduate students is 14-18 credits",
+      "bulletinSection": "Full-Time Status / Normal Course Load",
+      "sourceLine": 357
+    },
+    {
+      "path": "overloadRequirements[default].note",
+      "claim": "Students placed on academic probation are limited to a maximum of 18 credits per semester while on probation, unless otherwise approved by their adviser",
+      "bulletinSection": "Academic Probation",
+      "sourceLine": 326
+    },
+    {
+      "path": "programExclusions[duplicate_major_other_school]",
+      "claim": "Tandon students may not declare a second major at another NYU School if a similar major, in name and content, is offered at Tandon (e.g., CS, Math)",
+      "bulletinSection": "Second Major (Double Major)",
+      "sourceLine": 91
+    },
+    {
+      "path": "<unprovenanced-at-v1>",
+      "claim": "totalCreditsRequired (128), transferCreditLimits.firstYearMaxTotal (32), goodStandingReturnThreshold (0.67), maxCourseRepeats (2), and advisingContact are NOT explicitly stated in this academic-policies bulletin. They are inherited from CAS-style defaults pending a per-major or NYU-wide bulletin source.",
+      "bulletinSection": "(none)",
+      "sourceLine": null
+    }
+  ],
+  "schoolId": "tandon",
+  "name": "Tandon School of Engineering",
+  "degreeType": "BS",
+  "courseSuffix": [
+    "-UY"
+  ],
+  "overallGpaMin": 2.0,
+  "residency": {
+    "type": "suffix_based",
+    "suffix": "-UY",
+    "minCredits": 64,
+    "finalCreditsInResidence": null,
+    "majorMinorResidencyPercent": 50,
+    "note": "Residency is half the degree credits. Final-semester-in-residence is required but not denominated as a fixed credit count."
+  },
+  "creditCaps": [
+    {
+      "type": "non_home_school",
+      "maxCourses": 4,
+      "maxCredits": 16,
+      "excludes": [
+        "cross_school_minor",
+        "study_abroad",
+        "tandon_required_outside_course",
+        "test_credits",
+        "prior_transfer"
+      ],
+      "label": "Non-Tandon courses (excl. minor/abroad/required-outside)"
+    },
+    {
+      "type": "transfer",
+      "maxCredits": 64,
+      "label": "Transfer credits (max half of degree)"
+    }
+  ],
+  "passFail": {
+    "careerLimitType": "credits",
+    "careerLimit": null,
+    "perTermLimit": null,
+    "perTermUnit": "semester",
+    "countsForMajor": false,
+    "countsForMinor": false,
+    "creditType": "elective_only",
+    "canElect": false,
+    "gradePassEquivalent": "D",
+    "failCountsInGpa": true,
+    "note": "Students cannot elect P/F. Only courses already designated P/F are allowed, and they count only as Free Elective credit."
+  },
+  "spsPolicy": {
+    "allowed": false
+  },
+  "doubleCounting": {
+    "defaultMajorToMajor": null,
+    "defaultMajorToMinor": null,
+    "noTripleCounting": true,
+    "requiresDepartmentApproval": true,
+    "note": "No explicit numeric limit — discretion of both academic departments"
+  },
+  "transferCreditLimits": {
+    "firstYearMaxTotal": 32,
+    "transferStudentMaxTotal": 64
+  },
+  "acceptsTransferCredit": true,
+  "maxCreditsPerSemester": 18,
+  "f1FullTimeMinCredits": 12,
+  "overloadRequirements": [
+    {
+      "condition": "default",
+      "minGpa": null,
+      "note": "Adviser approval required"
+    }
+  ],
+  "gpaTierTable": [
+    {
+      "semestersCompleted": 1,
+      "minCumGpa": 1.501,
+      "minCreditsEarned": 8
+    },
+    {
+      "semestersCompleted": 2,
+      "minCumGpa": 1.501,
+      "minCreditsEarned": 16
+    },
+    {
+      "semestersCompleted": 3,
+      "minCumGpa": 1.501,
+      "minCreditsEarned": 28
+    },
+    {
+      "semestersCompleted": 4,
+      "minCumGpa": 1.67,
+      "minCreditsEarned": 40
+    },
+    {
+      "semestersCompleted": 5,
+      "minCumGpa": 1.78,
+      "minCreditsEarned": 56
+    },
+    {
+      "semestersCompleted": 6,
+      "minCumGpa": 1.88,
+      "minCreditsEarned": 68
+    },
+    {
+      "semestersCompleted": 7,
+      "minCumGpa": 1.95,
+      "minCreditsEarned": 84
+    },
+    {
+      "semestersCompleted": null,
+      "minCumGpa": 2.0,
+      "minCreditsEarned": 96,
+      "note": "applies to >8 full-time semesters"
+    }
+  ],
+  "finalProbationGpaFloor": 1.5,
+  "goodStandingReturnThreshold": 0.67,
+  "maxCourseRepeats": 2,
+  "sharedPrograms": [],
+  "programExclusions": [
+    {
+      "type": "duplicate_major_other_school",
+      "note": "Tandon students may not double major at another NYU school in a major similar in name and content to one offered at Tandon (e.g., CS, Math)"
+    }
+  ],
+  "advisingContact": {
+    "name": "Tandon Office of Undergraduate Academics",
+    "email": "tandon.advising@nyu.edu",
+    "url": "https://engineering.nyu.edu/academics/advising"
+  }
+}
