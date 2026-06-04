@@ -1,0 +1,152 @@
+{
+  "_meta": {
+    "catalogYear": "2025-2026",
+    "sourceUrl": "https://bulletins.nyu.edu/undergraduate/shanghai/academic-policies/",
+    "lastVerified": "2026-06-04",
+    "sourceHash": "sha256:4244064a60e867ad9de2f9b77631802b7e967c2fbfdbd604fba7dfd3f9456f7d",
+    "extractedBy": "llm-assisted",
+    "verifiedBy": "spot-check",
+    "sourceRef": {
+      "anchor": null,
+      "pdfPage": null
+    }
+  },
+  "schoolId": "shanghai",
+  "name": "NYU Shanghai",
+  "degreeType": "BA",
+  "courseSuffix": [
+    "-SHU"
+  ],
+  "overallGpaMin": 2.0,
+  "residency": {
+    "type": "suffix_based",
+    "suffix": "-SHU",
+    "minCredits": 64,
+    "finalCreditsInResidence": 32,
+    "majorMinorResidencyPercent": 50,
+    "note": "All 128 degree credits must be completed in the NYU network; students must register full-time for a minimum of six fall/spring semesters at the NYU Shanghai campus, including the final semester. Major/minor coursework must be taken in that disciplinary area."
+  },
+  "creditCaps": [
+    {
+      "type": "non_home_school",
+      "maxCredits": 36,
+      "label": "Courses in other divisions of NYU (incl. approved minors); petition required beyond 36"
+    },
+    {
+      "type": "online",
+      "maxCredits": 24,
+      "label": "Online course credits (inherited CAS default; Shanghai bulletin silent)"
+    },
+    {
+      "type": "transfer",
+      "maxCredits": 64,
+      "label": "Transfer credits (inherited CAS default; Shanghai bulletin directs transfer inquiries to Admissions, states no numeric cap)"
+    },
+    {
+      "type": "advanced_standing",
+      "maxCredits": 0,
+      "label": "NYU Shanghai does not award AP/IB/foreign-maturity-exam credit (may fulfill a core requirement only)"
+    },
+    {
+      "type": "independent_study",
+      "maxCredits": 12,
+      "maxPerDepartment": 8,
+      "includesInternship": true,
+      "label": "Independent study (max 12 credits over four years, max 8 in any one major)"
+    }
+  ],
+  "gradeThresholds": {
+    "core": "D",
+    "major": "C",
+    "minor": "C"
+  },
+  "passFail": {
+    "careerLimitType": "credits",
+    "careerLimit": 32,
+    "perTermLimit": 1,
+    "perTermUnit": "semester",
+    "countsForMajor": false,
+    "countsForMinor": false,
+    "countsForGenEd": false,
+    "excludedCourseTypes": [],
+    "canElect": true,
+    "autoExcludedFromLimit": [],
+    "gradePassEquivalent": "D",
+    "failCountsInGpa": true,
+    "exceptions": [
+      "Chinese language (through Intermediate II) and English for Academic Purposes courses cannot be taken P/F",
+      "Courses in other languages and Advanced Chinese can be taken P/F, but a grade of C or higher (not P) is required to satisfy a prerequisite for a higher-level course"
+    ]
+  },
+  "spsPolicy": {
+    "allowed": true,
+    "allowedPrefixes": [
+      "REBS1-UC",
+      "TCHT1-UC",
+      "TCSM1-UC",
+      "RWLD1-UC"
+    ],
+    "creditType": "elective_only",
+    "countsTowardResidency": false,
+    "countsAgainstNonHomeSchoolCap": true,
+    "excludedCourseTypes": [
+      "internship",
+      "independent_study"
+    ]
+  },
+  "doubleCounting": {
+    "defaultMajorToMajor": 2,
+    "defaultMajorToMinor": 2,
+    "defaultMinorToMinor": 2,
+    "noTripleCounting": true,
+    "requiresDepartmentApproval": true,
+    "overrideByProgram": true
+  },
+  "transferCreditLimits": {
+    "firstYearMaxTotal": 32,
+    "transferStudentMaxTotal": 64,
+    "springAdmitPostSecondaryMax": 8
+  },
+  "acceptsTransferCredit": true,
+  "maxCreditsPerSemester": 18,
+  "f1FullTimeMinCredits": 12,
+  "overloadRequirements": [
+    {
+      "condition": "default",
+      "minGpa": 3.5,
+      "note": "After the first year, students in good academic standing may register for more than 18 credits with clearance of their academic advisor and approval of the Assistant Dean for Academic Affairs; per-credit overload charges apply. GPA threshold inherited from CAS default (Shanghai bulletin states 'good academic standing', no numeric GPA)."
+    }
+  ],
+  "goodStandingReturnThreshold": 0.5,
+  "maxCourseRepeats": 2,
+  "sharedPrograms": [
+    "shanghai_core"
+  ],
+  "programExclusions": [],
+  "deansListThreshold": {
+    "minGpa": 3.65,
+    "note": "Dean's Honors List: average of 3.65 or higher for the academic year (September-May) in at least 28 graded credits; no grades of Incomplete or N"
+  },
+  "advisingContact": {
+    "name": "NYU Shanghai Academic Affairs / Office of Academic Advising",
+    "email": "shanghai.advising@nyu.edu",
+    "url": "https://shanghai.nyu.edu/academics/advising"
+  },
+  "_inferredFields": [
+    "creditCaps.online.maxCredits",
+    "creditCaps.transfer.maxCredits",
+    "creditCaps.independent_study.includesInternship",
+    "passFail.countsForGenEd",
+    "passFail.autoExcludedFromLimit",
+    "spsPolicy.allowedPrefixes",
+    "spsPolicy.countsTowardResidency",
+    "spsPolicy.countsAgainstNonHomeSchoolCap",
+    "spsPolicy.excludedCourseTypes",
+    "doubleCounting.defaultMinorToMinor",
+    "transferCreditLimits.firstYearMaxTotal",
+    "transferCreditLimits.transferStudentMaxTotal",
+    "transferCreditLimits.springAdmitPostSecondaryMax",
+    "overloadRequirements.minGpa",
+    "programExclusions"
+  ]
+}

@@ -1,0 +1,162 @@
+{
+  "_meta": {
+    "catalogYear": "2025-2026",
+    "sourceUrl": "https://bulletins.nyu.edu/undergraduate/nursing/academic-policies/",
+    "lastVerified": "2026-06-04",
+    "sourceHash": "sha256:c35d49008c4e8436c91042609979e7ee7a86c73186fbd4f2bb90c7e5cd7eb9b1",
+    "extractedBy": "llm-assisted",
+    "verifiedBy": "spot-check",
+    "sourceRef": {
+      "anchor": null,
+      "pdfPage": null
+    }
+  },
+  "schoolId": "nursing",
+  "name": "NYU Rory Meyers College of Nursing",
+  "degreeType": "BS",
+  "courseSuffix": [
+    "-UN"
+  ],
+  "overallGpaMin": 2.0,
+  "residency": {
+    "type": "suffix_based",
+    "suffix": "-UN",
+    "minCredits": 32,
+    "finalCreditsInResidence": null,
+    "majorMinorResidencyPercent": 50
+  },
+  "creditCaps": [
+    {
+      "type": "non_home_school",
+      "maxCredits": 16,
+      "label": "Non-Meyers courses (inferred from CAS default; not in Nursing bulletin)"
+    },
+    {
+      "type": "online",
+      "maxCredits": 24,
+      "label": "Online course credits (inferred from CAS default; not in Nursing bulletin)"
+    },
+    {
+      "type": "transfer",
+      "maxCredits": 64,
+      "label": "Transfer credits (two-year college: not to exceed credits required for associate degree, or 64)"
+    },
+    {
+      "type": "advanced_standing",
+      "maxCredits": 32,
+      "label": "AP/IB/A-Level credits (inferred from CAS default; not in Nursing bulletin)"
+    },
+    {
+      "type": "independent_study",
+      "maxCredits": 12,
+      "maxPerDepartment": 8,
+      "includesInternship": true,
+      "label": "Independent study + internship (inferred from CAS default; not in Nursing bulletin)"
+    }
+  ],
+  "gradeThresholds": {
+    "core": "D",
+    "major": "C",
+    "minor": "C",
+    "nursingPrerequisite": "C",
+    "nonNursing": "D"
+  },
+  "passFail": {
+    "careerLimitType": "percent_of_program",
+    "careerLimit": 25,
+    "perTermLimit": 1,
+    "perTermUnit": "semester",
+    "countsForMajor": false,
+    "countsForMinor": false,
+    "countsForGenEd": false,
+    "creditType": "elective_only",
+    "excludedCourseTypes": [
+      "core_ua",
+      "intro_to_psychology",
+      "science",
+      "nursing_prerequisite",
+      "nursing_sequence"
+    ],
+    "canElect": true,
+    "autoExcludedFromLimit": [],
+    "gradePassEquivalent": "D",
+    "failCountsInGpa": true,
+    "exceptions": [
+      "Nursing cohort seminar is taken Pass/Fail and is a graduation requirement",
+      "Liberal arts electives only; subject to the policy of the school offering the course and adviser approval"
+    ]
+  },
+  "spsPolicy": {
+    "allowed": true,
+    "allowedPrefixes": [
+      "REBS1-UC",
+      "TCHT1-UC",
+      "TCSM1-UC",
+      "RWLD1-UC"
+    ],
+    "creditType": "elective_only",
+    "countsTowardResidency": false,
+    "countsAgainstNonHomeSchoolCap": true,
+    "excludedCourseTypes": [
+      "internship",
+      "independent_study"
+    ]
+  },
+  "doubleCounting": {
+    "defaultMajorToMajor": 2,
+    "defaultMajorToMinor": 2,
+    "defaultMinorToMinor": 2,
+    "noTripleCounting": true,
+    "requiresDepartmentApproval": true,
+    "overrideByProgram": true
+  },
+  "transferCreditLimits": {
+    "firstYearMaxTotal": 32,
+    "transferStudentMaxTotal": 64
+  },
+  "acceptsTransferCredit": true,
+  "maxCreditsPerSemester": 18,
+  "f1FullTimeMinCredits": 12,
+  "overloadRequirements": [
+    {
+      "condition": "default",
+      "minGpa": 3.5,
+      "note": "Over 18 credits by advisement only; requires approval from the Vice Dean, Enrollment Management, Student Success, and Inclusion (Credit Overload Permission Form)"
+    }
+  ],
+  "goodStandingReturnThreshold": 0.75,
+  "maxCourseRepeats": 1,
+  "deansListThreshold": {
+    "minGpa": 3.6,
+    "minCredits": 8,
+    "per": "term",
+    "note": "Term average of 3.6 or better in at least 8 credits; grades of I or N disqualify"
+  },
+  "advisingContact": {
+    "name": "NYU Meyers Office of Advising & Academic Services",
+    "email": "nursing.ug.admissions@nyu.edu",
+    "url": "https://nursing.nyu.edu"
+  },
+  "_inferredFields": [
+    "courseSuffix",
+    "residency.type",
+    "residency.suffix",
+    "residency.finalCreditsInResidence",
+    "residency.majorMinorResidencyPercent",
+    "creditCaps[type=non_home_school]",
+    "creditCaps[type=online]",
+    "creditCaps[type=advanced_standing]",
+    "creditCaps[type=independent_study]",
+    "passFail.perTermLimit",
+    "passFail.perTermUnit",
+    "passFail.countsForMinor",
+    "spsPolicy",
+    "doubleCounting",
+    "transferCreditLimits.firstYearMaxTotal",
+    "f1FullTimeMinCredits",
+    "overloadRequirements[0].minGpa",
+    "goodStandingReturnThreshold",
+    "advisingContact.email",
+    "advisingContact.url"
+  ]
+}

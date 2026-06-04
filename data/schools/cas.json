@@ -1,0 +1,133 @@
+{
+  "_meta": {
+    "catalogYear": "2025-2026",
+    "sourceUrl": "https://bulletin.cas.nyu.edu/undergraduate/academic-policies/",
+    "lastVerified": "2026-04-26",
+    "sourceHash": "sha256:a51f88d66d6ae14aedd33dd32f812258225ca1d5e149391804a424469e26bdc4",
+    "extractedBy": "manual",
+    "verifiedBy": "hand-review",
+    "sourceRef": {
+      "anchor": null,
+      "pdfPage": null
+    }
+  },
+  "schoolId": "cas",
+  "name": "College of Arts and Science",
+  "degreeType": "BA",
+  "courseSuffix": [
+    "-UA"
+  ],
+  "overallGpaMin": 2.0,
+  "residency": {
+    "type": "suffix_based",
+    "suffix": "-UA",
+    "minCredits": 64,
+    "finalCreditsInResidence": 32,
+    "majorMinorResidencyPercent": 50
+  },
+  "creditCaps": [
+    {
+      "type": "non_home_school",
+      "maxCredits": 16,
+      "label": "Non-CAS courses (incl. SPS allowlist)"
+    },
+    {
+      "type": "online",
+      "maxCredits": 24,
+      "label": "Online course credits (raised from 16 in Fall 2024)"
+    },
+    {
+      "type": "transfer",
+      "maxCredits": 64,
+      "label": "Transfer credits"
+    },
+    {
+      "type": "advanced_standing",
+      "maxCredits": 32,
+      "label": "AP/IB/A-Level credits"
+    },
+    {
+      "type": "independent_study",
+      "maxCredits": 12,
+      "maxPerDepartment": 8,
+      "includesInternship": true,
+      "label": "Independent study + internship (max 8/dept)"
+    }
+  ],
+  "gradeThresholds": {
+    "core": "D",
+    "major": "C",
+    "minor": "C"
+  },
+  "passFail": {
+    "careerLimitType": "credits",
+    "careerLimit": 32,
+    "perTermLimit": 1,
+    "perTermUnit": "semester",
+    "countsForMajor": false,
+    "countsForMinor": false,
+    "countsForGenEd": false,
+    "excludedCourseTypes": [],
+    "canElect": true,
+    "autoExcludedFromLimit": [],
+    "gradePassEquivalent": "D",
+    "failCountsInGpa": true,
+    "exceptions": [
+      "FL courses not used for FL requirement are P/F-eligible"
+    ]
+  },
+  "spsPolicy": {
+    "allowed": true,
+    "allowedPrefixes": [
+      "REBS1-UC",
+      "TCHT1-UC",
+      "TCSM1-UC",
+      "RWLD1-UC"
+    ],
+    "creditType": "elective_only",
+    "countsTowardResidency": false,
+    "countsAgainstNonHomeSchoolCap": true,
+    "excludedCourseTypes": [
+      "internship",
+      "independent_study"
+    ]
+  },
+  "doubleCounting": {
+    "defaultMajorToMajor": 2,
+    "defaultMajorToMinor": 2,
+    "defaultMinorToMinor": 2,
+    "noTripleCounting": true,
+    "requiresDepartmentApproval": true,
+    "overrideByProgram": true
+  },
+  "transferCreditLimits": {
+    "firstYearMaxTotal": 32,
+    "transferStudentMaxTotal": 64,
+    "springAdmitPostSecondaryMax": 8
+  },
+  "acceptsTransferCredit": true,
+  "maxCreditsPerSemester": 18,
+  "f1FullTimeMinCredits": 12,
+  "overloadRequirements": [
+    {
+      "condition": "default",
+      "minGpa": 3.5,
+      "note": "Adviser approval required"
+    }
+  ],
+  "goodStandingReturnThreshold": 0.75,
+  "maxCourseRepeats": 2,
+  "sharedPrograms": [
+    "cas_core"
+  ],
+  "programExclusions": [],
+  "deansListThreshold": {
+    "minGpa": 3.65,
+    "note": "Traditionally 3.65; see CAS honors page"
+  },
+  "advisingContact": {
+    "name": "CAS Advising",
+    "email": "cas.advising@nyu.edu",
+    "url": "https://cas.nyu.edu/advising"
+  }
+}
