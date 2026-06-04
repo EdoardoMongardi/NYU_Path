@@ -15,7 +15,7 @@
 
 import { z } from "zod";
 import { buildTool } from "../tool.js";
-import { classifyCourseAccessibility } from "../../data/courseSuffixMap.js";
+import { classifyCourseAccessibility, type Accessibility } from "../../data/courseSuffixMap.js";
 
 interface CatalogCourse {
     courseId: string;
