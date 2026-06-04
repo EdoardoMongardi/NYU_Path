@@ -142,7 +142,7 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
         }
     }
 
-    // ---- 8. Build program rules from session.programs + school config ----
+    // ---- 8. Build program rules from DPR requirement groups + school config ----
 
     const programRules = buildProgramRules(session, dpr, graduationTerm, graduationCreditMinimum);
 

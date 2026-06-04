@@ -25,8 +25,7 @@ import {
     createPrimaryClient,
     type ToolSession,
 } from "../packages/engine/src/agent/index.js";
-import { loadCourses, loadPrereqs, loadPrograms } from "../packages/engine/src/dataLoader.js";
-import type { Program } from "@nyupath/shared";
+import { loadCourses, loadPrereqs } from "../packages/engine/src/dataLoader.js";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CACHE = join(REPO_ROOT, "data/policy-corpus/policy_chunks.jsonl");
@@ -90,8 +89,6 @@ async function main() {
     const reranker: Reranker = cohereKey ? new CohereReranker({ apiKey: cohereKey }) : new LocalLexicalReranker();
     console.error(`Corpus loaded: ${store.size} chunks. Reranker: ${reranker.modelId}.`);
 
-    const programs = new Map<string, Program>();
-    for (const p of loadPrograms()) programs.set(p.programId, p);
     const courses = loadCourses();
     const prereqs = loadPrereqs();
 
@@ -103,7 +100,7 @@ async function main() {
         const session: ToolSession = {
             student: q.student,
             rag: { store, embedder, reranker },
-            programs, courses, prereqs,
+            courses, prereqs,
             ...(q.transferIntent ? { transferIntent: true } : {}),
         };
         const systemPrompt = buildSystemPrompt({ student: q.student });
