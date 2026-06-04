@@ -31,12 +31,13 @@ import {
 // Step 3A — Gap A: dismissal independent of GPA gate
 // ============================================================
 describe("Gap A — dismissal check independent of GPA (CAS L494)", () => {
-    it("high-GPA + low-completion student after 2nd semester is now flagged dismissed", () => {
-        // 4 courses, 2 graded (A) + 2 W. Cumulative GPA = 4.0 (good standing).
-        // Completion rate: 2 earned / (2+2 attempted) = 50%, but with only one
-        // more W to drop below 50%. Make it 1 A + 3 W: GPA=4.0, attempted=16cr,
-        // earned=4cr → 25% completion. Per CAS L494, after 2nd semester this
-        // is dismissal-eligible regardless of GPA.
+    const cas = loadSchoolConfig("cas")!; // publishes a completion-rate dismissal policy
+
+    it("high-GPA + low-completion student after 2nd semester is flagged dismissed (CAS)", () => {
+        // 1 A + 3 W: GPA=4.0, attempted=16cr, earned=4cr → 25% completion.
+        // Per CAS L494, after the 2nd semester this is dismissal-eligible
+        // regardless of GPA. The dismissal is now driven by CAS's per-school
+        // completionRatePolicy (not a universal default).
         const r = calculateStanding(
             [
                 { courseId: "X1", grade: "A", semester: "2024-fall", credits: 4 },
@@ -45,12 +46,13 @@ describe("Gap A — dismissal check independent of GPA (CAS L494)", () => {
                 { courseId: "X4", grade: "W", semester: "2025-spring", credits: 4 },
             ],
             2,
+            cas,
         );
         expect(r.cumulativeGPA).toBe(4.0);
         expect(r.level).toBe("dismissed");
     });
 
-    it("high-GPA + ≥50% completion student is still good_standing", () => {
+    it("high-GPA + ≥50% completion student is still good_standing (CAS)", () => {
         const r = calculateStanding(
             [
                 { courseId: "X1", grade: "A", semester: "2024-fall", credits: 4 },
@@ -58,6 +60,7 @@ describe("Gap A — dismissal check independent of GPA (CAS L494)", () => {
                 { courseId: "X3", grade: "W", semester: "2025-spring", credits: 4 },
             ],
             2,
+            cas,
         );
         expect(r.level).toBe("good_standing");
     });
@@ -139,10 +142,22 @@ describe("Gap B — Tandon tiered GPA (Tandon L287-300)", () => {
         expect(r.warnings.some(w => w.includes("Final Probation"))).toBe(true);
     });
 
-    it("Tandon final_probation does NOT override an active dismissal (dismissal wins)", () => {
+    it("final_probation does NOT override an active dismissal (dismissal wins)", () => {
+        // Precedence rule, exercised on a school that carries BOTH a
+        // finalProbationGpaFloor and a completion-rate dismissal policy.
+        // (Tandon itself publishes only the GPA floor; pace-dismissal is a
+        // per-school opt-in, so we compose a config with both to test that
+        // dismissal still wins.) 4 W's after 3 semesters → 0% completion
+        // (< 50% floor) AND cumulative GPA 0 < 1.5 — both trigger.
         const tandon = loadSchoolConfig("tandon")!;
-        // 4 W's + 0 grades after 3 semesters → completion 0%, dismissal floor 50%.
-        // Cumulative GPA 0 < 1.5 — both rules trigger; dismissal must win.
+        const withDismissal = {
+            ...tandon,
+            completionRatePolicy: {
+                goodStandingThreshold: 0.75,
+                dismissalThreshold: 0.5,
+                dismissalAfterSemesters: 2,
+            },
+        };
         const r = calculateStanding(
             [
                 { courseId: "X1", grade: "W", semester: "2024-fall", credits: 4 },
@@ -151,7 +166,7 @@ describe("Gap B — Tandon tiered GPA (Tandon L287-300)", () => {
                 { courseId: "X4", grade: "W", semester: "2025-spring", credits: 4 },
             ],
             3,
-            tandon,
+            withDismissal,
         );
         expect(r.level).toBe("dismissed");
     });

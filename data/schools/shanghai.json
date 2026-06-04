@@ -62,7 +62,9 @@
       "note": "Overload after year 1 requires good academic standing (GPA > 2.0) + Assistant Dean approval; no numeric GPA gate published."
     }
   ],
-  "goodStandingReturnThreshold": 0.5,
+  "completionRatePolicy": {
+    "goodStandingThreshold": 0.5
+  },
   "maxCourseRepeats": 2,
   "deansListThreshold": {
     "minGpa": 3.65,

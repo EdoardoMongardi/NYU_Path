@@ -369,6 +369,32 @@ export interface DeansListThreshold {
     note?: string;
 }
 
+/**
+ * A school's credit-completion-rate ("pace") academic-standing rule. This is
+ * per-school, NOT a universal NYU default: only schools whose bulletin
+ * publishes a completion-rate floor carry this. Schools that express standing
+ * purely through GPA / a tiered GPA table (e.g. Stern, Tandon) omit it, and
+ * `calculateStanding` applies no completion-rate warning or dismissal to them.
+ */
+export interface CompletionRatePolicy {
+    /**
+     * Minimum fraction (0–1) of attempted credits a student must complete to
+     * be on-pace for good academic standing; falling below it raises an
+     * advisory completion-rate warning. Bulletin-sourced per school
+     * (CAS/LS 0.75, Gallatin 0.76, NYUAD 0.75, Tisch/SPS/Shanghai 0.50).
+     */
+    goodStandingThreshold: number;
+    /**
+     * Completion fraction below which the student becomes dismissal-eligible
+     * once `dismissalAfterSemesters` have elapsed. Opt-in: only schools that
+     * publish a hard pace-dismissal rule set this (CAS 0.50, bulletin L494).
+     * Omitted → the school never dismisses on completion-rate grounds.
+     */
+    dismissalThreshold?: number;
+    /** Semesters that must elapse before the dismissal check applies (CAS: 2). */
+    dismissalAfterSemesters?: number;
+}
+
 
 export interface SchoolConfig {
     /** Stable identifier, e.g. "cas", "stern", "tandon" */
@@ -418,12 +444,12 @@ export interface SchoolConfig {
      */
     finalProbationGpaFloor?: number;
     /**
-     * Completion-rate floor required to *return* to good academic standing
-     * after a notice of academic concern. Distinct from federal SAP (which
-     * is a financial-aid metric, typically 0.67). For CAS this is 0.75
-     * per the bulletin: "complete 75% of attempted credits."
+     * Per-school credit-completion-rate ("pace") standing rule. Present only
+     * for schools whose bulletin publishes a completion-rate floor; absent for
+     * GPA-only / tiered-GPA schools, which then get no completion-rate warning
+     * or dismissal. Distinct from federal SAP (a financial-aid metric, ~0.67).
      */
-    goodStandingReturnThreshold?: number;
+    completionRatePolicy?: CompletionRatePolicy;
     maxCourseRepeats?: number;
     deansListThreshold?: DeansListThreshold;
     // Step 8e — dead fields removed (zero live readers; rule-engine/structural
