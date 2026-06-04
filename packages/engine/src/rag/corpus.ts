@@ -1,20 +1,20 @@
 // ============================================================
-// RAG Corpus Builder (Phase 4 §5.3)
+// RAG Corpus Builder — full bulletin walk
 // ============================================================
-// Assembles the indexed corpus from `data/bulletin-raw/`. Per §5.3,
-// each school's bulletin is chunked separately so the scope filter
-// can hard-filter by school. Tag each chunk with:
-//   - source (e.g., "CAS Academic Policies")
-//   - school (lowercase id)
-//   - year (catalogYear)
-//   - section (heading)
+// Assembles the indexed policy corpus from `data/bulletin-raw/`. The
+// "nothing hardcoded" pass replaced the hand-authored entry list +
+// per-section discovery functions with ONE walk of the whole
+// undergraduate bulletin tree (+ the NYU-wide internal-transfer, OGS,
+// and nyu trees). Every `.md` page is ingested and auto-tagged by
+// school + category from its path, so the agent can RAG-explore any
+// undergraduate bulletin page — no curated subset.
 //
-// Default catalog year is "2025-2026" matching the rest of the data
-// files. Callers can override.
+// Excluded by design: `graduate/` (undergrad scope) and `courses/`
+// (the full course catalog is embedded SEPARATELY for search_courses;
+// duplicating it here would bloat the policy corpus).
 //
-// At v1 this builds the corpus on-demand by reading bulletin markdown.
-// In production, the corpus would be pre-embedded and persisted to a
-// vector DB; the rebuild path here exists for tests and dev iteration.
+// Each chunk is tagged with source title, school (lowercase id), year,
+// section heading, and a category. Default catalog year is "2025-2026".
 // ============================================================
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -28,177 +28,77 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..", "..", "..", "..");
 const BULLETIN_DIR = join(REPO_ROOT, "data", "bulletin-raw");
 
+type CorpusCategory = "academic_policy" | "admissions" | "program" | "core_curriculum" | "course_catalog" | "school_overview";
+
 interface CorpusEntry {
     school: string;
     source: string;
     /** Path relative to data/bulletin-raw/ */
     relPath: string;
-    /** Phase 9 — category tag so the agent + ranker can prefer the
-     *  right kind of source. Optional for back-compat. */
-    category?: "academic_policy" | "admissions" | "program" | "core_curriculum" | "course_catalog" | "school_overview";
+    /** Category tag so the agent + reranker can prefer the right kind
+     *  of source (e.g. `program` pages for curriculum questions). */
+    category?: CorpusCategory;
 }
-
-/**
- * Default mapping of (school, source title) → bulletin file path.
- * Each entry produces one chunked subset of the corpus. Add T3 program
- * pages here as they become available.
- */
-const DEFAULT_ENTRIES: CorpusEntry[] = [
-    { school: "cas", source: "CAS Academic Policies",
-      relPath: "undergraduate/arts-science/academic-policies/_index.md" },
-    { school: "stern", source: "Stern Academic Policies",
-      relPath: "undergraduate/business/academic-policies/_index.md" },
-    { school: "tandon", source: "Tandon Academic Policies",
-      relPath: "undergraduate/engineering/academic-policies/_index.md" },
-    { school: "tisch", source: "Tisch Academic Policies",
-      relPath: "undergraduate/arts/academic-policies/_index.md" },
-    { school: "all", source: "NYU-wide Internal Transfer Admissions (CAS)",
-      relPath: "undergraduate/arts-science/admissions/_index.md" },
-    { school: "stern", source: "Stern Admissions",
-      relPath: "undergraduate/business/admissions/_index.md" },
-    { school: "cas", source: "CAS EXPOS-UA Course Catalog",
-      relPath: "courses/expos_ua/_index.md" },
-    { school: "cas", source: "CAS Economics BA",
-      relPath: "undergraduate/arts-science/programs/economics-ba/_index.md" },
-    // T3 — included so verbatim-quote responses can be served from RAG.
-    // Bulletin path note: Gallatin's directory in the scrape is named
-    // "individualized-study", not "gallatin". The school config keeps
-    // schoolId "gallatin"; only the bulletin file path differs.
-    { school: "gallatin", source: "NYU Gallatin School of Individualized Study (overview, T3)",
-      relPath: "undergraduate/individualized-study/_index.md" },
-    { school: "gallatin", source: "NYU Gallatin Academic Policies (T3)",
-      relPath: "undergraduate/individualized-study/academic-policies/_index.md" },
-    { school: "liberal_studies", source: "NYU Liberal Studies (overview, T3)",
-      relPath: "undergraduate/liberal-studies/_index.md" },
-    { school: "liberal_studies", source: "NYU Liberal Studies Academic Policies (T3)",
-      relPath: "undergraduate/liberal-studies/academic-policies/_index.md" },
-];
 
 export interface BuildCorpusOptions {
     catalogYear?: string;
-    /** Override the entry list (tests use this) */
+    /** Override the entry list (tests use this to ingest a fixed set). */
     entries?: CorpusEntry[];
-    /** Override the bulletin root (tests use a tmp dir) */
+    /** Override the bulletin root (tests use a tmp dir). */
     bulletinDir?: string;
     /** When true, throw if any configured entry's file is missing. Default false. */
     strict?: boolean;
     /** When true (default), log skipped entries via console.warn. */
     warnOnSkip?: boolean;
-    /** Phase 9 Stage 1 — when true, the corpus also includes every
-     *  CAS program page (BA / BS / minor) under undergraduate/arts-
-     *  science/programs/ + the College Core Curriculum page. Also
-     *  pulls similar program directories under arts/business/
-     *  engineering/individualized-study/liberal-studies for what-if
-     *  questions. Defaults to false for back-compat — the embed
-     *  script flips it on. */
-    includeProgramPages?: boolean;
-    /** Improvement plan, Phase C — when true, the corpus also indexes
-     *  the previously-skipped NYU-wide policy trees:
-     *    - `internal-transfer-equivalencies/` (internal-transfer
-     *      requirements) → category "admissions"
-     *    - `ogs/` (Office of Global Services: F-1/J-1/RCL/CPT/OPT visa
-     *      + immigration rules) → category "academic_policy"
-     *  Both are tagged school "all" (NYU-wide) so every student's scope
-     *  admits them. Defaults to false for back-compat; the embed script
-     *  flips it on. */
-    includePolicyTrees?: boolean;
 }
 
-/** Phase 9 Stage 1 — map a program-directory location → school id.
- *  Mirrors the schoolId convention used elsewhere in the engine
- *  (see SchoolConfig + buildStudentProfileFromDpr). */
-const PROGRAM_DIR_TO_SCHOOL: Record<string, string> = {
+// Bulletin `undergraduate/<dir>` → engine school id (matches the
+// SchoolConfig / DPR-derived convention). Dirs not listed fall back to
+// the dir name with dashes → underscores.
+const SCHOOL_DIR_TO_ID: Record<string, string> = {
     "arts-science": "cas",
-    "arts": "tisch",
     "business": "stern",
     "engineering": "tandon",
+    "arts": "tisch",
+    "culture-education-human-development": "steinhardt",
     "individualized-study": "gallatin",
     "liberal-studies": "liberal_studies",
+    "professional-studies": "sps",
+    "nursing": "nursing",
+    "social-work": "social_work",
+    "public-service": "public_service",
+    "dentistry": "dentistry",
     "abu-dhabi": "nyuad",
     "shanghai": "shanghai",
 };
 
-/** Phase 9 Stage 1 — derive a human-readable program label from the
- *  directory slug. E.g. "mathematics-computer-science-ba" → "Mathematics
- *  and Computer Science (BA)". Used for the chunk metadata's `source`
- *  field so reranker output is human-meaningful. */
+/** Derive a human-readable program label from a directory slug, e.g.
+ *  "mathematics-computer-science-ba" → "CAS Mathematics Computer Science (BA)". */
 function programSlugToLabel(slug: string, schoolId: string): string {
-    // Trim a trailing degree marker (-ba, -bs, -minor, -ma, -ms) and remember it.
     const degreeMatch = slug.match(/-(ba|bs|minor|ma|ms|phd|cert)$/);
     const degree = degreeMatch ? degreeMatch[1] : null;
     const base = degreeMatch ? slug.slice(0, -degreeMatch[0].length) : slug;
-    // Title-case the rest, joining with spaces.
     const title = base
         .split("-")
-        .map((p) => (p === "and" || p === "of" || p === "in" ? p : p[0]?.toUpperCase() + p.slice(1)))
+        .map((p) => (p === "and" || p === "of" || p === "in" ? p : (p[0]?.toUpperCase() ?? "") + p.slice(1)))
         .join(" ");
-    const schoolPrefix =
-        schoolId === "cas" ? "CAS"
-        : schoolId === "stern" ? "Stern"
-        : schoolId === "tandon" ? "Tandon"
-        : schoolId === "tisch" ? "Tisch"
-        : schoolId === "gallatin" ? "Gallatin"
-        : schoolId === "liberal_studies" ? "Liberal Studies"
-        : schoolId === "nyuad" ? "NYU Abu Dhabi"
-        : schoolId === "shanghai" ? "NYU Shanghai"
-        : schoolId;
     const degreeLabel = degree ? ` (${degree.toUpperCase()})` : "";
-    return `${schoolPrefix} ${title}${degreeLabel}`;
+    return `${schoolDisplayPrefix(schoolId)} ${title}${degreeLabel}`.trim();
 }
 
-/** Phase 9 Stage 1 — walk `data/bulletin-raw/undergraduate/<school-dir>/programs/`
- *  and produce a CorpusEntry per program _index.md. Skips dirs that
- *  don't have an _index.md (rare). */
-function discoverProgramEntries(bulletinDir: string): CorpusEntry[] {
-    const out: CorpusEntry[] = [];
-    const undergradRoot = join(bulletinDir, "undergraduate");
-    if (!existsSync(undergradRoot)) return out;
-    for (const schoolDir of readdirSync(undergradRoot)) {
-        const schoolId = PROGRAM_DIR_TO_SCHOOL[schoolDir];
-        if (!schoolId) continue;
-        const programsRoot = join(undergradRoot, schoolDir, "programs");
-        if (!existsSync(programsRoot)) continue;
-        for (const slug of readdirSync(programsRoot)) {
-            const programDir = join(programsRoot, slug);
-            try {
-                if (!statSync(programDir).isDirectory()) continue;
-            } catch { continue; }
-            const indexPath = join(programDir, "_index.md");
-            if (!existsSync(indexPath)) continue;
-            out.push({
-                school: schoolId,
-                source: programSlugToLabel(slug, schoolId),
-                relPath: join("undergraduate", schoolDir, "programs", slug, "_index.md"),
-                category: "program",
-            });
-        }
-    }
-    return out;
+function schoolDisplayPrefix(schoolId: string): string {
+    const map: Record<string, string> = {
+        cas: "CAS", stern: "Stern", tandon: "Tandon", tisch: "Tisch",
+        steinhardt: "Steinhardt", gallatin: "Gallatin", liberal_studies: "Liberal Studies",
+        sps: "SPS", nursing: "Nursing", social_work: "Silver Social Work",
+        public_service: "Public Service", dentistry: "Dentistry",
+        nyuad: "NYU Abu Dhabi", shanghai: "NYU Shanghai", all: "NYU",
+    };
+    return map[schoolId] ?? schoolId;
 }
 
-/** Phase 9 Stage 1 — entries for the College Core Curriculum page +
- *  any other school-overview pages we want indexed (e.g. CAS
- *  college-core-curriculum). */
-function discoverCoreCurriculumEntries(bulletinDir: string): CorpusEntry[] {
-    const out: CorpusEntry[] = [];
-    const candidates: Array<{school: string; relPath: string; source: string}> = [
-        {
-            school: "cas",
-            source: "CAS College Core Curriculum",
-            relPath: "undergraduate/arts-science/college-core-curriculum/_index.md",
-        },
-    ];
-    for (const c of candidates) {
-        if (existsSync(join(bulletinDir, c.relPath))) {
-            out.push({ ...c, category: "core_curriculum" });
-        }
-    }
-    return out;
-}
-
-/** Phase C — recursively collect every `.md` file under `dir`, returned
- *  as paths relative to `bulletinDir` (the form CorpusEntry.relPath
- *  expects). Symlink-free, depth-first; unreadable entries are skipped. */
+/** Recursively collect every `.md` file under `dir`, returned as paths
+ *  relative to `bulletinDir`. Depth-first; unreadable entries skipped. */
 function walkMarkdownRelPaths(dir: string, bulletinDir: string): string[] {
     const out: string[] = [];
     let names: string[];
@@ -224,57 +124,85 @@ function walkMarkdownRelPaths(dir: string, bulletinDir: string): string[] {
     return out;
 }
 
-/** Phase C — derive a human-readable source label from a tree-relative
- *  markdown path. Uses the directory that owns an `_index.md` (or the
- *  filename otherwise), title-cased: ".../student-visa-and-immigration/
- *  _index.md" → "Student Visa And Immigration". */
-function policyTreeLabel(relPath: string): string {
+/** Title-case the directory that owns a page (or the filename), e.g.
+ *  ".../student-visa-and-immigration/_index.md" → "Student Visa And Immigration". */
+function pathLabel(relPath: string): string {
     const parts = relPath.split(/[\\/]/);
     const file = parts[parts.length - 1]!;
-    const slug = file === "_index.md"
-        ? (parts[parts.length - 2] ?? parts[0]!)
-        : file.replace(/\.md$/, "");
-    return slug
-        .split("-")
-        .map((p) => (p.length === 0 ? p : p[0]!.toUpperCase() + p.slice(1)))
-        .join(" ");
+    const slug = file === "_index.md" ? (parts[parts.length - 2] ?? parts[0]!) : file.replace(/\.md$/, "");
+    return slug.split("-").map((p) => (p.length === 0 ? p : p[0]!.toUpperCase() + p.slice(1))).join(" ");
 }
 
-/** Phase C — entries for the NYU-wide policy trees that the default
- *  corpus skipped: internal-transfer requirements and OGS visa /
- *  immigration rules. Every file is tagged school "all" so it is in
- *  scope for any student; the category lets the reranker prefer the
- *  right kind of source. */
-function discoverPolicyTreeEntries(bulletinDir: string): CorpusEntry[] {
-    const trees: Array<{ dir: string; category: NonNullable<CorpusEntry["category"]>; prefix: string }> = [
-        { dir: "internal-transfer-equivalencies", category: "admissions", prefix: "NYU Internal Transfer" },
-        { dir: "ogs", category: "academic_policy", prefix: "NYU OGS (Global Services)" },
-    ];
+/** Infer the category for a bulletin page from its path. */
+function categoryFor(relPath: string): CorpusCategory {
+    const p = relPath.toLowerCase();
+    if (p.includes("/programs/")) return "program";
+    if (p.includes("college-core-curriculum")) return "core_curriculum";
+    if (p.includes("/admissions") || p.includes("internal-transfer")) return "admissions";
+    if (p.includes("academic-polic")) return "academic_policy";
+    // OGS visa/immigration rules read as policy.
+    if (p.startsWith("ogs/")) return "academic_policy";
+    return "school_overview";
+}
+
+/** Walk the entire undergraduate bulletin tree + the NYU-wide trees and
+ *  produce one CorpusEntry per `.md` page, auto-tagged by school +
+ *  category. This is the "ingest all" entry list. */
+function discoverAllEntries(bulletinDir: string): CorpusEntry[] {
     const out: CorpusEntry[] = [];
-    for (const tree of trees) {
+
+    // 1. Per-school undergraduate tree.
+    const ugRoot = join(bulletinDir, "undergraduate");
+    if (existsSync(ugRoot)) {
+        for (const schoolDir of readdirSync(ugRoot)) {
+            const schoolRoot = join(ugRoot, schoolDir);
+            try {
+                if (!statSync(schoolRoot).isDirectory()) continue;
+            } catch { continue; }
+            const schoolId = SCHOOL_DIR_TO_ID[schoolDir] ?? schoolDir.replace(/-/g, "_");
+            for (const relPath of walkMarkdownRelPaths(schoolRoot, bulletinDir)) {
+                const category = categoryFor(relPath);
+                const source = category === "program"
+                    ? programSlugToLabel(relPath.split(/[\\/]/).slice(-2)[0]!, schoolId)
+                    : `${schoolDisplayPrefix(schoolId)} — ${pathLabel(relPath)}`;
+                out.push({ school: schoolId, source, relPath, category });
+            }
+        }
+    }
+
+    // 2. NYU-wide trees → school "all" (in scope for every student).
+    const wideTrees: Array<{ dir: string; prefix: string }> = [
+        { dir: "internal-transfer-equivalencies", prefix: "NYU Internal Transfer" },
+        { dir: "ogs", prefix: "NYU OGS (Global Services)" },
+        { dir: "nyu", prefix: "NYU-wide" },
+    ];
+    for (const tree of wideTrees) {
         const root = join(bulletinDir, tree.dir);
         if (!existsSync(root)) continue;
         for (const relPath of walkMarkdownRelPaths(root, bulletinDir)) {
             out.push({
                 school: "all",
-                source: `${tree.prefix}: ${policyTreeLabel(relPath)}`,
+                source: `${tree.prefix}: ${pathLabel(relPath)}`,
                 relPath,
-                category: tree.category,
+                category: categoryFor(relPath),
             });
         }
     }
+
     return out;
 }
 
 export interface BuildCorpusResult {
     store: VectorStore;
     chunks: PolicyChunk[];
-    /** Entries skipped because the file didn't exist */
+    /** Entries skipped because the file didn't exist. */
     skipped: CorpusEntry[];
 }
 
 /**
  * Build the full RAG corpus and return a populated VectorStore.
+ * By default ingests the ENTIRE undergraduate bulletin tree + the
+ * NYU-wide trees (`options.entries` overrides for tests).
  */
 export async function buildCorpus(
     embedder: Embedder,
@@ -282,24 +210,8 @@ export async function buildCorpus(
 ): Promise<BuildCorpusResult> {
     const year = options.catalogYear ?? "2025-2026";
     const bulletinDir = options.bulletinDir ?? BULLETIN_DIR;
-    let entries = options.entries ?? DEFAULT_ENTRIES;
-    if (options.includeProgramPages) {
-        // De-duplicate against the explicit DEFAULT_ENTRIES list (we
-        // already include economics-ba there) — keep the explicit
-        // entry's source name + category.
-        const seen = new Set(entries.map((e) => e.relPath));
-        const programEntries = discoverProgramEntries(bulletinDir).filter((e) => !seen.has(e.relPath));
-        const coreEntries = discoverCoreCurriculumEntries(bulletinDir).filter((e) => !seen.has(e.relPath));
-        entries = [...entries, ...programEntries, ...coreEntries];
-    }
-    if (options.includePolicyTrees) {
-        // Phase C — append the NYU-wide internal-transfer + OGS trees,
-        // deduped against whatever is already in `entries` (including the
-        // program pages added just above).
-        const seen = new Set(entries.map((e) => e.relPath));
-        const treeEntries = discoverPolicyTreeEntries(bulletinDir).filter((e) => !seen.has(e.relPath));
-        entries = [...entries, ...treeEntries];
-    }
+    const entries = options.entries ?? discoverAllEntries(bulletinDir);
+
     const store = new VectorStore(embedder);
     const allChunks: PolicyChunk[] = [];
     const skipped: CorpusEntry[] = [];
@@ -345,5 +257,3 @@ export async function buildCorpus(
     await store.addChunks(allChunks);
     return { store, chunks: allChunks, skipped };
 }
-
-export { DEFAULT_ENTRIES };
