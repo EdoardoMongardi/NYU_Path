@@ -10,7 +10,6 @@
 // transitions — the gate is a forcing function for human review).
 // ============================================================
 
-import { matchTemplate, type PolicyTemplate, type TemplateMatchResult } from "../rag/policyTemplate.js";
 import type { ToolSession } from "../agent/tool.js";
 
 export type Cohort = "alpha" | "beta" | "invite" | "public" | "limited";
@@ -123,41 +122,21 @@ export function getCohortConfig(cohort: Cohort): CohortConfig {
 // availability" message instead of an LLM-generated reply.
 
 export interface TemplateOnlyResult {
-    kind: "template" | "no_match";
-    /** Present when kind === "template". */
-    match?: TemplateMatchResult;
-    /** Always present. The reply text the chat layer should surface. */
+    kind: "no_match";
+    /** The reply text the chat layer should surface. */
     reply: string;
 }
 
 /**
- * Recovery-mode entry point. Looks up the user's home school and
- * walks the curated template corpus for a match. No LLM, no tools,
- * no validators — just template lookup.
+ * Recovery-mode entry point. The curated template corpus was removed
+ * (the "nothing hardcoded" pass), so a gated/limited cohort no longer
+ * has a degraded answer path — it always returns the transparent
+ * "limited availability" message instead of an LLM-generated reply.
  */
-export function runTemplateMatcherOnly(
-    userMessage: string,
-    session: ToolSession,
-    templates: PolicyTemplate[],
-    options: { now?: Date; transferIntent?: boolean } = {},
+export function runRecoveryMode(
+    _userMessage: string,
+    _session: ToolSession,
 ): TemplateOnlyResult {
-    if (!session.student) {
-        return {
-            kind: "no_match",
-            reply: noMatchMessage("limited"),
-        };
-    }
-    const match = matchTemplate(userMessage, templates, session.student.homeSchool, {
-        now: options.now,
-        transferIntent: options.transferIntent,
-    });
-    if (match) {
-        return {
-            kind: "template",
-            match,
-            reply: match.template.body,
-        };
-    }
     return {
         kind: "no_match",
         reply: noMatchMessage("limited"),

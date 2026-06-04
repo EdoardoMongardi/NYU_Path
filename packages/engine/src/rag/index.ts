@@ -26,17 +26,6 @@ export {
 } from "./ragScopeFilter.js";
 export type { ScopeOptions, ScopeDecision } from "./ragScopeFilter.js";
 
-export {
-    matchTemplate,
-} from "./policyTemplate.js";
-export type {
-    PolicyTemplate,
-    PolicyTemplateApplicability,
-    TemplateMatchResult,
-} from "./policyTemplate.js";
-
-export { loadPolicyTemplates } from "./policyTemplateLoader.js";
-export type { PolicyTemplateLoadResult } from "./policyTemplateLoader.js";
 
 export {
     policySearch,

@@ -14,7 +14,6 @@ import {
 } from "../../src/rag/policySearch.js";
 import { LocalHashEmbedder } from "../../src/rag/embedder.js";
 import { VectorStore } from "../../src/rag/vectorStore.js";
-import { matchTemplate } from "../../src/rag/policyTemplate.js";
 import type { VectorSearchHit } from "../../src/rag/vectorStore.js";
 
 describe("CohereReranker (Phase 7-B Step 13)", () => {
@@ -94,13 +93,11 @@ describe("CohereReranker (Phase 7-B Step 13)", () => {
             {
                 homeSchool: "cas",
                 catalogYear: "2025-2026",
-                templates: [],
             },
             {
                 store,
                 embedder,
                 reranker: fakeCohere,
-                matchTemplate,
             },
         );
         expect(lexResult.confidence).toBe("medium");
@@ -112,14 +109,12 @@ describe("CohereReranker (Phase 7-B Step 13)", () => {
             {
                 homeSchool: "cas",
                 catalogYear: "2025-2026",
-                templates: [],
                 confidenceBands: COHERE_CONFIDENCE_BANDS,
             },
             {
                 store,
                 embedder,
                 reranker: fakeCohere,
-                matchTemplate,
             },
         );
         expect(cohereResult.confidence).toBe("medium");
