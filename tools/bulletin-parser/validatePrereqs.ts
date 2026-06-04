@@ -66,7 +66,15 @@ const PREREQS_PATH = join(
     "data",
     "prereqs.json"
 );
-const DEFAULT_SNAPSHOT = "/tmp/prereqs.curated.snapshot.json";
+// Committed fixture (was a machine-local `/tmp` path). Override via argv[2].
+const DEFAULT_SNAPSHOT = join(
+    REPO_ROOT,
+    "packages",
+    "engine",
+    "tests",
+    "fixtures",
+    "prereqs.curated.snapshot.json"
+);
 
 /**
  * Normalize a prereq group:

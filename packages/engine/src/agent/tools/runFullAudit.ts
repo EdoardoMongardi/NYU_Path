@@ -95,9 +95,6 @@ interface RunFullAuditOutput {
      *  whoami tool. Pure data-surface; works for any student. */
     dprHeader?: {
         studentName: string;
-        studentId: string;
-        program: string;
-        college: string;
         preparedDate: string;
     };
     /** Phase 11 follow-up — per-program GPA computed from the
@@ -134,11 +131,11 @@ export const runFullAuditTool = buildTool({
         "  • \"Am I on track to graduate?\", \"can I graduate this/next term?\"\n" +
         "  • Currently-enrolled / in-progress courses (DPR carries these)\n" +
         "  • What is my profile, what programs am I declared in\n" +
-        "  • IDENTITY questions: \"what is my name?\", \"what's my student ID?\", " +
-        "\"what program / college am I in?\", \"when was my DPR prepared?\" " +
-        "— the result envelope includes `dprHeader` with studentName, " +
-        "studentId, program, college, preparedDate. Always check it before " +
-        "saying \"I don't have access to your name.\"\n" +
+        "  • IDENTITY questions: \"what is my name?\", \"when was my DPR " +
+        "prepared?\" — the result envelope includes `dprHeader` with " +
+        "studentName + preparedDate. Always check it before saying \"I " +
+        "don't have access to your name.\" (Program/major questions are " +
+        "answered from the audit body, which names the audited program.)\n" +
         "  • PER-PROGRAM GPA: \"what's my major GPA?\", \"what's my CS GPA?\", " +
         "\"how am I doing in [program]?\" — the result envelope includes " +
         "`dprProgramGpas` with a computed GPA per declared program (using " +
@@ -285,11 +282,15 @@ export const runFullAuditTool = buildTool({
             // exposure; works for any student. Lets the agent answer
             // "what's my name?" / "what program am I in?" without a
             // dedicated whoami tool.
+            // Phase F follow-up bug fix — the DPR header schema only
+            // carries studentName + preparedDate (+ optional requestedBy).
+            // The earlier surface also read `studentId` / `program` /
+            // `college`, which the parser never populates, so they
+            // rendered as "undefined" to the agent. Program/college
+            // questions are answered from the audit body (which names the
+            // audited program) instead.
             const dprHeader = {
                 studentName: dpr.header.studentName,
-                studentId: dpr.header.studentId,
-                program: dpr.header.program,
-                college: dpr.header.college,
                 preparedDate: dpr.header.preparedDate,
             };
 
@@ -492,8 +493,7 @@ export const runFullAuditTool = buildTool({
             const h = output.dprHeader;
             lines.push(``);
             lines.push(`STUDENT (DPR header):`);
-            lines.push(`  Name: ${h.studentName} | StudentId: ${h.studentId}`);
-            lines.push(`  Program: ${h.program} | College: ${h.college}`);
+            lines.push(`  Name: ${h.studentName}`);
             lines.push(`  DPR prepared: ${h.preparedDate}`);
         }
 

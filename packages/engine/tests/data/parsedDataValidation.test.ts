@@ -48,7 +48,11 @@ const OFFERINGS_PATH = join(
     "data",
     "courses-offerings.json"
 );
-const SNAPSHOT_PATH = "/tmp/prereqs.curated.snapshot.json";
+// Committed fixture (was a machine-local `/tmp` path that no longer
+// exists, so the snapshot test ENOENT'd everywhere). Generated from the
+// 16 curated entries in the current prereqs.json; it now pins those
+// entries so a future drift in prereqs.json is caught.
+const SNAPSHOT_PATH = join(__dirname, "..", "fixtures", "prereqs.curated.snapshot.json");
 
 const SUFFIX_RE = "(UA|UB|UE|UF|UG|UH|UT|UY|SHU)";
 const COURSE_ID_RE = new RegExp(`^[A-Z][A-Z0-9]*-${SUFFIX_RE} \\S+$`);
