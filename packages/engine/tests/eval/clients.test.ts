@@ -137,9 +137,11 @@ describe("createPrimaryClient / createFallbackClient", () => {
         expect(f).toBeNull();
     });
 
-    // Phase 8 B5 — primary swap. Bake-off picked claude-haiku-4-5 as
-    // the default primary (post-Phase-8 architecture). Fallback is
-    // openai:gpt-4.1-mini (the prior primary).
+    // Primary is Anthropic by default. Phase 8 picked claude-haiku-4-5;
+    // Phase 9's live RAG eval swapped to claude-sonnet-4-6 (Haiku was
+    // variable on hard multi-part policy questions). Asserted via the
+    // DEFAULT_PRIMARY_MODEL constant so this stays correct across swaps.
+    // Fallback is openai:gpt-4.1-mini.
     it("builds an Anthropic primary by default when ANTHROPIC_API_KEY is set", () => {
         const c = createPrimaryClient({ ANTHROPIC_API_KEY: "sk-ant-test-fake" });
         expect(c).not.toBeNull();

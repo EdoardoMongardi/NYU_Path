@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import OpenAI from "openai";
 import { buildCorpus } from "../../packages/engine/src/rag/corpus.js";
 import type { Embedder } from "../../packages/engine/src/rag/embedder.js";
+import { withRetry } from "../../packages/engine/src/rag/retry.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..", "..");
@@ -74,7 +75,23 @@ async function main() {
     const fd = openSync(OUTPUT_JSONL, "w");
     closeSync(fd);
 
-    const client = new OpenAI({ apiKey });
+    const client = new OpenAI({ apiKey, maxRetries: 6 });
+
+    // Token-per-minute rate limits get tripped by the full-corpus walk
+    // (much larger than before). The shared `withRetry` helper backs off
+    // on 429 / 5xx / network blips (the same guard the runtime RAG path
+    // uses); TPM windows reset each minute so its 20s cap + jitter is
+    // sufficient on top of the SDK's own retries. Larger attempt budget
+    // here because this is a one-shot batch job, not a live turn.
+    const embedBatch = (inputs: string[]) =>
+        withRetry(() => client.embeddings.create({ model: MODEL, input: inputs }), {
+            maxAttempts: 10,
+            baseMs: 2000,
+            maxMs: 60_000,
+            onRetry: ({ attempt, waitMs }) =>
+                console.error(`  rate-limited; backing off ${Math.round(waitMs / 1000)}s (attempt ${attempt})`),
+        });
+
     let written = 0;
     for (let i = 0; i < chunks.length; i += BATCH) {
         const slice = chunks.slice(i, i + BATCH);
@@ -82,10 +99,7 @@ async function main() {
             const heading = c.meta.section?.trim() ?? "";
             return heading ? `${heading}\n\n${c.text}` : c.text;
         });
-        const response = await client.embeddings.create({
-            model: MODEL,
-            input: inputs,
-        });
+        const response = await embedBatch(inputs);
         const lines = [];
         for (let j = 0; j < slice.length; j++) {
             lines.push(JSON.stringify({
@@ -98,7 +112,7 @@ async function main() {
         if ((i / BATCH) % 5 === 0 || i + BATCH >= chunks.length) {
             console.error(`  checkpoint ${written} / ${chunks.length}`);
         }
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 250));
     }
 
     const sha = createHash("sha256").update(`${MODEL}|${DIM}|${written}`).digest("hex");
