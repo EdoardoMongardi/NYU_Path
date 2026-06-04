@@ -142,30 +142,18 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UB",
-    "minCredits": 64,
     "finalCreditsInResidence": null,
     "majorMinorResidencyPercent": 50
   },
   "creditCaps": [
-    {
-      "type": "non_home_school",
-      "maxCredits": 32,
-      "subtype": "transfer_back",
-      "label": "Non-business coursework transfer (max 32 total)"
-    },
     {
       "type": "advanced_standing",
       "maxCredits": 32,
       "label": "AP/IB/foreign certificate/prior college credits"
     }
   ],
-  "gradeThresholds": {
-    "major": "C",
-    "concentration": "C"
-  },
   "passFail": {
     "careerLimitType": "courses",
-    "careerLimit": 4,
     "perTermLimit": 1,
     "perTermUnit": "academic_year",
     "countsForMajor": true,

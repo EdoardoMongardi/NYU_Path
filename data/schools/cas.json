@@ -20,16 +20,10 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UA",
-    "minCredits": 64,
     "finalCreditsInResidence": 32,
     "majorMinorResidencyPercent": 50
   },
   "creditCaps": [
-    {
-      "type": "non_home_school",
-      "maxCredits": 16,
-      "label": "Non-CAS courses (incl. SPS allowlist)"
-    },
     {
       "type": "online",
       "maxCredits": 24,
@@ -53,14 +47,8 @@
       "label": "Independent study + internship (max 8/dept)"
     }
   ],
-  "gradeThresholds": {
-    "core": "D",
-    "major": "C",
-    "minor": "C"
-  },
   "passFail": {
     "careerLimitType": "credits",
-    "careerLimit": 32,
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,

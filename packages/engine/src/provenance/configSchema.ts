@@ -42,7 +42,6 @@ const doubleCountPolicySchema = z.enum(["allow", "limit_1", "disallow"]);
 const residencyConfigSchema = z.object({
     type: residencyTypeSchema,
     suffix: z.string().optional(),
-    minCredits: z.number().nullable(),
     finalCreditsInResidence: z.number().nullable().optional(),
     majorMinorResidencyPercent: z.number().optional(),
     note: z.string().optional(),
@@ -64,7 +63,6 @@ const creditCapSchema = z.object({
 
 const passFailConfigSchema = z.object({
     careerLimitType: careerLimitTypeSchema,
-    careerLimit: z.number().nullable(),
     careerLimitScope: z.string().optional(),
     perTermLimit: z.number().nullable().optional(),
     perTermUnit: perTermUnitSchema.optional(),
@@ -117,14 +115,6 @@ const transferCreditLimitsSchema = z.object({
     springAdmitPostSecondaryMax: z.number().optional(),
 }).passthrough();
 
-const gradeThresholdsSchema = z.object({
-    core: z.string().optional(),
-    major: z.string().optional(),
-    minor: z.string().optional(),
-    concentration: z.string().optional(),
-    nursingPrerequisite: z.string().optional(),
-    nonNursing: z.string().optional(),
-}).passthrough();
 
 const overloadRequirementSchema = z.object({
     condition: z.string(),
@@ -169,7 +159,6 @@ export const schoolConfigBodySchema = z.object({
     auditMode: z.enum(["full", "advising_only"]).optional(),
     residency: residencyConfigSchema,
     creditCaps: z.array(creditCapSchema).optional(),
-    gradeThresholds: gradeThresholdsSchema.optional(),
     passFail: passFailConfigSchema.optional(),
     spsPolicy: spsPolicySchema.optional(),
     transferCreditLimits: transferCreditLimitsSchema.optional(),

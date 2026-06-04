@@ -196,8 +196,9 @@ export interface ResidencyConfig {
     type: ResidencyType;
     /** Course-id suffix that counts toward residency, e.g. "-UA" for CAS */
     suffix?: string;
-    /** Minimum residency credits — null when school has no fixed limit */
-    minCredits: number | null;
+    // Step 8e — residency minimum-credits moved to the DPR
+    // (`dpr.cumulative.residencyRequired`, per-student). The forward planner's
+    // residency axis reads it from there; schoolConfig no longer carries it.
     /** Final-N-credits-in-residence rule (e.g., last 32 credits at NYU) */
     finalCreditsInResidence?: number | null;
     /** Percentage of major/minor that must be in residence */
@@ -244,8 +245,9 @@ export type PerTermUnit = "semester" | "academic_year";
 export interface PassFailConfig {
     /** Whether the career limit is denominated in credits, courses, or % */
     careerLimitType: CareerLimitType;
-    /** Career limit value — null when school has no explicit limit */
-    careerLimit: number | null;
+    // Step 8e — the P/F career-limit *value* moved to the DPR
+    // (`dpr.cumulative.passFailCapUnits`, per-student). careerLimitType is
+    // retained as the policy unit; the number comes from the DPR.
     /** For percent-of-program, whether scope is total, plan, or both */
     careerLimitScope?: string;
     /** Per-term limit — null when school has no explicit limit */
@@ -327,20 +329,6 @@ export interface TransferCreditLimits {
     springAdmitPostSecondaryMax?: number;
 }
 
-export interface GradeThresholds {
-    /** Minimum letter grade for Core / general-education courses */
-    core?: string;
-    /** Minimum letter grade for major courses */
-    major?: string;
-    /** Minimum letter grade for minor courses */
-    minor?: string;
-    /** Minimum letter grade for concentration courses (Stern) */
-    concentration?: string;
-    /** Nursing-prerequisite-specific minimum (Meyers) */
-    nursingPrerequisite?: string;
-    /** Non-nursing course minimum (Meyers) */
-    nonNursing?: string;
-}
 
 /**
  * One row in a per-semester minimum-cumulative-GPA table. Used by schools
@@ -416,7 +404,9 @@ export interface SchoolConfig {
     auditMode?: "full" | "advising_only";
     residency: ResidencyConfig;
     creditCaps?: CreditCap[];
-    gradeThresholds?: GradeThresholds;
+    // Step 8e — gradeThresholds removed: "a C is required in major courses" is a
+    // static bulletin fact answered via search_policy (RAG), and the DPR's
+    // requirement audit already reflects grade-based satisfaction.
     passFail?: PassFailConfig;
     spsPolicy?: SpsPolicy;
     transferCreditLimits?: TransferCreditLimits;

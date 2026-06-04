@@ -20,16 +20,10 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UC",
-    "minCredits": 64,
     "finalCreditsInResidence": null,
     "majorMinorResidencyPercent": 50
   },
   "creditCaps": [
-    {
-      "type": "non_home_school",
-      "maxCredits": 16,
-      "label": "Coursework in other undergraduate schools/divisions of NYU (Schack/Tisch/Tisch Institute bachelor's; DAUS bachelor's with adviser approval)"
-    },
     {
       "type": "transfer",
       "maxCredits": 64,
@@ -41,14 +35,8 @@
       "label": "Advanced standing incl. transfer + AP/IB credits (Schack/Tisch/Tisch Institute bachelor's)"
     }
   ],
-  "gradeThresholds": {
-    "core": "D",
-    "major": "C",
-    "minor": "C"
-  },
   "passFail": {
     "careerLimitType": "credits",
-    "careerLimit": 16,
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,

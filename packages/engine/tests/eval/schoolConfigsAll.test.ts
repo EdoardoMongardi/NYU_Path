@@ -44,17 +44,21 @@ describe("all school configs (Step 8c PR-B)", () => {
             if (!r.ok) throw new Error(`${s} failed to load`);
             return r.config;
         };
-        // Residency credits genuinely vary by school.
-        expect(get("steinhardt").residency?.minCredits).toBe(56);
-        expect(get("nursing").residency?.minCredits).toBe(32);
-        // Pass/Fail policy shape varies (Stern counts courses, not credits).
+        // Residency final-credits-in-residence genuinely varies by school.
+        expect(get("gallatin").residency?.finalCreditsInResidence).toBe(32);
+        // Pass/Fail policy *unit* varies (Stern counts courses, not credits).
         expect(get("stern").passFail?.careerLimitType).toBe("courses");
         expect(get("steinhardt").passFail?.careerLimitType).toBe("percent_of_program");
-        // The dropped Step 8c fields must NOT reappear on any config.
+        // Dropped fields (Step 8c/8e) must NOT reappear on any config.
         for (const s of SCHOOLS) {
             const c = get(s) as Record<string, unknown>;
             expect(c.totalCreditsRequired).toBeUndefined();
             expect(c.timeLimitYears).toBeUndefined();
+            expect(c.overallGpaMin).toBeUndefined();
+            expect(c.doubleCounting).toBeUndefined();
+            expect(c.gradeThresholds).toBeUndefined();
+            expect((c.residency as Record<string, unknown>)?.minCredits).toBeUndefined();
+            expect((c.passFail as Record<string, unknown>)?.careerLimit).toBeUndefined();
         }
     });
 });

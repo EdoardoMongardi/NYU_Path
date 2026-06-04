@@ -20,7 +20,6 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UG",
-    "minCredits": 64,
     "finalCreditsInResidence": 32,
     "note": "A minimum of 64 credits must be completed after matriculation in Gallatin; the last 32 credits must be completed at NYU (NYC or an NYU study away program)."
   },
@@ -41,14 +40,8 @@
       "label": "Internship credits (admitted Summer 2015 and later); max 4 internship credits per semester"
     }
   ],
-  "gradeThresholds": {
-    "core": "D",
-    "major": "C",
-    "minor": "C"
-  },
   "passFail": {
     "careerLimitType": "courses",
-    "careerLimit": 4,
     "perTermLimit": 1,
     "perTermUnit": "academic_year",
     "countsForMajor": false,
