@@ -409,8 +409,6 @@ export interface SchoolConfig {
     degreeType: string | null;
     /** Course-id suffixes belonging to this school, e.g. ["-UA"] */
     courseSuffix: string[];
-    /** Degree credit total — null when not fixed (e.g., Liberal Studies) */
-    totalCreditsRequired: number | null;
     overallGpaMin: number;
     /** "advising_only" disables hard rule enforcement (Gallatin) */
     auditMode?: "full" | "advising_only";
@@ -461,7 +459,6 @@ export interface SchoolConfig {
     maxCourseRepeats?: number;
     /** School-level shared programs (e.g., CAS Core) */
     sharedPrograms?: string[];
-    timeLimitYears?: number | null;
     programExclusions?: unknown[];
     deansListThreshold?: DeansListThreshold;
     /** Program kinds this school supports (e.g., Stern adds "concentration") */
