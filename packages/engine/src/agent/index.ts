@@ -21,7 +21,6 @@ export {
     getCreditCapsTool,
     searchAvailabilityTool,
     getAcademicStandingTool,
-    checkOverlapTool,
     searchCoursesTool,
     // Phase 16 Task B — exposed so the Update-DPR route can re-plan
     // programmatically without having to spin up the full agent loop.

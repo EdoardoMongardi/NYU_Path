@@ -24,7 +24,6 @@ export const TOOL_VERBS: Record<string, ToolVerb> = {
     get_credit_caps:            { active: "Checking credit caps",             past: "Checked credit caps" },
     search_availability:        { active: "Checking course offerings",        past: "Checked course offerings" },
     get_academic_standing:      { active: "Reading your academic standing",   past: "Read your academic standing" },
-    check_overlap:              { active: "Checking course overlap",          past: "Checked course overlap" },
     search_courses:             { active: "Searching the course catalog",     past: "Searched the course catalog" },
     // Phase 13 — forward planner
     plan_forward_degree:        { active: "Planning your full degree",        past: "Planned your full degree" },
@@ -76,7 +75,6 @@ export const TOOL_THOUGHT_SENTENCES: Record<string, string> = {
     get_credit_caps:            "Let me check the credit caps for your school and visa status so I don't suggest something over the ceiling.",
     search_availability:        "I should verify when those courses are actually offered before recommending them for a specific term.",
     get_academic_standing:      "Let me check your current academic standing — cumulative GPA and per-semester history.",
-    check_overlap:              "I need to check whether any of these courses count toward more than one of your declared programs.",
     search_courses:             "Searching the course catalog for matches so I can pull real course IDs and titles.",
     // Phase 13 — forward planner
     plan_forward_degree:        "Let me build out your full forward plan — every remaining semester through graduation, with credit balance and prerequisite ordering.",
