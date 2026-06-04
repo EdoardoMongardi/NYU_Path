@@ -45,7 +45,7 @@ data/
 
 # Local-only documentation (project-internal notes; not source-of-truth in repo).
 # Phase plan files at repo root (PHASE_*_PLAN.md) remain tracked normally.
-/docs/
+/Project Documentations/docs/
 
 # PII-containing source DPR PDFs and unredacted text extracts.
 # Only the .redacted.txt + .expected.json fixtures may be committed.
