@@ -2,11 +2,11 @@
 // loadCatalog — module-cached engine catalog for the chat session
 // ============================================================
 // Phase A (improvement plan): the chat route historically never
-// populated `session.programs` / `session.courses` / `session.prereqs`,
-// so `check_overlap` always rejected ("Programs catalog not loaded")
-// and any rule-engine-backed path was unreachable. This helper loads
-// the engine's bundled catalog ONCE per server process and hands the
-// chat route the shapes the ToolSession expects.
+// populated `session.programs` / `session.courses` / `session.prereqs`.
+// The forward planner needs the course catalog (titles/credits) +
+// prereqs, and what_if_audit's authored path needs programs + courses.
+// This helper loads the engine's bundled catalog ONCE per server process
+// and hands the chat route the shapes the ToolSession expects.
 //
 // Cached at module scope: the JSON files (courses ~32KB, prereqs ~860KB,
 // programs ~10KB) are read on first use and reused for every request.

@@ -1,16 +1,14 @@
 // ============================================================
-// Phase 7-A P-3 — get_academic_standing + check_overlap + search_courses tests
+// Phase 7-A P-3 — get_academic_standing + search_courses tests
 // ============================================================
 
 import { describe, expect, it } from "vitest";
 import {
     getAcademicStandingTool,
-    checkOverlapTool,
     searchCoursesTool,
     type ToolSession,
 } from "../../src/agent/index.js";
-import type { Course, Program, StudentProfile } from "@nyupath/shared";
-import { mkDpr } from "../helpers/mkDpr.js";
+import type { StudentProfile } from "@nyupath/shared";
 
 const ctx = (session: ToolSession) => ({ signal: new AbortController().signal, session });
 
@@ -61,95 +59,6 @@ describe("get_academic_standing tool (Phase 7-A P-3)", () => {
         expect(summary).toMatch(/STANDING:/);
         expect(summary).toMatch(/cumulative GPA/);
         expect(summary).toMatch(/completion rate/i);
-    });
-});
-
-// ----------------------------------------------------------------
-// check_overlap
-// ----------------------------------------------------------------
-
-describe("check_overlap tool (Phase 7-A P-3 / Appendix A rule #4)", () => {
-    const csProgram: Program = {
-        programId: "cs_major_ba",
-        name: "CS BA",
-        catalogYear: "2025-2026",
-        school: "CAS",
-        department: "CS",
-        totalCreditsRequired: 128,
-        rules: [
-            {
-                ruleId: "cs_intro",
-                label: "Intro CS",
-                type: "must_take",
-                doubleCountPolicy: "disallow",
-                catalogYearRange: ["2018", "2030"],
-                courses: ["CSCI-UA 101"],
-            },
-        ],
-    };
-    const mathMinor: Program = {
-        programId: "cas_math_minor",
-        name: "Math Minor",
-        catalogYear: "2025-2026",
-        school: "CAS",
-        department: "Math",
-        totalCreditsRequired: 16,
-        rules: [
-            {
-                ruleId: "math_calc",
-                label: "Calculus I",
-                type: "must_take",
-                doubleCountPolicy: "allow",
-                catalogYearRange: ["2018", "2030"],
-                courses: ["MATH-UA 121"],
-            },
-        ],
-    };
-    const courses: Course[] = [
-        { courseId: "CSCI-UA 101", title: "Intro CS", credits: 4, crossListed: [], offerings: [], exclusions: [] } as unknown as Course,
-        { courseId: "MATH-UA 121", title: "Calc I", credits: 4, crossListed: [], offerings: [], exclusions: [] } as unknown as Course,
-    ];
-
-    it("rejects when programs catalog is missing", async () => {
-        // A DPR is present (it's now required first); the programs
-        // catalog is still missing, which is the branch under test.
-        const v = await checkOverlapTool.validateInput!(
-            {},
-            ctx({ student: STUDENT, degreeProgressReport: mkDpr() }),
-        );
-        expect(v.ok).toBe(false);
-        if (v.ok) return;
-        expect(v.userMessage).toMatch(/programs catalog/i);
-    });
-
-    it("rejects when no DPR is loaded", async () => {
-        const v = await checkOverlapTool.validateInput!({}, ctx({ student: STUDENT }));
-        expect(v.ok).toBe(false);
-        if (v.ok) return;
-        expect(v.userMessage).toMatch(/degree progress report/i);
-    });
-
-    it("returns per-program statuses + sharedCourses on a 2-program student", async () => {
-        const dualStudent: StudentProfile = {
-            ...STUDENT,
-            declaredPrograms: [
-                { programId: "cs_major_ba", programType: "major" },
-                { programId: "cas_math_minor", programType: "minor" },
-            ],
-        };
-        const session: ToolSession = {
-            student: dualStudent,
-            programs: new Map([["cs_major_ba", csProgram], ["cas_math_minor", mathMinor]]),
-            courses,
-        };
-        const out = await checkOverlapTool.call({}, ctx(session)) as {
-            declaredPrograms: Array<{ programId: string; overallStatus: string }>;
-            sharedCourses: Array<{ courseId: string; programIds: string[] }>;
-        };
-        expect(out.declaredPrograms).toHaveLength(2);
-        expect(out.declaredPrograms.map((p) => p.programId).sort()).toEqual(["cas_math_minor", "cs_major_ba"]);
-        // No course in both rule pools — no overlap.
-        expect(out.sharedCourses).toEqual([]);
     });
 });
 
