@@ -21,10 +21,9 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-SHU",
-    "minCredits": 64,
-    "finalCreditsInResidence": 32,
-    "majorMinorResidencyPercent": 50,
-    "note": "All 128 degree credits must be completed in the NYU network; students must register full-time for a minimum of six fall/spring semesters at the NYU Shanghai campus, including the final semester. Major/minor coursework must be taken in that disciplinary area."
+    "minCredits": null,
+    "finalCreditsInResidence": null,
+    "note": "Semester-based residency: minimum 6 fall/spring semesters at the NYU Shanghai campus, final semester in residence. The 64-credit figure is the major-declaration gate, not a residency floor."
   },
   "creditCaps": [
     {
@@ -34,8 +33,8 @@
     },
     {
       "type": "online",
-      "maxCredits": 24,
-      "label": "Online course credits (inherited CAS default; Shanghai bulletin silent)"
+      "maxCredits": 0,
+      "label": "Online/internet courses from other NYU divisions not counted toward the degree unless approved by petition"
     },
     {
       "type": "transfer",
@@ -113,8 +112,8 @@
   "overloadRequirements": [
     {
       "condition": "default",
-      "minGpa": 3.5,
-      "note": "After the first year, students in good academic standing may register for more than 18 credits with clearance of their academic advisor and approval of the Assistant Dean for Academic Affairs; per-credit overload charges apply. GPA threshold inherited from CAS default (Shanghai bulletin states 'good academic standing', no numeric GPA)."
+      "minGpa": null,
+      "note": "Overload after year 1 requires good academic standing (GPA > 2.0) + Assistant Dean approval; no numeric GPA gate published."
     }
   ],
   "goodStandingReturnThreshold": 0.5,
@@ -136,7 +135,6 @@
     "creditCaps.online.maxCredits",
     "creditCaps.transfer.maxCredits",
     "creditCaps.independent_study.includesInternship",
-    "passFail.countsForGenEd",
     "passFail.autoExcludedFromLimit",
     "spsPolicy.allowedPrefixes",
     "spsPolicy.countsTowardResidency",
@@ -146,7 +144,6 @@
     "transferCreditLimits.firstYearMaxTotal",
     "transferCreditLimits.transferStudentMaxTotal",
     "transferCreditLimits.springAdmitPostSecondaryMax",
-    "overloadRequirements.minGpa",
     "programExclusions"
   ]
 }

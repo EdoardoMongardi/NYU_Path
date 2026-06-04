@@ -21,10 +21,9 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UH",
-    "minCredits": 64,
+    "minCredits": null,
     "finalCreditsInResidence": null,
-    "majorMinorResidencyPercent": 50,
-    "note": "NYUAD requires residence in Abu Dhabi for the final semester of enrollment (in absentia completion considered only within 8 credits of graduation); there is no fixed final-credits-in-residence count. minCredits (half of the 128-credit degree) and majorMinorResidencyPercent are inferred CAS-style defaults — the bulletin states a final-semester residency rule, not a credit-count or per-major/minor percentage."
+    "note": "Time-based residency: final semester in residence at Abu Dhabi (in-absentia considered only within 8 credits of graduation). No fixed credit-residency floor; double-majors need >=30 distinct credits each."
   },
   "creditCaps": [
     {
@@ -36,6 +35,11 @@
       "type": "online",
       "maxCredits": 24,
       "label": "Online course credits (inferred CAS default; NYUAD bulletin silent)"
+    },
+    {
+      "type": "advanced_standing",
+      "maxCredits": 0,
+      "label": "NYUAD awards no AP/IB/exam advanced-standing credit"
     }
   ],
   "gradeThresholds": {
@@ -114,18 +118,12 @@
   "maxCourseRepeats": 2,
   "sharedPrograms": [],
   "programExclusions": [],
-  "deansListThreshold": {
-    "minGpa": 3.65,
-    "note": "INFERRED — NYUAD does not publish a Dean's List; it recognizes Latin Honors by graduating-cohort percentile (summa top 5%, magna next 10%, cum laude next 15% per division). This CAS-default 3.65 is a placeholder and not an NYUAD-stated threshold."
-  },
   "advisingContact": {
     "name": "NYUAD Academic Resource Center (ARC)",
     "email": "nyuad.arc@nyu.edu",
     "url": "https://students.nyuad.nyu.edu/academics/registration/"
   },
   "_inferredFields": [
-    "residency.minCredits",
-    "residency.majorMinorResidencyPercent",
     "creditCaps[type=online]",
     "doubleCounting.defaultMajorToMajor",
     "doubleCounting.defaultMajorToMinor",
@@ -134,7 +132,6 @@
     "transferCreditLimits.firstYearMaxTotal",
     "f1FullTimeMinCredits",
     "spsPolicy",
-    "deansListThreshold",
     "sharedPrograms",
     "programExclusions"
   ]

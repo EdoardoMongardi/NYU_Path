@@ -50,7 +50,7 @@
       "type": "independent_study",
       "maxCredits": 6,
       "maxPerDepartment": 8,
-      "includesInternship": true,
+      "includesInternship": false,
       "label": "Independent study (max 6 units over undergraduate career)"
     }
   ],

@@ -142,12 +142,13 @@
     "gradeThresholds.core",
     "gradeThresholds.minor",
     "doubleCounting.defaultMinorToMinor",
-    "transferCreditLimits.firstYearMaxTotal",
     "transferCreditLimits.transferStudentMaxTotal",
     "transferCreditLimits.springAdmitPostSecondaryMax",
     "overloadRequirements.minGpa",
     "maxCourseRepeats",
     "sharedPrograms",
-    "programExclusions"
+    "programExclusions",
+    "residency.minCredits",
+    "residency.majorMinorResidencyPercent"
   ]
 }
