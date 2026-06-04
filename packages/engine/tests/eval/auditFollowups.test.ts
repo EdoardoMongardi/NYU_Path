@@ -7,8 +7,6 @@
 //         change behavior
 //   - §11.0.2: resolveFact applies the school > program > department >
 //              course_catalog precedence rule
-//   - 4.3: degreeAudit.isCSProgram still detects CSCI courses across rule
-//          types after the type-safe switch refactor
 //   - 4.4: canonicalSchoolId normalizes "CAS" / "cas" / " CAS " uniformly
 // ============================================================
 

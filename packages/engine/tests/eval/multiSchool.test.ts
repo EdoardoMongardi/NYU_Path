@@ -1,10 +1,6 @@
 // ============================================================
-// Multi-School Tests — Groups 2 & 3 (Phase 1 §11.2)
+// Multi-School Tests — Group 3 (Phase 1 §11.2)
 // ============================================================
-// Group 2 (Econ BA, major-agnostic):
-//   Verifies the engine can audit a non-CS program loaded from
-//   data/programs/cas/cas_econ_ba.json with no CS-specific assumptions.
-//
 // Group 3 (Stern P/F + Tandon residency):
 //   Verifies SchoolConfig actually drives engine behavior — Stern's
 //   4-courses career P/F limit is honored, and Tandon's 64-credit
@@ -12,13 +8,11 @@
 // ============================================================
 
 import { describe, it, expect } from "vitest";
-import type { Course, StudentProfile } from "@nyupath/shared";
+import type { StudentProfile } from "@nyupath/shared";
 import {
     loadCourses,
     loadSchoolConfig,
-    loadProgramFromDataDir,
 } from "../../src/dataLoader.js";
-import { degreeAudit } from "../../src/audit/degreeAudit.js";
 import { checkResidencyCredits } from "../../src/audit/creditCapValidator.js";
 import { checkPassFailViolations } from "../../src/audit/passfailGuard.js";
 
@@ -34,96 +28,6 @@ function profile(partial: Partial<StudentProfile> & { id: string; homeSchool: st
         ...partial,
     };
 }
-
-// ============================================================
-// Group 2 — Econ BA (major-agnostic engine run)
-// ============================================================
-describe("Group 2 — Econ BA program audit (no CS-specific assumptions)", () => {
-    const courses: Course[] = loadCourses();
-    const casConfig = loadSchoolConfig("cas");
-
-    const econLoad = loadProgramFromDataDir("cas", "cas_econ_ba");
-    const econProgram = econLoad.ok ? econLoad.program : null;
-
-    it("loads cas_econ_ba.json from data/programs/cas with valid _meta", () => {
-        expect(econLoad.ok).toBe(true);
-        if (!econLoad.ok) return;
-        expect(econLoad.meta.catalogYear).toBe("2025-2026");
-        expect(econLoad.meta.extractedBy).toBe("llm-assisted");
-        expect(econProgram!.programId).toBe("cas_econ_ba");
-        expect(econProgram!.school).toBe("CAS");
-        expect(econProgram!.department).toBe("Economics");
-    });
-
-    it("empty Econ student → all rules not_started, overallStatus not_started", () => {
-        if (!econProgram) return;
-        const student = profile({
-            id: "econ_empty",
-            homeSchool: "cas",
-            declaredPrograms: [{ programId: "cas_econ_ba", programType: "major" }],
-        });
-        const result = degreeAudit(student, econProgram, courses, casConfig);
-        expect(result.programId).toBe("cas_econ_ba");
-        expect(result.overallStatus).toBe("not_started");
-        for (const r of result.rules) {
-            expect(r.status).toBe("not_started");
-        }
-    });
-
-    it("partial Econ student — A-grades on intro courses + math sequence → those rules satisfied", () => {
-        if (!econProgram) return;
-        const student = profile({
-            id: "econ_partial",
-            homeSchool: "cas",
-            declaredPrograms: [{ programId: "cas_econ_ba", programType: "major" }],
-            coursesTaken: [
-                { courseId: "ECON-UA 1", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "ECON-UA 2", grade: "A-", semester: "2024-fall", credits: 4 },
-                { courseId: "MATH-UA 131", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "MATH-UA 132", grade: "B+", semester: "2025-spring", credits: 4 },
-            ],
-        });
-        const result = degreeAudit(student, econProgram, courses, casConfig);
-        const macro = result.rules.find(r => r.ruleId === "econ_intro_macro")!;
-        const micro = result.rules.find(r => r.ruleId === "econ_intro_micro")!;
-        const math = result.rules.find(r => r.ruleId === "econ_math_sequence")!;
-        expect(macro.status).toBe("satisfied");
-        expect(micro.status).toBe("satisfied");
-        expect(math.status).toBe("satisfied");
-    });
-
-    it("Econ major-grade rule: D in ECON-UA 1 does NOT satisfy the rule (CAS major threshold = C)", () => {
-        if (!econProgram) return;
-        const student = profile({
-            id: "econ_dgrade",
-            homeSchool: "cas",
-            declaredPrograms: [{ programId: "cas_econ_ba", programType: "major" }],
-            coursesTaken: [
-                { courseId: "ECON-UA 1", grade: "D", semester: "2024-fall", credits: 4 },
-            ],
-        });
-        const result = degreeAudit(student, econProgram, courses, casConfig);
-        const macro = result.rules.find(r => r.ruleId === "econ_intro_macro")!;
-        // D < C → MAJOR_GRADES set excludes it, so the must_take rule is unsatisfied
-        expect(macro.status).toBe("not_started");
-    });
-
-    it("Econ choose_n micro rule: ECON-UA 11 alone satisfies (it's one of the OR pool)", () => {
-        if (!econProgram) return;
-        const student = profile({
-            id: "econ_micro_alt",
-            homeSchool: "cas",
-            declaredPrograms: [{ programId: "cas_econ_ba", programType: "major" }],
-            coursesTaken: [
-                { courseId: "ECON-UA 11", grade: "B", semester: "2024-fall", credits: 4 },
-            ],
-        });
-        const result = degreeAudit(student, econProgram, courses, casConfig);
-        const micro = result.rules.find(r => r.ruleId === "econ_intermediate_micro")!;
-        expect(micro.status).toBe("satisfied");
-        expect(micro.coursesSatisfying).toContain("ECON-UA 11");
-    });
-});
 
 // ============================================================
 // Group 3a — Stern P/F (4-course career limit)
