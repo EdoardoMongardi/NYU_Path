@@ -1,0 +1,141 @@
+{
+  "_meta": {
+    "catalogYear": "2025-2026",
+    "sourceUrl": "https://bulletins.nyu.edu/undergraduate/abu-dhabi/academic-policies/",
+    "lastVerified": "2026-06-04",
+    "sourceHash": "sha256:c4c096cb3a19ce4dc38fbf3c142cb3084c66eed5b8dafe9059335963072a46e6",
+    "extractedBy": "llm-assisted",
+    "verifiedBy": "spot-check",
+    "sourceRef": {
+      "anchor": null,
+      "pdfPage": null
+    }
+  },
+  "schoolId": "nyuad",
+  "name": "NYU Abu Dhabi",
+  "degreeType": "BA",
+  "courseSuffix": [
+    "-UH"
+  ],
+  "overallGpaMin": 2.0,
+  "residency": {
+    "type": "suffix_based",
+    "suffix": "-UH",
+    "minCredits": 64,
+    "finalCreditsInResidence": null,
+    "majorMinorResidencyPercent": 50,
+    "note": "NYUAD requires residence in Abu Dhabi for the final semester of enrollment (in absentia completion considered only within 8 credits of graduation); there is no fixed final-credits-in-residence count. minCredits (half of the 128-credit degree) and majorMinorResidencyPercent are inferred CAS-style defaults — the bulletin states a final-semester residency rule, not a credit-count or per-major/minor percentage."
+  },
+  "creditCaps": [
+    {
+      "type": "transfer",
+      "maxCredits": 20,
+      "label": "Post-matriculation transfer credit (max 8/semester on leave, 8/summer, 20 career)"
+    },
+    {
+      "type": "online",
+      "maxCredits": 24,
+      "label": "Online course credits (inferred CAS default; NYUAD bulletin silent)"
+    }
+  ],
+  "gradeThresholds": {
+    "core": "C",
+    "major": "C",
+    "minor": "C"
+  },
+  "passFail": {
+    "careerLimitType": "courses",
+    "careerLimit": 3,
+    "perTermLimit": 1,
+    "perTermUnit": "semester",
+    "countsForMajor": false,
+    "countsForMinor": false,
+    "countsForGenEd": false,
+    "excludedCourseTypes": [
+      "jterm",
+      "summer",
+      "corequisite"
+    ],
+    "canElect": true,
+    "autoExcludedFromLimit": [],
+    "gradePassEquivalent": "D",
+    "failCountsInGpa": true,
+    "exceptions": [
+      "Available only beginning in the second year of study",
+      "Electives only — major, minor, and Core courses (incl. E, Q, X, J, Colloquium) cannot be taken P/F",
+      "First attempt in any Core area must be letter-graded",
+      "A P/F course cannot satisfy a prerequisite",
+      "J-Term and summer courses may not be taken P/F"
+    ]
+  },
+  "spsPolicy": {
+    "allowed": false
+  },
+  "doubleCounting": {
+    "defaultMajorToMajor": null,
+    "defaultMajorToMinor": null,
+    "defaultMinorToMinor": null,
+    "noTripleCounting": true,
+    "requiresDepartmentApproval": true,
+    "overrideByProgram": true,
+    "note": "NYUAD double-counting is governed by uniqueness floors, not a fixed double-count count: each of two majors must include >=30 credits not counted toward the other major, and each minor must include >=2 courses not counted toward any other major or minor. No individual course may count for more than one Core category, and Art/Design/Technology, Cultural Exploration & Analysis, Data & Discovery, and Structures of Thought & Society Core courses may not simultaneously count toward a major or minor (Islamic Studies, Quantitative Reasoning, and Experimental Inquiry may). Colloquia cannot be double counted. The numeric default* fields are inferred placeholders pending per-program modeling."
+  },
+  "transferCreditLimits": {
+    "firstYearMaxTotal": 0,
+    "transferStudentMaxTotal": 20,
+    "perSemesterMax": 8,
+    "perSummerMax": 8,
+    "note": "Transfer credit is awarded only for coursework taken AFTER matriculation at NYUAD; no transfer credit for pre-matriculation or high-school work, and none for AP/IB/A-Level exams. Up to 8 credits per semester while on approved leave and up to 8 credits per summer, to a career total of no more than 20. firstYearMaxTotal=0 reflects the no-pre-matriculation rule (inferred framing of the CAS first-year field)."
+  },
+  "acceptsTransferCredit": true,
+  "maxCreditsPerSemester": 18,
+  "f1FullTimeMinCredits": 12,
+  "overloadRequirements": [
+    {
+      "condition": "first_year_second_semester",
+      "minGpa": 3.7,
+      "maxCredits": 20,
+      "note": "First-year students (from their second semester) need a cumulative internal GPA >= 3.7 to overload above 18 credits"
+    },
+    {
+      "condition": "second_year",
+      "minGpa": 3.6,
+      "maxCredits": 20,
+      "note": "Second-year students need a cumulative internal GPA >= 3.6 to overload"
+    },
+    {
+      "condition": "third_or_fourth_year",
+      "minGpa": 3.5,
+      "maxCredits": 20,
+      "note": "Third- and fourth-year students need a cumulative internal GPA >= 3.5 to overload; no student may exceed 20 credit hours, and overloads are not possible in J-Terms or summer sessions"
+    }
+  ],
+  "goodStandingReturnThreshold": 0.75,
+  "maxCourseRepeats": 2,
+  "sharedPrograms": [],
+  "programExclusions": [],
+  "deansListThreshold": {
+    "minGpa": 3.65,
+    "note": "INFERRED — NYUAD does not publish a Dean's List; it recognizes Latin Honors by graduating-cohort percentile (summa top 5%, magna next 10%, cum laude next 15% per division). This CAS-default 3.65 is a placeholder and not an NYUAD-stated threshold."
+  },
+  "advisingContact": {
+    "name": "NYUAD Academic Resource Center (ARC)",
+    "email": "nyuad.arc@nyu.edu",
+    "url": "https://students.nyuad.nyu.edu/academics/registration/"
+  },
+  "_inferredFields": [
+    "residency.minCredits",
+    "residency.majorMinorResidencyPercent",
+    "creditCaps[type=online]",
+    "doubleCounting.defaultMajorToMajor",
+    "doubleCounting.defaultMajorToMinor",
+    "doubleCounting.defaultMinorToMinor",
+    "doubleCounting.overrideByProgram",
+    "transferCreditLimits.firstYearMaxTotal",
+    "f1FullTimeMinCredits",
+    "spsPolicy",
+    "deansListThreshold",
+    "sharedPrograms",
+    "programExclusions"
+  ]
+}

@@ -1,0 +1,315 @@
+{
+  "_meta": {
+    "catalogYear": "2025-2026",
+    "sourceUrl": "https://bulletins.nyu.edu/undergraduate/liberal-studies/academic-policies/",
+    "lastVerified": "2026-06-04",
+    "sourceHash": "sha256:1a4dcea8c06563518b79a64d4cd31fef6aae61f545f1bd0e92deade0972ba064",
+    "extractedBy": "llm-assisted",
+    "verifiedBy": "spot-check",
+    "sourceRef": {
+      "anchor": null,
+      "pdfPage": null
+    }
+  },
+  "_provenance": [
+    {
+      "path": "degreeType",
+      "claim": "The Liberal Studies Core is a four-semester program. Students planning to transition to one of the baccalaureate programs at NYU normally must complete four semesters of full-time enrollment in the LS Core. (LS Core is a 2-year lower-division program; the BA/BS degree is conferred by the transition school — CAS, Steinhardt, Tisch, etc. — not by LS. The GLS track within Liberal Studies does award its own BA.)",
+      "bulletinSection": "Residency Requirements",
+      "sourceLine": 46
+    },
+    {
+      "path": "residency.minCredits",
+      "claim": "The LS Core publishes NO fixed degree-credit residency of its own. Residency is defined as time: 'must complete four semesters of full-time enrollment in the LS Core. Full-time enrollment is defined as the completion of a minimum of 12 credit hours in each of the four semesters.' Degree-credit residency belongs to the transition school: 'Other NYU schools and colleges where students may transition or transfer have specific residency requirements.' Hence minCredits is null.",
+      "bulletinSection": "Residency Requirements",
+      "sourceLine": 46
+    },
+    {
+      "path": "residency.suffix",
+      "claim": "Liberal Studies course IDs carry the -UF suffix (e.g., the WREX-UF, GWA-UF, AAC-UF / ACA-UF, GWS-UF Core course subjects observed under data/bulletin-raw/.../liberal-studies/courses/*-uf). schoolId courseSuffix is ['-UF'].",
+      "bulletinSection": "(course subject directory)",
+      "sourceLine": null
+    },
+    {
+      "path": "overallGpaMin",
+      "claim": "Good academic standing is defined as maintaining a semester and cumulative GPA of 2.0 or above.",
+      "bulletinSection": "Academic Standing and Progress",
+      "sourceLine": 248
+    },
+    {
+      "path": "creditCaps[type=advanced_standing].maxCredits",
+      "claim": "LS accepts a maximum of 32 credits of advanced standing. While GLS accepts up to 32 advanced standing credits, the structure of the program does not allow for early graduation.",
+      "bulletinSection": "Advanced Standing Credits",
+      "sourceLine": 94
+    },
+    {
+      "path": "creditCaps[type=transfer].maxCredits",
+      "claim": "For spring admits, LS accepts a maximum of 8 transfer credits earned during the gap semester prior to enrollment, and a maximum of 32 credits from all advanced standing sources (both transfer and testing) combined. LS does not publish a general transfer-credit ceiling of its own; transfer back to the degree is governed by the transition school. The 8-credit spring-admit gap-semester cap is the only LS-specific transfer number.",
+      "bulletinSection": "Advanced Standing Credits",
+      "sourceLine": 94
+    },
+    {
+      "path": "creditCaps[type=online]",
+      "claim": "LS will only consider transfer credits for online courses ... with a C or higher ... on a case-by-case basis, and--for LS Core students--in accordance with the limitations for online course credit established by the student's expected transition program. LS publishes NO fixed numeric online cap of its own; it defers to the transition program. Omitted rather than fabricated.",
+      "bulletinSection": "Online Courses",
+      "sourceLine": 144
+    },
+    {
+      "path": "gradeThresholds.core",
+      "claim": "D indicates passable work and is the lowest passing grade. (Lowest passing letter grade for LS Core curriculum coursework.)",
+      "bulletinSection": "Grading",
+      "sourceLine": 154
+    },
+    {
+      "path": "passFail.careerLimit",
+      "claim": "Students may elect no more than one pass/fail option each term, including summer sessions, for a cumulative total of no more than 16 credits while they are degree candidates in LS.",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 205
+    },
+    {
+      "path": "passFail.perTermLimit",
+      "claim": "Students may elect no more than one pass/fail option each term, including summer sessions. (perTermUnit = semester; one P/F per term.)",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 205
+    },
+    {
+      "path": "passFail.countsForMajor",
+      "claim": "The pass/fail option is not permitted for any required course. LS Core students will not be granted approval to take pass/fail: Courses in the LS Core Curriculum; Required coursework towards a major and/or minor; Courses under the College Core Curriculum for CAS-bound students or core requirements for other NYU schools. Hence P/F may not satisfy major/minor/gen-ed requirements.",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 207
+    },
+    {
+      "path": "passFail.gradePassEquivalent",
+      "claim": "P includes all passing grades (equivalent to D or higher), but is not counted in the grade point average.",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 226
+    },
+    {
+      "path": "passFail.failCountsInGpa",
+      "claim": "F is counted in the grade point average.",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 226
+    },
+    {
+      "path": "passFail.exceptions",
+      "claim": "The pass/fail option is not available for courses completed at other institutions. The choice must be made before the completion of the ninth week of the term (or the third week of a six-week summer session).",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 205
+    },
+    {
+      "path": "transferCreditLimits.springAdmitPostSecondaryMax",
+      "claim": "For spring admits, LS accepts a maximum of 8 transfer credits earned during the gap semester prior to enrollment.",
+      "bulletinSection": "Advanced Standing Credits",
+      "sourceLine": 94
+    },
+    {
+      "path": "acceptsTransferCredit",
+      "claim": "In general, transfer credit may be awarded for satisfactory work completed at another accredited college or university ... Advanced standing credit toward the degree is given only for a grade of B or better for courses completed prior to enrollment at NYU, or a C or better for courses completed once enrolled at NYU. NOTE: Liberal Studies students are not permitted to pursue coursework at other universities while in the LS Core or Global Liberal Studies during the regular academic year.",
+      "bulletinSection": "Transfer and Articulation Agreements / Non-NYU Study",
+      "sourceLine": 102
+    },
+    {
+      "path": "f1FullTimeMinCredits",
+      "claim": "Full-time enrollment is defined as the completion of a minimum of 12 credit hours in each of the four semesters.",
+      "bulletinSection": "Residency Requirements",
+      "sourceLine": 46
+    },
+    {
+      "path": "goodStandingReturnThreshold",
+      "claim": "Progress towards the degree is defined as a 2.0 GPA or higher with at least 75% of attempted credits completed. The University's Financial Aid Office defines 'satisfactory progress' for full-time students as maintaining a grade point average of 2.0 or better and completing at least three-quarters of all attempted credits.",
+      "bulletinSection": "Academic Standing and Progress",
+      "sourceLine": 248
+    },
+    {
+      "path": "deansListThreshold",
+      "claim": "This is an honor roll of matriculated students who have achieved an average of 3.65 or higher for that academic year in at least 28 graded credits. ... a student must not have any grades of 'I' or 'N' at the time the list is compiled.",
+      "bulletinSection": "Honors and Awards / Dean's List",
+      "sourceLine": 44
+    },
+    {
+      "path": "lifecycle.type",
+      "claim": "Liberal Studies Core is designed as a four-semester curriculum for students, who are expected to make regular progress toward transition (or transfer) to another school by the end of the fourth semester. (forced_exit lifecycle: students must leave the LS Core for a transition school.)",
+      "bulletinSection": "Term Limits for LS Core Students",
+      "sourceLine": 264
+    },
+    {
+      "path": "lifecycle.expectedTransitionSemesters",
+      "claim": "The Liberal Studies Core is a four-semester program. Students ... normally must complete four semesters of full-time enrollment in the LS Core.",
+      "bulletinSection": "Residency Requirements",
+      "sourceLine": 46
+    },
+    {
+      "path": "lifecycle.warningThreshold",
+      "claim": "Students who do not complete core requirements after a minimum of six academic semesters receive a Notice of Academic Concern: Approaching Term Limit which outlines the requirements they need to complete in order to move towards degree completion.",
+      "bulletinSection": "Term Limits for LS Core Students",
+      "sourceLine": 266
+    },
+    {
+      "path": "lifecycle.maxSemesters",
+      "claim": "If a student has not attained eligibility for transition by the end of the eighth semester of enrollment, that student will be considered for potential dismissal from NYU due to lack of academic progress. This policy applies to all students matriculating with Liberal Studies Core beginning in the Fall 2023 semester.",
+      "bulletinSection": "Term Limits for LS Core Students",
+      "sourceLine": 266
+    },
+    {
+      "path": "lifecycle.dualAuditMode",
+      "claim": "Other NYU schools and colleges where students may transition or transfer have specific residency requirements. LS Core students should consult the websites and bulletins of those schools and colleges. (No single transitionTarget — the target school varies by student — so dualAuditMode is enabled without a fixed transitionTarget.)",
+      "bulletinSection": "Residency Requirements / Term Limits",
+      "sourceLine": 48
+    },
+    {
+      "path": "advisingContact",
+      "claim": "Additional information ... may be obtained from the Liberal Studies Advising Center, 726 Broadway, 6th Floor; ls.advising@nyu.edu.",
+      "bulletinSection": "Honors and Awards (Advising Center contact)",
+      "sourceLine": 11
+    },
+    {
+      "path": "<inferred-from-CAS-defaults>",
+      "claim": "gradeThresholds.major ('C') and gradeThresholds.minor ('C'); spsPolicy (entire block); doubleCounting (entire block); transferCreditLimits.firstYearMaxTotal (32) and transferStudentMaxTotal (64); maxCreditsPerSemester (18); overloadRequirements (default, minGpa 3.5, adviser approval); and maxCourseRepeats (2) are NOT stated in the LS academic-policies bulletin. They are inherited from CAS-style defaults pending an LS-specific source, and each dot-path is listed in _inferredFields. The bulletin DOES state a course-repeat policy (line 187: repeats allowed, only the subsequent grade counts) but publishes no numeric repeat cap, so maxCourseRepeats inherits the CAS value of 2. The bulletin references an '18-credit schedule' (line 174) only as a GPA-computation example, not as a stated per-semester ceiling.",
+      "bulletinSection": "(none)",
+      "sourceLine": null
+    }
+  ],
+  "schoolId": "liberal_studies",
+  "name": "NYU Liberal Studies",
+  "degreeType": "BA",
+  "courseSuffix": [
+    "-UF"
+  ],
+  "overallGpaMin": 2.0,
+  "residency": {
+    "type": "suffix_based",
+    "suffix": "-UF",
+    "minCredits": null,
+    "finalCreditsInResidence": null,
+    "note": "Liberal Studies Core is a four-semester (two-year) lower-division program with a TIME-based residency, not a credit-based one: four semesters of full-time enrollment (min. 12 credits/semester). It publishes no fixed degree-credit residency of its own because students complete the bachelor's degree in a transition school (CAS, Steinhardt, Tisch, etc.), whose own residency requirements then apply. Summer enrollment does not count toward LS residency, except the required 10-week Summer Session for Spring Admits. The Global Liberal Studies (GLS) track is a full four-year BA and additionally requires the fall and spring of both sophomore and senior years in residence on Washington Square."
+  },
+  "creditCaps": [
+    {
+      "type": "advanced_standing",
+      "maxCredits": 32,
+      "label": "Advanced standing (AP/IB/A-Level/transfer combined, max 32); does not substitute for required LS Core/GLS courses and does not enable early graduation"
+    },
+    {
+      "type": "transfer",
+      "maxCredits": 8,
+      "subtype": "spring_admit_gap_semester",
+      "label": "Spring-admit gap-semester transfer credits (max 8); general transfer-back ceiling is set by the student's transition school, not by LS"
+    }
+  ],
+  "gradeThresholds": {
+    "core": "D",
+    "major": "C",
+    "minor": "C"
+  },
+  "passFail": {
+    "careerLimitType": "credits",
+    "careerLimit": 16,
+    "perTermLimit": 1,
+    "perTermUnit": "semester",
+    "countsForMajor": false,
+    "countsForMinor": false,
+    "countsForGenEd": false,
+    "creditType": "elective_only",
+    "canElect": true,
+    "autoExcludedFromLimit": [],
+    "excludedCourseTypes": [
+      "ls_core_curriculum",
+      "major_required",
+      "minor_required",
+      "college_core_curriculum"
+    ],
+    "gradePassEquivalent": "D",
+    "failCountsInGpa": true,
+    "exceptions": [
+      "One P/F option per term including summer sessions; cumulative cap 16 credits while a degree candidate in LS",
+      "Not available for courses completed at other institutions",
+      "Not permitted for any required course (LS Core, major/minor required, College Core Curriculum or other-school core)",
+      "Election deadline: before completion of the 9th week of the term (3rd week of a six-week summer session); cannot be reversed once elected"
+    ]
+  },
+  "spsPolicy": {
+    "allowed": true,
+    "allowedPrefixes": [
+      "REBS1-UC",
+      "TCHT1-UC",
+      "TCSM1-UC",
+      "RWLD1-UC"
+    ],
+    "creditType": "elective_only",
+    "countsTowardResidency": false,
+    "countsAgainstNonHomeSchoolCap": true,
+    "excludedCourseTypes": [
+      "internship",
+      "independent_study"
+    ]
+  },
+  "doubleCounting": {
+    "defaultMajorToMajor": 2,
+    "defaultMajorToMinor": 2,
+    "defaultMinorToMinor": 2,
+    "noTripleCounting": true,
+    "requiresDepartmentApproval": true,
+    "overrideByProgram": true
+  },
+  "transferCreditLimits": {
+    "firstYearMaxTotal": 32,
+    "transferStudentMaxTotal": 64,
+    "springAdmitPostSecondaryMax": 8
+  },
+  "acceptsTransferCredit": true,
+  "maxCreditsPerSemester": 18,
+  "f1FullTimeMinCredits": 12,
+  "overloadRequirements": [
+    {
+      "condition": "default",
+      "minGpa": 3.5,
+      "note": "Adviser approval required (inherited from CAS default; LS bulletin does not publish an overload GPA gate)"
+    }
+  ],
+  "goodStandingReturnThreshold": 0.75,
+  "maxCourseRepeats": 2,
+  "sharedPrograms": [],
+  "programExclusions": [],
+  "deansListThreshold": {
+    "minGpa": 3.65,
+    "minCredits": 28,
+    "per": "year",
+    "note": "Dean's Honors List: average of 3.65+ for the academic year in at least 28 graded credits, with no 'I' or 'N' grades; GPAs are not rounded. Compiled annually (not per term)."
+  },
+  "lifecycle": {
+    "type": "forced_exit",
+    "expectedTransitionSemesters": 4,
+    "maxSemesters": 8,
+    "warningThreshold": 6,
+    "warningMessage": "After a minimum of six academic semesters without completing LS Core requirements, students receive a 'Notice of Academic Concern: Approaching Term Limit'. By the end of the eighth semester a student who has not attained eligibility for transition is considered for dismissal from NYU. (Term-limit policy applies to LS Core matriculants from Fall 2023 onward.)",
+    "dismissalTrigger": "not_transition_eligible_by_max_semesters",
+    "dualAuditMode": true
+  },
+  "advisingContact": {
+    "name": "Liberal Studies Advising Center",
+    "email": "ls.advising@nyu.edu",
+    "url": "https://liberalstudies.nyu.edu/academic-advising.html"
+  },
+  "_inferredFields": [
+    "gradeThresholds.major",
+    "gradeThresholds.minor",
+    "spsPolicy.allowed",
+    "spsPolicy.allowedPrefixes",
+    "spsPolicy.creditType",
+    "spsPolicy.countsTowardResidency",
+    "spsPolicy.countsAgainstNonHomeSchoolCap",
+    "spsPolicy.excludedCourseTypes",
+    "doubleCounting.defaultMajorToMajor",
+    "doubleCounting.defaultMajorToMinor",
+    "doubleCounting.defaultMinorToMinor",
+    "doubleCounting.noTripleCounting",
+    "doubleCounting.requiresDepartmentApproval",
+    "doubleCounting.overrideByProgram",
+    "transferCreditLimits.firstYearMaxTotal",
+    "transferCreditLimits.transferStudentMaxTotal",
+    "maxCreditsPerSemester",
+    "overloadRequirements",
+    "maxCourseRepeats",
+    "passFail.countsForGenEd"
+  ]
+}
