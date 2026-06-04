@@ -2,8 +2,8 @@
 // Phase A — getCatalog() loads the engine catalog into the session
 // ============================================================
 // Pins the wiring fix: the chat route now populates
-// session.programs/courses/prereqs from getCatalog(), so check_overlap
-// + any rule-engine path are no longer dead in production.
+// session.programs/courses/prereqs from getCatalog(), so the forward
+// planner + what_if_audit's authored path have the catalog in production.
 
 import { describe, expect, it } from "vitest";
 import { getCatalog, _clearCatalogCache } from "../lib/loadCatalog";

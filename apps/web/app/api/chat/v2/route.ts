@@ -234,10 +234,11 @@ export async function POST(req: NextRequest): Promise<Response> {
         }
     })();
     // Phase A (improvement plan) — load the engine catalog (programs +
-    // courses + prereqs) into the session. Without this, check_overlap
-    // rejected with "Programs catalog not loaded" and any rule-engine
-    // path was unreachable. Module-cached; file-read failures degrade
-    // to an empty catalog so a missing data file can't break the turn.
+    // courses + prereqs) into the session. The forward planner needs the
+    // course catalog (titles/credits) + prereqs, and what_if_audit's
+    // authored path needs programs + courses. Module-cached; file-read
+    // failures degrade to an empty catalog so a missing data file can't
+    // break the turn.
     const catalog = (() => {
         try {
             return getCatalog();
