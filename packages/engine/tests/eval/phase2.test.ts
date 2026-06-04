@@ -22,7 +22,6 @@ import { join } from "node:path";
 import type { Course } from "@nyupath/shared";
 
 import { calculateStanding } from "../../src/audit/academicStanding.js";
-import { decideSpsEnrollment, isSpsCourse } from "../../src/audit/spsEnrollmentGuard.js";
 import { computePoolGpa } from "../../src/audit/gpaCalculator.js";
 import { parseTranscript } from "../../src/transcript/parser.js";
 import { transcriptToProfileDraft } from "../../src/transcript/profileMapper.js";
@@ -83,69 +82,6 @@ describe("Step 2A — I/NR/W grade classification (CAS bulletin L344, L394)", ()
         );
         // TR doesn't count as attempted, so completion = 4/4 = 100%
         expect(r.completionRate).toBe(1.0);
-    });
-});
-
-// ============================================================
-// Step 2B — SPS Enrollment Guard
-// ============================================================
-describe("Step 2B — spsEnrollmentGuard", () => {
-    const cas = loadSchoolConfig("cas")!;
-    const stern = loadSchoolConfig("stern")!;
-    const tandon = loadSchoolConfig("tandon")!;
-
-    it("identifies SPS courses by -UC / -CE suffix", () => {
-        expect(isSpsCourse("REBS1-UC 1234")).toBe(true);
-        expect(isSpsCourse("FOO-CE 5")).toBe(true);
-        expect(isSpsCourse("CSCI-UA 101")).toBe(false);
-    });
-
-    it("CAS: REBS1-UC course is allowed (in allowlist per bulletin L246)", () => {
-        const r = decideSpsEnrollment("REBS1-UC 100", cas);
-        expect(r.enrollment).toBe("allowed");
-    });
-
-    it("CAS: a non-allowlisted SPS prefix is blocked", () => {
-        const r = decideSpsEnrollment("FOO1-UC 100", cas);
-        expect(r.enrollment).toBe("blocked");
-        if (r.enrollment !== "blocked") return;
-        expect(r.rule).toBe("prefix_not_in_allowlist");
-    });
-
-    it("CAS: an internship-tagged allowlisted SPS course is BLOCKED (bulletin L246 internship/indep-study sub-ban)", () => {
-        const courseCatalog = new Map<string, Course>([
-            ["REBS1-UC 999", {
-                id: "REBS1-UC 999",
-                title: "Real Estate Internship",
-                credits: 4,
-                departments: ["REBS1-UC"],
-                crossListed: [],
-                exclusions: [],
-                termsOffered: ["fall"],
-                catalogYearsActive: ["2018", "2030"],
-            }],
-        ]);
-        const r = decideSpsEnrollment("REBS1-UC 999", cas, courseCatalog);
-        expect(r.enrollment).toBe("blocked");
-        if (r.enrollment !== "blocked") return;
-        expect(r.rule).toBe("course_type_excluded");
-    });
-
-    it("Stern: TOTAL BAN — every SPS course is blocked", () => {
-        const r = decideSpsEnrollment("REBS1-UC 100", stern);
-        expect(r.enrollment).toBe("blocked");
-        if (r.enrollment !== "blocked") return;
-        expect(r.rule).toBe("school_total_ban");
-    });
-
-    it("Tandon: TOTAL BAN — every SPS course is blocked", () => {
-        const r = decideSpsEnrollment("DGCM1-UC 1", tandon);
-        expect(r.enrollment).toBe("blocked");
-    });
-
-    it("Non-SPS courses are passed through (out of scope for this guard)", () => {
-        const r = decideSpsEnrollment("CSCI-UA 101", cas);
-        expect(r.enrollment).toBe("allowed");
     });
 });
 

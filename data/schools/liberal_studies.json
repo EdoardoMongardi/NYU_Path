@@ -178,7 +178,6 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UF",
-    "minCredits": null,
     "finalCreditsInResidence": null,
     "note": "Liberal Studies Core is a four-semester (two-year) lower-division program with a TIME-based residency, not a credit-based one: four semesters of full-time enrollment (min. 12 credits/semester). It publishes no fixed degree-credit residency of its own because students complete the bachelor's degree in a transition school (CAS, Steinhardt, Tisch, etc.), whose own residency requirements then apply. Summer enrollment does not count toward LS residency, except the required 10-week Summer Session for Spring Admits. The Global Liberal Studies (GLS) track is a full four-year BA and additionally requires the fall and spring of both sophomore and senior years in residence on Washington Square."
   },
@@ -195,14 +194,8 @@
       "label": "Spring-admit gap-semester transfer credits (max 8); general transfer-back ceiling is set by the student's transition school, not by LS"
     }
   ],
-  "gradeThresholds": {
-    "core": "D",
-    "major": "C",
-    "minor": "C"
-  },
   "passFail": {
     "careerLimitType": "credits",
-    "careerLimit": 16,
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,

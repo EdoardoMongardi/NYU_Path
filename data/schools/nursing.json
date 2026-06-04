@@ -20,16 +20,10 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UN",
-    "minCredits": 32,
     "finalCreditsInResidence": null,
     "majorMinorResidencyPercent": 50
   },
   "creditCaps": [
-    {
-      "type": "non_home_school",
-      "maxCredits": 16,
-      "label": "Non-Meyers courses (inferred from CAS default; not in Nursing bulletin)"
-    },
     {
       "type": "online",
       "maxCredits": 24,
@@ -53,16 +47,8 @@
       "label": "Independent study + internship (inferred from CAS default; not in Nursing bulletin)"
     }
   ],
-  "gradeThresholds": {
-    "core": "D",
-    "major": "C",
-    "minor": "C",
-    "nursingPrerequisite": "C",
-    "nonNursing": "D"
-  },
   "passFail": {
     "careerLimitType": "percent_of_program",
-    "careerLimit": 25,
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,

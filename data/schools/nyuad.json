@@ -20,7 +20,6 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UH",
-    "minCredits": null,
     "finalCreditsInResidence": null,
     "note": "Time-based residency: final semester in residence at Abu Dhabi (in-absentia considered only within 8 credits of graduation). No fixed credit-residency floor; double-majors need >=30 distinct credits each."
   },
@@ -41,14 +40,8 @@
       "label": "NYUAD awards no AP/IB/exam advanced-standing credit"
     }
   ],
-  "gradeThresholds": {
-    "core": "C",
-    "major": "C",
-    "minor": "C"
-  },
   "passFail": {
     "careerLimitType": "courses",
-    "careerLimit": 3,
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,
