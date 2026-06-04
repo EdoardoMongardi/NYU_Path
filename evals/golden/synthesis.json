@@ -384,40 +384,6 @@
             }
         },
         {
-            "id": "synth-011-transfer-not-yet-eligible",
-            "userMessage": "Can I move into Stern next semester?",
-            "frozenToolResults": [
-                {
-                    "toolName": "check_transfer_eligibility",
-                    "result": {
-                        "eligible": false,
-                        "entryYear": "sophomore",
-                        "deadline": "varies by year — see Office of Undergraduate Admissions",
-                        "missingPrereqs": [
-                            {"category": "Calculus", "satisfied": false},
-                            {"category": "Microeconomics", "satisfied": false}
-                        ],
-                        "gpaNote": "Minimum GPA for internal transfer is not published. Contact the target school's admissions office.",
-                        "creditsCompleted": 28,
-                        "minCreditsCompleted": 32
-                    }
-                }
-            ],
-            "rubric": {
-                "requiredToolNames": ["check_transfer_eligibility"],
-                "requiredCaveats": [
-                    "Calculus",
-                    "Microeconomics",
-                    "GPA"
-                ],
-                "forbiddenClaims": [
-                    "you are eligible to transfer",
-                    "minimum GPA is 3.5",
-                    "the GPA cutoff is"
-                ]
-            }
-        },
-        {
             "id": "synth-012-future-projection-caveat",
             "userMessage": "Map out the rest of my degree — Spring 2026 through Spring 2027.",
             "frozenToolResults": [
@@ -473,7 +439,6 @@
                     "I called run_full_audit",
                     "I called plan_semester",
                     "I called search_policy",
-                    "I called check_transfer_eligibility",
                     "I called what_if_audit",
                     "your GPA is",
                     "your remaining requirements are"

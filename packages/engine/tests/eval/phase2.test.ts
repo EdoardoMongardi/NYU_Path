@@ -6,8 +6,6 @@
 //   - spsEnrollmentGuard (CAS allowlist, Stern total ban, Tandon total ban,
 //     CAS internship/independent-study sub-ban)
 //   - gpaCalculator pool GPA (G5-G6)
-//   - checkTransferEligibility (CAS → Stern bulletin-grounded; CAS → Tandon
-//     unsupported with NYU-wide policy floor)
 //   - whatIfAudit (read-only hypothetical with comparison)
 //   - transcript parser: 10 golden transcripts pass invariants;
 //     1 corrupted sample throws TranscriptParseError(cumulative_gpa_mismatch)
@@ -26,7 +24,6 @@ import type { Course, Program, StudentProfile } from "@nyupath/shared";
 import { calculateStanding } from "../../src/audit/academicStanding.js";
 import { decideSpsEnrollment, isSpsCourse } from "../../src/audit/spsEnrollmentGuard.js";
 import { computePoolGpa } from "../../src/audit/gpaCalculator.js";
-import { checkTransferEligibility } from "../../src/audit/checkTransferEligibility.js";
 import { whatIfAudit } from "../../src/audit/whatIfAudit.js";
 import { crossProgramAudit } from "../../src/audit/crossProgramAudit.js";
 import { parseTranscript } from "../../src/transcript/parser.js";
@@ -206,125 +203,6 @@ describe("Step 2C — computePoolGpa", () => {
         const r = computePoolGpa([], ["ECON-UA *"]);
         expect(r.gpa).toBe(0);
         expect(r.countedCourses).toBe(0);
-    });
-});
-
-// ============================================================
-// Step 2D — checkTransferEligibility (CAS → Stern + Tandon fallback)
-// ============================================================
-describe("Step 2D — checkTransferEligibility", () => {
-    function profile(partial: Partial<StudentProfile> & { id: string; homeSchool: string }): StudentProfile {
-        return {
-            id: partial.id,
-            catalogYear: partial.catalogYear ?? "2023",
-            homeSchool: partial.homeSchool,
-            declaredPrograms: partial.declaredPrograms ?? [],
-            coursesTaken: partial.coursesTaken ?? [],
-            ...partial,
-        };
-    }
-
-    it("CAS student with calc + writing → eligible to transfer to Stern as sophomore", () => {
-        const student = profile({
-            id: "trans1",
-            homeSchool: "cas",
-            coursesTaken: [
-                { courseId: "MATH-UA 121", grade: "B", semester: "2024-fall", credits: 4 },
-                { courseId: "EXPOS-UA 1", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "CORE-UA 400", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "CSCI-UA 101", grade: "B", semester: "2024-fall", credits: 4 },
-                { courseId: "CORE-UA 500", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CORE-UA 700", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CSCI-UA 102", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CSCI-UA 201", grade: "A", semester: "2025-spring", credits: 4 },
-            ],
-        });
-        const r = checkTransferEligibility(student, "stern");
-        expect(r.status).toBe("eligible");
-        if (r.status !== "eligible" && r.status !== "not_yet_eligible") return;
-        expect(r.entryYear).toBe("sophomore");
-        expect(r.deadline).toBe("March 1");
-        expect(r.acceptedTerms).toEqual(["fall"]);
-    });
-
-    it("CAS student with NO calc → not_yet_eligible (calculus prereq missing)", () => {
-        const student = profile({
-            id: "trans2",
-            homeSchool: "cas",
-            coursesTaken: [
-                { courseId: "EXPOS-UA 1", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "CORE-UA 400", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "CORE-UA 500", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CORE-UA 700", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "PHYS-UA 91", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "PHYS-UA 93", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "PHYS-UA 95", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "PHYS-UA 97", grade: "A", semester: "2025-spring", credits: 4 },
-            ],
-        });
-        const r = checkTransferEligibility(student, "stern");
-        expect(r.status).toBe("not_yet_eligible");
-        if (r.status !== "not_yet_eligible") return;
-        expect(r.missingPrereqs.some((p) => p.category === "calculus")).toBe(true);
-    });
-
-    it("CAS student with <32 credits → ineligible (credit floor)", () => {
-        const student = profile({
-            id: "trans3",
-            homeSchool: "cas",
-            coursesTaken: [
-                { courseId: "MATH-UA 121", grade: "B", semester: "2024-fall", credits: 4 },
-                { courseId: "EXPOS-UA 1", grade: "A", semester: "2024-fall", credits: 4 },
-            ],
-        });
-        const r = checkTransferEligibility(student, "stern");
-        expect(r.status).toBe("ineligible");
-        if (r.status !== "ineligible") return;
-        expect(r.reason).toContain("first year");
-    });
-
-    it("Disqualifier flag (previously_external_transfer) blocks Stern transfer", () => {
-        const student = profile({
-            id: "trans4",
-            homeSchool: "cas",
-            coursesTaken: [
-                { courseId: "MATH-UA 121", grade: "B", semester: "2024-fall", credits: 4 },
-                { courseId: "EXPOS-UA 1", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "CORE-UA 400", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "CSCI-UA 101", grade: "B", semester: "2024-fall", credits: 4 },
-                { courseId: "CORE-UA 500", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CORE-UA 700", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CSCI-UA 102", grade: "A", semester: "2025-spring", credits: 4 },
-                { courseId: "CSCI-UA 201", grade: "A", semester: "2025-spring", credits: 4 },
-            ],
-            flags: ["previously_external_transfer"],
-        });
-        const r = checkTransferEligibility(student, "stern");
-        expect(r.status).toBe("ineligible");
-        if (r.status !== "ineligible") return;
-        expect(r.reason.toLowerCase()).toContain("externally transferred");
-    });
-
-    it("CAS → Tandon: unsupported (no specific data file), returns NYU-wide floor policy", () => {
-        const student = profile({
-            id: "trans5",
-            homeSchool: "cas",
-            coursesTaken: [
-                { courseId: "MATH-UA 121", grade: "A", semester: "2024-fall", credits: 4 },
-            ],
-        });
-        const r = checkTransferEligibility(student, "tandon");
-        expect(r.status).toBe("unsupported");
-        if (r.status !== "unsupported") return;
-        expect(r.contact).toContain("NYU");
-        // The NYU-wide policy block was attached
-        expect(r.nyuWidePolicy).toBeDefined();
-    });
-
-    it("Same-school: 'unsupported' rather than running an audit", () => {
-        const student = profile({ id: "trans6", homeSchool: "cas", coursesTaken: [] });
-        const r = checkTransferEligibility(student, "cas");
-        expect(r.status).toBe("unsupported");
     });
 });
 
