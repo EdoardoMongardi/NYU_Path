@@ -208,7 +208,6 @@ export {
     CONFIDENCE_MEDIUM,
     COHERE_CONFIDENCE_BANDS,
     buildCorpus,
-    DEFAULT_ENTRIES,
     loadPolicyCorpusFromCache,
 } from "./rag/index.js";
 // Improvement-plan Phase B — section-complete (whole-page) retrieval.

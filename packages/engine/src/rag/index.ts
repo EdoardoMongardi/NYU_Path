@@ -43,6 +43,5 @@ export type {
 
 export {
     buildCorpus,
-    DEFAULT_ENTRIES,
 } from "./corpus.js";
 export type { BuildCorpusOptions, BuildCorpusResult } from "./corpus.js";

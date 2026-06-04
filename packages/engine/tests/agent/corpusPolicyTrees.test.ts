@@ -1,51 +1,49 @@
 // ============================================================
-// Phase C — corpus ingest of the NYU-wide policy trees
+// buildCorpus — full bulletin walk ("ingest all")
 // ============================================================
-// Pins that buildCorpus({ includePolicyTrees: true }) picks up the
-// previously-skipped internal-transfer-equivalencies + OGS (visa /
-// immigration) trees from data/bulletin-raw, tags every file school
-// "all" with the right category, and that the flag is opt-in (off ->
-// no tree chunks). The actual cache regen (embedding) is a separate
-// ops step — buildCorpus only chunks, so this runs without any API.
+// Pins that buildCorpus() (no entries override) walks the ENTIRE
+// undergraduate bulletin tree + the NYU-wide internal-transfer / OGS /
+// nyu trees, auto-tagging each page by school + category. buildCorpus
+// only chunks (the embedder is local + deterministic), so this runs
+// without any API.
 
 import { describe, expect, it } from "vitest";
 import { buildCorpus } from "../../src/rag/corpus.js";
 import { LocalHashEmbedder } from "../../src/rag/embedder.js";
 
-const embedder = new LocalHashEmbedder(64);
+const embedder = new LocalHashEmbedder(16);
 
-describe("buildCorpus — policy trees (Phase C)", () => {
-    it("ingests the internal-transfer + OGS trees when includePolicyTrees is on", async () => {
-        // entries: [] isolates the test to ONLY the policy trees.
-        const { chunks } = await buildCorpus(embedder, {
-            entries: [],
-            includePolicyTrees: true,
-            warnOnSkip: false,
-        });
+describe("buildCorpus — full walk ingests everything", () => {
+    it("ingests every undergrad school + the NYU-wide trees, tagged by school + category", async () => {
+        const { chunks } = await buildCorpus(embedder, { warnOnSkip: false });
 
-        const transfer = chunks.filter((c) =>
-            c.meta.sourcePath.startsWith("internal-transfer-equivalencies/"),
-        );
-        const ogs = chunks.filter((c) => c.meta.sourcePath.startsWith("ogs/"));
+        const bySource = (prefix: string) => chunks.filter((c) => c.meta.sourcePath.startsWith(prefix));
 
-        // The real trees exist in the repo, so both must produce chunks.
+        // NYU-wide trees → school "all".
+        const transfer = bySource("internal-transfer-equivalencies/");
+        const ogs = bySource("ogs/");
         expect(transfer.length).toBeGreaterThan(0);
         expect(ogs.length).toBeGreaterThan(0);
-
-        // NYU-wide scope so every student can reach them.
         expect(transfer.every((c) => c.meta.school === "all")).toBe(true);
         expect(ogs.every((c) => c.meta.school === "all")).toBe(true);
-
-        // Category tags drive the reranker preference.
         expect(transfer.every((c) => c.meta.category === "admissions")).toBe(true);
         expect(ogs.every((c) => c.meta.category === "academic_policy")).toBe(true);
 
-        // Source labels are human-readable (not raw slugs).
-        expect(transfer[0]!.meta.source.startsWith("NYU Internal Transfer:")).toBe(true);
-        expect(ogs[0]!.meta.source.startsWith("NYU OGS (Global Services):")).toBe(true);
+        // A NON-CAS school's admissions page is now ingested (previously
+        // only CAS + Stern admissions were) — proves "ingest all".
+        const tandonPages = chunks.filter((c) => c.meta.school === "tandon");
+        const tandonAdmissions = tandonPages.filter((c) => c.meta.category === "admissions");
+        expect(tandonPages.length).toBeGreaterThan(0);
+        expect(tandonAdmissions.length).toBeGreaterThan(0);
+
+        // Program pages across multiple schools are tagged "program".
+        const programs = chunks.filter((c) => c.meta.category === "program");
+        const programSchools = new Set(programs.map((c) => c.meta.school));
+        expect(programs.length).toBeGreaterThan(0);
+        expect(programSchools.size).toBeGreaterThan(1);
     });
 
-    it("is opt-in: without the flag, no tree chunks are produced", async () => {
+    it("an explicit `entries` override still ingests just that set (test hook)", async () => {
         const { chunks } = await buildCorpus(embedder, { entries: [], warnOnSkip: false });
         expect(chunks.length).toBe(0);
     });
