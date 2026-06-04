@@ -175,7 +175,6 @@
   "courseSuffix": [
     "-UF"
   ],
-  "overallGpaMin": 2.0,
   "residency": {
     "type": "suffix_based",
     "suffix": "-UF",
@@ -242,14 +241,6 @@
       "internship",
       "independent_study"
     ]
-  },
-  "doubleCounting": {
-    "defaultMajorToMajor": 2,
-    "defaultMajorToMinor": 2,
-    "defaultMinorToMinor": 2,
-    "noTripleCounting": true,
-    "requiresDepartmentApproval": true,
-    "overrideByProgram": true
   },
   "transferCreditLimits": {
     "firstYearMaxTotal": 32,

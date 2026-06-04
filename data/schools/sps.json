@@ -17,7 +17,6 @@
   "courseSuffix": [
     "-UC"
   ],
-  "overallGpaMin": 2.0,
   "residency": {
     "type": "suffix_based",
     "suffix": "-UC",
@@ -79,14 +78,6 @@
     "countsAgainstNonHomeSchoolCap": false,
     "excludedCourseTypes": [],
     "note": "SPS is the home school: -UC courses are home-school coursework and count toward SPS residency. allowedPrefixes lists the home-school suffix rather than a cross-school allowlist."
-  },
-  "doubleCounting": {
-    "defaultMajorToMajor": 2,
-    "defaultMajorToMinor": 2,
-    "defaultMinorToMinor": 2,
-    "noTripleCounting": true,
-    "requiresDepartmentApproval": true,
-    "overrideByProgram": true
   },
   "transferCreditLimits": {
     "transferStudentMaxTotal": 64

@@ -50,7 +50,6 @@ describe("loadSchoolConfig — real CAS fixture", () => {
         expect(cfg!.residency.minCredits).toBe(64);
         expect(cfg!.passFail?.careerLimit).toBe(32);
         expect(cfg!.spsPolicy?.allowed).toBe(true);
-        expect(cfg!.doubleCounting?.defaultMajorToMajor).toBe(2);
     });
 
     it("strict loader exposes the validated _meta block", () => {
