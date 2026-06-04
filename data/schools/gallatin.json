@@ -1,0 +1,131 @@
+{
+  "_meta": {
+    "catalogYear": "2025-2026",
+    "sourceUrl": "https://bulletins.nyu.edu/undergraduate/individualized-study/academic-policies/",
+    "lastVerified": "2026-06-04",
+    "sourceHash": "sha256:1169e6a857d90e5e1e8b5c0a84223491528f06c2c900b7352ec9383030d525e4",
+    "extractedBy": "llm-assisted",
+    "verifiedBy": "spot-check",
+    "sourceRef": {
+      "anchor": null,
+      "pdfPage": null
+    }
+  },
+  "schoolId": "gallatin",
+  "name": "NYU Gallatin School of Individualized Study",
+  "degreeType": "BA",
+  "courseSuffix": [
+    "-UG"
+  ],
+  "overallGpaMin": 2.0,
+  "residency": {
+    "type": "suffix_based",
+    "suffix": "-UG",
+    "minCredits": 64,
+    "finalCreditsInResidence": 32,
+    "note": "A minimum of 64 credits must be completed after matriculation in Gallatin; the last 32 credits must be completed at NYU (NYC or an NYU study away program)."
+  },
+  "creditCaps": [
+    {
+      "type": "transfer",
+      "maxCredits": 64,
+      "label": "Transfer credits (incl. AP/IB/Maturity Exam and pre-approved non-NYU courses); only grades of C or higher accepted"
+    },
+    {
+      "type": "advanced_standing",
+      "maxCredits": 32,
+      "label": "AP/IB/Maturity Certificate advanced standing credits (elective only)"
+    },
+    {
+      "type": "internship",
+      "maxCredits": 24,
+      "label": "Internship credits (admitted Summer 2015 and later); max 4 internship credits per semester"
+    }
+  ],
+  "gradeThresholds": {
+    "core": "D",
+    "major": "C",
+    "minor": "C"
+  },
+  "passFail": {
+    "careerLimitType": "courses",
+    "careerLimit": 4,
+    "perTermLimit": 1,
+    "perTermUnit": "academic_year",
+    "countsForMajor": false,
+    "countsForMinor": false,
+    "countsForGenEd": false,
+    "excludedCourseTypes": [
+      "liberal_arts_requirement",
+      "historical_cultural_requirement",
+      "first_year_seminar",
+      "senior_project",
+      "travel_course"
+    ],
+    "canElect": true,
+    "autoExcludedFromLimit": [
+      "private_lessons"
+    ],
+    "gradePassEquivalent": "D",
+    "failCountsInGpa": true,
+    "exceptions": [
+      "Pass/Fail option may be used once per full-time academic year (once within 32 credits) and a maximum of four times during the academic career.",
+      "Courses graded with P do not count toward the Dean's List 12-credit graded minimum."
+    ]
+  },
+  "spsPolicy": {
+    "allowed": true,
+    "allowedPrefixes": [],
+    "creditType": "elective_only",
+    "countsTowardResidency": false,
+    "countsAgainstNonHomeSchoolCap": false,
+    "excludedCourseTypes": []
+  },
+  "doubleCounting": {
+    "defaultMajorToMajor": 2,
+    "defaultMajorToMinor": 2,
+    "defaultMinorToMinor": 2,
+    "noTripleCounting": true,
+    "requiresDepartmentApproval": true,
+    "overrideByProgram": true
+  },
+  "transferCreditLimits": {
+    "transferStudentMaxTotal": 64
+  },
+  "acceptsTransferCredit": true,
+  "maxCreditsPerSemester": 18,
+  "f1FullTimeMinCredits": 12,
+  "overloadRequirements": [
+    {
+      "condition": "default",
+      "minGpa": 3.0,
+      "note": "To exceed 18 credits: at least a 3.0 GPA, no Incomplete or NR grades, and adviser approval. 19-20 credits by adviser approval on the Plan of Study; more than 20 requires a Petition to the Office of Academic Advising."
+    }
+  ],
+  "goodStandingReturnThreshold": 0.76,
+  "deansListThreshold": {
+    "minGpa": 3.85,
+    "minCredits": 12,
+    "per": "term",
+    "note": "Requires 12+ credits in graded (A-F) courses that count toward the GPA; courses graded N, NR, W, or P do not count toward the 12-credit minimum."
+  },
+  "advisingContact": {
+    "name": "Gallatin Office of Academic Advising",
+    "url": "https://gallatin.nyu.edu/academics/advising.html"
+  },
+  "_inferredFields": [
+    "creditCaps.online",
+    "creditCaps.non_home_school",
+    "creditCaps.independent_study",
+    "gradeThresholds.core",
+    "gradeThresholds.major",
+    "gradeThresholds.minor",
+    "passFail.countsForGenEd",
+    "spsPolicy",
+    "doubleCounting.defaultMajorToMajor",
+    "doubleCounting.defaultMajorToMinor",
+    "doubleCounting.defaultMinorToMinor",
+    "doubleCounting.requiresDepartmentApproval"
+  ],
+  "auditMode": "advising_only"
+}

@@ -1,0 +1,236 @@
+{
+  "_meta": {
+    "catalogYear": "2025-2026",
+    "sourceUrl": "https://bulletin.nyu.edu/undergraduate/business/academic-policies/",
+    "lastVerified": "2026-04-26",
+    "sourceHash": "sha256:2a39c05c3e3714e63e8c08375826be17156eba596898d9d66de34443e51d6fd8",
+    "extractedBy": "llm-assisted",
+    "verifiedBy": "spot-check",
+    "sourceRef": {
+      "anchor": "academic-policies",
+      "pdfPage": null
+    }
+  },
+  "_provenance": [
+    {
+      "path": "residency.minCredits",
+      "claim": "minimum of 64 credits of business coursework (-UB or equivalent) in residence",
+      "bulletinSection": "Residency Requirements",
+      "sourceLine": 290
+    },
+    {
+      "path": "residency.suffix",
+      "claim": "-UB courses are 'business coursework' for residency",
+      "bulletinSection": "Residency Requirements",
+      "sourceLine": 290
+    },
+    {
+      "path": "creditCaps[type=non_home_school].maxCredits",
+      "claim": "transfer back a maximum of 32 credits of non-business coursework",
+      "bulletinSection": "Non-NYU Coursework",
+      "sourceLine": 268
+    },
+    {
+      "path": "creditCaps[type=advanced_standing].maxCredits",
+      "claim": "Non-transfer students are allowed to transfer in a maximum of 32 credits from AP, IB, foreign certificate, college credit earned prior",
+      "bulletinSection": "Residency Requirements",
+      "sourceLine": 291
+    },
+    {
+      "path": "transferCreditLimits.transferStudentMaxTotal",
+      "claim": "External transfer students can transfer in a maximum of 64 credits from their prior institution(s)",
+      "bulletinSection": "Transfer Credits",
+      "sourceLine": 306
+    },
+    {
+      "path": "passFail.careerLimit",
+      "claim": "A maximum of 4 courses may be elected pass/fail during a student's academic career",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 398
+    },
+    {
+      "path": "passFail.perTermLimit",
+      "claim": "No more than one course may be elected pass/fail in an academic year (fall–summer)",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 399
+    },
+    {
+      "path": "passFail.countsForMajor",
+      "claim": "A course designated as pass/fail may be used to fulfill degree requirements (including BS in Business concentrations, BPE and BTE)",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 401
+    },
+    {
+      "path": "passFail.autoExcludedFromLimit",
+      "claim": "Courses with an automatic pass/fail grading basis (including IBEX, CLP, etc) do not count toward the 4-course limit",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 406
+    },
+    {
+      "path": "passFail.excludedCourseTypes",
+      "claim": "Stern graduate courses may not be elected pass/fail; Film & Television required coursework toward the BS/BFA Degree may not be elected pass/fail",
+      "bulletinSection": "Pass/Fail Option",
+      "sourceLine": 407
+    },
+    {
+      "path": "spsPolicy.allowed",
+      "claim": "Students do not receive credit for courses taken through the School of Professional Studies; Stern students are not permitted to enroll in courses through any SPS programs",
+      "bulletinSection": "School of Professional Studies",
+      "sourceLine": 215
+    },
+    {
+      "path": "doubleCounting",
+      "claim": "Stern students are generally not permitted to count Stern coursework toward more than one requirement",
+      "bulletinSection": "Double-Counting of Stern Coursework",
+      "sourceLine": 201
+    },
+    {
+      "path": "maxCreditsPerSemester",
+      "claim": "Permission required to take more than 18 credits in a given semester",
+      "bulletinSection": "General Stern Undergraduate Academic Standards",
+      "sourceLine": 298
+    },
+    {
+      "path": "overloadRequirements[continuing]",
+      "claim": "limited to students who have completed at least 32 credits and maintained a cumulative GPA of 3.0 or better",
+      "bulletinSection": "General Stern Undergraduate Academic Standards",
+      "sourceLine": 298
+    },
+    {
+      "path": "overloadRequirements[firstYear]",
+      "claim": "First year students may be given permission only after completing one full semester and only if GPA of 3.5 or better",
+      "bulletinSection": "General Stern Undergraduate Academic Standards",
+      "sourceLine": 298
+    },
+    {
+      "path": "totalCreditsRequired",
+      "claim": "the Stern curriculum only requires that students earn a minimum of 128 credits to meet most graduation requirements",
+      "bulletinSection": "Semester Course Loads and Credit Limits",
+      "sourceLine": 300
+    },
+    {
+      "path": "overallGpaMin",
+      "claim": "A minimum 2.0 cumulative GPA is required to graduate",
+      "bulletinSection": "Academic Standards / Standing",
+      "sourceLine": 310
+    },
+    {
+      "path": "passFail.gradePassEquivalent",
+      "claim": "The Registrar automatically converts any letter grades 'A' through 'D' to 'P' for those who have elected to pass/fail the course; D is the lowest letter that converts to P",
+      "bulletinSection": "Pass/Fail Important Notes",
+      "sourceLine": 430
+    },
+    {
+      "path": "passFail.failCountsInGpa",
+      "claim": "Grade of F: 4 grade points; 0 credits earned (P/F-elected F counts in GPA). IBEX failing grades factor into a student's grade point average.",
+      "bulletinSection": "Pass/Fail Grading / IBEX",
+      "sourceLine": 420
+    },
+    {
+      "path": "<unprovenanced-at-v1>",
+      "claim": "gradeThresholds.major ('C'), gradeThresholds.concentration ('C'), goodStandingReturnThreshold (0.67), maxCourseRepeats (2), and advisingContact are NOT explicitly stated in this academic-policies bulletin. The C grade appears in transfer-credit context (lines 271/281) but not as a per-major degree-counting floor. These values are inherited from CAS-style defaults pending a Stern-specific source.",
+      "bulletinSection": "(none)",
+      "sourceLine": null
+    }
+  ],
+  "schoolId": "stern",
+  "name": "Leonard N. Stern School of Business",
+  "degreeType": "BS",
+  "courseSuffix": [
+    "-UB"
+  ],
+  "overallGpaMin": 2.0,
+  "residency": {
+    "type": "suffix_based",
+    "suffix": "-UB",
+    "minCredits": 64,
+    "finalCreditsInResidence": null,
+    "majorMinorResidencyPercent": 50
+  },
+  "creditCaps": [
+    {
+      "type": "non_home_school",
+      "maxCredits": 32,
+      "subtype": "transfer_back",
+      "label": "Non-business coursework transfer (max 32 total)"
+    },
+    {
+      "type": "advanced_standing",
+      "maxCredits": 32,
+      "label": "AP/IB/foreign certificate/prior college credits"
+    }
+  ],
+  "gradeThresholds": {
+    "major": "C",
+    "concentration": "C"
+  },
+  "passFail": {
+    "careerLimitType": "courses",
+    "careerLimit": 4,
+    "perTermLimit": 1,
+    "perTermUnit": "academic_year",
+    "countsForMajor": true,
+    "countsForMinor": true,
+    "canElect": true,
+    "autoExcludedFromLimit": [
+      "IBEX",
+      "CLP"
+    ],
+    "excludedCourseTypes": [
+      "stern_graduate",
+      "bfa_film_tv"
+    ],
+    "gradePassEquivalent": "D",
+    "failCountsInGpa": true,
+    "warnings": [
+      "May impact enrollment in upper-level CAS math/CS courses",
+      "May impact Dean's List, Valedictorian, honors eligibility"
+    ]
+  },
+  "spsPolicy": {
+    "allowed": false
+  },
+  "doubleCounting": {
+    "defaultMajorToMajor": 0,
+    "defaultMajorToMinor": 0,
+    "defaultConcentrationToConcentration": 0,
+    "noTripleCounting": true,
+    "requiresDepartmentApproval": true,
+    "note": "Generally prohibited; exceptions for substitute courses toward ULE"
+  },
+  "transferCreditLimits": {
+    "firstYearMaxTotal": 32,
+    "transferStudentMaxTotal": 64
+  },
+  "acceptsTransferCredit": true,
+  "maxCreditsPerSemester": 18,
+  "f1FullTimeMinCredits": 12,
+  "overloadRequirements": [
+    {
+      "condition": "firstYear",
+      "minGpa": 3.5,
+      "minSemesters": 1
+    },
+    {
+      "condition": "continuing",
+      "minGpa": 3.0,
+      "minCreditsCompleted": 32
+    }
+  ],
+  "goodStandingReturnThreshold": 0.67,
+  "maxCourseRepeats": 2,
+  "sharedPrograms": [
+    "stern_business_core"
+  ],
+  "programExclusions": [],
+  "supportedProgramTypes": [
+    "major",
+    "minor",
+    "concentration"
+  ],
+  "advisingContact": {
+    "name": "Stern Office of Academic Advising",
+    "email": "stern.advising@nyu.edu",
+    "url": "https://www.stern.nyu.edu/portal-partners/current-students/undergraduate/advising"
+  }
+}
