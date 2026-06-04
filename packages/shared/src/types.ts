@@ -8,6 +8,7 @@ export interface Course {
     /** e.g. "CSCI-UA 102" */
     id: string;
     title: string;
+    /** Planning credits — the MAX of a variable-credit range (see creditsMin/Max). */
     credits: number;
     /** Departments offering this course, e.g. ["CSCI-UA"] */
     departments: string[];
@@ -19,6 +20,15 @@ export interface Course {
     termsOffered: ("fall" | "spring" | "summer" | "january")[];
     /** Range of catalog years this course exists in */
     catalogYearsActive: [string, string]; // [start, end]
+    // ---- Step 8d: bulletin-sourced extras (optional; the curated stub omits them) ----
+    /** Lower bound of a variable-credit range (equals `credits` for fixed-credit courses). */
+    creditsMin?: number;
+    /** Upper bound of a variable-credit range (equals `credits`). */
+    creditsMax?: number;
+    /** Bulletin grading basis, e.g. "CAS Graded", "UC SPS Graded". */
+    grading?: string;
+    /** Whether the bulletin marks the course repeatable for additional credit. */
+    repeatableForCredit?: boolean;
 }
 
 // ---- Prerequisites ----
