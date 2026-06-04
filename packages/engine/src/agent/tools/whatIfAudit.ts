@@ -1,31 +1,27 @@
 // ============================================================
-// what_if_audit (Phase 5 §7.2 + Phase 7-E W3.3)
+// what_if_audit — hypothetical PROGRAM change (pure-RAG estimate)
 // ============================================================
-// Two paths:
-//   1. Authored program path: when the hypothetical program is
-//      already in `session.programs`, run the deterministic
-//      `whatIfAudit()` engine against it. Same as Phase 5.
-//   2. Unauthored program path (post-pivot): when the hypothetical
-//      program isn't in the authored catalog, return a structured
-//      "best-effort estimate" envelope that tells the student
-//      we don't have rigorous rules for the hypothetical program
-//      and points them at search_policy / their adviser. The
-//      reply carries a non-removable disclaimer enforced via the
-//      existing Step 15 verbatimText mechanism.
+// Scope: hypothetical PROGRAM changes — declaring a different major,
+// adding a minor, a second major. There is never a DPR for a
+// hypothetical program, so this tool NEVER claims a deterministic
+// audit. It returns a structured, confidence-disclaimed ESTIMATE and
+// points the student at `search_policy` (the program's bulletin
+// requirements) + their adviser. NYU only produces an audit-grade
+// verdict by recomputing the student's DPR for the new program.
 //
-// Just-in-time bulletin extraction (the LLM-driven path that
-// extracts a Program spec from bulletin chunks on-the-fly) is a
-// W3.3 P2 follow-up. The minimal version here keeps the system
-// honest: it never invents an audit verdict for a program we
-// don't have structured rules for; it surfaces a clear estimate
-// + caveat.
+// Course-level "what if I take A instead of B" is a DIFFERENT question
+// — it runs the forward-schedule solver via `propose_plan_change` /
+// `simulate_alternatives` against the student's plan, not this tool.
+//
+// The authored deterministic path (the `whatIfAudit()` rule engine over
+// programs.json) was removed in the rule-engine decommission: the
+// 1-program authored stub could only ever audit a single hypothetical,
+// and the DPR-first design relies on the student's real audit + bulletin
+// RAG instead.
 // ============================================================
 
 import { z } from "zod";
 import { buildTool } from "../tool.js";
-import { whatIfAudit } from "../../audit/whatIfAudit.js";
-import type { WhatIfResult } from "../../audit/whatIfAudit.js";
-import type { ProgramDeclaration } from "@nyupath/shared";
 
 interface UnauthoredProgramEstimate {
     kind: "unauthored_program_estimate";
@@ -33,14 +29,10 @@ interface UnauthoredProgramEstimate {
     /** Verbatim disclaimer the validator's verbatim_drift check
      *  enforces in the LLM's reply. */
     disclaimer: string;
-    /** What the student CAN learn from the DPR + RAG corpus,
-     *  even without rigorous rules for the hypothetical. */
+    /** What the student CAN learn from the DPR + RAG corpus, even
+     *  without an audit-grade verdict for the hypothetical. */
     guidance: string;
 }
-
-type WhatIfOutput =
-    | (WhatIfResult & { kind?: undefined })
-    | UnauthoredProgramEstimate;
 
 const DISCLAIMER =
     "This estimate is based on AI-extracted requirements from NYU's bulletin. " +
@@ -49,31 +41,32 @@ const DISCLAIMER =
 export const whatIfAuditTool = buildTool({
     name: "what_if_audit",
     description:
-        "Runs a hypothetical audit with a different set of declared programs " +
-        "(read-only — does NOT modify the student's profile). When the " +
-        "hypothetical program is in the authored catalog, returns a " +
-        "deterministic comparison. When it isn't, returns a structured " +
-        "estimate with a non-removable disclaimer pointing the student " +
-        "at the bulletin and an adviser. Use for 'what if I switched to X', " +
-        "'compare X vs Y', 'should I add a minor in Z'.",
+        "Estimates the impact of a hypothetical PROGRAM change — declaring a " +
+        "different major, adding a minor, or a second major (read-only — does " +
+        "NOT modify the profile). Returns a structured estimate with a " +
+        "non-removable disclaimer pointing at the bulletin (search_policy) + an " +
+        "adviser; NYU only produces an audit-grade verdict by recomputing the " +
+        "DPR for the new program, so this is always an estimate. Use for 'what " +
+        "if I switched to X', 'should I add a minor in Z'. For course-level " +
+        "'what if I take A instead of B', use propose_plan_change / " +
+        "simulate_alternatives (they run the schedule solver) instead.",
     inputSchema: z.object({
         hypotheticalPrograms: z.array(z.string())
-            .describe("Program ids to hypothetically declare, e.g., ['cas_econ_ba', 'cas_math_minor']."),
+            .describe("Program ids to hypothetically declare, e.g., ['economics_ba', 'mathematics_minor']."),
         compareWithCurrent: z.boolean().default(true)
-            .describe("If true, also runs the current declarations and produces a diff."),
+            .describe("Retained for compatibility; the estimate is always framed against the student's current DPR."),
     }),
     maxResultChars: 3000,
-    // Phase 7-E W3.3 — semi_hardened: when we return an unauthored
-    // estimate, the disclaimer must appear verbatim in the reply.
+    // semi_hardened: the disclaimer must appear verbatim in the reply.
     outputMode: "semi_hardened",
     async validateInput(input, { session }) {
-        // DPR-only: a hypothetical audit compares against the student's
-        // real coursework, which comes from the DPR. Refuse without it.
+        // DPR-only: the estimate is framed against the student's real
+        // coursework, which comes from the DPR. Refuse without it.
         if (!session.degreeProgressReport || !session.student) {
             return {
                 ok: false,
                 userMessage:
-                    "I need your Albert Degree Progress Report (DPR) to run a what-if comparison. " +
+                    "I need your Albert Degree Progress Report (DPR) to frame a what-if comparison. " +
                     "Please upload your DPR and try again.",
             };
         }
@@ -83,39 +76,17 @@ export const whatIfAuditTool = buildTool({
         return { ok: true };
     },
     prompt: () =>
-        `Run a hypothetical audit. Required: hypotheticalPrograms (array of program ids). ` +
-        `Optional: compareWithCurrent (default true). Read-only — never modifies the profile. ` +
-        `Returns deterministic comparison when programs are in the authored catalog; ` +
-        `otherwise returns an estimate envelope with a non-removable disclaimer.`,
-    async call(input, { session }): Promise<WhatIfOutput> {
-        const allInCatalog = input.hypotheticalPrograms.every(
-            (id) => session.programs?.has(id) ?? false,
-        );
-
-        // ---- Authored program path ----
-        if (allInCatalog && session.programs && session.courses) {
-            return whatIfAudit(
-                session.student!,
-                input.hypotheticalPrograms,
-                session.programs,
-                session.courses,
-                session.schoolConfig ?? null,
-                input.compareWithCurrent ?? true,
-            );
-        }
-
-        // ---- Unauthored program path ----
-        // Identify which requested IDs we lack and what we can offer
-        // the student deterministically anyway (RAG over the bulletin
-        // for the program's policy text + the student's DPR for
-        // current state).
-        const missing = input.hypotheticalPrograms.filter(
-            (id) => !session.programs?.has(id),
-        );
-
-        let guidance = "";
-        if (session.degreeProgressReport) {
-            const dpr = session.degreeProgressReport;
+        `Estimate the impact of a hypothetical PROGRAM change. Required: hypotheticalPrograms ` +
+        `(array of program ids). Returns a confidence-disclaimed estimate (never a deterministic ` +
+        `audit — there is no DPR for a hypothetical program) + points at search_policy and an ` +
+        `adviser. Read-only; never modifies the profile.`,
+    async call(input, { session }): Promise<UnauthoredProgramEstimate> {
+        // The student's current state (from the DPR) anchors the estimate;
+        // the hypothetical program's requirements come from search_policy
+        // (the model fires it next), not from any authored rule set.
+        const dpr = session.degreeProgressReport;
+        let guidance: string;
+        if (dpr) {
             const credits = dpr.cumulative.creditsUsed ?? 0;
             const gpa = dpr.cumulative.cumulativeGpa ?? 0;
             const transfer = dpr.courseHistory.filter((c) => c.type === "TE").length;
@@ -132,53 +103,22 @@ export const whatIfAuditTool = buildTool({
 
         return {
             kind: "unauthored_program_estimate",
-            requestedProgramIds: missing,
+            requestedProgramIds: input.hypotheticalPrograms,
             disclaimer: DISCLAIMER,
             guidance,
         };
     },
     summarizeResult(result) {
-        if ("kind" in result && result.kind === "unauthored_program_estimate") {
-            const lines: string[] = [];
-            lines.push(`WHAT-IF (estimate, no structured rules available)`);
-            lines.push(`  Requested programs without authored rules: ${result.requestedProgramIds.join(", ")}`);
-            lines.push(`  Guidance: ${result.guidance}`);
-            // The disclaimer is also returned via extractVerbatim; it's
-            // included in the summary so the model can see the exact
-            // text it must include.
-            lines.push(`  REQUIRED DISCLAIMER (must appear verbatim in your reply): ${result.disclaimer}`);
-            return lines.join("\n");
-        }
-        // Authored-path result.
-        const r = result as WhatIfResult;
         const lines: string[] = [];
-        lines.push(`WHAT-IF: ${r.hypothetical.programs.length} program(s) hypothetically declared`);
-        for (const entry of r.hypothetical.programs) {
-            const a = entry.audit;
-            const unmetCount = a.rules.filter((rr: { status: string }) => rr.status !== "satisfied").length;
-            const decl = entry.declaration as ProgramDeclaration;
-            lines.push(`  ${decl.programType.toUpperCase()} ${a.programName} — ${unmetCount} unmet rules, ${a.totalCreditsCompleted}/${a.totalCreditsRequired} credits`);
-        }
-        if (r.comparison) {
-            const c = r.comparison;
-            lines.push(`Comparison to current:`);
-            lines.push(`  Courses transferable to hypothetical: ${c.coursesTransferred}`);
-            lines.push(`  Net additional requirements remaining: ${c.additionalRequirementsRemaining}`);
-            if (c.droppedPrograms.length > 0) lines.push(`  Dropped: ${c.droppedPrograms.join(", ")}`);
-            if (c.addedPrograms.length > 0) lines.push(`  Added: ${c.addedPrograms.join(", ")}`);
-        }
-        if (r.warnings.length > 0) {
-            lines.push(`Warnings: ${r.warnings.slice(0, 3).join(" | ")}`);
-        }
+        lines.push(`WHAT-IF (estimate — there is no DPR for a hypothetical program)`);
+        lines.push(`  Requested program(s): ${result.requestedProgramIds.join(", ")}`);
+        lines.push(`  Guidance: ${result.guidance}`);
+        // The disclaimer is also returned via extractVerbatim; it's
+        // included here so the model sees the exact text it must include.
+        lines.push(`  REQUIRED DISCLAIMER (must appear verbatim in your reply): ${result.disclaimer}`);
         return lines.join("\n");
     },
     extractVerbatim(result) {
-        // Only the unauthored-estimate path enforces a verbatim
-        // disclaimer; authored-path results don't need one because
-        // the verdict is deterministic.
-        if ("kind" in result && result.kind === "unauthored_program_estimate") {
-            return result.disclaimer;
-        }
-        return null;
+        return result.disclaimer;
     },
 });
