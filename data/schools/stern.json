@@ -50,7 +50,7 @@
     },
     {
       "path": "passFail.perTermLimit",
-      "claim": "No more than one course may be elected pass/fail in an academic year (fall–summer)",
+      "claim": "No more than one course may be elected pass/fail in an academic year (fall\u2013summer)",
       "bulletinSection": "Pass/Fail Option",
       "sourceLine": 399
     },
@@ -135,7 +135,6 @@
   ],
   "schoolId": "stern",
   "name": "Leonard N. Stern School of Business",
-  "degreeType": "BS",
   "courseSuffix": [
     "-UB"
   ],

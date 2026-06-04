@@ -13,7 +13,6 @@
   },
   "schoolId": "shanghai",
   "name": "NYU Shanghai",
-  "degreeType": "BA",
   "courseSuffix": [
     "-SHU"
   ],
@@ -63,7 +62,8 @@
     }
   ],
   "completionRatePolicy": {
-    "goodStandingThreshold": 0.5
+    "goodStandingThreshold": 0.5,
+    "basis": "term"
   },
   "maxCourseRepeats": 2,
   "deansListThreshold": {

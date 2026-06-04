@@ -13,7 +13,6 @@
   },
   "schoolId": "nyuad",
   "name": "NYU Abu Dhabi",
-  "degreeType": "BA",
   "courseSuffix": [
     "-UH"
   ],
@@ -87,7 +86,8 @@
     }
   ],
   "completionRatePolicy": {
-    "goodStandingThreshold": 0.75
+    "goodStandingThreshold": 0.75,
+    "basis": "cumulative"
   },
   "maxCourseRepeats": 2
 }

@@ -13,7 +13,6 @@
   },
   "schoolId": "sps",
   "name": "NYU School of Professional Studies",
-  "degreeType": "BS",
   "courseSuffix": [
     "-UC"
   ],
@@ -24,14 +23,22 @@
   },
   "creditCaps": [
     {
-      "type": "transfer",
+      "type": "advanced_standing",
       "maxCredits": 64,
-      "label": "Transfer credits (Schack/Tisch/Tisch Institute bachelor's; included in the 64-credit advanced-standing cap)"
+      "appliesTo": "Schack Institute / Tisch Center / Tisch Institute \u2014 bachelor's",
+      "label": "Advanced standing incl. transfer + AP credits (SPS academic-policies L376)"
     },
     {
       "type": "advanced_standing",
-      "maxCredits": 64,
-      "label": "Advanced standing incl. transfer + AP/IB credits (Schack/Tisch/Tisch Institute bachelor's)"
+      "maxCredits": 80,
+      "appliesTo": "Division of Applied Undergraduate Studies (DAUS) \u2014 bachelor's",
+      "label": "Advanced standing incl. transfer + AP + CLEP + Prior Learning credits (L378)"
+    },
+    {
+      "type": "advanced_standing",
+      "maxCredits": 30,
+      "appliesTo": "Division of Applied Undergraduate Studies (DAUS) \u2014 associate's",
+      "label": "Advanced standing incl. transfer + AP + CLEP + Prior Learning credits (L378)"
     }
   ],
   "passFail": {
@@ -61,12 +68,10 @@
     "excludedCourseTypes": [],
     "note": "SPS is the home school: -UC courses are home-school coursework and count toward SPS residency. allowedPrefixes lists the home-school suffix rather than a cross-school allowlist."
   },
-  "transferCreditLimits": {
-    "transferStudentMaxTotal": 64
-  },
   "overloadRequirements": [],
   "completionRatePolicy": {
-    "goodStandingThreshold": 0.5
+    "goodStandingThreshold": 0.5,
+    "basis": "cumulative"
   },
   "maxCourseRepeats": 1,
   "deansListThreshold": {

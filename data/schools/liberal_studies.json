@@ -13,12 +13,6 @@
   },
   "_provenance": [
     {
-      "path": "degreeType",
-      "claim": "The Liberal Studies Core is a four-semester program. Students planning to transition to one of the baccalaureate programs at NYU normally must complete four semesters of full-time enrollment in the LS Core. (LS Core is a 2-year lower-division program; the BA/BS degree is conferred by the transition school \u2014 CAS, Steinhardt, Tisch, etc. \u2014 not by LS. The GLS track within Liberal Studies does award its own BA.)",
-      "bulletinSection": "Residency Requirements",
-      "sourceLine": 46
-    },
-    {
       "path": "residency.minCredits",
       "claim": "The LS Core publishes NO fixed degree-credit residency of its own. Residency is defined as time: 'must complete four semesters of full-time enrollment in the LS Core. Full-time enrollment is defined as the completion of a minimum of 12 credit hours in each of the four semesters.' Degree-credit residency belongs to the transition school: 'Other NYU schools and colleges where students may transition or transfer have specific residency requirements.' Hence minCredits is null.",
       "bulletinSection": "Residency Requirements",
@@ -115,7 +109,7 @@
       "sourceLine": 46
     },
     {
-      "path": "goodStandingReturnThreshold",
+      "path": "completionRatePolicy.goodStandingThreshold",
       "claim": "Progress towards the degree is defined as a 2.0 GPA or higher with at least 75% of attempted credits completed. The University's Financial Aid Office defines 'satisfactory progress' for full-time students as maintaining a grade point average of 2.0 or better and completing at least three-quarters of all attempted credits.",
       "bulletinSection": "Academic Standing and Progress",
       "sourceLine": 248
@@ -171,7 +165,6 @@
   ],
   "schoolId": "liberal_studies",
   "name": "NYU Liberal Studies",
-  "degreeType": "BA",
   "courseSuffix": [
     "-UF"
   ],
@@ -232,7 +225,8 @@
     }
   ],
   "completionRatePolicy": {
-    "goodStandingThreshold": 0.75
+    "goodStandingThreshold": 0.75,
+    "basis": "cumulative"
   },
   "deansListThreshold": {
     "minGpa": 3.65,

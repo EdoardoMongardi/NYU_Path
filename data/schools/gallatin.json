@@ -13,7 +13,6 @@
   },
   "schoolId": "gallatin",
   "name": "NYU Gallatin School of Individualized Study",
-  "degreeType": "BA",
   "courseSuffix": [
     "-UG"
   ],
@@ -77,7 +76,8 @@
     }
   ],
   "completionRatePolicy": {
-    "goodStandingThreshold": 0.76
+    "goodStandingThreshold": 0.76,
+    "basis": "annual"
   },
   "deansListThreshold": {
     "minGpa": 3.85,

@@ -19,6 +19,15 @@ import { loadSchoolConfig } from "../../src/dataLoader.js";
 const stern = loadSchoolConfig("stern")!; // no completionRatePolicy
 const cas = loadSchoolConfig("cas")!; // full policy: 0.75 / dismiss <0.5 after 2
 const tisch = loadSchoolConfig("tisch")!; // goodStanding 0.5, NO dismissal mechanic
+const gallatin = loadSchoolConfig("gallatin")!; // annual 0.76 pace basis
+const shanghai = loadSchoolConfig("shanghai")!; // per-term 0.5 pace basis
+
+// 2 A + 1 F → 8 of 12 attempted credits completed (66.7%), GPA 2.667.
+const SUB75 = [
+    { courseId: "X1", grade: "A", semester: "2024-fall", credits: 4 },
+    { courseId: "X2", grade: "A", semester: "2024-fall", credits: 4 },
+    { courseId: "X3", grade: "F", semester: "2024-fall", credits: 4 },
+];
 
 describe("completion-rate standing is gated on a per-school policy", () => {
     it("a school with no completion-rate policy is NOT dismissed for low completion (Stern)", () => {
@@ -100,5 +109,38 @@ describe("completion-rate standing is gated on a per-school policy", () => {
         expect(r.level).not.toBe("dismissed");
         expect(r.level).toBe("good_standing");
         expect(r.warnings.some((w) => w.toLowerCase().includes("completion"))).toBe(true);
+    });
+});
+
+describe("completion-rate warning text reflects each school's pace basis", () => {
+    const warningFor = (cfg: typeof cas, courses = SUB75) =>
+        calculateStanding(courses, 1, cfg).warnings.find((w) =>
+            w.toLowerCase().includes("completion"),
+        ) ?? "";
+
+    it("a cumulative-basis school (CAS) names cumulative attempted credits", () => {
+        const w = warningFor(cas);
+        expect(w).toContain("75%");
+        expect(w.toLowerCase()).toContain("cumulative attempted credits");
+        expect(w.toLowerCase()).not.toContain("each academic year");
+        expect(w.toLowerCase()).not.toContain("each term");
+    });
+
+    it("an annual-basis school (Gallatin) says the threshold is per academic year", () => {
+        const w = warningFor(gallatin);
+        expect(w).toContain("76%");
+        expect(w.toLowerCase()).toContain("each academic year");
+    });
+
+    it("a per-term-basis school (Shanghai) says the threshold is per term", () => {
+        // 1 A + 2 W → 33% completion (< 50%).
+        const courses = [
+            { courseId: "X1", grade: "A", semester: "2024-fall", credits: 4 },
+            { courseId: "X2", grade: "W", semester: "2024-fall", credits: 4 },
+            { courseId: "X3", grade: "W", semester: "2024-fall", credits: 4 },
+        ];
+        const w = warningFor(shanghai, courses);
+        expect(w).toContain("50%");
+        expect(w.toLowerCase()).toContain("each term");
     });
 });

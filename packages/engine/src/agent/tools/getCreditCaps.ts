@@ -148,7 +148,14 @@ export const getCreditCapsTool = buildTool({
             }
         }
         for (const cap of out.crossSchoolCaps) {
-            lines.push(`Credit cap (${cap.type}): max ${cap.maxCredits} credits`);
+            // Surface the division/degree scope when a cap is sub-unit-specific
+            // (e.g. SPS Schack/Tisch vs DAUS) — there's no division signal to
+            // auto-select one, so the student must see which variant applies.
+            const scope = cap.appliesTo ? ` — ${cap.appliesTo}` : "";
+            const ceiling = cap.maxCredits !== undefined
+                ? `max ${cap.maxCredits} credits`
+                : (cap.maxCourses !== undefined ? `max ${cap.maxCourses} courses` : "see policy");
+            lines.push(`Credit cap (${cap.type}): ${ceiling}${scope}`);
         }
         if (out.transferCreditLimits) {
             lines.push(`Transfer credit limits: ${JSON.stringify(out.transferCreditLimits)}`);
