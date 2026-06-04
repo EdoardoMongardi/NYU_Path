@@ -412,7 +412,7 @@ export function buildSolverInputFromSession(
         outsideHomeCreditsUsed,
         cumulativeGpa,
         majorGpa: null,
-        graduationGpaFloor: schoolConfig?.overallGpaMin ?? 2.0,
+        graduationGpaFloor: dpr.cumulative.cumulativeGpaRequired ?? 2.0,
         majorGpaFloor: null,
         unmetRequirements,
         prereqs: prereqsMap,
@@ -760,7 +760,7 @@ function buildProgramRulesFromSession(
         }
     }
 
-    const residencyMin = dpr.cumulative.residencyRequired ?? schoolConfig?.residency?.minCredits ?? null;
+    const residencyMin = dpr.cumulative.residencyRequired ?? null;
 
     const solverRules: SolverInput["programRules"] = {
         majorRuleKinds,

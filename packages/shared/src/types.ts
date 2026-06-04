@@ -409,7 +409,9 @@ export interface SchoolConfig {
     degreeType: string | null;
     /** Course-id suffixes belonging to this school, e.g. ["-UA"] */
     courseSuffix: string[];
-    overallGpaMin: number;
+    // Step 8e — overallGpaMin removed: the GPA floor is per-student and comes
+    // from the DPR (`dpr.cumulative.cumulativeGpaRequired`). doubleCounting
+    // removed: double-counting is answered from the DPR + RAG (no authored rule).
     /** "advising_only" disables hard rule enforcement (Gallatin) */
     auditMode?: "full" | "advising_only";
     residency: ResidencyConfig;
@@ -417,7 +419,6 @@ export interface SchoolConfig {
     gradeThresholds?: GradeThresholds;
     passFail?: PassFailConfig;
     spsPolicy?: SpsPolicy;
-    doubleCounting?: DoubleCountingConfig;
     transferCreditLimits?: TransferCreditLimits;
     /** Whether this school accepts inbound transfer credit */
     acceptsTransferCredit: boolean;

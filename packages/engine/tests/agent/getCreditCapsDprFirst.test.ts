@@ -86,13 +86,13 @@ describe("get_credit_caps — DPR-first, school-agnostic (Phase E)", () => {
         expect(out.capsSource).toBe("dpr+config");
     });
 
-    it("without a DPR: GPA floor falls back to config, but the degree total stays null (DPR-only)", async () => {
+    it("without a DPR: both the degree total and the GPA floor are null (DPR-only)", async () => {
         const ctx = ctxWith({ student: { ...sternStudent(), homeSchool: "cas" }, schoolConfig: CAS_CFG });
         const out = await getCreditCapsTool.call({}, ctx);
-        // Step 8c — the degree total is program-dependent, so it comes only
-        // from the DPR; we don't state a personalized total without one.
+        // Step 8c/8e — degree total and GPA floor are both per-student DPR
+        // facts; without a DPR we don't state a personalized number.
         expect(out.totalCreditsRequired).toBeNull();
-        expect(out.overallGpaMin).toBe(2.0); // school-wide floor still from config
+        expect(out.overallGpaMin).toBeNull();
         expect(out.capsSource).toBe("config");
     });
 

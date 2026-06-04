@@ -139,7 +139,6 @@
   "courseSuffix": [
     "-UB"
   ],
-  "overallGpaMin": 2.0,
   "residency": {
     "type": "suffix_based",
     "suffix": "-UB",
@@ -189,14 +188,6 @@
   },
   "spsPolicy": {
     "allowed": false
-  },
-  "doubleCounting": {
-    "defaultMajorToMajor": 0,
-    "defaultMajorToMinor": 0,
-    "defaultConcentrationToConcentration": 0,
-    "noTripleCounting": true,
-    "requiresDepartmentApproval": true,
-    "note": "Generally prohibited; exceptions for substitute courses toward ULE"
   },
   "transferCreditLimits": {
     "firstYearMaxTotal": 32,

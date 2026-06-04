@@ -155,7 +155,6 @@
   "courseSuffix": [
     "-UY"
   ],
-  "overallGpaMin": 2.0,
   "residency": {
     "type": "suffix_based",
     "suffix": "-UY",
@@ -199,13 +198,6 @@
   },
   "spsPolicy": {
     "allowed": false
-  },
-  "doubleCounting": {
-    "defaultMajorToMajor": null,
-    "defaultMajorToMinor": null,
-    "noTripleCounting": true,
-    "requiresDepartmentApproval": true,
-    "note": "No explicit numeric limit — discretion of both academic departments"
   },
   "transferCreditLimits": {
     "firstYearMaxTotal": 32,

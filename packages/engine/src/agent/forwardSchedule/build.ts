@@ -191,7 +191,7 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
         outsideHomeCreditsUsed,
         cumulativeGpa,
         majorGpa: null,
-        graduationGpaFloor: schoolConfig?.overallGpaMin ?? 2.0,
+        graduationGpaFloor: dpr.cumulative.cumulativeGpaRequired ?? 2.0,
         majorGpaFloor: null,
         unmetRequirements,
         prereqs,
@@ -401,7 +401,7 @@ function buildProgramRules(
     }
 
     // Residency from DPR cumulative or school config
-    const residencyMin = dpr.cumulative.residencyRequired ?? schoolConfig?.residency?.minCredits ?? null;
+    const residencyMin = dpr.cumulative.residencyRequired ?? null;
 
     const validatorRules: GraduationPathValidatorArgs["programRules"] = {
         degreeCreditMinimum,
