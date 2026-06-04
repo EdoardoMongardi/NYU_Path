@@ -20,16 +20,10 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-SHU",
-    "minCredits": null,
     "finalCreditsInResidence": null,
     "note": "Semester-based residency: minimum 6 fall/spring semesters at the NYU Shanghai campus, final semester in residence. The 64-credit figure is the major-declaration gate, not a residency floor."
   },
   "creditCaps": [
-    {
-      "type": "non_home_school",
-      "maxCredits": 36,
-      "label": "Courses in other divisions of NYU (incl. approved minors); petition required beyond 36"
-    },
     {
       "type": "online",
       "maxCredits": 0,
@@ -53,14 +47,8 @@
       "label": "Independent study (max 12 credits over four years, max 8 in any one major)"
     }
   ],
-  "gradeThresholds": {
-    "core": "D",
-    "major": "C",
-    "minor": "C"
-  },
   "passFail": {
     "careerLimitType": "credits",
-    "careerLimit": 32,
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,

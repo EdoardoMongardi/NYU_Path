@@ -158,25 +158,11 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UY",
-    "minCredits": 64,
     "finalCreditsInResidence": null,
     "majorMinorResidencyPercent": 50,
     "note": "Residency is half the degree credits. Final-semester-in-residence is required but not denominated as a fixed credit count."
   },
   "creditCaps": [
-    {
-      "type": "non_home_school",
-      "maxCourses": 4,
-      "maxCredits": 16,
-      "excludes": [
-        "cross_school_minor",
-        "study_abroad",
-        "tandon_required_outside_course",
-        "test_credits",
-        "prior_transfer"
-      ],
-      "label": "Non-Tandon courses (excl. minor/abroad/required-outside)"
-    },
     {
       "type": "transfer",
       "maxCredits": 64,
@@ -185,7 +171,6 @@
   ],
   "passFail": {
     "careerLimitType": "credits",
-    "careerLimit": null,
     "perTermLimit": null,
     "perTermUnit": "semester",
     "countsForMajor": false,
