@@ -7,11 +7,38 @@
 // regress the wire contract.
 // ============================================================
 
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { POST } from "../app/api/chat/v2/route";
-import { setCohortAssignment, reviewCompleteness, parseDpr } from "@nyupath/engine";
+import { setCohortAssignment, reviewCompleteness, parseDpr, type ChatTurnResult } from "@nyupath/engine";
+import { getStores, resetStoresForTests } from "../lib/db/store";
+
+// ------------------------------------------------------------
+// Mock ONLY the streaming agent loop. The post-loop session-summary
+// append (exercised by the last describe block) needs a completed turn
+// but must NOT make a real LLM call. `importOriginal` keeps every other
+// engine export real, so the validator / completeness / cohort logic the
+// other suites in this file depend on is untouched.
+// ------------------------------------------------------------
+vi.mock("@nyupath/engine", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@nyupath/engine")>();
+    return {
+        ...actual,
+        runAgentTurnStreaming: async function* () {
+            const result: ChatTurnResult = {
+                kind: "ok",
+                finalText: "You can plan your courses for next semester.",
+                invocations: [],
+                turnMessages: [],
+                usage: { promptTokens: 0, completionTokens: 0 },
+                modelUsedId: "test-model",
+                transitions: [],
+            };
+            yield { type: "done" as const, result };
+        },
+    };
+});
 
 // DPR-only: the route now requires a valid Degree Progress Report
 // payload. Parse the shared fixture once and wrap it in the canonical
@@ -268,5 +295,114 @@ describe("completenessReviewer wiring (Phase 12.5 Task 4)", () => {
             expect(typeof v.kind).toBe("string");
             expect(typeof v.detail).toBe("string");
         }
+    });
+});
+
+// ============================================================
+// Session-summary persistence (post-loop appendSummary)
+// ============================================================
+// Regression guard for the silent bug where runV2Turn referenced a
+// `stores` binding that only existed in the POST handler's scope. The
+// post-stream `sessionStore.appendSummary` threw `ReferenceError: stores
+// is not defined`, was swallowed by its try/catch, and authenticated
+// users' rolling session summaries were never persisted.
+//
+// We mock the streaming agent loop (above) so a turn completes without a
+// real LLM, drive a full turn for an authenticated user, and assert the
+// append actually fired.
+describe("v2 route session-summary persistence (post-loop append)", () => {
+    const ORIGINAL = {
+        openai: process.env.OPENAI_API_KEY,
+        anthropic: process.env.ANTHROPIC_API_KEY,
+        dbUrl: process.env.DATABASE_URL,
+        sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+    };
+
+    beforeEach(() => {
+        // Force the in-memory store bundle (no Postgres, no file-backed)
+        // so we can spy on the exact sessionStore instance the route uses.
+        delete process.env.DATABASE_URL;
+        delete process.env.NYUPATH_SESSION_STORE_PATH;
+        // createPrimaryClient only checks for key PRESENCE; a fake value
+        // clears the 503 guard. The agent loop is mocked, so no real
+        // provider call is ever made with it.
+        process.env.OPENAI_API_KEY = "sk-test-fake-key-for-summary-test";
+        process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-summary-test";
+        // Default cohort `alpha` runs the full agent loop (evalGateFailing
+        // is false), so the turn reaches the post-loop append rather than
+        // short-circuiting into recovery mode.
+        setCohortAssignment({ default: "alpha" });
+        resetStoresForTests();
+    });
+
+    afterEach(() => {
+        if (ORIGINAL.openai === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = ORIGINAL.openai;
+        if (ORIGINAL.anthropic === undefined) delete process.env.ANTHROPIC_API_KEY;
+        else process.env.ANTHROPIC_API_KEY = ORIGINAL.anthropic;
+        if (ORIGINAL.dbUrl === undefined) delete process.env.DATABASE_URL;
+        else process.env.DATABASE_URL = ORIGINAL.dbUrl;
+        if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
+        else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        setCohortAssignment({ default: "alpha" });
+        resetStoresForTests();
+        vi.restoreAllMocks();
+    });
+
+    it("persists a session summary for an authenticated user after a turn", async () => {
+        // Pre-build + cache the in-memory bundle. getStores() returns the
+        // module-cached bundle regardless of its env arg, so the route's
+        // `getStores()` reuses THIS instance — letting us spy on the exact
+        // sessionStore the post-loop append writes to.
+        const stores = getStores({});
+        const appendSpy = vi.spyOn(stores.sessionStore, "appendSummary");
+
+        const userId = "summary-student-1";
+        const res = await POST(fakeRequest({
+            message: "What should I take next semester?",
+            parsedData: validDprPayload(),
+            userId,
+        }) as never);
+        expect(res.status).toBe(200);
+
+        // Drain the SSE stream to completion. The route writes the `done`
+        // event, THEN runs the post-loop appendSummary, THEN closes the
+        // stream in `finally` — so once the reader reports done=true the
+        // append has already been awaited.
+        const reader = res.body!.getReader();
+        while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+        }
+
+        expect(appendSpy).toHaveBeenCalledTimes(1);
+        expect(appendSpy).toHaveBeenCalledWith(
+            userId,
+            expect.objectContaining({
+                date: expect.any(String),
+                summary: expect.stringContaining("Asked:"),
+            }),
+        );
+    });
+
+    it("does NOT persist a session summary for an anonymous user", async () => {
+        const stores = getStores({});
+        const appendSpy = vi.spyOn(stores.sessionStore, "appendSummary");
+
+        // No userId in the body and no auth cookie → userId === "anonymous",
+        // which must never write to shared session storage.
+        const res = await POST(fakeRequest({
+            message: "What should I take next semester?",
+            parsedData: validDprPayload(),
+        }) as never);
+        expect(res.status).toBe(200);
+
+        const reader = res.body!.getReader();
+        while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+        }
+
+        expect(appendSpy).not.toHaveBeenCalled();
     });
 });
