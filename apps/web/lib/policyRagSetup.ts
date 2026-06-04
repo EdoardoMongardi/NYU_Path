@@ -23,7 +23,6 @@ import {
     CohereReranker,
     LocalLexicalReranker,
     loadPolicyCorpusFromCache,
-    loadPolicyTemplates,
     COHERE_CONFIDENCE_BANDS,
     type Reranker,
     type ToolSession,
@@ -75,13 +74,10 @@ export function getPolicyRagBundle(): ToolSession["rag"] | null {
             console.warn("[policyRagSetup] COHERE_API_KEY not set — falling back to LocalLexicalReranker");
         }
 
-        const templates = loadPolicyTemplates().templates;
-
         cached = {
             store,
             embedder,
             reranker,
-            templates,
             // Cohere v3.5 distribution differs from the lexical reranker;
             // use the calibrated bands when Cohere is active, otherwise
             // let policySearch fall back to its lexical defaults.

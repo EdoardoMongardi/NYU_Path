@@ -83,9 +83,6 @@ export type { LLMStreamEvent } from "./llmClient.js";
 export { buildSystemPrompt } from "./systemPrompt.js";
 export type { SystemPromptOptions } from "./systemPrompt.js";
 
-export { preLoopDispatch } from "./templateMatcher.js";
-export type { PreLoopResult, PreLoopOptions } from "./templateMatcher.js";
-
 export {
     validateResponse,
     extractClaimNumbers,
