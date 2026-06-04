@@ -256,7 +256,7 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         "6. RENDER STRUCTURED ENVELOPE FIELDS FAITHFULLY (Phase 10):",
         "   Tool results are envelopes with structured fields besides the",
         "   primary `data` payload — `disclaimers`, `suggestedFollowUps`,",
-        "   `anchors`, `coreUaClassifications`, `coreUaRequirements`. When",
+        "   `anchors`. When",
         "   any of these fields is non-empty, include its content in your",
         "   reply. Do not paraphrase a disclaimer's `text`; surface it",
         "   verbatim. Do not skip an anchor's `quote`; cite it with the",

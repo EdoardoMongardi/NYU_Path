@@ -1,17 +1,17 @@
 // ============================================================
-// search_policy (Phase 5 §7.2 + §5)
+// search_policy — pure RAG over the NYU bulletin corpus
 // ============================================================
+// Curated FAQ templates + the deterministic CORE-UA range table were
+// removed (the "nothing hardcoded" pass): search_policy now answers
+// purely from the embedded bulletin corpus — scope filter → vector
+// top-K → rerank → confidence gate, plus a whole-section reassembly of
+// the top hit so the agent reads the complete rule, not a fragment.
+// ============================================================
+
 import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { policySearch } from "../../rag/policySearch.js";
-import { matchTemplate } from "../../rag/policyTemplate.js";
 import { reassembleSection, type ReassembledUnit } from "../../rag/sectionRetrieval.js";
-import {
-    detectCoreUaReferences,
-    detectRequirementReferences,
-    type CoreUaClassification,
-    type CoreUaRange,
-} from "../../data/coreUaRanges.js";
 import {
     type Disclaimer,
     type EnvelopeConfidence,
@@ -21,62 +21,45 @@ import {
 export const searchPolicyTool = buildTool({
     name: "search_policy",
     description:
-        "Looks up NYU policy + bulletin curriculum via the RAG corpus + " +
-        "curated templates. Phase 9 expanded the corpus to index ALL CAS " +
-        "program pages (Math BA, CS BA, the Math/CS joint major, every minor) " +
-        "+ the College Core Curriculum + Stern, Tandon, Tisch, Gallatin, " +
-        "Liberal Studies, Abu Dhabi, Shanghai program pages. The agent now " +
-        "calls this tool for BOTH policy questions AND curriculum questions.\n\n" +
-        "Returns BOTH (when both apply): a curated operator-verified verbatim " +
-        "bulletin quote (\"CURATED TEMPLATE\") AND the top RAG chunks for " +
-        "additional context. The agent decides what to quote.\n\n" +
-        "The result also reassembles the TOP hit's FULL bulletin section " +
-        "(\"FULL SECTION\") so you can read the complete rule, not just the " +
-        "matched ~500-token fragment. For a program's ENTIRE requirement set " +
-        "(a whole major/minor/core-curriculum page), prefer the dedicated " +
+        "Looks up NYU policy + bulletin curriculum via the RAG corpus. The " +
+        "corpus indexes every undergraduate school's program pages, the " +
+        "College Core Curriculum, academic-policy pages, admissions / " +
+        "internal-transfer pages, and the OGS visa/immigration (F-1/J-1/RCL/" +
+        "CPT/OPT) pages. Call this for BOTH policy questions AND curriculum " +
+        "questions.\n\n" +
+        "Returns the top RAG chunks PLUS the top hit's FULL bulletin section " +
+        "(\"FULL SECTION\") so you read the complete rule, not just the matched " +
+        "~500-token fragment. For a program's ENTIRE requirement set (a whole " +
+        "major/minor/core-curriculum page), prefer the dedicated " +
         "`get_program_requirements` tool instead.\n\n" +
         "Use this for:\n" +
         "  POLICY QUESTIONS:\n" +
         "    • Pass/Fail rules (per-term limit, career cap, deadline, eligibility)\n" +
         "    • Credit caps + overload, residency, time limit\n" +
-        "    • F-1 / J-1 visa enrollment requirements\n" +
+        "    • F-1 / J-1 visa enrollment, reduced course load (RCL), CPT/OPT\n" +
         "    • Withdrawal deadlines, W vs Y, drop windows\n" +
         "    • Double-counting / cross-school credit / transfer credit\n" +
         "    • Major/minor declaration, internal transfer, study-away\n" +
-        "  CURRICULUM / MAJOR QUESTIONS (Phase 9):\n" +
+        "    • CORE-UA ranges + what a College Core Curriculum requirement means\n" +
+        "  CURRICULUM / MAJOR QUESTIONS:\n" +
         "    • \"Which CS courses are required for the Math/CS joint major?\"\n" +
         "    • \"What advanced math electives count for the joint major?\"\n" +
-        "    • \"What is CORE-UA 400-499 — what does the range mean?\"\n" +
-        "    • \"What does CORE-UA 700 satisfy?\"\n" +
-        "    • \"What's the C-or-better-for-major rule?\"\n" +
         "    • \"What courses are in the [program X] requirements?\"\n\n" +
-        "MANDATORY FOLLOW-UP: when `run_full_audit` returns an unsatisfied " +
-        "requirement with generic text (\"Complete the following courses:\", " +
-        "\"complete 1 course from CORE-UA 400-499\"), call this tool with the " +
-        "program label + the requirement category to fetch the bulletin's " +
-        "actual list, then quote the relevant sentence back to the student.\n\n" +
-        "When the user asks about themselves AND a policy/curriculum (e.g. " +
+        "When the student asks about themselves AND a policy/curriculum (e.g. " +
         "\"how many P/F have I used? what's the cap?\"), pair this with " +
         "`run_full_audit` so you can quote the policy AND surface the student's " +
         "specific numbers.\n\n" +
-        "Default-hard scope: returns only the student's home-school chunks " +
-        "plus NYU-wide chunks. If the user EXPLICITLY mentions another school " +
-        "by name, the override admits that school's chunks too. If you get " +
-        "back \"POLICY UNCERTAINTY\" or no high-confidence hit AND no template, " +
-        "say \"I couldn't find a specific policy on [X]\" and recommend the " +
-        "student contact their adviser — do NOT synthesize from training data.\n\n" +
-        "When the query references a CORE-UA course id or a College Core " +
-        "Curriculum requirement name, the result envelope's " +
-        "`coreUaClassifications` and `coreUaRequirements` fields carry the " +
-        "deterministic bulletin mapping; surface those fields to the student.",
+        "Default-hard scope: returns only the student's home-school chunks plus " +
+        "NYU-wide chunks. If the user EXPLICITLY mentions another school by " +
+        "name, the override admits that school's chunks too. If you get back " +
+        "\"POLICY UNCERTAINTY\" or only a low-confidence hit, say \"I couldn't " +
+        "find a specific policy on [X]\" and recommend the student contact " +
+        "their adviser — do NOT synthesize from training data.",
     inputSchema: z.object({
         query: z.string().min(2).describe("Natural-language policy question."),
     }),
-    // Phase 11.2 follow-up — bumped from 2500 to 6000 so program /
-    // minor / curriculum chunks (often 3KB+) reach the agent in
-    // full. The 240-char per-chunk truncation was the dominant
-    // reason agents kept saying "I don't have the specific course
-    // codes" even when retrieval found the right chunk.
+    // Program / minor / curriculum chunks are often 3KB+; a generous cap
+    // lets the load-bearing course codes reach the agent intact.
     maxResultChars: 6000,
     async validateInput(_input, { session }) {
         if (!session.rag) return { ok: false, userMessage: "RAG corpus not loaded." };
@@ -97,35 +80,18 @@ export const searchPolicyTool = buildTool({
                 homeSchool: session.student!.homeSchool,
                 catalogYear: session.student!.catalogYear,
                 allowExplicitOverride: true,
-                templates: rag.templates,
                 ...(rag.confidenceBands ? { confidenceBands: rag.confidenceBands } : {}),
             },
             {
                 store: rag.store,
                 embedder: rag.embedder,
                 reranker: rag.reranker,
-                matchTemplate,
             },
         );
-        // Per §7.2: when the session is in `transferIntent` mode, the
-        // tool flags it on the returned result so the chat layer +
-        // response validator can relax the home-school caveat and
-        // surface target-school policies. The flag is metadata; the
-        // policySearch core stays scoped per its hard-filter contract.
-        // Phase 10 Stage 2 — attach deterministic CORE-UA range
-        // classifications when the query references CORE-UA codes or
-        // College Core Curriculum requirement names. The agent surfaces
-        // these via posture rather than via a per-case prose rule.
-        const coreUaClassifications: CoreUaClassification[] = detectCoreUaReferences(input.query);
-        const coreUaRequirements: CoreUaRange[] = detectRequirementReferences(input.query);
 
-        // Phase 10 envelope — anti-hallucination guard. When the
-        // search returns no template AND no high-confidence RAG hit,
-        // we attach a disclaimer that the agent must surface. This
-        // structurally prevents the "agent invents a §-quote" failure
-        // mode (P10_A08, P10_B05 from the baseline). The rule lives
-        // in DATA, not prose: when retrieval is uncertain, the
-        // envelope says so.
+        // Anti-hallucination envelope — banded on the NUMERIC top rerank
+        // score. escalate → uncertain; weak hit → low + disclaimer;
+        // moderate → medium; strong → high.
         const disclaimers: Disclaimer[] = [];
         let envelopeConfidence: EnvelopeConfidence = "high";
         if (result.kind === "escalate") {
@@ -136,18 +102,10 @@ export const searchPolicyTool = buildTool({
                     `I couldn't find a specific bulletin policy on "${input.query.slice(0, 80)}". ` +
                     `Please contact your academic adviser for confirmation.`,
                 reason:
-                    "search_policy returned uncertainty (no template + low RAG confidence). " +
+                    "search_policy returned uncertainty (low RAG confidence). " +
                     "Surface this verbatim instead of inventing a bulletin quote.",
             });
         } else if (result.kind === "rag" && (result.topScore ?? 0) < 0.5) {
-            // Phase D fix — band on the NUMERIC top rerank score
-            // (`result.topScore`), not the `confidence` band string. The
-            // old `(result.confidence ?? 0) < 0.5` compared a string
-            // ("high"/"medium") to a number, which is always false, so
-            // this low-confidence branch (and the medium one below) never
-            // fired and search_policy could only ever report "high" or
-            // "uncertain". Now a weak-but-present RAG hit correctly ships
-            // as a low/medium-confidence, adviser-caveated estimate.
             envelopeConfidence = "low";
             disclaimers.push({
                 id: "policy_low_confidence_no_fabrication",
@@ -161,13 +119,8 @@ export const searchPolicyTool = buildTool({
             envelopeConfidence = "medium";
         }
 
-        // Phase B (improvement plan) — wholeSection expansion. The top
-        // reranked hit is one ~500-token FRAGMENT; when its section was
-        // split across several chunks, the fragment alone can omit the
-        // rest of the rule (e.g., a multi-paragraph P/F policy). Reassemble
-        // the top hit's FULL section so the agent reasons over the whole
-        // section, not just the matched window. Additive — the per-hit
-        // fragments still render below for cross-section breadth.
+        // Whole-section expansion — reassemble the top hit's FULL section
+        // so the agent reasons over the complete rule, not a fragment.
         let wholeSection: ReassembledUnit | null = null;
         const topHit = result.hits?.[0];
         if (topHit) {
@@ -181,8 +134,6 @@ export const searchPolicyTool = buildTool({
         return {
             ...result,
             transferIntent: session.transferIntent === true,
-            coreUaClassifications,
-            coreUaRequirements,
             disclaimers,
             confidence: envelopeConfidence,
             wholeSection,
@@ -192,9 +143,8 @@ export const searchPolicyTool = buildTool({
         const transferTag = result.transferIntent ? " (transferIntent=on)" : "";
         const lines: string[] = [];
 
-        // Phase B — render the top hit's FULL reassembled section (capped
-        // so it can't crowd out the per-hit fragments + the envelope under
-        // the result-char budget). Empty when there was no RAG hit.
+        // Top hit's FULL reassembled section (capped so it can't crowd out
+        // the per-hit fragments + the envelope under the result-char cap).
         const ws = (result as { wholeSection?: ReassembledUnit | null }).wholeSection;
         const renderWholeSection = (): string[] => {
             if (!ws) return [];
@@ -209,69 +159,6 @@ export const searchPolicyTool = buildTool({
             ];
         };
 
-        // Phase 10 Stage 2 — emit deterministic CORE-UA classifications
-        // FIRST when present. The agent must surface these per posture
-        // rule (no per-case prose rule needed).
-        const cls = (result as { coreUaClassifications?: CoreUaClassification[] }).coreUaClassifications ?? [];
-        const reqs = (result as { coreUaRequirements?: CoreUaRange[] }).coreUaRequirements ?? [];
-        if (cls.length > 0 || reqs.length > 0) {
-            lines.push(`CORE-UA CLASSIFICATIONS (deterministic; from CAS College Core Curriculum bulletin):`);
-            for (const c of cls) {
-                if (c.range) {
-                    lines.push(`  ${c.courseId} → ${c.range.requirement} (${c.range.lo}-${c.range.hi} range)`);
-                    lines.push(`    Source: ${c.range.bulletinSource}`);
-                } else {
-                    lines.push(`  ${c.courseId} → not in any known College Core Curriculum range`);
-                }
-            }
-            for (const r of reqs) {
-                lines.push(`  ${r.requirement} → CORE-UA ${r.lo}-${r.hi}`);
-                lines.push(`    Source: ${r.bulletinSource}`);
-            }
-            lines.push(``);
-        }
-
-        // Phase 8 A1: when a template matched, surface it FIRST (it's
-        // operator-verified verbatim bulletin text). Then surface RAG
-        // hits as additional context the agent can pull from. The
-        // agent decides: quote the template verbatim, blend with RAG,
-        // or skip if the template is adjacent-but-imperfect for the
-        // specific question asked.
-        if (result.kind === "template") {
-            const t = result.template!.template;
-            lines.push(`CURATED TEMPLATE${transferTag}: ${t.id} (school=${t.school}, last verified ${t.lastVerified})`);
-            lines.push(`Source: ${t.source}`);
-            lines.push(``);
-            lines.push(t.body);
-            // If the policySearch core also returned RAG hits, render
-            // them below as extra context.
-            const ragHits = (result.hits ?? []).slice(0, 3);
-            if (ragHits.length > 0) {
-                lines.push(``);
-                lines.push(`-- ADDITIONAL RAG HITS (for context; not necessarily what the user asked) --`);
-                for (const h of ragHits) {
-                    // Phase 11.2 — bumped from 240 → 1400 so course-list
-                    // chunks (program / minor / curriculum pages, often
-                    // 2-3KB) reach the agent intact. 240 was hiding
-                    // the load-bearing course codes after the first
-                    // ~30 words of every chunk. Generic across all
-                    // program / minor / curriculum lookups.
-                    const snippet = h.chunk.text.slice(0, 1400).replace(/\s+/g, " ");
-                    lines.push(`  [${h.chunk.meta.school}/${h.chunk.meta.section}] (rerank ${h.rerankScore.toFixed(2)})`);
-                    lines.push(`    ${snippet}…`);
-                    lines.push(`    Source: ${h.chunk.meta.source} (${h.chunk.meta.sourcePath}:${h.chunk.meta.sourceLine})`);
-                }
-            }
-            lines.push(...renderWholeSection());
-            if (result.notes.length > 0) lines.push(``, `Notes: ${result.notes.join(" | ")}`);
-            // Phase 10 envelope rendering — disclaimers + confidence
-            const env = renderEnvelopeMeta({
-                disclaimers: (result as { disclaimers?: Disclaimer[] }).disclaimers,
-                confidence: (result as { confidence?: EnvelopeConfidence }).confidence,
-            });
-            if (env) lines.push("", env);
-            return lines.join("\n");
-        }
         if (result.kind === "escalate") {
             const env = renderEnvelopeMeta({
                 disclaimers: (result as { disclaimers?: Disclaimer[] }).disclaimers,
@@ -283,9 +170,9 @@ export const searchPolicyTool = buildTool({
                 env,
             ].filter((s) => s.length > 0).join("\n");
         }
+
         lines.push(`RAG hits${transferTag} (confidence=${result.confidence}; scope=${result.scopedSchools.join(",")}; override=${result.overrideTriggered})`);
         for (const h of (result.hits ?? []).slice(0, 3)) {
-            // Phase 11.2 — same expansion as the template-merged path above.
             const snippet = h.chunk.text.slice(0, 1400).replace(/\s+/g, " ");
             lines.push(`  [${h.chunk.meta.school}/${h.chunk.meta.section}] (rerank ${h.rerankScore.toFixed(2)})`);
             lines.push(`    ${snippet}…`);
@@ -296,9 +183,6 @@ export const searchPolicyTool = buildTool({
         if (result.transferIntent) {
             lines.push(`Notes: User is exploring an internal transfer — target-school catalog rules may also apply; consider check_transfer_eligibility.`);
         }
-        // Phase 10 envelope rendering — disclaimers + confidence on
-        // the RAG-only path. The anti-hallucination guard fires here
-        // when confidence < 0.5.
         const env = renderEnvelopeMeta({
             disclaimers: (result as { disclaimers?: Disclaimer[] }).disclaimers,
             confidence: (result as { confidence?: EnvelopeConfidence }).confidence,

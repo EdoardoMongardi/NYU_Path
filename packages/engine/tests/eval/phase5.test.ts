@@ -32,7 +32,6 @@ import {
     buildSystemPrompt,
     ToolRegistry,
     runAgentTurn,
-    preLoopDispatch,
     validateResponse,
     extractClaimNumbers,
     RecordingLLMClient,
@@ -44,7 +43,6 @@ import {
     type ToolSession,
     type Tool,
 } from "../../src/agent/index.js";
-import { loadPolicyTemplates } from "../../src/rag/index.js";
 
 // ============================================================
 // Tool factory + registry
@@ -241,43 +239,6 @@ describe("buildSystemPrompt", () => {
         expect(toolRoutingIdx).toBeGreaterThan(-1);
         expect(prefExtractionIdx).toBeGreaterThan(-1);
         expect(prefExtractionIdx).toBeGreaterThan(toolRoutingIdx);
-    });
-});
-
-// ============================================================
-// Template matcher pre-loop dispatch
-// ============================================================
-describe("preLoopDispatch", () => {
-    const { templates } = loadPolicyTemplates();
-    const session: ToolSession = {
-        student: {
-            id: "u1", catalogYear: "2025-2026", homeSchool: "cas",
-            declaredPrograms: [], coursesTaken: [],
-        },
-    };
-
-    it("returns 'template' when a CAS student asks 'pass fail major'", () => {
-        const r = preLoopDispatch("Can I pass fail major courses?", session, {
-            templates,
-            now: new Date("2026-04-26T00:00:00Z"),
-        });
-        expect(r.kind).toBe("template");
-        if (r.kind !== "template") return;
-        expect(r.match.template.id).toBe("cas_pf_major");
-        expect(r.finalText).toContain("Pass/Fail");
-    });
-
-    it("returns 'fallthrough' when no template matches", () => {
-        const r = preLoopDispatch("What's the cafeteria menu today?", session, {
-            templates,
-            now: new Date("2026-04-26T00:00:00Z"),
-        });
-        expect(r.kind).toBe("fallthrough");
-    });
-
-    it("returns 'fallthrough' when no student is loaded", () => {
-        const r = preLoopDispatch("anything", {}, { templates });
-        expect(r.kind).toBe("fallthrough");
     });
 });
 

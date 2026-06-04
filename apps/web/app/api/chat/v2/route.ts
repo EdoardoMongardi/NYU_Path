@@ -34,7 +34,7 @@ import {
     createPrimaryClient,
     createFallbackClient,
     getCohortConfig,
-    runTemplateMatcherOnly,
+    runRecoveryMode,
     summariesAsPriorMessage,
     JsonlFileSink,
     type FallbackSink,
@@ -44,7 +44,6 @@ import {
     type Cohort,
 } from "@nyupath/engine";
 import {
-    loadPolicyTemplates,
     loadSchoolConfig,
     degreeProgressReportSchema,
     deriveTemporalContext,
@@ -70,15 +69,6 @@ import { extractPendingMutationId } from "../../../../lib/chatV2Client";
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
 export const runtime = "nodejs";
-
-// Cache the templates corpus at module level (one disk read per warm
-// container). The Phase 6.5 cohort runner can rebuild via process
-// recycling — there's no hot-reload requirement here.
-let TEMPLATES: ReturnType<typeof loadPolicyTemplates>["templates"] | null = null;
-function getTemplates() {
-    if (TEMPLATES === null) TEMPLATES = loadPolicyTemplates().templates;
-    return TEMPLATES;
-}
 
 // Phase 7-E W11 reviewer P1-2 — wire a real fallback sink so the
 // /admin/observability dashboard has data to display. Without this
@@ -354,7 +344,6 @@ export async function POST(req: NextRequest): Promise<Response> {
     const finalSystemPrompt = briefing
         ? `${systemPrompt}\n\n${briefing}`
         : systemPrompt;
-    const templates = getTemplates();
 
     // Phase 7-A P-1 + Phase 7-B Step 8b: cohort gate. The store factory
     // checks Postgres first (when DATABASE_URL is set) and falls back
@@ -421,7 +410,6 @@ export async function POST(req: NextRequest): Promise<Response> {
         fallback,
         session,
         systemPrompt: finalSystemPrompt,
-        templates,
         userMessage: body.message,
         history: body.history,
         correlationId: body.correlationId,
@@ -446,7 +434,6 @@ interface V2TurnArgs {
     fallback: ReturnType<typeof createFallbackClient>;
     session: ToolSession;
     systemPrompt: string;
-    templates: ReturnType<typeof loadPolicyTemplates>["templates"];
     userMessage: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     correlationId?: string;
@@ -462,29 +449,22 @@ interface V2TurnArgs {
 }
 
 async function runV2Turn(args: V2TurnArgs): Promise<void> {
-    const { primary, fallback, session, systemPrompt, templates, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, userId, writer } = args;
+    const { primary, fallback, session, systemPrompt, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, userId, writer } = args;
     if (!primary) {
         writer.write({ kind: "error", message: "primary LLM client not configured" });
         writer.close();
         return;
     }
     try {
-        // Phase 7-A P-1 / §12.6.5 — recovery mode. When the user's
-        // cohort has `evalGateFailing: true` (e.g., the production
-        // composite has dropped below 0.90), the agent loop is
-        // disabled and we serve template-only answers. Falls back
-        // to a "limited availability" reply when no template matches.
+        // §12.6.5 — recovery mode. When the user's cohort has
+        // `evalGateFailing: true` (e.g., the production composite dropped
+        // below 0.90), the agent loop is disabled. The curated template
+        // corpus was removed, so there's no degraded answer path — we
+        // surface a transparent "limited availability" reply.
         if (cohortGateFailing) {
-            const recovery = runTemplateMatcherOnly(userMessage, session, templates);
-            if (recovery.kind === "template") {
-                const t = recovery.match!.template;
-                writer.write({ kind: "template_match", templateId: t.id, body: t.body, source: t.source });
-                writer.write({ kind: "token", text: t.body });
-                writer.write({ kind: "done", finalText: t.body, modelUsedId: `cohort:${cohort}:template-only` });
-            } else {
-                writer.write({ kind: "token", text: recovery.reply });
-                writer.write({ kind: "done", finalText: recovery.reply, modelUsedId: `cohort:${cohort}:limited` });
-            }
+            const recovery = runRecoveryMode(userMessage, session);
+            writer.write({ kind: "token", text: recovery.reply });
+            writer.write({ kind: "done", finalText: recovery.reply, modelUsedId: `cohort:${cohort}:limited` });
             writer.close();
             return;
         }
