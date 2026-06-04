@@ -314,46 +314,53 @@ describe("Step 3C — Transcript confirmation flow (§11.8.4)", () => {
 // ============================================================
 // Polish #17 — priorityScorer marginal blocked count
 // ============================================================
-describe("Polish #17 — priorityScorer marginal-blocked count (CSCI-UA 110 quirk)", () => {
-    const courses = loadCourses();
-    const prereqs = loadPrereqs();
-    const csBA = loadProgram("cs_major_ba", "2023")!;
-
-    it("when CSCI-UA 101 is completed, planNextSemester does NOT suggest CSCI-UA 110", async () => {
-        const { planNextSemester } = await import("../../src/planner/semesterPlanner.js");
-        const profile: StudentProfile = {
-            id: "polish17a",
-            catalogYear: "2023",
-            homeSchool: "cas",
-            declaredPrograms: [{ programId: "cs_major_ba", programType: "major" }],
-            coursesTaken: [
-                { courseId: "CSCI-UA 101", grade: "A", semester: "2024-fall", credits: 4 },
-            ],
-        };
-        const plan = planNextSemester(profile, csBA, courses, prereqs, {
-            targetSemester: "2025-spring", maxCourses: 5, maxCredits: 18,
-        });
-        expect(plan.suggestions.find(s => s.courseId === "CSCI-UA 110")).toBeUndefined();
-    });
+describe("Polish #17 — marginal-blocked count (OR-prereq sibling quirk)", () => {
+    // Rewritten as a drift-proof synthetic-graph unit test. The original
+    // queried real prereqs.json with the hardcoded IDs "CSCI-UA 101" /
+    // "CSCI-UA 110". prereqs.json was later re-normalized to zero-pad inner
+    // prereq references (e.g. "CSCI-UA 0101") and "CSCI-UA 110" was dropped
+    // as an entry, so those IDs no longer match the data (the relationships
+    // resolve to nothing). The logic under test — countTransitivelyBlocked
+    // / countMarginallyBlocked on the LIVE PrereqGraph (the forward-schedule
+    // solver depends on it) — is unchanged; a tiny synthetic graph removes
+    // the dependence on the exact shape of the real corpus.
+    //
+    // Graph: DOWN needs (A OR B); FAR needs DOWN. A and B are pure
+    // OR-siblings for DOWN with no other dependents.
+    async function buildGraph() {
+        const { PrereqGraph } = await import("../../src/graph/prereqGraph.js");
+        const synthetic: Prerequisite[] = [
+            { course: "DOWN", prereqGroups: [{ type: "OR", courses: ["A", "B"] }], coreqs: [] },
+            { course: "FAR", prereqGroups: [{ type: "AND", courses: ["DOWN"] }], coreqs: [] },
+        ];
+        return new PrereqGraph(synthetic);
+    }
 
     it("countMarginallyBlocked returns 0 when an OR-prereq sibling is already completed", async () => {
-        const { PrereqGraph } = await import("../../src/graph/prereqGraph.js");
-        const graph = new PrereqGraph(prereqs);
-        // Static count for CSCI-UA 110 is large (it's an OR-prereq for many CSCI-UA courses)
-        const staticCount = graph.countTransitivelyBlocked("CSCI-UA 110");
-        // But once 101 is completed, the marginal count should be 0
-        const marginalCount = graph.countMarginallyBlocked("CSCI-UA 110", new Set(["CSCI-UA 101"]));
+        const graph = await buildGraph();
+        // A statically blocks DOWN → FAR (transitive), so the static count is > 0.
+        const staticCount = graph.countTransitivelyBlocked("A");
         expect(staticCount).toBeGreaterThan(0);
+        // With B already completed, B alone unblocks DOWN, so adding A
+        // unblocks nothing new → marginal count is 0.
+        const marginalCount = graph.countMarginallyBlocked("A", new Set(["B"]));
         expect(marginalCount).toBe(0);
     });
 
     it("countMarginallyBlocked still credits a course that genuinely unlocks new dependents", async () => {
-        const { PrereqGraph } = await import("../../src/graph/prereqGraph.js");
-        const graph = new PrereqGraph(prereqs);
-        // Empty completed set: 101 should marginally unlock everything 101 alone unlocks.
-        const marginalEmpty = graph.countMarginallyBlocked("CSCI-UA 101", new Set());
+        const graph = await buildGraph();
+        // From an empty completed set, A unblocks DOWN (and downstream FAR).
+        const marginalEmpty = graph.countMarginallyBlocked("A", new Set());
         expect(marginalEmpty).toBeGreaterThan(0);
     });
+
+    // NOTE: the former "planNextSemester does NOT suggest CSCI-UA 110" case
+    // was an integration test for the legacy single-term planner
+    // (semesterPlanner.planNextSemester), which is superseded by the
+    // forward-schedule solver and slated for Phase F removal; its
+    // CSCI-UA 101/110 fixtures drifted with the prereqs.json
+    // re-normalization. The marginal-blocked LOGIC it relied on is covered
+    // by the two unit tests above.
 });
 
 // ============================================================
