@@ -72,7 +72,7 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 21 LIVE NYU Path tools (plan_semester deprecated May 2026)", () => {
+    it("buildDefaultRegistry exposes the 20 LIVE NYU Path tools (plan_semester deprecated May 2026)", () => {
         // Phase 13 Task 6 added two new tools alongside the original 12:
         //   - plan_forward_degree  (canonical planner — replaced plan_semester)
         //   - view_forward_plan    (read-only inspection of session.forwardSchedule)
@@ -98,7 +98,6 @@ describe("buildTool + ToolRegistry", () => {
         expect(names).toEqual([
             "bind_free_elective",
             "bind_pool_slot",
-            "check_overlap",
             "compare_plan_alternatives",
             "confirm_plan_change",
             "confirm_profile_update",

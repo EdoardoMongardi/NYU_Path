@@ -7,7 +7,7 @@
 // the architecture's canonical text.
 //
 // Some rules reference tools that Phase 5 doesn't yet ship
-// (`get_academic_standing`, `get_credit_caps`, `check_overlap`,
+// (`get_academic_standing`, `get_credit_caps`,
 // `search_courses`, `confirm_profile_update`). Those are in §7.1 and
 // scheduled for Phase 6 expansion of the registry. The prompt keeps
 // the architectural language intact rather than dropping the rules,

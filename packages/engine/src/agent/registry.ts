@@ -1,12 +1,18 @@
 // ============================================================
-// Default ToolRegistry — wires the 21 LIVE NYU Path tools
+// Default ToolRegistry — wires the 20 LIVE NYU Path tools
 // ============================================================
 // §7.1 tools (Phase 0–11):
 //   run_full_audit, what_if_audit,
 //   search_policy, update_profile, confirm_profile_update,
 //   get_credit_caps, search_availability, get_academic_standing,
-//   check_overlap, search_courses
+//   search_courses
 // REMOVED (improvement plan — pure-RAG decommission):
+//   check_overlap — the authored cross-program double-count audit
+//   (crossProgramAudit over programs.json) is gone. Double-counting
+//   POLICY ("no more than two courses…") comes from `search_policy`;
+//   the student's per-program requirement satisfaction comes from
+//   `run_full_audit` (the DPR). The rule engine + programs.json that
+//   backed it are removed in the following step.
 //   check_transfer_eligibility — the authored CAS→Stern transfer route
 //   (data/transfers/*.json) is gone; internal-transfer questions are now
 //   answered by `search_policy` over the bulletin's internal-transfer
@@ -43,7 +49,6 @@ import { updateProfileTool, confirmProfileUpdateTool } from "./tools/updateProfi
 import { getCreditCapsTool } from "./tools/getCreditCaps.js";
 import { searchAvailabilityTool } from "./tools/searchAvailability.js";
 import { getAcademicStandingTool } from "./tools/getAcademicStanding.js";
-import { checkOverlapTool } from "./tools/checkOverlap.js";
 import { searchCoursesTool } from "./tools/searchCourses.js";
 import { planForwardDegreeTool } from "./tools/planForwardDegree.js";
 import { viewForwardPlanTool } from "./tools/viewForwardPlan.js";
@@ -69,7 +74,6 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     getCreditCapsTool as unknown as Tool<ZodTypeAny, unknown>,
     searchAvailabilityTool as unknown as Tool<ZodTypeAny, unknown>,
     getAcademicStandingTool as unknown as Tool<ZodTypeAny, unknown>,
-    checkOverlapTool as unknown as Tool<ZodTypeAny, unknown>,
     searchCoursesTool as unknown as Tool<ZodTypeAny, unknown>,
     planForwardDegreeTool as unknown as Tool<ZodTypeAny, unknown>,
     viewForwardPlanTool as unknown as Tool<ZodTypeAny, unknown>,
@@ -101,7 +105,6 @@ export {
     getCreditCapsTool,
     searchAvailabilityTool,
     getAcademicStandingTool,
-    checkOverlapTool,
     searchCoursesTool,
     planForwardDegreeTool,
     viewForwardPlanTool,

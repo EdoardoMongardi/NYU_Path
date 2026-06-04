@@ -355,35 +355,6 @@
             }
         },
         {
-            "id": "synth-010-multi-program-overlap-mention",
-            "userMessage": "Will my Math major and CS minor share any required courses?",
-            "frozenToolResults": [
-                {
-                    "toolName": "check_overlap",
-                    "result": {
-                        "sharedCourses": [
-                            {"courseId": "MATH-UA 120", "satisfies": ["math_major.foundations", "cs_minor.discrete_prereq"]},
-                            {"courseId": "CSCI-UA 102", "satisfies": ["math_major.elective_d", "cs_minor.core"]}
-                        ],
-                        "doubleCountLimit": 2,
-                        "currentDoubleCount": 2,
-                        "warnings": ["At CAS, no more than 2 courses may be double-counted between any combination of major/minor."]
-                    }
-                }
-            ],
-            "rubric": {
-                "requiredToolNames": ["check_overlap"],
-                "requiredCaveats": [
-                    "2",
-                    "double"
-                ],
-                "forbiddenClaims": [
-                    "unlimited overlap",
-                    "you can share as many courses as you want"
-                ]
-            }
-        },
-        {
             "id": "synth-012-future-projection-caveat",
             "userMessage": "Map out the rest of my degree — Spring 2026 through Spring 2027.",
             "frozenToolResults": [
