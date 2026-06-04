@@ -196,8 +196,6 @@
       "minCreditsCompleted": 32
     }
   ],
-  "goodStandingReturnThreshold": 0.67,
-  "maxCourseRepeats": 2,
   "sharedPrograms": [
     "stern_business_core"
   ],
