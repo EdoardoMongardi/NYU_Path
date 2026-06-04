@@ -25,6 +25,23 @@ import {
 import type { GraduationPathValidatorArgs } from "./graduationPathValidator.js";
 import { hashDprCourseHistory } from "./reconcile.js";
 import type { SolverInput } from "./types.js";
+import { loadOffCatalogCredits } from "../../dataLoader.js";
+
+// Module-cached off-catalog (grad/professional) credit map for pin
+// resolution. Read once per process; a missing file degrades to empty so a
+// data-file absence can't break planning (off-catalog pins then fall to the
+// 0-credit "verify in Albert" path).
+let OFF_CATALOG_CACHE: Map<string, { title: string; credits: number }> | null = null;
+function getOffCatalogCredits(): Map<string, { title: string; credits: number }> {
+    if (!OFF_CATALOG_CACHE) {
+        try {
+            OFF_CATALOG_CACHE = loadOffCatalogCredits();
+        } catch {
+            OFF_CATALOG_CACHE = new Map();
+        }
+    }
+    return OFF_CATALOG_CACHE;
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -181,6 +198,7 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
         offerings: new Map(),
         offeringConfidence: new Map(),
         courseCatalog,
+        offCatalogCredits: getOffCatalogCredits(),
         dprCourseHistoryHash,
         dpr,
         programRules: programRules.solverRules,

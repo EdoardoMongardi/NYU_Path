@@ -9,7 +9,7 @@
 // ============================================================
 
 import { describe, expect, it } from "vitest";
-import { loadCourses } from "../../src/dataLoader.js";
+import { loadCourses, loadOffCatalogCredits } from "../../src/dataLoader.js";
 
 const courses = loadCourses();
 const byId = new Map(courses.map((c) => [c.id, c] as const));
@@ -55,5 +55,31 @@ describe("loadCourses full undergrad catalog (Step 8d)", () => {
         const ml = byId.get("CSCI-UA 471");
         expect(ml).toBeDefined();
         expect(ml?.crossListed).toContain("DS-UA 301");
+    });
+});
+
+describe("off-catalog credits sidecar (Step 8d PR-2 — pin resolution)", () => {
+    const off = loadOffCatalogCredits();
+
+    it("is non-empty and every entry carries a title and numeric credits", () => {
+        expect(off.size).toBeGreaterThan(5000);
+        for (const v of off.values()) {
+            expect(typeof v.title).toBe("string");
+            expect(typeof v.credits).toBe("number");
+            expect(Number.isNaN(v.credits)).toBe(false);
+        }
+    });
+
+    it("contains only non-undergraduate courses (disjoint from the undergrad catalog)", () => {
+        for (const id of off.keys()) {
+            expect(/^[A-Z0-9]+-(U[A-Z]|SHU)\s/.test(id)).toBe(false);
+            expect(byId.has(id)).toBe(false);
+        }
+    });
+
+    it("resolves a graduate course's credits (so a pinned grad course isn't dropped)", () => {
+        const grad = [...off.keys()].find((id) => /-G[A-Z]\s/.test(id));
+        expect(grad).toBeDefined();
+        expect(off.get(grad!)!.credits).toBeGreaterThanOrEqual(0);
     });
 });

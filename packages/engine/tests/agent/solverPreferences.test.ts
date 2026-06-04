@@ -262,6 +262,47 @@ describe("solveForwardSchedule — pins", () => {
             ),
         ).toBe(true);
     });
+
+    // Step 8d PR-2 — soften the pin path for off-catalog pins.
+    it("resolves an off-catalog pin from offCatalogCredits and places it with a verify-in-Albert caveat (not dropped)", () => {
+        const input = makeInput(
+            { pins: [{ courseId: "DM-GY 6063", term: "2026-fall" }] }, // graduate course
+            {
+                courseCatalog: new Map(), // not in the undergrad catalog
+                offCatalogCredits: new Map([
+                    ["DM-GY 6063", { title: "Deep Learning", credits: 3 }],
+                ]),
+            },
+        );
+        const out = solveForwardSchedule(input);
+        const fall = out.semesters.find(s => s.term === "2026-fall")!;
+        const slot = fall.slots.find(
+            s => s.kind === "specific_planned" && "courseId" in s && s.courseId === "DM-GY 6063",
+        ) as { credits: number; reason: string } | undefined;
+        expect(slot).toBeDefined();
+        expect(slot!.credits).toBe(3);
+        expect(slot!.reason).toMatch(/outside the undergraduate planning catalog/i);
+        expect(slot!.reason).toMatch(/Albert/i);
+        expect(
+            out.feasibility.constraintViolations.some(v => /not in catalog/i.test(v.detail ?? "")),
+        ).toBe(false);
+    });
+
+    it("places a wholly-unknown pin with 0 credits and a discontinued/renumbered caveat (never dropped)", () => {
+        const input = makeInput(
+            { pins: [{ courseId: "MATH-UA 233", term: "2026-fall" }] }, // renumbered → 333; defunct id
+            { courseCatalog: new Map(), offCatalogCredits: new Map() },
+        );
+        const out = solveForwardSchedule(input);
+        const fall = out.semesters.find(s => s.term === "2026-fall")!;
+        const slot = fall.slots.find(
+            s => s.kind === "specific_planned" && "courseId" in s && s.courseId === "MATH-UA 233",
+        ) as { credits: number; reason: string } | undefined;
+        expect(slot).toBeDefined();
+        expect(slot!.credits).toBe(0);
+        expect(slot!.reason).toMatch(/discontinued or renumbered/i);
+        expect(slot!.reason).toMatch(/Albert/i);
+    });
 });
 
 // ---------------------------------------------------------------------------
