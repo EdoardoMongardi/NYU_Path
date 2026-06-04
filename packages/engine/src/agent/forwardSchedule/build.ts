@@ -68,7 +68,7 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
     // ---- 1. Derive credit parameters from DPR + school config ----
 
     const creditsEarned = dpr.cumulative.creditsUsed ?? 0;
-    const graduationCreditMinimum = dpr.cumulative.creditsRequired ?? schoolConfig?.totalCreditsRequired ?? 128;
+    const graduationCreditMinimum = dpr.cumulative.creditsRequired ?? 128;
     const creditCeiling = schoolConfig?.maxCreditsPerSemester ?? 18;
     const creditTargetPerSemester = 16;
     const cumulativeGpa = dpr.cumulative.cumulativeGpa ?? 0;

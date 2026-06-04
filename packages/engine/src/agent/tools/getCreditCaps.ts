@@ -68,11 +68,11 @@ export const getCreditCapsTool = buildTool({
         const creditCaps = cfg?.creditCaps ?? [];
         const transferCreditLimits = cfg?.transferCreditLimits ?? null;
 
-        // Phase E — degree total + GPA floor come from the DPR cumulative
-        // block FIRST (per-student, authoritative, already specialized to
-        // the student's school + catalog year), falling back to the
-        // authored config only when the DPR omits the field.
-        const totalCreditsRequired = dpr?.creditsRequired ?? cfg?.totalCreditsRequired ?? null;
+        // The degree total is program-dependent, so it comes ONLY from the
+        // student's DPR — no config fallback. Without a DPR we don't state a
+        // personalized degree total (Step 8c). The GPA floor is a school-wide
+        // minimum, so it still falls back to the authored config.
+        const totalCreditsRequired = dpr?.creditsRequired ?? null;
         const overallGpaMin = dpr?.cumulativeGpaRequired ?? cfg?.overallGpaMin ?? null;
         const capsSource = dpr ? (cfg ? "dpr+config" : "dpr") : "config";
 

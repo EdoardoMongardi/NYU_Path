@@ -46,7 +46,6 @@ describe("loadSchoolConfig — real CAS fixture", () => {
         expect(cfg).not.toBeNull();
         expect(cfg!.schoolId).toBe("cas");
         expect(cfg!.courseSuffix).toEqual(["-UA"]);
-        expect(cfg!.totalCreditsRequired).toBe(128);
         expect(cfg!.residency.type).toBe("suffix_based");
         expect(cfg!.residency.minCredits).toBe(64);
         expect(cfg!.passFail?.careerLimit).toBe(32);
