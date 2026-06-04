@@ -120,13 +120,27 @@ Update the doc comment to note the catalog is now bulletin-sourced (~8.5k underg
 (`tools/live-rag-test.ts`) as a smoke check that planner-touching paths still
 answer.
 
-## Out of scope (→ PR-2)
+## PR-2 — solver pin-path softening (shipped)
 
-Solver pin-path softening (`solver.ts:778-786`): replace the hard
-`"Pinned course not in catalog"` violation with resolve-on-demand credits, else
-place with student-confirmed credits + a "verify in Albert" caveat. Auto-planning
-stays catalog-only. PR-2 depends on PR-1's full catalog as its credit-resolution
-source.
+Replaces the hard `"Pinned course not in catalog"` violation (`solver.ts:778-786`)
+with resolve-or-flag, so an explicit student pin is never silently dropped:
+
+1. **Resolve** off-catalog credits from a precomputed sidecar
+   `packages/engine/src/data/off-catalog-credits.json` — `{id: {title, credits,
+   creditsMin, creditsMax}}` for all bulletin courses OUTSIDE the undergraduate
+   catalog (graduate/professional, ~8.5k), emitted by the same
+   `extractCourses.ts` run. (On-demand bulletin parsing was rejected: the raw
+   bulletin is gitignored and not deployed, so the resolver must be a committed
+   artifact.) Hit → place with real credits + a *"outside the undergraduate
+   planning catalog — verify in Albert"* caveat.
+2. **Miss** (the ~16 residual ids — verified to be discontinued/renumbered courses,
+   e.g. `MATH-UA 233` → current `MATH-UA 333`) → place at **0 credits** (never a
+   guessed nonzero) + a *"not in the current NYU bulletin — may be discontinued or
+   renumbered; verify in Albert"* caveat (embedded in the slot `reason`).
+
+Auto-planning (candidate placement at `solver.ts:891`) is unchanged — it still
+only places catalog courses with known credits. Wiring: `SolverInput.offCatalogCredits`
+(optional), populated by `build.ts` via a module-cached `loadOffCatalogCredits()`.
 
 ## Risks / notes
 
