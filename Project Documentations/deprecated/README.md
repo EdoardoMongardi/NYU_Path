@@ -2,7 +2,7 @@
 
 This folder holds documentation for parts of the system that are **deprecated, dead, or superseded** — segregated from the live docs so readers aren't confused about what's actually in production.
 
-> These docs are kept for reference (they accurately describe code that still exists in the repo). The code they describe is a **Phase F decommission candidate** in [`../improvement-plan.md`](../improvement-plan.md) — i.e., slated for removal once its replacement is proven. Nothing here documents a current production code path.
+> These docs are kept for reference (they accurately describe code that still exists in the repo). The code they describe is a **Phase F decommission candidate** in [`../improvement-plan.md`](../docs/improvement-plan.md) — i.e., slated for removal once its replacement is proven. Nothing here documents a current production code path.
 
 | Doc | What it documents | Status / why it's here |
 |---|---|---|
@@ -13,7 +13,7 @@ This folder holds documentation for parts of the system that are **deprecated, d
 
 ## Why these aren't just deleted yet
 
-Per the [improvement plan](../improvement-plan.md)'s **Phase F (strangler-fig)**: code is removed only after its replacement is live and validated, and each removal is its own small, reversible PR. **Done so far:** the `plan_semester` tool + `plan-feasibility-verifier` are now **deleted** (the agent-facing twins of `plan_forward_degree`). **Still deferred:** the planner *library* subsystem (entangled — `explorePlanner`/`transferPrepPlanner` import `semesterPlanner`; removal needs surgery across 9 mixed test files) and the orphaned engine `transcript/` module (~6 mixed eval-test files). These docs are retained as historical records for the removed/soon-to-be-removed code.
+Per the [improvement plan](../docs/improvement-plan.md)'s **Phase F (strangler-fig)**: code is removed only after its replacement is live and validated, and each removal is its own small, reversible PR. **Done so far:** the `plan_semester` tool + `plan-feasibility-verifier` are now **deleted** (the agent-facing twins of `plan_forward_degree`). **Still deferred:** the planner *library* subsystem (entangled — `explorePlanner`/`transferPrepPlanner` import `semesterPlanner`; removal needs surgery across 9 mixed test files) and the orphaned engine `transcript/` module (~6 mixed eval-test files). These docs are retained as historical records for the removed/soon-to-be-removed code.
 
 ## What is **not** deprecated (kept in the live docs on purpose)
 
