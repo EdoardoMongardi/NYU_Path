@@ -18,130 +18,35 @@
     "-UE"
   ],
   "residency": {
-    "type": "suffix_based",
-    "suffix": "-UE",
-    "finalCreditsInResidence": 32,
-    "majorMinorResidencyPercent": 50
+    "suffix": "-UE"
   },
   "creditCaps": [
-    {
-      "type": "online",
-      "maxCredits": 24,
-      "label": "Online course credits (inferred from CAS default)"
-    },
     {
       "type": "transfer",
       "maxCredits": 72,
       "label": "External transfer credits (up to 72)"
     },
     {
-      "type": "advanced_standing",
-      "maxCredits": 32,
-      "label": "AP/IB/A-Level credits (inferred from CAS default)"
-    },
-    {
       "type": "independent_study",
       "maxCredits": 6,
-      "maxPerDepartment": 8,
-      "includesInternship": false,
       "label": "Independent study (max 6 units over undergraduate career)"
     }
   ],
   "passFail": {
-    "careerLimitType": "percent_of_program",
-    "perTermLimit": 1,
-    "perTermUnit": "semester",
-    "countsForMajor": false,
-    "countsForMinor": false,
-    "countsForGenEd": false,
-    "excludedCourseTypes": [],
-    "canElect": true,
-    "autoExcludedFromLimit": [],
-    "gradePassEquivalent": "D",
-    "failCountsInGpa": true,
-    "exceptions": [
-      "Departmentally designated pass/fail courses do not count toward the 25% limit",
-      "Pass/fail grades are not weighted grades and do not count toward the 64-credit weighted-grade honors threshold"
-    ]
-  },
-  "spsPolicy": {
-    "allowed": true,
-    "allowedPrefixes": [
-      "REBS1-UC",
-      "TCHT1-UC",
-      "TCSM1-UC",
-      "RWLD1-UC"
-    ],
-    "creditType": "elective_only",
-    "countsTowardResidency": false,
-    "countsAgainstNonHomeSchoolCap": true,
-    "excludedCourseTypes": [
-      "internship",
-      "independent_study"
-    ]
+    "careerLimitType": "percent_of_program"
   },
   "transferCreditLimits": {
-    "firstYearMaxTotal": 32,
-    "transferStudentMaxTotal": 72,
-    "springAdmitPostSecondaryMax": 8
+    "transferStudentMaxTotal": 72
   },
-  "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
-  "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
     {
       "condition": "default",
-      "minGpa": null,
       "note": "By exception, petition department to register for up to 20 credits; no GPA threshold stated in bulletin"
     }
   ],
-  "goodStandingReturnThreshold": 0.75,
-  "maxCourseRepeats": 2,
-  "sharedPrograms": [],
-  "programExclusions": [],
   "deansListThreshold": {
     "minGpa": 3.7,
     "note": "GPA of 3.7+ in at least 12 graded credits each fall and spring term; no missing/N/Incomplete grades; P/F-elected courses ineligible"
-  },
-  "advisingContact": {
-    "name": "Steinhardt Office of Advisement and Registration Services",
-    "email": "steinhardt.advisement.registration@nyu.edu",
-    "url": "https://bulletins.nyu.edu/undergraduate/culture-education-human-development/student-services/advising/"
-  },
-  "_inferredFields": [
-    "residency.type",
-    "residency.finalCreditsInResidence",
-    "residency.majorMinorResidencyPercent",
-    "creditCaps[type=non_home_school].maxCredits",
-    "creditCaps[type=online].maxCredits",
-    "creditCaps[type=advanced_standing].maxCredits",
-    "creditCaps[type=independent_study].maxPerDepartment",
-    "creditCaps[type=independent_study].includesInternship",
-    "gradeThresholds.core",
-    "gradeThresholds.major",
-    "gradeThresholds.minor",
-    "passFail.perTermLimit",
-    "passFail.perTermUnit",
-    "passFail.countsForMajor",
-    "passFail.countsForMinor",
-    "passFail.countsForGenEd",
-    "passFail.excludedCourseTypes",
-    "passFail.canElect",
-    "passFail.autoExcludedFromLimit",
-    "passFail.gradePassEquivalent",
-    "passFail.failCountsInGpa",
-    "passFail.exceptions",
-    "spsPolicy",
-    "doubleCounting.defaultMajorToMajor",
-    "doubleCounting.defaultMajorToMinor",
-    "doubleCounting.defaultMinorToMinor",
-    "doubleCounting.noTripleCounting",
-    "doubleCounting.overrideByProgram",
-    "transferCreditLimits.firstYearMaxTotal",
-    "transferCreditLimits.springAdmitPostSecondaryMax",
-    "f1FullTimeMinCredits",
-    "overloadRequirements[0].minGpa",
-    "goodStandingReturnThreshold",
-    "maxCourseRepeats"
-  ]
+  }
 }

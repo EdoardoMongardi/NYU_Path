@@ -181,7 +181,6 @@
     "firstYearMaxTotal": 32,
     "transferStudentMaxTotal": 64
   },
-  "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
   "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
@@ -195,19 +194,5 @@
       "minGpa": 3.0,
       "minCreditsCompleted": 32
     }
-  ],
-  "sharedPrograms": [
-    "stern_business_core"
-  ],
-  "programExclusions": [],
-  "supportedProgramTypes": [
-    "major",
-    "minor",
-    "concentration"
-  ],
-  "advisingContact": {
-    "name": "Stern Office of Academic Advising",
-    "email": "stern.advising@nyu.edu",
-    "url": "https://www.stern.nyu.edu/portal-partners/current-students/undergraduate/advising"
-  }
+  ]
 }

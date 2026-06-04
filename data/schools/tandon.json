@@ -188,7 +188,6 @@
     "firstYearMaxTotal": 32,
     "transferStudentMaxTotal": 64
   },
-  "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
   "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
@@ -242,17 +241,5 @@
     }
   ],
   "finalProbationGpaFloor": 1.5,
-  "maxCourseRepeats": 2,
-  "sharedPrograms": [],
-  "programExclusions": [
-    {
-      "type": "duplicate_major_other_school",
-      "note": "Tandon students may not double major at another NYU school in a major similar in name and content to one offered at Tandon (e.g., CS, Math)"
-    }
-  ],
-  "advisingContact": {
-    "name": "Tandon Office of Undergraduate Academics",
-    "email": "tandon.advising@nyu.edu",
-    "url": "https://engineering.nyu.edu/academics/advising"
-  }
+  "maxCourseRepeats": 2
 }

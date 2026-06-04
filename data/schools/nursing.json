@@ -19,40 +19,18 @@
   ],
   "residency": {
     "type": "suffix_based",
-    "suffix": "-UN",
-    "finalCreditsInResidence": null,
-    "majorMinorResidencyPercent": 50
+    "suffix": "-UN"
   },
   "creditCaps": [
-    {
-      "type": "online",
-      "maxCredits": 24,
-      "label": "Online course credits (inferred from CAS default; not in Nursing bulletin)"
-    },
     {
       "type": "transfer",
       "maxCredits": 64,
       "label": "Transfer credits (two-year college: not to exceed credits required for associate degree, or 64)"
-    },
-    {
-      "type": "advanced_standing",
-      "maxCredits": 32,
-      "label": "AP/IB/A-Level credits (inferred from CAS default; not in Nursing bulletin)"
-    },
-    {
-      "type": "independent_study",
-      "maxCredits": 12,
-      "maxPerDepartment": 8,
-      "includesInternship": true,
-      "label": "Independent study + internship (inferred from CAS default; not in Nursing bulletin)"
     }
   ],
   "passFail": {
     "careerLimitType": "percent_of_program",
-    "perTermLimit": 1,
-    "perTermUnit": "semester",
     "countsForMajor": false,
-    "countsForMinor": false,
     "countsForGenEd": false,
     "creditType": "elective_only",
     "excludedCourseTypes": [
@@ -71,65 +49,20 @@
       "Liberal arts electives only; subject to the policy of the school offering the course and adviser approval"
     ]
   },
-  "spsPolicy": {
-    "allowed": true,
-    "allowedPrefixes": [
-      "REBS1-UC",
-      "TCHT1-UC",
-      "TCSM1-UC",
-      "RWLD1-UC"
-    ],
-    "creditType": "elective_only",
-    "countsTowardResidency": false,
-    "countsAgainstNonHomeSchoolCap": true,
-    "excludedCourseTypes": [
-      "internship",
-      "independent_study"
-    ]
-  },
   "transferCreditLimits": {
-    "firstYearMaxTotal": 32,
     "transferStudentMaxTotal": 64
   },
-  "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
-  "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
     {
       "condition": "default",
-      "minGpa": null,
       "note": "Overload by advisement (Vice Dean approval); no GPA threshold published."
     }
   ],
-  "goodStandingReturnThreshold": 0.75,
   "deansListThreshold": {
     "minGpa": 3.6,
     "minCredits": 8,
     "per": "term",
     "note": "Term average of 3.6 or better in at least 8 credits; grades of I or N disqualify"
-  },
-  "advisingContact": {
-    "name": "NYU Meyers Office of Advising & Academic Services",
-    "email": "nursing.ug.admissions@nyu.edu",
-    "url": "https://nursing.nyu.edu"
-  },
-  "_inferredFields": [
-    "residency.finalCreditsInResidence",
-    "residency.majorMinorResidencyPercent",
-    "creditCaps[type=non_home_school]",
-    "creditCaps[type=online]",
-    "creditCaps[type=advanced_standing]",
-    "creditCaps[type=independent_study]",
-    "passFail.perTermLimit",
-    "passFail.perTermUnit",
-    "passFail.countsForMinor",
-    "spsPolicy",
-    "doubleCounting",
-    "transferCreditLimits.firstYearMaxTotal",
-    "f1FullTimeMinCredits",
-    "overloadRequirements[0].minGpa",
-    "goodStandingReturnThreshold",
-    "advisingContact.email",
-    "advisingContact.url"
-  ]
+  }
 }

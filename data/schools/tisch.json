@@ -20,31 +20,13 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UT",
-    "finalCreditsInResidence": 32,
-    "majorMinorResidencyPercent": 50
+    "finalCreditsInResidence": 32
   },
   "creditCaps": [
-    {
-      "type": "online",
-      "maxCredits": 24,
-      "label": "Online course credits (inherited CAS default; Tisch bulletin silent)"
-    },
-    {
-      "type": "transfer",
-      "maxCredits": 64,
-      "label": "Transfer credits (department-specific maxima apply; school-wide value inherited)"
-    },
     {
       "type": "advanced_standing",
       "maxCredits": 32,
       "label": "AP/IB/A-Level + college-in-high-school credits (max 8 toward Gen Ed)"
-    },
-    {
-      "type": "independent_study",
-      "maxCredits": 12,
-      "maxPerDepartment": 8,
-      "includesInternship": true,
-      "label": "Independent study + internship (inherited CAS default; Tisch bulletin silent)"
     }
   ],
   "passFail": {
@@ -83,11 +65,8 @@
     ]
   },
   "transferCreditLimits": {
-    "firstYearMaxTotal": 32,
-    "transferStudentMaxTotal": 64,
-    "springAdmitPostSecondaryMax": 8
+    "firstYearMaxTotal": 32
   },
-  "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
   "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
@@ -98,36 +77,8 @@
     }
   ],
   "goodStandingReturnThreshold": 0.5,
-  "maxCourseRepeats": 2,
-  "sharedPrograms": [
-    "tisch_core"
-  ],
-  "programExclusions": [],
   "deansListThreshold": {
     "minGpa": 3.65,
     "note": "GPA of 3.65 or higher for the academic year in at least 28 graded points; no Incompletes"
-  },
-  "advisingContact": {
-    "name": "Tisch Academic Services (Office of Student Affairs)",
-    "email": "tisch.academic.services@nyu.edu",
-    "url": "https://tisch.nyu.edu/student-affairs/advisement-academic-services"
-  },
-  "_inferredFields": [
-    "creditCaps.non_home_school.maxCredits",
-    "creditCaps.online.maxCredits",
-    "creditCaps.transfer.maxCredits",
-    "creditCaps.independent_study.maxCredits",
-    "creditCaps.independent_study.maxPerDepartment",
-    "gradeThresholds.core",
-    "gradeThresholds.minor",
-    "doubleCounting.defaultMinorToMinor",
-    "transferCreditLimits.transferStudentMaxTotal",
-    "transferCreditLimits.springAdmitPostSecondaryMax",
-    "overloadRequirements.minGpa",
-    "maxCourseRepeats",
-    "sharedPrograms",
-    "programExclusions",
-    "residency.minCredits",
-    "residency.majorMinorResidencyPercent"
-  ]
+  }
 }

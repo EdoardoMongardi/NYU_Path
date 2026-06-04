@@ -20,7 +20,6 @@
   "residency": {
     "type": "suffix_based",
     "suffix": "-UC",
-    "finalCreditsInResidence": null,
     "majorMinorResidencyPercent": 50
   },
   "creditCaps": [
@@ -39,16 +38,11 @@
     "careerLimitType": "credits",
     "perTermLimit": 1,
     "perTermUnit": "semester",
-    "countsForMajor": false,
-    "countsForMinor": false,
-    "countsForGenEd": false,
     "excludedCourseTypes": [
       "TCHT1-UC",
       "TCSM1-UC",
       "REBS1-UC"
     ],
-    "canElect": true,
-    "autoExcludedFromLimit": [],
     "gradePassEquivalent": "D",
     "failCountsInGpa": true,
     "exceptions": [
@@ -70,35 +64,11 @@
   "transferCreditLimits": {
     "transferStudentMaxTotal": 64
   },
-  "acceptsTransferCredit": true,
-  "maxCreditsPerSemester": 18,
-  "f1FullTimeMinCredits": 12,
   "overloadRequirements": [],
   "goodStandingReturnThreshold": 0.5,
   "maxCourseRepeats": 1,
   "deansListThreshold": {
     "minGpa": 3.7,
     "note": "Semester GPA of 3.7 or better while taking a minimum of 8 credits; Incompletes not permitted"
-  },
-  "advisingContact": {
-    "name": "NYU SPS Advising",
-    "email": "sps.studentaffairs@nyu.edu",
-    "url": "https://www.sps.nyu.edu/homepage/student-experience/advising-and-academic-support.html"
-  },
-  "_inferredFields": [
-    "residency.finalCreditsInResidence",
-    "gradeThresholds.core",
-    "gradeThresholds.major",
-    "gradeThresholds.minor",
-    "passFail.countsForMajor",
-    "passFail.countsForMinor",
-    "passFail.countsForGenEd",
-    "passFail.canElect",
-    "passFail.autoExcludedFromLimit",
-    "maxCreditsPerSemester",
-    "f1FullTimeMinCredits",
-    "advisingContact.name",
-    "advisingContact.email",
-    "advisingContact.url"
-  ]
+  }
 }
