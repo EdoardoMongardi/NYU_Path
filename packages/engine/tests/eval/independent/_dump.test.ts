@@ -7,7 +7,6 @@ import { describe, it } from "vitest";
 import type { Course, Program, StudentProfile, SchoolConfig } from "@nyupath/shared";
 import { degreeAudit } from "../../../src/audit/degreeAudit.js";
 import { crossProgramAudit } from "../../../src/audit/crossProgramAudit.js";
-import { checkTransferEligibility } from "../../../src/audit/checkTransferEligibility.js";
 import { calculateStanding } from "../../../src/audit/academicStanding.js";
 import { decideSpsEnrollment } from "../../../src/audit/spsEnrollmentGuard.js";
 import { loadCourses, loadProgram, loadSchoolConfig } from "../../../src/dataLoader.js";
@@ -219,7 +218,6 @@ describe("dump engine output for each profile", () => {
     for (const { id, profile } of PROFILES) {
         it(`dump ${id}`, () => {
             const audit = degreeAudit(profile, cs, COURSES, casCfg);
-            const trans = checkTransferEligibility(profile, "stern");
             const stand = calculateStanding(profile.coursesTaken, 4, casCfg);
             const sps = {
                 cscia102: decideSpsEnrollment("CSCI-UA 102", casCfg),
@@ -228,7 +226,6 @@ describe("dump engine output for each profile", () => {
             const programs = new Map<string, Program>([[cs.programId, cs]]);
             const xprog = crossProgramAudit(profile, programs, COURSES, casCfg);
             dump(`${id} :: degreeAudit`, audit);
-            dump(`${id} :: checkTransferEligibility(stern)`, trans);
             dump(`${id} :: calculateStanding`, stand);
             dump(`${id} :: decideSpsEnrollment`, sps);
             dump(`${id} :: crossProgramAudit warnings`, {

@@ -49,9 +49,9 @@ export interface ToolSession {
     /**
      * Phase 11 follow-up — the latest user message text. Threaded by
      * the route layer so tool `validateInput` hooks can apply scope
-     * guards based on the user's intent (e.g., reject
-     * `check_transfer_eligibility` when the message keys on
-     * "minor"). Optional — when unset, scope guards no-op.
+     * guards based on the user's intent (e.g., distinguish a "minor"
+     * declaration question from a hypothetical). Optional — when unset,
+     * scope guards no-op.
      */
     lastUserMessage?: string;
     /**

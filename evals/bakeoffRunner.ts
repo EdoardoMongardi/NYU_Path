@@ -106,21 +106,6 @@ export const BAKEOFF_TOOLS: BakeoffToolDef[] = [
         },
     },
     {
-        name: "check_transfer_eligibility",
-        description:
-            "Checks internal-transfer eligibility from the student's home school to a target school.",
-        parameters: {
-            type: "object",
-            properties: {
-                targetSchool: {
-                    type: "string",
-                    description: "Lowercase school id, e.g. 'stern', 'tandon'.",
-                },
-            },
-            required: ["targetSchool"],
-        },
-    },
-    {
         name: "what_if_audit",
         description:
             "Runs a hypothetical audit with a different set of declared programs (read-only). " +

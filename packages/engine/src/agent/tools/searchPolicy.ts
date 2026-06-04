@@ -181,7 +181,7 @@ export const searchPolicyTool = buildTool({
         lines.push(...renderWholeSection());
         if (result.notes.length > 0) lines.push(`Notes: ${result.notes.join(" | ")}`);
         if (result.transferIntent) {
-            lines.push(`Notes: User is exploring an internal transfer — target-school catalog rules may also apply; consider check_transfer_eligibility.`);
+            lines.push(`Notes: User is exploring an internal transfer — search the target school's internal-transfer requirements (deadline, required prep courses, eligibility) and the equivalency pages; target-school catalog rules may also apply.`);
         }
         const env = renderEnvelopeMeta({
             disclaimers: (result as { disclaimers?: Disclaimer[] }).disclaimers,

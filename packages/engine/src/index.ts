@@ -104,7 +104,6 @@ export {
     DEFAULT_PRIMARY_MODEL,
     DEFAULT_FALLBACK_MODEL,
     runFullAuditTool,
-    checkTransferEligibilityTool,
     whatIfAuditTool,
     searchPolicyTool,
     getProgramRequirementsTool,

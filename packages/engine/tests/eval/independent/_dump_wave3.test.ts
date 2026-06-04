@@ -13,7 +13,6 @@ import {
 } from "../../../src/dataLoader.js";
 import { projectMultiSemester } from "../../../src/planner/multiSemesterProjector.js";
 import { planExploratory } from "../../../src/planner/explorePlanner.js";
-import { planForTransferPrep } from "../../../src/planner/transferPrepPlanner.js";
 import { planMultiProgram } from "../../../src/planner/crossProgramPlanner.js";
 import {
     parseTranscript,
