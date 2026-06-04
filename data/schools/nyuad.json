@@ -53,7 +53,7 @@
     "failCountsInGpa": true,
     "exceptions": [
       "Available only beginning in the second year of study",
-      "Electives only — major, minor, and Core courses (incl. E, Q, X, J, Colloquium) cannot be taken P/F",
+      "Electives only \u2014 major, minor, and Core courses (incl. E, Q, X, J, Colloquium) cannot be taken P/F",
       "First attempt in any Core area must be letter-graded",
       "A P/F course cannot satisfy a prerequisite",
       "J-Term and summer courses may not be taken P/F"
@@ -86,6 +86,8 @@
       "note": "Third- and fourth-year students need a cumulative internal GPA >= 3.5 to overload; no student may exceed 20 credit hours, and overloads are not possible in J-Terms or summer sessions"
     }
   ],
-  "goodStandingReturnThreshold": 0.75,
+  "completionRatePolicy": {
+    "goodStandingThreshold": 0.75
+  },
   "maxCourseRepeats": 2
 }

@@ -132,6 +132,12 @@ const deansListThresholdSchema = z.object({
     note: z.string().optional(),
 }).passthrough();
 
+const completionRatePolicySchema = z.object({
+    goodStandingThreshold: z.number().min(0).max(1),
+    dismissalThreshold: z.number().min(0).max(1).optional(),
+    dismissalAfterSemesters: z.number().int().min(0).optional(),
+}).passthrough();
+
 export const schoolConfigBodySchema = z.object({
     schoolId: z.string(),
     name: z.string(),
@@ -152,7 +158,7 @@ export const schoolConfigBodySchema = z.object({
         note: z.string().optional(),
     }).passthrough()).optional(),
     finalProbationGpaFloor: z.number().optional(),
-    goodStandingReturnThreshold: z.number().optional(),
+    completionRatePolicy: completionRatePolicySchema.optional(),
     maxCourseRepeats: z.number().optional(),
     deansListThreshold: deansListThresholdSchema.optional(),
     // Step 8e — dead fields removed: auditMode, acceptsTransferCredit,

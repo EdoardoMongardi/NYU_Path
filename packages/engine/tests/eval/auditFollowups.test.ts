@@ -2,9 +2,9 @@
 // Audit Follow-ups — regressions for P1 + §11.0.2 resolveFact
 // ============================================================
 // Adds explicit coverage for the issues flagged in the Phase 1 audit:
-//   - P1: cas.json `goodStandingReturnThreshold` matches CAS_DEFAULTS so
-//         threading the CAS config through calculateStanding does NOT
-//         change behavior
+//   - P1: credit-completion-rate standing is per-school — the completion-rate
+//         warning is gated on a school's completionRatePolicy (CAS publishes
+//         one; the null-config path does not), not a universal CAS default
 //   - §11.0.2: resolveFact applies the school > program > department >
 //              course_catalog precedence rule
 //   - 4.4: canonicalSchoolId normalizes "CAS" / "cas" / " CAS " uniformly
@@ -19,31 +19,33 @@ import {
     type FactCandidate,
 } from "../../src/dataLoader.js";
 
-describe("P1 — calculateStanding regression: CAS config matches CAS_DEFAULTS", () => {
+describe("P1 — calculateStanding: completion-rate standing is per-school", () => {
     const casConfig = loadSchoolConfig("cas");
 
-    it("a 70%-completion student receives the same standing whether config is null or the CAS config", () => {
-        // 5 courses attempted, 7 of 10 credits-effective completed → 70%
-        // This rate is below the 75% return-to-good-standing threshold and
-        // above the 50% dismissal threshold, so it should generate a
-        // completion-rate warning under both code paths.
+    it("a sub-75% student is flagged on the CAS config but not when no school policy applies", () => {
+        // 5 courses: A, C, F, B, F → 12 of 20 attempted credits completed (60%),
+        // cumulative GPA 1.8. 60% is below CAS's 75% pace floor and above its
+        // 50% dismissal floor. The completion math + GPA + overall level are
+        // identical regardless of config; only the completion-rate WARNING is
+        // gated on a school that publishes a completionRatePolicy (CAS does;
+        // the null-config path has no policy → no completion warning).
         const courses = [
             { courseId: "X1", grade: "A", semester: "2024-fall", credits: 4 },
             { courseId: "X2", grade: "C", semester: "2024-fall", credits: 4 },
-            // 8 of 12 attempted-credits-with-grade-letter completed yields ≈67% — actually flagged
             { courseId: "X3", grade: "F", semester: "2024-fall", credits: 4 },
             { courseId: "X4", grade: "B", semester: "2025-spring", credits: 4 },
             { courseId: "X5", grade: "F", semester: "2025-spring", credits: 4 },
         ];
         const noCfg = calculateStanding(courses, 4);
         const withCfg = calculateStanding(courses, 4, casConfig);
-        // goodStandingReturnThreshold drift: prior to the fix, withCfg used 0.67 and would
-        // NOT emit the "below 75%" return-warning that noCfg emits. After
-        // the fix, both code paths share the 0.75 threshold.
-        expect(withCfg.warnings).toEqual(noCfg.warnings);
+        // Pure facts are config-independent.
         expect(withCfg.completionRate).toBe(noCfg.completionRate);
         expect(withCfg.cumulativeGPA).toBe(noCfg.cumulativeGPA);
         expect(withCfg.level).toBe(noCfg.level);
+        // The completion-rate warning is CAS-policy-driven, not universal.
+        const isCompletionWarning = (w: string) => w.toLowerCase().includes("completion");
+        expect(withCfg.warnings.some(isCompletionWarning)).toBe(true);
+        expect(noCfg.warnings.some(isCompletionWarning)).toBe(false);
     });
 
     it("clean 100%-completion student is in good standing under both code paths", () => {
