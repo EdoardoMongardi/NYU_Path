@@ -28,6 +28,7 @@
 import type { DegreeProgressReport, DPRCourseRow } from "./schema.js";
 import { walkRequirements } from "./schema.js";
 import { meetsGradeThreshold } from "./gradeComparison.js";
+import { canonicalizeCourseId } from "../courseId.js";
 
 // ---- Types ----
 
@@ -141,7 +142,9 @@ function compareDprTerms(a: string, b: string): number {
 // Matches the format used throughout the solver and bulletin parser.
 
 function rowToCourseId(row: DPRCourseRow): string {
-    return `${row.subject} ${row.catalogNbr}`;
+    // Canonicalize so a DPR row "EXPOS-UA 1" matches a prereq stored as
+    // "EXPOS-UA 0001" (the same course written two ways).
+    return canonicalizeCourseId(`${row.subject} ${row.catalogNbr}`);
 }
 
 // ---- Main export ----
@@ -177,6 +180,16 @@ export function isPrereqSatisfied(args: {
 }): PrereqSatisfactionResult {
     const { prereqCourseId, dependentTerm, dpr, plannedPlacements, minGrades, mode } = args;
 
+    // Canonicalize all ids so padded/unpadded forms of the same course
+    // ("EXPOS-UA 0001" vs "EXPOS-UA 1") match. `rowToCourseId` already
+    // canonicalizes the DPR side.
+    const cpid = canonicalizeCourseId(prereqCourseId);
+    const canonPlacements = new Map<string, string>();
+    for (const [k, v] of plannedPlacements) canonPlacements.set(canonicalizeCourseId(k), v);
+    const canonMinGrades: Record<string, string> | undefined = minGrades
+        ? Object.fromEntries(Object.entries(minGrades).map(([k, v]) => [canonicalizeCourseId(k), v]))
+        : undefined;
+
     // ------------------------------------------------------------------
     // Step 1 — DPR satisfiedBy (coursesUsed in any leaf requirement).
     // Walk the requirementGroups tree; if Y appears in any
@@ -186,7 +199,7 @@ export function isPrereqSatisfied(args: {
     const allLeafReqs = walkRequirements(dpr.requirementGroups);
     for (const req of allLeafReqs) {
         for (const usedRow of req.coursesUsed) {
-            if (rowToCourseId(usedRow) === prereqCourseId) {
+            if (rowToCourseId(usedRow) === cpid) {
                 return { satisfied: true, reason: "dpr-satisfiedBy" };
             }
         }
@@ -198,7 +211,7 @@ export function isPrereqSatisfied(args: {
     // when the IP row receives a final grade (Phase 13 separate task).
     // ------------------------------------------------------------------
     for (const row of dpr.courseHistory) {
-        if (rowToCourseId(row) === prereqCourseId && row.type === "IP") {
+        if (rowToCourseId(row) === cpid && row.type === "IP") {
             return { satisfied: true, reason: "ip-attempt" };
         }
     }
@@ -208,8 +221,8 @@ export function isPrereqSatisfied(args: {
     // prereq mode: placement must be strictly BEFORE dependentTerm.
     // coreq mode:  placement may be AT or before dependentTerm.
     // ------------------------------------------------------------------
-    if (plannedPlacements.has(prereqCourseId)) {
-        const placedTerm = plannedPlacements.get(prereqCourseId)!;
+    if (canonPlacements.has(cpid)) {
+        const placedTerm = canonPlacements.get(cpid)!;
         const cmp = compareSolverTerms(placedTerm, dependentTerm);
         const satisfiesPlacement =
             mode === "prereq" ? cmp < 0 : cmp <= 0;
@@ -233,14 +246,14 @@ export function isPrereqSatisfied(args: {
     //      Step 1 already checked and returned false → "fail-no-implicit-acceptance".
     // ------------------------------------------------------------------
     const finalAttempts = dpr.courseHistory.filter(
-        (row) => rowToCourseId(row) === prereqCourseId && (row.type === "EN" || row.type === "TE"),
+        (row) => rowToCourseId(row) === cpid && (row.type === "EN" || row.type === "TE"),
     );
 
     if (finalAttempts.length === 0) {
         return { satisfied: false, reason: "fail-no-attempt" };
     }
 
-    const minGrade = minGrades?.[prereqCourseId];
+    const minGrade = canonMinGrades?.[cpid];
 
     if (minGrade !== undefined) {
         // Find the most-recent EN/TE attempt by DPR-term ordering.

@@ -2,9 +2,10 @@
 // Prerequisite Graph — DAG operations
 // ============================================================
 import type { Prerequisite, PrereqGroup } from "@nyupath/shared";
+import { canonicalizeCourseId, canonicalizeCourseIdSet } from "../courseId.js";
 
 export class PrereqGraph {
-    /** course → prerequisite definition */
+    /** course → prerequisite definition (ids canonicalized) */
     private prereqMap: Map<string, Prerequisite>;
 
     /** course → list of courses it unlocks (reverse edges) */
@@ -14,7 +15,12 @@ export class PrereqGraph {
         this.prereqMap = new Map();
         this.reverseMap = new Map();
 
-        for (const p of prereqs) {
+        for (const raw of prereqs) {
+            // Canonicalize every id so "CSCI-UA 0101" and "CSCI-UA 101"
+            // (the same course written two ways) compare equal against the
+            // student's completed-course ids. Done at construction so the
+            // whole graph is form-agnostic regardless of the source data.
+            const p = canonicalizePrereq(raw);
             this.prereqMap.set(p.course, p);
             // Build reverse edges
             for (const group of p.prereqGroups) {
@@ -76,11 +82,19 @@ export class PrereqGraph {
      *   - OR group: AT LEAST ONE course in the group must be completed
      */
     hasPrerequisitesMet(courseId: string, completedCourses: Set<string>): boolean {
-        const prereq = this.prereqMap.get(courseId);
-        if (!prereq) return true; // no prerequisites
+        return this._hasPrereqMet(
+            canonicalizeCourseId(courseId),
+            canonicalizeCourseIdSet(completedCourses),
+        );
+    }
 
+    /** Internal: assumes already-canonicalized inputs (the graph's keys
+     *  and the completed set are both canonical). */
+    private _hasPrereqMet(canonCourseId: string, canonCompleted: Set<string>): boolean {
+        const prereq = this.prereqMap.get(canonCourseId);
+        if (!prereq) return true; // no prerequisites
         return prereq.prereqGroups.every((group) =>
-            this.isGroupSatisfied(group, completedCourses)
+            this.isGroupSatisfied(group, canonCompleted)
         );
     }
 
@@ -94,32 +108,32 @@ export class PrereqGraph {
         completedCourses: Set<string>,
         allCourseIds: string[]
     ): string[] {
-        return allCourseIds.filter(
-            (id) =>
-                !completedCourses.has(id) &&
-                this.hasPrerequisitesMet(id, completedCourses)
-        );
+        const cc = canonicalizeCourseIdSet(completedCourses);
+        return allCourseIds.filter((id) => {
+            const c = canonicalizeCourseId(id);
+            return !cc.has(c) && this._hasPrereqMet(c, cc);
+        });
     }
 
     /**
      * Get the prerequisites for a course.
      */
     getPrereqs(courseId: string): Prerequisite | undefined {
-        return this.prereqMap.get(courseId);
+        return this.prereqMap.get(canonicalizeCourseId(courseId));
     }
 
     /**
      * Get corequisites for a course.
      */
     getCoreqs(courseId: string): string[] {
-        return this.prereqMap.get(courseId)?.coreqs ?? [];
+        return this.prereqMap.get(canonicalizeCourseId(courseId))?.coreqs ?? [];
     }
 
     /**
      * Get all courses that this course unlocks (direct dependents).
      */
     getDependents(courseId: string): string[] {
-        return [...(this.reverseMap.get(courseId) ?? [])];
+        return [...(this.reverseMap.get(canonicalizeCourseId(courseId)) ?? [])];
     }
 
     /**
@@ -132,7 +146,7 @@ export class PrereqGraph {
      */
     countTransitivelyBlocked(courseId: string): number {
         const blocked = new Set<string>();
-        const queue = [courseId];
+        const queue = [canonicalizeCourseId(courseId)];
 
         while (queue.length > 0) {
             const current = queue.pop()!;
@@ -166,12 +180,14 @@ export class PrereqGraph {
         courseId: string,
         completedCourses: Set<string>,
     ): number {
-        if (completedCourses.has(courseId)) return 0;
+        const canonCourseId = canonicalizeCourseId(courseId);
+        const completed = canonicalizeCourseIdSet(completedCourses);
+        if (completed.has(canonCourseId)) return 0;
 
         // Iterative fixed-point expansion. Keep adding courses to the
         // "would-be-completed" frontier until nothing new unlocks.
-        const wouldBeComplete = new Set(completedCourses);
-        wouldBeComplete.add(courseId);
+        const wouldBeComplete = new Set(completed);
+        wouldBeComplete.add(canonCourseId);
 
         // Newly unlocked courses (not previously unlocked but now are)
         const newlyUnlocked = new Set<string>();
@@ -179,7 +195,7 @@ export class PrereqGraph {
         // Restrict the BFS to the transitive-dependents subgraph rooted at
         // `courseId` — anything outside it can't be affected.
         const reachable = new Set<string>();
-        const queue = [courseId];
+        const queue = [canonCourseId];
         while (queue.length > 0) {
             const current = queue.pop()!;
             const deps = this.reverseMap.get(current);
@@ -197,12 +213,13 @@ export class PrereqGraph {
             changed = false;
             for (const candidate of reachable) {
                 if (newlyUnlocked.has(candidate)) continue;
-                if (completedCourses.has(candidate)) continue;
+                if (completed.has(candidate)) continue;
                 // Was it already unlocked WITHOUT `courseId`? If yes, doesn't count.
-                const alreadyUnlocked = this.hasPrerequisitesMet(candidate, completedCourses);
+                // `candidate` comes from reverseMap → already canonical.
+                const alreadyUnlocked = this._hasPrereqMet(candidate, completed);
                 if (alreadyUnlocked) continue;
                 // Is it unlocked NOW (with `courseId` and prior unlocks added)?
-                if (this.hasPrerequisitesMet(candidate, wouldBeComplete)) {
+                if (this._hasPrereqMet(candidate, wouldBeComplete)) {
                     newlyUnlocked.add(candidate);
                     wouldBeComplete.add(candidate);
                     changed = true;
@@ -225,4 +242,29 @@ export class PrereqGraph {
         }
         return (group.notCourses ?? []).every((c) => !completedCourses.has(c));
     }
+}
+
+/** Return a copy of a Prerequisite with every course id canonicalized
+ *  (course key, every group's courses/notCourses, coreqs, and minGrades
+ *  keys). Dedupes ids that collapse to the same canonical form within a
+ *  group (e.g. a group listing both "X 0101" and "X 101"). */
+function canonicalizePrereq(p: Prerequisite): Prerequisite {
+    const canon = canonicalizeCourseId;
+    const uniq = (ids: string[]): string[] => [...new Set(ids.map(canon))];
+    const out: Prerequisite = {
+        ...p,
+        course: canon(p.course),
+        prereqGroups: p.prereqGroups.map((g) => ({
+            ...g,
+            courses: uniq(g.courses),
+            ...(g.notCourses ? { notCourses: uniq(g.notCourses) } : {}),
+        })),
+        coreqs: uniq(p.coreqs ?? []),
+    };
+    if (p.minGrades) {
+        const mg: Record<string, string> = {};
+        for (const [k, v] of Object.entries(p.minGrades)) mg[canon(k)] = v;
+        out.minGrades = mg;
+    }
+    return out;
 }
