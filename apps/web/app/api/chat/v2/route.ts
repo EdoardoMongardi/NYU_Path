@@ -416,6 +416,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         cohortGateFailing: cohortConfig.evalGateFailing,
         sessionSummaryContext,
         userId,
+        sessionStore: stores.sessionStore,
         writer,
     });
 
@@ -444,11 +445,17 @@ interface V2TurnArgs {
      *  authenticated, per-browser UUID otherwise). Used for the
      *  end-of-turn appendSummary call. */
     userId: string;
+    /** Session-summary store, threaded from the POST handler's
+     *  `getStores()` bundle. runV2Turn runs outside the POST handler's
+     *  scope, so it can't reach the handler-local `stores`; pass the
+     *  store it needs explicitly so the end-of-turn appendSummary writes
+     *  to the same instance the rest of the route uses. */
+    sessionStore: ReturnType<typeof getStores>["sessionStore"];
     writer: SseWriter;
 }
 
 async function runV2Turn(args: V2TurnArgs): Promise<void> {
-    const { primary, fallback, session, systemPrompt, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, userId, writer } = args;
+    const { primary, fallback, session, systemPrompt, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, userId, sessionStore, writer } = args;
     if (!primary) {
         writer.write({ kind: "error", message: "primary LLM client not configured" });
         writer.close();
@@ -835,7 +842,7 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 const summary =
                     `Asked: "${userSnippet}${userMessage.length > 140 ? "…" : ""}". ` +
                     `Tools called: ${toolNames.length > 0 ? toolNames.join(", ") : "none"}.`;
-                await stores.sessionStore.appendSummary(userId, {
+                await sessionStore.appendSummary(userId, {
                     date: new Date().toISOString().slice(0, 10),
                     summary,
                 });
