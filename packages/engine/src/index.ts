@@ -88,7 +88,6 @@ export {
     runAgentTurnStreaming,
     buildDefaultRegistry,
     buildSystemPrompt,
-    preLoopDispatch,
     validateResponse,
     reviewCompleteness,
     detectMultiIntent,
@@ -138,8 +137,6 @@ export type {
     ValidatorVerdict,
     ValidatorContext,
     CompletenessReviewVerdict,
-    PreLoopResult,
-    PreLoopOptions,
     SystemPromptOptions,
     // Phase 15 Task 8 — section-materialization types surfaced for
     // the apps/web sidebar (forward_materialization_update payload).
@@ -191,10 +188,6 @@ export type {
     DprTemporalContext,
 } from "./dpr/index.js";
 
-// Phase 4: RAG entry points (used by the agent's search_policy tool
-// + by the v2 web route to load the curated template corpus).
-export { loadPolicyTemplates } from "./rag/index.js";
-export type { PolicyTemplate } from "./rag/policyTemplate.js";
 
 // Phase 4 + Phase 7-B Step 3: embedder interface + OpenAI adapter
 // + semantic course-search wiring (used by the v2 web route to inject
@@ -214,7 +207,6 @@ export {
     CONFIDENCE_HIGH,
     CONFIDENCE_MEDIUM,
     COHERE_CONFIDENCE_BANDS,
-    matchTemplate,
     buildCorpus,
     DEFAULT_ENTRIES,
     loadPolicyCorpusFromCache,
@@ -263,7 +255,7 @@ export {
     getCohortAssignment,
     userInCohort,
     getCohortConfig,
-    runTemplateMatcherOnly,
+    runRecoveryMode,
 } from "./cohort/gate.js";
 export type {
     Cohort,
