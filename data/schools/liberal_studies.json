@@ -257,13 +257,13 @@
     "springAdmitPostSecondaryMax": 8
   },
   "acceptsTransferCredit": true,
-  "maxCreditsPerSemester": 18,
+  "maxCreditsPerSemester": 16,
   "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
     {
       "condition": "default",
-      "minGpa": 3.5,
-      "note": "Adviser approval required (inherited from CAS default; LS bulletin does not publish an overload GPA gate)"
+      "minGpa": null,
+      "note": "Advisor registration-clearance only; no published overload GPA threshold."
     }
   ],
   "goodStandingReturnThreshold": 0.75,
@@ -307,9 +307,6 @@
     "doubleCounting.overrideByProgram",
     "transferCreditLimits.firstYearMaxTotal",
     "transferCreditLimits.transferStudentMaxTotal",
-    "maxCreditsPerSemester",
-    "overloadRequirements",
-    "maxCourseRepeats",
-    "passFail.countsForGenEd"
+    "maxCourseRepeats"
   ]
 }

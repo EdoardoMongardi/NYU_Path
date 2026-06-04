@@ -23,7 +23,6 @@
     "suffix": "-UG",
     "minCredits": 64,
     "finalCreditsInResidence": 32,
-    "majorMinorResidencyPercent": 50,
     "note": "A minimum of 64 credits must be completed after matriculation in Gallatin; the last 32 credits must be completed at NYU (NYC or an NYU study away program)."
   },
   "creditCaps": [
@@ -91,9 +90,7 @@
     "overrideByProgram": true
   },
   "transferCreditLimits": {
-    "firstYearMaxTotal": 32,
-    "transferStudentMaxTotal": 64,
-    "springAdmitPostSecondaryMax": 8
+    "transferStudentMaxTotal": 64
   },
   "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
@@ -106,7 +103,6 @@
     }
   ],
   "goodStandingReturnThreshold": 0.76,
-  "maxCourseRepeats": 2,
   "deansListThreshold": {
     "minGpa": 3.85,
     "minCredits": 12,
@@ -118,7 +114,6 @@
     "url": "https://gallatin.nyu.edu/academics/advising.html"
   },
   "_inferredFields": [
-    "residency.majorMinorResidencyPercent",
     "creditCaps.online",
     "creditCaps.non_home_school",
     "creditCaps.independent_study",
@@ -130,10 +125,7 @@
     "doubleCounting.defaultMajorToMajor",
     "doubleCounting.defaultMajorToMinor",
     "doubleCounting.defaultMinorToMinor",
-    "doubleCounting.requiresDepartmentApproval",
-    "transferCreditLimits.firstYearMaxTotal",
-    "transferCreditLimits.springAdmitPostSecondaryMax",
-    "f1FullTimeMinCredits",
-    "overloadRequirements"
-  ]
+    "doubleCounting.requiresDepartmentApproval"
+  ],
+  "auditMode": "advising_only"
 }

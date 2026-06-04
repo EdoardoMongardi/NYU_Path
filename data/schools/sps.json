@@ -94,13 +94,7 @@
   "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
   "f1FullTimeMinCredits": 12,
-  "overloadRequirements": [
-    {
-      "condition": "default",
-      "minGpa": 3.5,
-      "note": "Adviser approval required"
-    }
-  ],
+  "overloadRequirements": [],
   "goodStandingReturnThreshold": 0.5,
   "maxCourseRepeats": 1,
   "deansListThreshold": {
@@ -124,9 +118,6 @@
     "passFail.autoExcludedFromLimit",
     "maxCreditsPerSemester",
     "f1FullTimeMinCredits",
-    "overloadRequirements",
-    "doubleCounting.requiresDepartmentApproval",
-    "doubleCounting.overrideByProgram",
     "advisingContact.name",
     "advisingContact.email",
     "advisingContact.url"
