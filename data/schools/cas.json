@@ -84,7 +84,6 @@
     "transferStudentMaxTotal": 64,
     "springAdmitPostSecondaryMax": 8
   },
-  "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
   "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
@@ -96,19 +95,10 @@
   ],
   "goodStandingReturnThreshold": 0.75,
   "maxCourseRepeats": 2,
-  "sharedPrograms": [
-    "cas_core"
-  ],
-  "programExclusions": [],
   "deansListThreshold": {
     "minGpa": 3.65,
     "note": "3.65 GPA over >=28 graded credits, evaluated annually.",
     "minCredits": 28,
     "per": "year"
-  },
-  "advisingContact": {
-    "name": "CAS Advising",
-    "email": "cas.advising@nyu.edu",
-    "url": "https://cas.nyu.edu/advising"
   }
 }

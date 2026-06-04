@@ -219,28 +219,9 @@
       "Election deadline: before completion of the 9th week of the term (3rd week of a six-week summer session); cannot be reversed once elected"
     ]
   },
-  "spsPolicy": {
-    "allowed": true,
-    "allowedPrefixes": [
-      "REBS1-UC",
-      "TCHT1-UC",
-      "TCSM1-UC",
-      "RWLD1-UC"
-    ],
-    "creditType": "elective_only",
-    "countsTowardResidency": false,
-    "countsAgainstNonHomeSchoolCap": true,
-    "excludedCourseTypes": [
-      "internship",
-      "independent_study"
-    ]
-  },
   "transferCreditLimits": {
-    "firstYearMaxTotal": 32,
-    "transferStudentMaxTotal": 64,
     "springAdmitPostSecondaryMax": 8
   },
-  "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 16,
   "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
@@ -251,46 +232,10 @@
     }
   ],
   "goodStandingReturnThreshold": 0.75,
-  "maxCourseRepeats": 2,
-  "sharedPrograms": [],
-  "programExclusions": [],
   "deansListThreshold": {
     "minGpa": 3.65,
     "minCredits": 28,
     "per": "year",
     "note": "Dean's Honors List: average of 3.65+ for the academic year in at least 28 graded credits, with no 'I' or 'N' grades; GPAs are not rounded. Compiled annually (not per term)."
-  },
-  "lifecycle": {
-    "type": "forced_exit",
-    "expectedTransitionSemesters": 4,
-    "maxSemesters": 8,
-    "warningThreshold": 6,
-    "warningMessage": "After a minimum of six academic semesters without completing LS Core requirements, students receive a 'Notice of Academic Concern: Approaching Term Limit'. By the end of the eighth semester a student who has not attained eligibility for transition is considered for dismissal from NYU. (Term-limit policy applies to LS Core matriculants from Fall 2023 onward.)",
-    "dismissalTrigger": "not_transition_eligible_by_max_semesters",
-    "dualAuditMode": true
-  },
-  "advisingContact": {
-    "name": "Liberal Studies Advising Center",
-    "email": "ls.advising@nyu.edu",
-    "url": "https://liberalstudies.nyu.edu/academic-advising.html"
-  },
-  "_inferredFields": [
-    "gradeThresholds.major",
-    "gradeThresholds.minor",
-    "spsPolicy.allowed",
-    "spsPolicy.allowedPrefixes",
-    "spsPolicy.creditType",
-    "spsPolicy.countsTowardResidency",
-    "spsPolicy.countsAgainstNonHomeSchoolCap",
-    "spsPolicy.excludedCourseTypes",
-    "doubleCounting.defaultMajorToMajor",
-    "doubleCounting.defaultMajorToMinor",
-    "doubleCounting.defaultMinorToMinor",
-    "doubleCounting.noTripleCounting",
-    "doubleCounting.requiresDepartmentApproval",
-    "doubleCounting.overrideByProgram",
-    "transferCreditLimits.firstYearMaxTotal",
-    "transferCreditLimits.transferStudentMaxTotal",
-    "maxCourseRepeats"
-  ]
+  }
 }
