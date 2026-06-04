@@ -57,6 +57,21 @@ describe("P1 — calculateStanding regression: CAS config matches CAS_DEFAULTS",
         expect(withCfg.level).toBe("good_standing");
         expect(withCfg.warnings).toEqual(noCfg.warnings);
     });
+
+    it("uses the DPR-supplied required GPA as the flat floor (Step 8e)", () => {
+        // B + C → cumulative GPA 2.5, 100% completion. schoolConfig no longer
+        // carries overallGpaMin; the flat floor is the DPR's
+        // cumulativeGpaRequired (4th arg). A tiered gpaTierTable still wins.
+        const courses = [
+            { courseId: "X1", grade: "B", semester: "2024-fall", credits: 4 },
+            { courseId: "X2", grade: "C", semester: "2025-spring", credits: 4 },
+        ];
+        expect(calculateStanding(courses, 2, null, 2.0).cumulativeGPA).toBe(2.5);
+        // Floor 3.0 (from the DPR) → 2.5 is below → academic_concern.
+        expect(calculateStanding(courses, 2, null, 3.0).level).toBe("academic_concern");
+        // Floor 2.0 → 2.5 is above → good standing.
+        expect(calculateStanding(courses, 2, null, 2.0).level).toBe("good_standing");
+    });
 });
 
 describe("§11.0.2 — resolveFact precedence rule", () => {

@@ -73,7 +73,9 @@ export const getCreditCapsTool = buildTool({
         // personalized degree total (Step 8c). The GPA floor is a school-wide
         // minimum, so it still falls back to the authored config.
         const totalCreditsRequired = dpr?.creditsRequired ?? null;
-        const overallGpaMin = dpr?.cumulativeGpaRequired ?? cfg?.overallGpaMin ?? null;
+        // GPA floor is the student's DPR-required cumulative GPA (per-student,
+        // authoritative). schoolConfig no longer carries overallGpaMin.
+        const overallGpaMin = dpr?.cumulativeGpaRequired ?? null;
         const capsSource = dpr ? (cfg ? "dpr+config" : "dpr") : "config";
 
         const result: {

@@ -406,7 +406,7 @@ export const bindFreeElectiveTool = buildTool({
                 // Use the schedule's own degreeCreditMinimum (already accounts for
                 // total planned credits) rather than the raw school config value.
                 degreeCreditMinimum: schedule.graduationCreditMinimum,
-                residencyMinCredits: session.schoolConfig?.residency?.minCredits ?? null,
+                residencyMinCredits: session.degreeProgressReport?.cumulative.residencyRequired ?? null,
                 majorCreditMinimum: null,
                 minorCreditMinimum: null,
                 upperLevelMinCredits: null,
