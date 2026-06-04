@@ -1,6 +1,6 @@
 # @nyupath/engine
 
-Core deterministic engine for NYU Path: degree audit, semester planner, prereq graph, equivalence resolver, school configs, RAG corpus, response validator, and the agent loop. Consumed by `apps/web` and `apps/cli`.
+Core engine for NYU Path: DPR parser + audit adapter, forward-schedule solver, prereq graph, equivalence resolver, school configs, RAG corpus, response validator, and the agent loop. Consumed by `apps/web`.
 
 ## Architecture at a glance
 
@@ -29,32 +29,26 @@ Core deterministic engine for NYU Path: degree audit, semester planner, prereq g
 
 Every numerical claim the agent surfaces traces to a tool result — never LLM inference.
 
-## Phase 7-E doctrine: DPR-first, deterministic engine as fallback
+## DPR-first / two-tier doctrine
 
-The post-pivot system has two parallel sources of audit truth:
+After the rule-engine decommission, the engine has two sources of truth:
 
-1. **DPR primary path**: `session.degreeProgressReport` is NYU's pre-computed audit, ingested from an Albert Degree Progress Report PDF. The DPR carries every requirement's status, applied courses, GPA, credits, P/F + outside-CAS budget tracking, and time-limit data. The engine reads this object directly; no rule walking, no equivalence resolution, no GPA recomputation.
+1. **Tier 1 — DPR (deterministic)**: `session.degreeProgressReport` is NYU's pre-computed audit, ingested from an Albert Degree Progress Report PDF. It carries every requirement's status, applied courses, GPA, credits, P/F + outside-home budget tracking, and time-limit data. `run_full_audit` reads this directly; `plan_forward_degree` consumes `dpr.requirementGroups` to build the solver's unmet-requirements set. No authored rule walking, no on-disk program JSON, no GPA recomputation.
 
-2. **Authored-rules fallback**: when no DPR is loaded, the engine runs `degreeAudit()` against authored `Program` JSON files (e.g., [data/programs/cas/cas_econ_ba.json](../../data/programs/cas/cas_econ_ba.json)). This path uses the full deterministic stack: `evaluateRule` over the four rule types (`must_take`, `choose_n`, `min_credits`, `min_level`), `equivalenceResolver` for AP/IB/transfer credits, `creditCapValidator` for school caps, `gpaCalculator` for pool-restricted GPAs, `passfailGuard`, etc.
+2. **Tier 2 — bulletin RAG (estimates)**: `search_policy`, `get_program_requirements`, and `what_if_audit` answer hypothetical/program-shape questions from the embedded NYU bulletin corpus. Responses are confidence-banded, cited, and carry an adviser caveat — they are estimates, never audit-grade verdicts.
 
-**The fallback is not dead code.** It exists for three reasons:
+The legacy "authored-rules fallback" (`degreeAudit`, `evaluateRule`, `crossProgramAudit`, the engine `whatIfAudit`, the planner library, `programs.json`) has been removed. The DPR + RAG are the only paths.
 
-- **What-if backend**: `what_if_audit` extracts (or will extract — see W3.3 P2) a `Program` spec on-the-fly from bulletin chunks for hypothetical programs the student is considering, then runs the deterministic engine against it.
-- **DPR-failure fallback**: when a student's DPR is unavailable or malformed, onboarding routes them through the legacy transcript path, which produces a `StudentProfile` consumed by the same engine.
-- **Future independent operation**: a long-term goal is for NYU Path to operate without Albert PDF input (e.g., for prospective students researching majors). The engine + the small set of authored T1/T2 programs + the JIT extraction pipeline form the basis for that mode.
+## Audit-class tool surface
 
-## Tool routing under W3
-
-The three audit-class tools dispatch on `session.degreeProgressReport`:
-
-| Tool | DPR present | DPR absent |
+| Tool | Source | Output |
 |---|---|---|
-| `run_full_audit` | `dprToAuditResults(dpr)` + StandingResult synthesized from `cumulative` block | `degreeAudit(student, program, courses, schoolConfig)` |
-| `plan_semester` | Walks `notSatisfiedRequirements(dpr)`, extracts course IDs from descriptions, emits `CourseSuggestion[]` with optional prereq-risk flags | `planNextSemester(student, program, courses, prereqs, opts)` |
-| `what_if_audit` (in catalog) | Authored path (same engine call) | Authored path (same engine call) |
-| `what_if_audit` (not in catalog) | Returns `kind: "unauthored_program_estimate"` envelope with non-removable disclaimer | Same |
+| `run_full_audit` | DPR | `dprToAuditResults(dpr)` + StandingResult synthesized from `cumulative` block |
+| `plan_forward_degree` | DPR + `schoolConfig` | `solveForwardSchedule` over the DPR's unmet requirements + prereq map |
+| `what_if_audit` | DPR + RAG | `unauthored_program_estimate` envelope with non-removable disclaimer; the LLM follows up via `search_policy` |
+| `search_policy` / `get_program_requirements` | RAG | Confidence-banded, cited bulletin excerpts |
 
-Output shape stays consistent across paths so downstream consumers (the response validator, the chat layer's renderer, eval cases) don't fork.
+Output shape stays consistent across tools so downstream consumers (the response validator, the chat layer's renderer, eval cases) don't fork.
 
 ## DPR module
 
@@ -108,11 +102,10 @@ Run: `cd /Users/edoardomongardi/Desktop/Ideas/NYU\ Path && npx vitest run`
 ## Files most likely to evolve
 
 - [src/dpr/parser.ts](src/dpr/parser.ts) — when NYU IT updates Albert's DPR layout (typically annually). Drift-guard test in `dprParser.test.ts` catches silent format changes.
-- [src/agent/tools/whatIfAudit.ts](src/agent/tools/whatIfAudit.ts) — when the W3.3 P2 ships LLM-driven JIT bulletin extraction.
-- [src/agent/tools/planSemester.ts](src/agent/tools/planSemester.ts) — when FOSE availability gets wired into the DPR plan path (W3.2 P2).
+- [src/agent/forwardSchedule/solver.ts](src/agent/forwardSchedule/solver.ts) — when the forward-schedule heuristics evolve.
+- [src/rag/](src/rag/) — when the bulletin corpus, embedder, or reranker changes.
 
 ## Files that should rarely change
 
-- [src/audit/degreeAudit.ts](src/audit/degreeAudit.ts) and the rule evaluators — battle-tested deterministic engine; serves as what-if backend + DPR fallback.
 - [src/agent/responseValidator.ts](src/agent/responseValidator.ts) — Cardinal Rule §2.1 implementation.
 - [src/agent/loopState.ts](src/agent/loopState.ts) — Steps 14-20 architecture-compliance state machine.

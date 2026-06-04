@@ -2,18 +2,12 @@
 // Data Loader — Load JSON data files
 // ============================================================
 //
-// Phase 0/1 layering:
-//   - loadCourses / loadPrereqs / loadPrograms still read the bundled
-//     v1 datasets under `packages/engine/src/data/` (CS BA + CAS Core).
-//   - loadSchoolConfig reads `data/schools/<schoolId>.json` at the repo
-//     root, with Phase 0 `_meta` validation (§11.0.1). Re-exported from
-//     `data/schoolConfigLoader.ts` so callers can `import { loadSchoolConfig }
-//     from "@nyupath/engine/dataLoader"`.
-//   - applicableCatalogYear / resolveProgramFile (Phase 0) are re-exported
-//     so the same import path serves both CAS-bundled programs and the
-//     forthcoming `data/programs/<school>/<programId>.json` files.
+// loadCourses / loadPrereqs read the bundled course + prereq datasets
+// under `packages/engine/src/data/`. loadSchoolConfig reads
+// `data/schools/<schoolId>.json` at the repo root with `_meta`
+// validation, re-exported from `data/schoolConfigLoader.ts`.
 // ============================================================
-import type { Course, Prerequisite, Program } from "@nyupath/shared";
+import type { Course, Prerequisite } from "@nyupath/shared";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,21 +25,7 @@ export function loadPrereqs(): Prerequisite[] {
     return JSON.parse(raw) as Prerequisite[];
 }
 
-export function loadPrograms(): Program[] {
-    const raw = readFileSync(join(DATA_DIR, "programs.json"), "utf-8");
-    return JSON.parse(raw) as Program[];
-}
-
-export function loadProgram(programId: string, catalogYear?: string): Program | undefined {
-    const programs = loadPrograms();
-    return programs.find(
-        (p) =>
-            p.programId === programId &&
-            (catalogYear ? p.catalogYear === catalogYear : true)
-    );
-}
-
-// ---- Phase 1: school + per-school program loaders ----
+// ---- School + catalog loaders ----
 export {
     loadSchoolConfig,
     loadSchoolConfigStrict,
@@ -57,10 +37,6 @@ export {
     type ResolveResult,
     type ResolveLogger,
 } from "./data/catalogYearLoader.js";
-export {
-    loadProgramFromDataDir,
-    type ProgramFromDataDirResult,
-} from "./data/programLoader.js";
 export { loadDepartmentConfig, type DepartmentConfig } from "./data/departmentLoader.js";
 
 // ---- Phase 1 §11.0.2: precedence-rule resolver ----

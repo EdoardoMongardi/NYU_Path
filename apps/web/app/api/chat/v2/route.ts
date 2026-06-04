@@ -233,12 +233,10 @@ export async function POST(req: NextRequest): Promise<Response> {
             return null;
         }
     })();
-    // Phase A (improvement plan) — load the engine catalog (programs +
-    // courses + prereqs) into the session. The forward planner needs the
-    // course catalog (titles/credits) + prereqs, and what_if_audit's
-    // authored path needs programs + courses. Module-cached; file-read
-    // failures degrade to an empty catalog so a missing data file can't
-    // break the turn.
+    // Load the engine catalog (courses + prereqs) into the session.
+    // The forward planner reads course titles/credits + prereqs from
+    // these maps. Module-cached; file-read failures degrade to an empty
+    // catalog so a missing data file can't break the turn.
     const catalog = (() => {
         try {
             return getCatalog();
@@ -262,7 +260,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         // user's intent. Generic across all tools.
         lastUserMessage: body.message,
         ...(schoolConfig ? { schoolConfig } : {}),
-        ...(catalog ? { programs: catalog.programs, courses: catalog.courses, prereqs: catalog.prereqs } : {}),
+        ...(catalog ? { courses: catalog.courses, prereqs: catalog.prereqs } : {}),
         ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
         ...(parsedDpr ? { degreeProgressReport: parsedDpr } : {}),

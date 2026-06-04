@@ -16,23 +16,18 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Course, Program, StudentProfile } from "@nyupath/shared";
+import type { Course } from "@nyupath/shared";
 
 import { calculateStanding } from "../../src/audit/academicStanding.js";
 import { decideSpsEnrollment, isSpsCourse } from "../../src/audit/spsEnrollmentGuard.js";
 import { computePoolGpa } from "../../src/audit/gpaCalculator.js";
-import { whatIfAudit } from "../../src/audit/whatIfAudit.js";
-import { crossProgramAudit } from "../../src/audit/crossProgramAudit.js";
 import { parseTranscript } from "../../src/transcript/parser.js";
 import { transcriptToProfileDraft } from "../../src/transcript/profileMapper.js";
 import { TranscriptParseError } from "../../src/transcript/types.js";
 import {
-    loadCourses,
-    loadProgram,
-    loadProgramFromDataDir,
     loadSchoolConfig,
     loadSchoolConfigStrict,
 } from "../../src/dataLoader.js";
@@ -207,59 +202,6 @@ describe("Step 2C — computePoolGpa", () => {
 });
 
 // ============================================================
-// Step 2E — whatIfAudit
-// ============================================================
-describe("Step 2E — whatIfAudit", () => {
-    const courses = loadCourses();
-    const cas = loadSchoolConfig("cas");
-    const csBA = loadProgram("cs_major_ba", "2023")!;
-
-    it("does not mutate the input profile", () => {
-        const profile: StudentProfile = {
-            id: "wia1",
-            catalogYear: "2023",
-            homeSchool: "cas",
-            declaredPrograms: [{ programId: "cs_major_ba", programType: "major" }],
-            coursesTaken: [
-                { courseId: "CSCI-UA 101", grade: "A", semester: "2024-fall", credits: 4 },
-            ],
-        };
-        const before = JSON.parse(JSON.stringify(profile));
-        const programs = new Map<string, Program>([[csBA.programId, csBA]]);
-        whatIfAudit(profile, ["cs_major_ba"], programs, courses, cas, true);
-        expect(profile).toEqual(before);
-    });
-
-    it("with compareWithCurrent=true and current declarations, produces a comparison block", () => {
-        const profile: StudentProfile = {
-            id: "wia2",
-            catalogYear: "2023",
-            homeSchool: "cas",
-            declaredPrograms: [{ programId: "cs_major_ba", programType: "major" }],
-            coursesTaken: [
-                { courseId: "CSCI-UA 101", grade: "A", semester: "2024-fall", credits: 4 },
-            ],
-        };
-        const programs = new Map<string, Program>([[csBA.programId, csBA]]);
-        const r = whatIfAudit(profile, ["cs_major_ba"], programs, courses, cas, true);
-        expect(r.comparison).toBeDefined();
-    });
-
-    it("warns on unknown program ids", () => {
-        const profile: StudentProfile = {
-            id: "wia3",
-            catalogYear: "2023",
-            homeSchool: "cas",
-            declaredPrograms: [],
-            coursesTaken: [],
-        };
-        const programs = new Map<string, Program>([[csBA.programId, csBA]]);
-        const r = whatIfAudit(profile, ["nonexistent_program"], programs, courses, cas, false);
-        expect(r.warnings.some(w => w.includes("nonexistent_program"))).toBe(true);
-    });
-});
-
-// ============================================================
 // Step 2F — Transcript parser §11.8
 // ============================================================
 describe("Step 2F — transcript parser (§11.8)", () => {
@@ -366,126 +308,5 @@ describe("Step 2G — Zod body schemas reject malformed config bodies", () => {
         if (r.ok) return;
         expect(r.reason).toBe("invalid_body");
     });
-
-    it("rejects a Program file missing the rules array (F1: program body validation)", () => {
-        // Build a Program JSON with a typo: "rulez" instead of "rules"
-        const schoolDir = join(tmpRoot, "cas");
-        mkdirSync(schoolDir, { recursive: true });
-        const programPath = join(schoolDir, "cas_typo.json");
-        writeFileSync(programPath, JSON.stringify({
-            _meta: {
-                catalogYear: "2025-2026",
-                sourceUrl: "https://example.com",
-                lastVerified: "2026-01-01",
-                sourceHash: "sha256:" + "b".repeat(64),
-                extractedBy: "manual",
-                verifiedBy: "hand-review",
-            },
-            programId: "cas_typo",
-            name: "Typo Program",
-            catalogYear: "2025-2026",
-            school: "CAS",
-            department: "Test",
-            totalCreditsRequired: 128,
-            // intentional typo: should be "rules"
-            rulez: [],
-        }), "utf-8");
-        const r = loadProgramFromDataDir("cas", "cas_typo", { programsDir: tmpRoot });
-        expect(r.ok).toBe(false);
-        if (r.ok) return;
-        expect(r.reason).toBe("invalid_body");
-    });
-
-    it("rejects a Program file with a malformed rule (rule.type = 'unknown')", () => {
-        const schoolDir = join(tmpRoot, "cas");
-        mkdirSync(schoolDir, { recursive: true });
-        const programPath = join(schoolDir, "cas_badrule.json");
-        writeFileSync(programPath, JSON.stringify({
-            _meta: {
-                catalogYear: "2025-2026",
-                sourceUrl: "https://example.com",
-                lastVerified: "2026-01-01",
-                sourceHash: "sha256:" + "c".repeat(64),
-                extractedBy: "manual",
-                verifiedBy: "hand-review",
-            },
-            programId: "cas_badrule",
-            name: "Bad-Rule Program",
-            catalogYear: "2025-2026",
-            school: "CAS",
-            department: "Test",
-            totalCreditsRequired: 128,
-            rules: [
-                {
-                    ruleId: "bad",
-                    label: "Bad",
-                    type: "unknown_rule_type",
-                    doubleCountPolicy: "allow",
-                    catalogYearRange: ["2018", "2030"],
-                },
-            ],
-        }), "utf-8");
-        const r = loadProgramFromDataDir("cas", "cas_badrule", { programsDir: tmpRoot });
-        expect(r.ok).toBe(false);
-        if (r.ok) return;
-        expect(r.reason).toBe("invalid_body");
-    });
 });
 
-// ============================================================
-// Step 2H — crossProgramAudit overrideByProgram (more-restrictive wins)
-// ============================================================
-describe("Step 2H — crossProgramAudit overrideByProgram", () => {
-    const courses = loadCourses();
-    const csBA = loadProgram("cs_major_ba", "2023")!;
-    const fakeMinor: Program = {
-        programId: "cas_fake_minor",
-        name: "Fake Minor",
-        catalogYear: "2023",
-        school: "CAS",
-        department: "Mathematics",
-        totalCreditsRequired: 16,
-        rules: [
-            {
-                ruleId: "fake_required",
-                label: "Fake Required",
-                type: "must_take",
-                doubleCountPolicy: "allow",
-                catalogYearRange: ["2018", "2030"],
-                courses: ["MATH-UA 120", "MATH-UA 121"],
-            },
-        ],
-    };
-
-    it("when defaultMajorToMinor=2 and override sets fake_minor majorToMinor=0, all shared courses overflow", () => {
-        const baseCfg = loadSchoolConfig("cas")!;
-        const tightCfg = {
-            ...baseCfg,
-            doubleCounting: {
-                ...baseCfg.doubleCounting!,
-                overrideByProgram: { cas_fake_minor: { majorToMinor: 0 } },
-            },
-        };
-        const profile: StudentProfile = {
-            id: "ovr1",
-            catalogYear: "2023",
-            homeSchool: "cas",
-            declaredPrograms: [
-                { programId: "cs_major_ba", programType: "major" },
-                { programId: "cas_fake_minor", programType: "minor" },
-            ],
-            coursesTaken: [
-                { courseId: "CSCI-UA 101", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "MATH-UA 120", grade: "A", semester: "2024-fall", credits: 4 },
-                { courseId: "MATH-UA 121", grade: "A", semester: "2024-fall", credits: 4 },
-            ],
-        };
-        const programs = new Map<string, Program>([
-            [csBA.programId, csBA],
-            [fakeMinor.programId, fakeMinor],
-        ]);
-        const r = crossProgramAudit(profile, programs, courses, tightCfg);
-        const overflow = r.warnings.filter(w => w.kind === "exceeds_pair_limit");
-        expect(overflow.length).toBeGreaterThan(0);
-    });
-});

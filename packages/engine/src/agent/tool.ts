@@ -39,10 +39,9 @@ export interface PendingProfileMutation {
 export interface ToolSession {
     /** The student profile the agent is advising for. Optional — many tools require it. */
     student?: import("@nyupath/shared").StudentProfile;
-    /** Programs catalog, courses, prereqs, schoolConfig — things tool calls need */
+    /** Courses + prereqs catalogs, schoolConfig — things tool calls need */
     courses?: import("@nyupath/shared").Course[];
     prereqs?: import("@nyupath/shared").Prerequisite[];
-    programs?: Map<string, import("@nyupath/shared").Program>;
     schoolConfig?: import("@nyupath/shared").SchoolConfig | null;
     /** Whether the user is exploring a transfer (affects template applicability) */
     transferIntent?: boolean;

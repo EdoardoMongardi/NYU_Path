@@ -1,43 +1,34 @@
 // ============================================================
 // loadCatalog — module-cached engine catalog for the chat session
 // ============================================================
-// Phase A (improvement plan): the chat route historically never
-// populated `session.programs` / `session.courses` / `session.prereqs`.
-// The forward planner needs the course catalog (titles/credits) +
-// prereqs, and what_if_audit's authored path needs programs + courses.
-// This helper loads the engine's bundled catalog ONCE per server process
-// and hands the chat route the shapes the ToolSession expects.
+// The chat route hydrates the ToolSession with the bundled course +
+// prereq catalogs via getCatalog(). The forward planner reads
+// course titles/credits + prereqs from these maps.
 //
-// Cached at module scope: the JSON files (courses ~32KB, prereqs ~860KB,
-// programs ~10KB) are read on first use and reused for every request.
+// Cached at module scope: the JSON files are read on first use and
+// reused for every request.
 // ============================================================
 
-import { loadCourses, loadPrereqs, loadPrograms } from "@nyupath/engine";
-import type { Course, Prerequisite, Program } from "@nyupath/shared";
+import { loadCourses, loadPrereqs } from "@nyupath/engine";
+import type { Course, Prerequisite } from "@nyupath/shared";
 
 export interface SessionCatalog {
     courses: Course[];
     prereqs: Prerequisite[];
-    /** Programs keyed by `programId`, the shape `ToolSession.programs` expects. */
-    programs: Map<string, Program>;
 }
 
 let cached: SessionCatalog | null = null;
 
 /**
- * Return the engine catalog (courses + prereqs + programs map), loading
- * it from disk on first call and caching it for the process lifetime.
- * Never throws on an empty dataset — callers get whatever the loaders
- * return. File-read failures propagate (same as `loadSchoolConfig`).
+ * Return the engine catalog (courses + prereqs), loading it from disk
+ * on first call and caching it for the process lifetime. File-read
+ * failures propagate (same as `loadSchoolConfig`).
  */
 export function getCatalog(): SessionCatalog {
     if (cached) return cached;
-    const programs = new Map<string, Program>();
-    for (const p of loadPrograms()) programs.set(p.programId, p);
     cached = {
         courses: loadCourses(),
         prereqs: loadPrereqs(),
-        programs,
     };
     return cached;
 }
