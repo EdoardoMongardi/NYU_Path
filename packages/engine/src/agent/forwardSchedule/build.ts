@@ -31,6 +31,8 @@ import {
     DEFAULT_CREDIT_TARGET_PER_SEMESTER,
     DEFAULT_DOMESTIC_PARTTIME_FLOOR,
 } from "../../data/schoolDefaults.js";
+import { classifyRequirementKind } from "./requirementKind.js";
+import type { ProgramDeclaration } from "@nyupath/shared";
 
 // Module-cached off-catalog (grad/professional) credit map for pin
 // resolution. Read once per process; a missing file degrades to empty so a
@@ -150,11 +152,18 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
 
     // ---- 5. Build unmet requirements from DPR ----
 
+    // RC-3: classify requirement kinds structurally from the DPR group hierarchy
+    // rather than by substring-matching the leaf's rId/title.
+    const kindByRId = classifyRequirementKind({
+        groups: dpr.requirementGroups,
+        declaredPrograms: student?.declaredPrograms ?? [],
+    });
+
     const unmetReqs = notSatisfiedRequirements(dpr.requirementGroups);
     const unmetRequirements: SolverInput["unmetRequirements"] = unmetReqs.map(req => ({
         rId: req.rId,
         title: req.title,
-        category: inferCategory(req.rId, req.title),
+        category: kindByRId.get(req.rId) ?? "unknown",
         credits: inferRequirementCredits(req),
         candidateCourses: extractCandidateCourseIds(req),
     }));
@@ -379,14 +388,6 @@ function extractCandidateCourseIds(req: { description?: string; statusText: stri
     return Array.from(out);
 }
 
-function inferCategory(rId: string, title: string): string {
-    const blob = `${rId} ${title}`.toLowerCase();
-    if (blob.includes("major")) return "cs_major_required";
-    if (blob.includes("core")) return "cas_core";
-    if (blob.includes("elective")) return "free_elective";
-    return "general";
-}
-
 function inferRequirementCredits(req: { counter?: import("../../dpr/schema.js").DPRCounter }): number {
     if (!req.counter) return 4;
     if (req.counter.kind === "units") {
@@ -412,20 +413,30 @@ function buildProgramRules(
     degreeCreditMinimum: number,
 ): ProgramRulesBundle {
     const schoolConfig = session.schoolConfig ?? null;
+    const declaredPrograms = session.student?.declaredPrograms ?? [];
 
-    // Walk DPR requirement leaves to synthesize major/school-core rId sets
-    const leaves = walkRequirements(dpr.requirementGroups);
+    // RC-3: classify requirement kinds structurally from the DPR group hierarchy.
+    const kindByRId = classifyRequirementKind({
+        groups: dpr.requirementGroups,
+        declaredPrograms,
+    });
+
     const majorRuleKinds = new Map<string, "must_take" | "choose_n">();
     const schoolCoreRuleIds = new Set<string>();
     const generalCategoryRuleIds = new Set<string>();
 
+    // Walk all leaves and populate the rule maps from the classifier output.
+    const leaves = walkRequirements(dpr.requirementGroups);
     for (const leaf of leaves) {
-        const blob = `${leaf.rId} ${leaf.title}`.toLowerCase();
-        if (blob.includes("major") || blob.includes("concentration")) {
-            majorRuleKinds.set(leaf.rId, blob.includes("required") ? "must_take" : "choose_n");
-        } else if (blob.includes("core") || blob.includes("cas core")) {
+        const kind = kindByRId.get(leaf.rId);
+        if (kind === "major-required") {
+            majorRuleKinds.set(leaf.rId, "must_take");
+        } else if (kind === "major-elective") {
+            majorRuleKinds.set(leaf.rId, "choose_n");
+        } else if (kind === "school-core") {
             schoolCoreRuleIds.add(leaf.rId);
         } else {
+            // "free-elective", "general-elective", "unknown" → general bucket
             generalCategoryRuleIds.add(leaf.rId);
         }
     }
@@ -453,4 +464,50 @@ function buildProgramRules(
     };
 
     return { validatorRules, solverRules };
+}
+
+// ---------------------------------------------------------------------------
+// Test-only export (not part of the public API surface)
+// ---------------------------------------------------------------------------
+
+/**
+ * Exposed for unit tests that need to inspect the programRules maps
+ * directly without constructing a full session. Returns only the
+ * solver-facing rule maps (majorRuleKinds, schoolCoreRuleIds,
+ * generalCategoryRuleIds) so tests can assert the classifier output.
+ *
+ * @internal — test use only
+ */
+export function buildProgramRulesForTest(
+    dpr: DegreeProgressReport,
+    declaredPrograms: ProgramDeclaration[],
+): {
+    majorRuleKinds: Map<string, "must_take" | "choose_n">;
+    schoolCoreRuleIds: Set<string>;
+    generalCategoryRuleIds: Set<string>;
+} {
+    const kindByRId = classifyRequirementKind({
+        groups: dpr.requirementGroups,
+        declaredPrograms,
+    });
+
+    const majorRuleKinds = new Map<string, "must_take" | "choose_n">();
+    const schoolCoreRuleIds = new Set<string>();
+    const generalCategoryRuleIds = new Set<string>();
+
+    const leaves = walkRequirements(dpr.requirementGroups);
+    for (const leaf of leaves) {
+        const kind = kindByRId.get(leaf.rId);
+        if (kind === "major-required") {
+            majorRuleKinds.set(leaf.rId, "must_take");
+        } else if (kind === "major-elective") {
+            majorRuleKinds.set(leaf.rId, "choose_n");
+        } else if (kind === "school-core") {
+            schoolCoreRuleIds.add(leaf.rId);
+        } else {
+            generalCategoryRuleIds.add(leaf.rId);
+        }
+    }
+
+    return { majorRuleKinds, schoolCoreRuleIds, generalCategoryRuleIds };
 }
