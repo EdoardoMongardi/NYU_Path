@@ -186,8 +186,9 @@ export const getCreditCapsTool = buildTool({
             lines.push(`Credit cap (${cap.type}): ${ceiling}${scope}`);
         }
         if (advRes?.status === "resolved") {
+            const scope = advRes.appliesTo ? ` — ${advRes.appliesTo}` : "";
             lines.push(
-                `Advanced-standing cap: ${advRes.cap} credits — ${advRes.appliesTo} (from your DPR program: ${advRes.matchedLabel})`,
+                `Advanced-standing cap: ${advRes.cap} credits${scope} (from your DPR program: ${advRes.matchedLabel})`,
             );
         } else if (advRes?.status === "needs_clarification") {
             lines.push("Advanced-standing cap depends on your SPS division — confirm which applies:");

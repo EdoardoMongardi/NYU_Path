@@ -46,9 +46,9 @@ export const SPS_DIVISION_OPTIONS = [
 // The three named Schack/Tisch bachelor's subjects. Every other SPS program —
 // the "Applied …" bachelor's family AND all associate degrees — is DAUS.
 const NAMED_UNIT_SUBJECTS: ReadonlyArray<{ re: RegExp; division: SpsDivision }> = [
-    { re: /real estate/i, division: "schack" },
-    { re: /hospitalit/i, division: "tisch_center" },
-    { re: /sport/i, division: "tisch_institute" },
+    { re: /\breal estate/i, division: "schack" },
+    { re: /\bhospitalit/i, division: "tisch_center" },
+    { re: /\bsport/i, division: "tisch_institute" },
 ];
 
 function degreeLevelFromLabel(label: string): SpsDegreeLevel | null {
