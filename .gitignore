@@ -50,8 +50,12 @@ data/
 # PII-containing source DPR PDFs and unredacted text extracts.
 # Only the .redacted.txt + .expected.json fixtures may be committed.
 SAA_STD_DS.pdf
+SAA_STD_DS_WHATIF.pdf
 packages/engine/tests/fixtures/dpr_sample.txt
 packages/engine/tests/fixtures/*.unredacted.*
+
+# Superpowers brainstorming visual-companion mockups (local only).
+.superpowers/
 
 # Scraper progress state (tool-local checkpointing)
 tools/playwright-scraper/.scrape_progress.json
