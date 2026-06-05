@@ -106,6 +106,12 @@ interface V2RequestBody {
      *  the cohort gate falls through to the configured default
      *  (`alpha` until ops sets otherwise). */
     userId?: string;
+    /** CAS-1 (Task 1.5): onboarding-confirmed home school for this student
+     *  (e.g. "cas", "stern", "tandon", "shanghai", "nyuad", …).
+     *  When present, threads through as homeSchoolOverride so
+     *  deriveHomeSchool is bypassed entirely. Full onboarding UI control
+     *  is Phase 4; for now clients may send this from an explicit selection. */
+    homeSchool?: string;
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -216,6 +222,11 @@ export async function POST(req: NextRequest): Promise<Response> {
         studentIdOverride: userId,
         ...(body.visaStatus === "f1" || body.visaStatus === "domestic"
             ? { visaStatus: body.visaStatus }
+            : {}),
+        // CAS-1 (Task 1.5): thread onboarding-confirmed home school so
+        // deriveHomeSchool is bypassed when the client provides an explicit value.
+        ...(typeof body.homeSchool === "string" && body.homeSchool.length > 0
+            ? { homeSchoolOverride: body.homeSchool }
             : {}),
     });
     const searchCoursesFn = getCourseSearchFn();
