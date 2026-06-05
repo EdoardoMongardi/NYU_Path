@@ -44,18 +44,6 @@ export {
     type DepartmentConfig,
 } from "./data/departmentLoader.js";
 
-// Tool registry types (legacy Phase 0 surface, still consumed downstream)
-export {
-    buildTool,
-    getTool,
-    listTools,
-    registerTool,
-    type Tool,
-    type ToolContext,
-    type ToolDef,
-    type ValidationResult,
-} from "./tools/index.js";
-
 // Phase 6 WS4: observability
 export {
     InMemoryFallbackSink,

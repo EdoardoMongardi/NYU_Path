@@ -98,18 +98,3 @@ export function computePoolGpa(
         contributingCourseIds,
     };
 }
-
-/**
- * Convenience: compute GPA over courses whose canonical course-id prefix
- * matches the major's department prefix (e.g., "CSCI-UA" for CS BA, or
- * "ECON-UA" for Econ BA). For majors whose requirements span multiple
- * prefixes (Econ requires MATH-UA 131/132 too), pass the explicit pool
- * via `computePoolGpa` instead.
- */
-export function computeMajorGpaByDeptPrefix(
-    coursesTaken: CourseTaken[],
-    deptPrefix: string,
-    courseCatalog?: Map<string, Course>,
-): PoolGpaResult {
-    return computePoolGpa(coursesTaken, [`${deptPrefix} *`], courseCatalog);
-}
