@@ -47,11 +47,6 @@ describe("agentStatusVerbs", () => {
         expect(getPastVerb("future_tool_xyz")).toBe("Used a tool");
     });
 
-    it("template_match pseudo-tools are passed through with a sensible verb", () => {
-        expect(getActiveVerb("template:f1_credit_floor")).toBe("Checking a known answer");
-        expect(getPastVerb("template:f1_credit_floor")).toBe("Matched a known answer");
-    });
-
     it("exposes IDLE_VERB constant for the no-tool 'Thinking' state", () => {
         expect(IDLE_VERB).toBe("Thinking");
     });
@@ -64,10 +59,6 @@ describe("agentStatusVerbs", () => {
             expect(TOOL_THOUGHT_SENTENCES[t].length).toBeGreaterThan(30);
             expect(/[.!?]$/.test(TOOL_THOUGHT_SENTENCES[t])).toBe(true);
         }
-    });
-
-    it("getThoughtSentence routes template_match prefixes to the canned-answer thought", () => {
-        expect(getThoughtSentence("template:f1_credit_floor")).toMatch(/canned answer/i);
     });
 
     it("getThoughtSentence falls back to a generic thought for unknown tool names", () => {

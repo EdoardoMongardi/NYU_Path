@@ -1,7 +1,7 @@
 // ============================================================
 // Phase 6.1 WS5 — agent-loop live integration tests (env-gated)
 // ============================================================
-// Five canonical scenarios end-to-end against a real LLM. Skipped
+// Four canonical scenarios end-to-end against a real LLM. Skipped
 // without OPENAI_API_KEY. Each scenario also asserts the response
 // validator passes — these are the happy-path latency-and-correctness
 // gates the Phase 6.5 cohort transitions reference.
@@ -18,13 +18,11 @@ import {
     runAgentTurn,
     buildDefaultRegistry,
     buildSystemPrompt,
-    preLoopDispatch,
     validateResponse,
     OpenAIEngineClient,
     DEFAULT_PRIMARY_MODEL,
     type ToolSession,
 } from "../../src/agent/index.js";
-import { loadPolicyTemplates } from "../../src/rag/index.js";
 
 const HAS_OPENAI = Boolean(process.env.OPENAI_API_KEY);
 
@@ -53,23 +51,6 @@ describe.skipIf(!HAS_OPENAI)("agent-loop live integration (Phase 6.1 WS5)", () =
         apiKey: process.env.OPENAI_API_KEY!,
     });
     const systemPrompt = buildSystemPrompt({ student: STUDENT });
-
-    it("Scenario 1 — cas_pf_major template fast-path fires WITHOUT calling the LLM", async () => {
-        // Note: this scenario doesn't even invoke OpenAI — preLoopDispatch
-        // returns the template directly. We still gate on HAS_OPENAI to
-        // keep the file's run posture consistent.
-        const { templates } = loadPolicyTemplates();
-        const result = preLoopDispatch(
-            "Can I take a major course P/F?",
-            makeSession(STUDENT),
-            { templates },
-        );
-        expect(result.kind).toBe("template");
-        if (result.kind !== "template") return;
-        expect(result.match.template.id).toBe("cas_pf_major");
-        // Body cites the bulletin verbatim per the drift guard.
-        expect(result.match.template.body).toContain("32 credits");
-    });
 
     it("Scenario 2 — full audit completes and validator passes", async () => {
         const start = Date.now();

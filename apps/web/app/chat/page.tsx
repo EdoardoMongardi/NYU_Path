@@ -413,13 +413,6 @@ export default function ChatPage() {
 
     const applyEvent = (ev: ChatV2Event, assistantId: string, toolStatuses: ToolStatus[]) => {
         switch (ev.kind) {
-            case "template_match":
-                updateMessage(assistantId, {
-                    content: ev.body,
-                    // Surface the source so the user can verify the citation.
-                    toolStatuses: [...toolStatuses, { toolName: `template:${ev.templateId}`, state: "done", summary: ev.source }],
-                });
-                break;
             case "tool_invocation_start": {
                 toolStatuses.push({ toolName: ev.toolName, state: "running" });
                 const sentence = getThoughtSentence(ev.toolName);

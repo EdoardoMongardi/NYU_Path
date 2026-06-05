@@ -58,7 +58,7 @@ describe("createSseStream (Phase 6.1 WS2)", () => {
 
     it("emits all 7 event kinds without throwing", async () => {
         const { stream, writer } = createSseStream();
-        writer.write({ kind: "template_match", templateId: "t", body: "b", source: "s" });
+        writer.write({ kind: "thinking", text: "hmm" });
         writer.write({ kind: "tool_invocation_start", toolName: "x", args: { a: 1 } });
         writer.write({ kind: "tool_invocation_done", toolName: "x", summary: "ok" });
         writer.write({ kind: "validator_block", violations: [{ kind: "ungrounded_number", detail: "..." }] });
@@ -67,7 +67,7 @@ describe("createSseStream (Phase 6.1 WS2)", () => {
         writer.write({ kind: "error", message: "boom" });
         writer.close();
         const out = await readAll(stream);
-        expect(out).toMatch(/event: template_match/);
+        expect(out).toMatch(/event: thinking/);
         expect(out).toMatch(/event: tool_invocation_start/);
         expect(out).toMatch(/event: tool_invocation_done/);
         expect(out).toMatch(/event: validator_block/);
