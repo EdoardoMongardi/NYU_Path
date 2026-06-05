@@ -57,8 +57,34 @@ describe("all school configs (Step 8c PR-B)", () => {
             expect(c.overallGpaMin).toBeUndefined();
             expect(c.doubleCounting).toBeUndefined();
             expect(c.gradeThresholds).toBeUndefined();
+            // Replaced by completionRatePolicy (per-school) in the standing fix.
+            expect(c.goodStandingReturnThreshold).toBeUndefined();
             expect((c.residency as Record<string, unknown>)?.minCredits).toBeUndefined();
             expect((c.passFail as Record<string, unknown>)?.careerLimit).toBeUndefined();
         }
+    });
+
+    it("completion-rate standing is per-school (verified policies only; CAS alone has the dismissal mechanic)", () => {
+        const get = (s: string) => {
+            const r = loadSchoolConfigStrict(s);
+            if (!r.ok) throw new Error(`${s} failed to load`);
+            return r.config;
+        };
+        // GPA-only / tiered schools publish NO completion-rate policy.
+        for (const s of ["stern", "tandon", "steinhardt", "nursing"]) {
+            expect(get(s).completionRatePolicy).toBeUndefined();
+        }
+        // CAS publishes the full policy incl. the hard pace-dismissal rule
+        // (bulletin L494: <50% after 2 semesters).
+        const cas = get("cas").completionRatePolicy;
+        expect(cas?.goodStandingThreshold).toBe(0.75);
+        expect(cas?.dismissalThreshold).toBe(0.5);
+        expect(cas?.dismissalAfterSemesters).toBe(2);
+        // Other completion-rate schools carry only a good-standing threshold
+        // (bulletin-verified), and NO dismissal mechanic.
+        const tisch = get("tisch").completionRatePolicy;
+        expect(tisch?.goodStandingThreshold).toBe(0.5);
+        expect(tisch?.dismissalThreshold).toBeUndefined();
+        expect(get("gallatin").completionRatePolicy?.goodStandingThreshold).toBe(0.76);
     });
 });

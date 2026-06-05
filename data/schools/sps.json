@@ -65,7 +65,9 @@
     "transferStudentMaxTotal": 64
   },
   "overloadRequirements": [],
-  "goodStandingReturnThreshold": 0.5,
+  "completionRatePolicy": {
+    "goodStandingThreshold": 0.5
+  },
   "maxCourseRepeats": 1,
   "deansListThreshold": {
     "minGpa": 3.7,

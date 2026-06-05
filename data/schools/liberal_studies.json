@@ -14,7 +14,7 @@
   "_provenance": [
     {
       "path": "degreeType",
-      "claim": "The Liberal Studies Core is a four-semester program. Students planning to transition to one of the baccalaureate programs at NYU normally must complete four semesters of full-time enrollment in the LS Core. (LS Core is a 2-year lower-division program; the BA/BS degree is conferred by the transition school — CAS, Steinhardt, Tisch, etc. — not by LS. The GLS track within Liberal Studies does award its own BA.)",
+      "claim": "The Liberal Studies Core is a four-semester program. Students planning to transition to one of the baccalaureate programs at NYU normally must complete four semesters of full-time enrollment in the LS Core. (LS Core is a 2-year lower-division program; the BA/BS degree is conferred by the transition school \u2014 CAS, Steinhardt, Tisch, etc. \u2014 not by LS. The GLS track within Liberal Studies does award its own BA.)",
       "bulletinSection": "Residency Requirements",
       "sourceLine": 46
     },
@@ -152,7 +152,7 @@
     },
     {
       "path": "lifecycle.dualAuditMode",
-      "claim": "Other NYU schools and colleges where students may transition or transfer have specific residency requirements. LS Core students should consult the websites and bulletins of those schools and colleges. (No single transitionTarget — the target school varies by student — so dualAuditMode is enabled without a fixed transitionTarget.)",
+      "claim": "Other NYU schools and colleges where students may transition or transfer have specific residency requirements. LS Core students should consult the websites and bulletins of those schools and colleges. (No single transitionTarget \u2014 the target school varies by student \u2014 so dualAuditMode is enabled without a fixed transitionTarget.)",
       "bulletinSection": "Residency Requirements / Term Limits",
       "sourceLine": 48
     },
@@ -231,7 +231,9 @@
       "note": "Advisor registration-clearance only; no published overload GPA threshold."
     }
   ],
-  "goodStandingReturnThreshold": 0.75,
+  "completionRatePolicy": {
+    "goodStandingThreshold": 0.75
+  },
   "deansListThreshold": {
     "minGpa": 3.65,
     "minCredits": 28,

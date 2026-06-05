@@ -4,12 +4,14 @@
 // Source: SKILL.md §A3.8 — all rules from:
 //         Original rules/General CAS academic rules.md → Academic Standing
 //
-// Phase 1 Step A: GPA / completion thresholds moved into CAS_DEFAULTS.
-// Phase 1 Step D: overallGpaMin and goodStandingReturnThreshold now read from the
-// runtime SchoolConfig when supplied; the dismissal-rate structure
-// (50% / 2-semester) is intentionally still CAS-only — see L139-141
-// for rationale. Add school-specific dismissal config when a non-CAS
-// source documents an alternative.
+// Standing is computed per-school. The flat GPA floor comes from the DPR's
+// cumulativeGpaRequired (per-student), falling back to a tiered GPA table
+// (SchoolConfig.gpaTierTable) or the NYU-wide 2.0. The credit-completion-rate
+// ("pace") rule — both the advisory warning and the hard dismissal — is fully
+// config-driven via SchoolConfig.completionRatePolicy: schools that publish no
+// policy get NO completion-rate standing, and only schools whose policy carries
+// dismissalThreshold + dismissalAfterSemesters can be dismissed on pace grounds
+// (CAS, bulletin L494). No completion-rate rule is hard-coded as a default.
 // ============================================================
 
 import type { CourseTaken, SchoolConfig, GpaTierRow } from "@nyupath/shared";
@@ -38,15 +40,13 @@ function resolveTieredGpaMin(
     return openEnded?.minCumGpa;
 }
 
-// ---- CAS defaults (Phase 1 Step A: extracted, not yet config-driven) ----
-const CAS_DEFAULTS = {
-    overallGpaMin: 2.0,
-    completionRate: {
-        goodStandingThreshold: 0.75,
-        dismissalThreshold: 0.50,
-        dismissalAfterSemesters: 2,
-    },
-} as const;
+// ---- Engine default GPA floor ----
+// Last-resort flat GPA minimum when neither the DPR (cumulativeGpaRequired)
+// nor a school's tiered table supplies one. The NYU-wide good-standing floor
+// is 2.0. The completion-rate ("pace") rule is NOT defaulted here: it is
+// per-school and lives in `SchoolConfig.completionRatePolicy` — schools that
+// publish no policy get no completion-rate warning or dismissal.
+const DEFAULT_OVERALL_GPA_MIN = 2.0;
 
 export type StandingLevel =
     | "good_standing"
@@ -185,21 +185,20 @@ export function calculateStanding(
         ? totalCompletedCredits / totalAttemptedCredits
         : 1;
 
-    // Determine standing — SchoolConfig overrides for the values it knows
-    // about (overallGpaMin, goodStandingReturnThreshold). The CAS-specific
-    // completion-rate structure (50% dismissal / "after 2nd semester") is
-    // not expressed in SchoolConfig today, so we keep CAS defaults for it.
+    // Determine standing. The flat GPA floor comes from the DPR's
+    // cumulativeGpaRequired (per-student), falling back to the NYU-wide 2.0.
     // Gap B (Phase 3): when SchoolConfig publishes a per-semester tiered
     // GPA table (e.g., Tandon L287-300), the active tier supersedes the
-    // flat `overallGpaMin`. Tier lookup: largest row whose semestersCompleted
-    // is ≤ the student's semestersCompleted; null = open-ended ">N" tier.
-    const flatGpaMin = dprGpaRequired ?? CAS_DEFAULTS.overallGpaMin;
+    // flat floor. Tier lookup: largest row whose semestersCompleted is ≤ the
+    // student's semestersCompleted; null = open-ended ">N" tier.
+    const flatGpaMin = dprGpaRequired ?? DEFAULT_OVERALL_GPA_MIN;
     const gpaMin = resolveTieredGpaMin(schoolConfig?.gpaTierTable, semestersCompleted) ?? flatGpaMin;
-    const dismissalThreshold = CAS_DEFAULTS.completionRate.dismissalThreshold;
-    const dismissalAfter = CAS_DEFAULTS.completionRate.dismissalAfterSemesters;
-    const goodStandingThreshold =
-        schoolConfig?.goodStandingReturnThreshold
-        ?? CAS_DEFAULTS.completionRate.goodStandingThreshold;
+
+    // Completion-rate ("pace") standing is per-school: only schools whose
+    // config publishes a completionRatePolicy apply it. GPA-only / tiered
+    // schools (Stern, Tandon, Steinhardt, Nursing) carry no policy and get
+    // neither a completion-rate warning nor a completion-rate dismissal.
+    const completionPolicy = schoolConfig?.completionRatePolicy;
 
     const inGoodStanding = cumulativeGPA >= gpaMin;
     let level: StandingLevel = "good_standing";
@@ -212,10 +211,18 @@ export function calculateStanding(
     }
 
     // Gap A (Phase 3): the dismissal-completion-rate review per CAS bulletin
-    // L494 is INDEPENDENT of GPA. Lift out of the !inGoodStanding gate.
-    if (semestersCompleted >= dismissalAfter && completionRate < dismissalThreshold) {
+    // L494 is INDEPENDENT of GPA. It applies only to schools whose policy
+    // opts into a hard pace-dismissal rule (dismissalThreshold +
+    // dismissalAfterSemesters); others never dismiss on completion grounds.
+    if (
+        completionPolicy
+        && typeof completionPolicy.dismissalThreshold === "number"
+        && typeof completionPolicy.dismissalAfterSemesters === "number"
+        && semestersCompleted >= completionPolicy.dismissalAfterSemesters
+        && completionRate < completionPolicy.dismissalThreshold
+    ) {
         level = "dismissed";
-        const pct = Math.round(dismissalThreshold * 100);
+        const pct = Math.round(completionPolicy.dismissalThreshold * 100);
         message = `Academic dismissal risk: only ${(completionRate * 100).toFixed(0)}% of attempted credits completed after ${semestersCompleted} semesters.`;
         warnings.push(`Completion rate ${(completionRate * 100).toFixed(0)}% is below ${pct}% after ${semestersCompleted} semesters — may result in dismissal.`);
     }
@@ -238,10 +245,16 @@ export function calculateStanding(
         );
     }
 
-    // Additional warning for completion rate below the good-standing threshold
-    if (completionRate < goodStandingThreshold && level !== "dismissed") {
-        const pct = Math.round(goodStandingThreshold * 100);
-        warnings.push(`Credit completion rate is ${(completionRate * 100).toFixed(0)}% — below the ${pct}% threshold required to return to good standing.`);
+    // Additional warning when completion rate is below the school's
+    // good-standing pace threshold. Only emitted for schools that publish a
+    // completion-rate policy (per-school; no universal default).
+    if (
+        completionPolicy
+        && completionRate < completionPolicy.goodStandingThreshold
+        && level !== "dismissed"
+    ) {
+        const pct = Math.round(completionPolicy.goodStandingThreshold * 100);
+        warnings.push(`Credit completion rate is ${(completionRate * 100).toFixed(0)}% — below the ${pct}% threshold required for good academic standing.`);
     }
 
     return {
