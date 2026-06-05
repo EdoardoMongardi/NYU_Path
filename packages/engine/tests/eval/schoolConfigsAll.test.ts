@@ -59,6 +59,8 @@ describe("all school configs (Step 8c PR-B)", () => {
             expect(c.gradeThresholds).toBeUndefined();
             // Replaced by completionRatePolicy (per-school) in the standing fix.
             expect(c.goodStandingReturnThreshold).toBeUndefined();
+            // degreeType deleted (zero readers; per-student degree lives in the DPR).
+            expect(c.degreeType).toBeUndefined();
             expect((c.residency as Record<string, unknown>)?.minCredits).toBeUndefined();
             expect((c.passFail as Record<string, unknown>)?.careerLimit).toBeUndefined();
         }

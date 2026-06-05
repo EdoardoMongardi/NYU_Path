@@ -227,6 +227,14 @@ export interface CreditCap {
     schoolId?: string;
     /** Sub-classification, e.g., "transfer_back" for Stern non_home_school */
     subtype?: string;
+    /**
+     * Division / degree scope this cap applies to, for schools where a single
+     * schoolId spans sub-units with different caps (e.g. SPS: "Schack/Tisch
+     * bachelor's" vs "DAUS bachelor's" vs "DAUS associate's"). Surfaced in the
+     * credit-caps display so a student can identify the variant that applies to
+     * them — there is no division signal to auto-select one.
+     */
+    appliesTo?: string;
     /** Human-readable label */
     label?: string;
     /** Categories excluded from this cap */
@@ -393,6 +401,18 @@ export interface CompletionRatePolicy {
     dismissalThreshold?: number;
     /** Semesters that must elapse before the dismissal check applies (CAS: 2). */
     dismissalAfterSemesters?: number;
+    /**
+     * The window the school measures `goodStandingThreshold` over, used only to
+     * phrase the advisory warning honestly. The engine always computes a
+     * *cumulative* completion rate, so for `annual`/`term` schools the warning
+     * states the cumulative figure and attributes the threshold to its real
+     * period rather than implying a per-period computation. Omitted → a generic
+     * "threshold required for good academic standing" message.
+     * - cumulative: CAS, Liberal Studies, NYUAD (SPS Academic-Concern trigger)
+     * - annual: Gallatin ("76% of courses each academic year")
+     * - term: Shanghai ("more than half the credits in any semester")
+     */
+    basis?: "cumulative" | "annual" | "term";
 }
 
 
@@ -400,8 +420,9 @@ export interface SchoolConfig {
     /** Stable identifier, e.g. "cas", "stern", "tandon" */
     schoolId: string;
     name: string;
-    /** Primary degree type, e.g. "BA", "BS", or null for advising-only schools */
-    degreeType: string | null;
+    // Step 8e — degreeType removed: a school grants many degree types (one per
+    // program, e.g. BA/BS/BFA), so a single school-level scalar was lossy and
+    // had zero readers. The student's actual degree type is in their DPR header.
     /** Course-id suffixes belonging to this school, e.g. ["-UA"] */
     courseSuffix: string[];
     // Step 8e — overallGpaMin removed: the GPA floor is per-student and comes
