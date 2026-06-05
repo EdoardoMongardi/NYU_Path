@@ -20,6 +20,16 @@
  *  that genuinely differs goes in PER_SEMESTER_CEILING_OVERRIDES. */
 export const DEFAULT_PER_SEMESTER_CEILING = 18;
 
+/** Default planner pacing target credits/semester when a school config
+ *  does not author a per-school override. 16 is the near-universal
+ *  NYU undergrad norm; schools can override via SchoolConfig.creditTargetPerSemester. */
+export const DEFAULT_CREDIT_TARGET_PER_SEMESTER = 16;
+
+/** Default domestic part-time floor credits/semester when a school config
+ *  does not author a per-school override. Schools can override via
+ *  SchoolConfig.domesticPartTimeFloor. */
+export const DEFAULT_DOMESTIC_PARTTIME_FLOOR = 8;
+
 /** F-1 full-time minimum credits/semester (NYU OGS guidance). */
 export const DEFAULT_F1_FULLTIME_MIN_CREDITS = 12;
 

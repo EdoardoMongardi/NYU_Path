@@ -26,6 +26,10 @@ import type { GraduationPathValidatorArgs } from "./graduationPathValidator.js";
 import { hashDprCourseHistory } from "./reconcile.js";
 import type { SolverInput } from "./types.js";
 import { loadOffCatalogCredits } from "../../dataLoader.js";
+import {
+    DEFAULT_CREDIT_TARGET_PER_SEMESTER,
+    DEFAULT_DOMESTIC_PARTTIME_FLOOR,
+} from "../../data/schoolDefaults.js";
 
 // Module-cached off-catalog (grad/professional) credit map for pin
 // resolution. Read once per process; a missing file degrades to empty so a
@@ -70,13 +74,13 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
     const creditsEarned = dpr.cumulative.creditsUsed ?? 0;
     const graduationCreditMinimum = dpr.cumulative.creditsRequired ?? 128;
     const creditCeiling = schoolConfig?.maxCreditsPerSemester ?? 18;
-    const creditTargetPerSemester = 16;
+    const creditTargetPerSemester = schoolConfig?.creditTargetPerSemester ?? DEFAULT_CREDIT_TARGET_PER_SEMESTER;
     const cumulativeGpa = dpr.cumulative.cumulativeGpa ?? 0;
     const f1Floor =
         student?.visaStatus === "f1"
             ? (schoolConfig?.f1FullTimeMinCredits ?? 12)
             : null;
-    const domesticPartTimeFloor = 8;
+    const domesticPartTimeFloor = schoolConfig?.domesticPartTimeFloor ?? DEFAULT_DOMESTIC_PARTTIME_FLOOR;
 
     // Credit caps from DPR header
     const passFailCap = dpr.cumulative.passFailCapUnits ?? 32;
@@ -87,7 +91,7 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
     // ---- 2. Derive student identifiers ----
 
     const studentId = student?.id ?? "unknown";
-    const homeSchoolId = student?.homeSchool ?? schoolConfig?.schoolId ?? "cas";
+    const homeSchoolId = student?.homeSchool ?? schoolConfig?.schoolId ?? "unknown";
     const visaStatus = student?.visaStatus;
 
     // ---- 3. Build courses-taken and courses-in-progress sets from DPR ----
