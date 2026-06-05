@@ -107,12 +107,17 @@ function checkRequirementGroupsSatisfied(
     }
 
     // Build a map: rId → set of satisfier identifiers in plan slots.
-    // Both `specific_planned` (course bound) and `placeholder` (course
-    // not yet bound, but the slot is staked out for this requirement)
-    // count. The solver emits placeholder slots with `satisfiesRules`
-    // populated when an unmet requirement is reserved against a future
-    // term — ignoring them here would mean every feasible plan that
-    // still has an open placeholder gets flagged as infeasible.
+    // Only BOUND slots count as satisfiers:
+    //   - specific_planned slots are always bound (bindingState: "bound")
+    //   - placeholder slots are UNBOUND (bindingState: "placeholder-pending" or
+    //     "placeholder-deferred") and do NOT count — a requirement covered only
+    //     by an unbound placeholder is not actually satisfied.
+    // in_progress slots are bound to a real course and count via the
+    // assumed-pass path below (their courseId appears in ipCourseIds).
+    //
+    // Fix: PLAN-4 Bug B — previously placeholder slots were also added to
+    // planSatisfiers, causing a requirement "covered" only by an unbound
+    // placeholder to incorrectly pass. Removed.
     const planSatisfiers = new Map<string, Set<string>>();
     for (const sem of plan.semesters) {
         for (const slot of sem.slots) {
@@ -121,12 +126,9 @@ function checkRequirementGroupsSatisfied(
                     if (!planSatisfiers.has(rId)) planSatisfiers.set(rId, new Set());
                     planSatisfiers.get(rId)!.add(slot.courseId);
                 }
-            } else if (slot.kind === "placeholder") {
-                for (const rId of slot.satisfiesRules) {
-                    if (!planSatisfiers.has(rId)) planSatisfiers.set(rId, new Set());
-                    planSatisfiers.get(rId)!.add(slot.placeholderId ?? `placeholder(${slot.category})`);
-                }
             }
+            // placeholder slots (bindingState: "placeholder-pending" | "placeholder-deferred")
+            // are intentionally excluded — they are unbound and do not satisfy requirements.
         }
     }
 
@@ -297,7 +299,22 @@ function checkThresholdsMet(
         }
     }
 
-    // Minor and school-core thresholds: skip if null per spec
+    // Residency and major thresholds missing (null): these are axes we expect
+    // to be present for any standard NYU program. When the builder could not
+    // derive the floor (e.g., no DPR counter available), we do NOT silently
+    // pass — we return requires-approval so the plan surfaces as
+    // "valid-with-trade-offs" rather than "valid-clean".
+    //
+    // Fix: PLAN-4 Bug A — previously null thresholds were skipped entirely,
+    // meaning a plan that never had the checks populated would silently pass
+    // as if the thresholds had been verified. Now they require advisor sign-off.
+    //
+    // Minor and school-core thresholds are intentionally kept as silent-skip
+    // (null is normal for students without a minor or specific school-core).
+    if (residencyMin === null || majorMin === null) {
+        return { status: "requires-approval", authority: "advisor" };
+    }
+
     return { status: "pass", verifiedFrom: "program-rules" };
 }
 
