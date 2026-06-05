@@ -13,22 +13,10 @@
   },
   "_provenance": [
     {
-      "path": "residency.minCredits",
-      "claim": "minimum of 64 credits of business coursework (-UB or equivalent) in residence",
-      "bulletinSection": "Residency Requirements",
-      "sourceLine": 290
-    },
-    {
       "path": "residency.suffix",
       "claim": "-UB courses are 'business coursework' for residency",
       "bulletinSection": "Residency Requirements",
       "sourceLine": 290
-    },
-    {
-      "path": "creditCaps[type=non_home_school].maxCredits",
-      "claim": "transfer back a maximum of 32 credits of non-business coursework",
-      "bulletinSection": "Non-NYU Coursework",
-      "sourceLine": 268
     },
     {
       "path": "creditCaps[type=advanced_standing].maxCredits",
@@ -41,12 +29,6 @@
       "claim": "External transfer students can transfer in a maximum of 64 credits from their prior institution(s)",
       "bulletinSection": "Transfer Credits",
       "sourceLine": 306
-    },
-    {
-      "path": "passFail.careerLimit",
-      "claim": "A maximum of 4 courses may be elected pass/fail during a student's academic career",
-      "bulletinSection": "Pass/Fail Option",
-      "sourceLine": 398
     },
     {
       "path": "passFail.perTermLimit",
@@ -79,12 +61,6 @@
       "sourceLine": 215
     },
     {
-      "path": "doubleCounting",
-      "claim": "Stern students are generally not permitted to count Stern coursework toward more than one requirement",
-      "bulletinSection": "Double-Counting of Stern Coursework",
-      "sourceLine": 201
-    },
-    {
       "path": "maxCreditsPerSemester",
       "claim": "Permission required to take more than 18 credits in a given semester",
       "bulletinSection": "General Stern Undergraduate Academic Standards",
@@ -103,18 +79,6 @@
       "sourceLine": 298
     },
     {
-      "path": "totalCreditsRequired",
-      "claim": "the Stern curriculum only requires that students earn a minimum of 128 credits to meet most graduation requirements",
-      "bulletinSection": "Semester Course Loads and Credit Limits",
-      "sourceLine": 300
-    },
-    {
-      "path": "overallGpaMin",
-      "claim": "A minimum 2.0 cumulative GPA is required to graduate",
-      "bulletinSection": "Academic Standards / Standing",
-      "sourceLine": 310
-    },
-    {
       "path": "passFail.gradePassEquivalent",
       "claim": "The Registrar automatically converts any letter grades 'A' through 'D' to 'P' for those who have elected to pass/fail the course; D is the lowest letter that converts to P",
       "bulletinSection": "Pass/Fail Important Notes",
@@ -125,12 +89,6 @@
       "claim": "Grade of F: 4 grade points; 0 credits earned (P/F-elected F counts in GPA). IBEX failing grades factor into a student's grade point average.",
       "bulletinSection": "Pass/Fail Grading / IBEX",
       "sourceLine": 420
-    },
-    {
-      "path": "<unprovenanced-at-v1>",
-      "claim": "gradeThresholds.major ('C'), gradeThresholds.concentration ('C'), goodStandingReturnThreshold (0.67), maxCourseRepeats (2), and advisingContact are NOT explicitly stated in this academic-policies bulletin. The C grade appears in transfer-credit context (lines 271/281) but not as a per-major degree-counting floor. These values are inherited from CAS-style defaults pending a Stern-specific source.",
-      "bulletinSection": "(none)",
-      "sourceLine": null
     }
   ],
   "schoolId": "stern",
