@@ -20,6 +20,7 @@ import {
     perSemesterCeilingFor,
     schoolDisplayName,
 } from "../../data/schoolDefaults.js";
+import { resolveSpsDivision } from "../../dpr/index.js";
 
 export const getCreditCapsTool = buildTool({
     name: "get_credit_caps",
@@ -66,6 +67,29 @@ export const getCreditCapsTool = buildTool({
         const perSemesterCeiling = cfg?.maxCreditsPerSemester ?? perSemesterCeilingFor(student.homeSchool);
         const overloadRequirements = cfg?.overloadRequirements ?? [];
         const creditCaps = cfg?.creditCaps ?? [];
+        // SPS spans divisions with different advanced-standing caps (64/80/30).
+        // When a DPR is loaded we resolve the student's division; otherwise the
+        // three scoped caps are shown as general policy (see summarizeResult).
+        type AdvResolution =
+            | { status: "resolved"; cap: number; appliesTo: string; matchedLabel: string }
+            | { status: "needs_clarification"; options: ReadonlyArray<{ label: string; cap: number }> };
+        let advancedStandingResolution: AdvResolution | null = null;
+        if (student.homeSchool === "sps" && session.degreeProgressReport) {
+            const verdict = resolveSpsDivision(session.degreeProgressReport);
+            if (verdict.confidence === "high") {
+                const matched = creditCaps.find(
+                    (c) => c.type === "advanced_standing" && c.maxCredits === verdict.advancedStandingCap,
+                );
+                advancedStandingResolution = {
+                    status: "resolved",
+                    cap: verdict.advancedStandingCap,
+                    appliesTo: matched?.appliesTo ?? "",
+                    matchedLabel: verdict.matchedLabel,
+                };
+            } else {
+                advancedStandingResolution = { status: "needs_clarification", options: verdict.options };
+            }
+        }
         const transferCreditLimits = cfg?.transferCreditLimits ?? null;
 
         // The degree total is program-dependent, so it comes ONLY from the
@@ -86,6 +110,7 @@ export const getCreditCapsTool = buildTool({
             visaStatus: string;
             overloadRequirements: typeof overloadRequirements;
             crossSchoolCaps: typeof creditCaps;
+            advancedStandingResolution: AdvResolution | null;
             transferCreditLimits: typeof transferCreditLimits;
             totalCreditsRequired: number | null;
             overallGpaMin: number | null;
@@ -104,6 +129,7 @@ export const getCreditCapsTool = buildTool({
             visaStatus: student.visaStatus ?? "domestic",
             overloadRequirements,
             crossSchoolCaps: creditCaps,
+            advancedStandingResolution,
             transferCreditLimits,
             totalCreditsRequired,
             overallGpaMin,
@@ -147,7 +173,9 @@ export const getCreditCapsTool = buildTool({
                 lines.push(`Overload requirement: ${JSON.stringify(req)}`);
             }
         }
+        const advRes = out.advancedStandingResolution;
         for (const cap of out.crossSchoolCaps) {
+            if (cap.type === "advanced_standing" && advRes) continue; // rendered below
             // Surface the division/degree scope when a cap is sub-unit-specific
             // (e.g. SPS Schack/Tisch vs DAUS) — there's no division signal to
             // auto-select one, so the student must see which variant applies.
@@ -156,6 +184,11 @@ export const getCreditCapsTool = buildTool({
                 ? `max ${cap.maxCredits} credits`
                 : (cap.maxCourses !== undefined ? `max ${cap.maxCourses} courses` : "see policy");
             lines.push(`Credit cap (${cap.type}): ${ceiling}${scope}`);
+        }
+        if (advRes?.status === "resolved") {
+            lines.push(
+                `Advanced-standing cap: ${advRes.cap} credits — ${advRes.appliesTo} (from your DPR program: ${advRes.matchedLabel})`,
+            );
         }
         if (out.transferCreditLimits) {
             lines.push(`Transfer credit limits: ${JSON.stringify(out.transferCreditLimits)}`);
