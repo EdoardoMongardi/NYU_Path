@@ -30,11 +30,6 @@
       "label": "Post-matriculation transfer credit (max 8/semester on leave, 8/summer, 20 career)"
     },
     {
-      "type": "online",
-      "maxCredits": 24,
-      "label": "Online course credits (inferred CAS default; NYUAD bulletin silent)"
-    },
-    {
       "type": "advanced_standing",
       "maxCredits": 0,
       "label": "NYUAD awards no AP/IB/exam advanced-standing credit"
@@ -64,19 +59,13 @@
       "J-Term and summer courses may not be taken P/F"
     ]
   },
-  "spsPolicy": {
-    "allowed": false
-  },
   "transferCreditLimits": {
-    "firstYearMaxTotal": 0,
     "transferStudentMaxTotal": 20,
     "perSemesterMax": 8,
     "perSummerMax": 8,
     "note": "Transfer credit is awarded only for coursework taken AFTER matriculation at NYUAD; no transfer credit for pre-matriculation or high-school work, and none for AP/IB/A-Level exams. Up to 8 credits per semester while on approved leave and up to 8 credits per summer, to a career total of no more than 20. firstYearMaxTotal=0 reflects the no-pre-matriculation rule (inferred framing of the CAS first-year field)."
   },
-  "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
-  "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
     {
       "condition": "first_year_second_semester",
@@ -98,24 +87,5 @@
     }
   ],
   "goodStandingReturnThreshold": 0.75,
-  "maxCourseRepeats": 2,
-  "sharedPrograms": [],
-  "programExclusions": [],
-  "advisingContact": {
-    "name": "NYUAD Academic Resource Center (ARC)",
-    "email": "nyuad.arc@nyu.edu",
-    "url": "https://students.nyuad.nyu.edu/academics/registration/"
-  },
-  "_inferredFields": [
-    "creditCaps[type=online]",
-    "doubleCounting.defaultMajorToMajor",
-    "doubleCounting.defaultMajorToMinor",
-    "doubleCounting.defaultMinorToMinor",
-    "doubleCounting.overrideByProgram",
-    "transferCreditLimits.firstYearMaxTotal",
-    "f1FullTimeMinCredits",
-    "spsPolicy",
-    "sharedPrograms",
-    "programExclusions"
-  ]
+  "maxCourseRepeats": 2
 }
