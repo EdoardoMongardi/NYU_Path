@@ -1,10 +1,7 @@
 // Engine barrel export
 export { calculateStanding, computeSemesterGPA } from "./audit/academicStanding.js";
-export { PrereqGraph } from "./graph/prereqGraph.js";
-export { EquivalenceResolver } from "./equivalence/equivalenceResolver.js";
 export { loadCourses, loadPrereqs, loadSchoolConfig } from "./dataLoader.js";
 export { canonicalizeCourseId, canonicalizeCourseIdSet } from "./courseId.js";
-export { resolveExamCredit, EXAM_GENERAL_RULES } from "./data/examEquivalencies.js";
 // Phase E (de-CAS) — shared NYU-undergrad registration defaults + school names.
 export {
     DEFAULT_PER_SEMESTER_CEILING,
@@ -13,9 +10,6 @@ export {
     schoolDisplayName,
     SCHOOL_DISPLAY_NAMES,
 } from "./data/schoolDefaults.js";
-
-// Planner — graduation-risk detector (the remaining authored helper).
-export { detectGraduationRisks } from "./planner/graduationRisk.js";
 
 // Phase 1: NYU API Client
 export {
@@ -90,7 +84,6 @@ export {
     askClarification,
     extractClaimNumbers,
     RecordingLLMClient,
-    RecorderLLMClient,
     OpenAIEngineClient,
     AnthropicEngineClient,
     createPrimaryClient,

@@ -2,14 +2,10 @@
 // Course-ID canonicalization (the "CS 101 == CS 0101" fix)
 // ============================================================
 // Proves that the zero-padded and unpadded forms of the same course are
-// treated as equal — both by the pure helper and end-to-end through the
-// prereq graph (a padded prereq is satisfied by the student's unpadded
-// completion, which previously failed silently).
+// treated as equal by the pure helper.
 
 import { describe, expect, it } from "vitest";
 import { canonicalizeCourseId } from "../../src/courseId.js";
-import { PrereqGraph } from "../../src/graph/prereqGraph.js";
-import type { Prerequisite } from "@nyupath/shared";
 
 describe("canonicalizeCourseId", () => {
     it("strips leading zeros from the course number", () => {
@@ -29,23 +25,5 @@ describe("canonicalizeCourseId", () => {
     });
     it("preserves a letter suffix while stripping the leading zero", () => {
         expect(canonicalizeCourseId("CHIN-SHU 0101S")).toBe("CHIN-SHU 101S");
-    });
-});
-
-describe("PrereqGraph — padded/unpadded forms match (the live fix)", () => {
-    const prereqs: Prerequisite[] = [
-        // X's prereq is stored zero-padded; the student completed the unpadded form.
-        { course: "ADV-UA 200", prereqGroups: [{ type: "AND", courses: ["MATH-UA 0009"] }], coreqs: [] },
-    ] as unknown as Prerequisite[];
-    const graph = new PrereqGraph(prereqs);
-
-    it("a padded prereq is satisfied by the student's unpadded completion", () => {
-        expect(graph.hasPrerequisitesMet("ADV-UA 200", new Set(["MATH-UA 9"]))).toBe(true);
-    });
-    it("and vice-versa (unpadded query id, padded completion)", () => {
-        expect(graph.hasPrerequisitesMet("ADV-UA 200", new Set(["MATH-UA 0009"]))).toBe(true);
-    });
-    it("still correctly reports an unmet prereq", () => {
-        expect(graph.hasPrerequisitesMet("ADV-UA 200", new Set(["MATH-UA 8"]))).toBe(false);
     });
 });
