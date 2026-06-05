@@ -7,8 +7,7 @@
  * The map MUST stay in lock-step with `packages/engine/src/agent/registry.ts`
  * — when a new tool ships, add an entry here. The unit test
  * `apps/web/tests/agentStatusVerbs.test.ts` enforces parity. If a tool name
- * is somehow not in this map (e.g. a `template:*` pseudo-tool that surfaces
- * template-match events), getActiveVerb / getPastVerb fall back to a
+ * is somehow not in this map, getActiveVerb / getPastVerb fall back to a
  * generic verb so the UI never crashes.
  */
 export type ToolVerb = { active: string; past: string };
@@ -40,18 +39,15 @@ export const TOOL_VERBS: Record<string, ToolVerb> = {
     confirm_section_combination:{ active: "Applying the section combination", past: "Applied the section combination" },
 };
 
-const TEMPLATE_VERB: ToolVerb = { active: "Checking a known answer", past: "Matched a known answer" };
 const FALLBACK_VERB: ToolVerb = { active: "Working", past: "Used a tool" };
 
 export const IDLE_VERB = "Thinking";
 
 export function getActiveVerb(toolName: string): string {
-    if (toolName.startsWith("template:")) return TEMPLATE_VERB.active;
     return TOOL_VERBS[toolName]?.active ?? FALLBACK_VERB.active;
 }
 
 export function getPastVerb(toolName: string): string {
-    if (toolName.startsWith("template:")) return TEMPLATE_VERB.past;
     return TOOL_VERBS[toolName]?.past ?? FALLBACK_VERB.past;
 }
 
@@ -91,10 +87,8 @@ export const TOOL_THOUGHT_SENTENCES: Record<string, string> = {
     confirm_section_combination:"Applying the chosen section combination — pinning the CRNs into your schedule.",
 };
 
-const TEMPLATE_THOUGHT = "This looks like a question I have a verified canned answer for. Let me grab that.";
 const FALLBACK_THOUGHT = "Let me look into that.";
 
 export function getThoughtSentence(toolName: string): string {
-    if (toolName.startsWith("template:")) return TEMPLATE_THOUGHT;
     return TOOL_THOUGHT_SENTENCES[toolName] ?? FALLBACK_THOUGHT;
 }

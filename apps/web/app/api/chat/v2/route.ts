@@ -3,10 +3,9 @@
 // ============================================================
 // New endpoint that drives the Phase 5 agent loop (`runAgentTurn`)
 // against the production `OpenAIEngineClient`. Returns Server-Sent
-// Events: `template_match` (when preLoopDispatch fires), per-tool
-// `tool_invocation_start` / `tool_invocation_done`, `validator_block`
-// when the response validator blocks the reply, and finally
-// `token` + `done`.
+// Events: per-tool `tool_invocation_start` / `tool_invocation_done`,
+// `validator_block` when the response validator blocks the reply, and
+// finally `token` + `done`.
 //
 // NOTE: Phase 6.1 ships a "block-streaming" v2 — events are emitted
 // at coherent boundaries (tool start/done, final reply) rather than

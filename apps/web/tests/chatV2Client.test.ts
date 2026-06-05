@@ -64,9 +64,8 @@ describe("streamChatV2 (Phase 6.5 P-1)", () => {
         expect(events[0]).toMatchObject({ kind: "token", text: "split" });
     });
 
-    it("yields all 8 event kinds end-to-end", async () => {
+    it("yields all 7 event kinds end-to-end", async () => {
         const all: ChatV2Event[] = [
-            { kind: "template_match", templateId: "t", body: "b", source: "s" },
             { kind: "tool_invocation_start", toolName: "x", args: {} },
             { kind: "tool_invocation_done", toolName: "x", summary: "ok" },
             { kind: "thinking", text: "let me think" },

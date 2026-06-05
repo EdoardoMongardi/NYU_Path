@@ -11,7 +11,6 @@ import type { ForwardSchedule } from "@nyupath/shared";
 import type { ForwardMaterializationPayload } from "./chatV2Client";
 
 export type SseEvent =
-    | { kind: "template_match"; templateId: string; body: string; source: string }
     | { kind: "tool_invocation_start"; toolName: string; args: Record<string, unknown> }
     | { kind: "tool_invocation_done"; toolName: string; summary?: string; error?: string }
     | { kind: "token"; text: string }
