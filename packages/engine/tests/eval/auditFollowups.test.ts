@@ -1,23 +1,17 @@
 // ============================================================
-// Audit Follow-ups — regressions for P1 + §11.0.2 resolveFact
+// Audit Follow-ups — regressions for P1 + canonicalSchoolId
 // ============================================================
 // Adds explicit coverage for the issues flagged in the Phase 1 audit:
 //   - P1: credit-completion-rate standing is per-school — the completion-rate
 //         warning is gated on a school's completionRatePolicy (CAS publishes
 //         one; the null-config path does not), not a universal CAS default
-//   - §11.0.2: resolveFact applies the school > program > department >
-//              course_catalog precedence rule
 //   - 4.4: canonicalSchoolId normalizes "CAS" / "cas" / " CAS " uniformly
 // ============================================================
 
 import { describe, it, expect } from "vitest";
 import { canonicalSchoolId } from "@nyupath/shared";
 import { calculateStanding } from "../../src/audit/academicStanding.js";
-import {
-    loadSchoolConfig,
-    resolveFact,
-    type FactCandidate,
-} from "../../src/dataLoader.js";
+import { loadSchoolConfig } from "../../src/dataLoader.js";
 
 describe("P1 — calculateStanding: completion-rate standing is per-school", () => {
     const casConfig = loadSchoolConfig("cas");
@@ -73,56 +67,6 @@ describe("P1 — calculateStanding: completion-rate standing is per-school", () 
         expect(calculateStanding(courses, 2, null, 3.0).level).toBe("academic_concern");
         // Floor 2.0 → 2.5 is above → good standing.
         expect(calculateStanding(courses, 2, null, 2.0).level).toBe("good_standing");
-    });
-});
-
-describe("§11.0.2 — resolveFact precedence rule", () => {
-    it("returns the highest-authority defined value (school > program > department > course_catalog)", () => {
-        const candidates: FactCandidate<number>[] = [
-            { layer: "course_catalog", value: 4 },
-            { layer: "department", value: 5 },
-            { layer: "program", value: 6 },
-            { layer: "school", value: 7 },
-        ];
-        const r = resolveFact(candidates);
-        expect(r.value).toBe(7);
-        expect(r.winner).toBe("school");
-        // Other defined layers are recorded for audit
-        expect(r.overridden.map(o => o.layer)).toEqual(["program", "department", "course_catalog"]);
-    });
-
-    it("falls through layers when higher-authority layers don't define the fact", () => {
-        const candidates: FactCandidate<string>[] = [
-            { layer: "school", value: undefined },
-            { layer: "program", value: undefined },
-            { layer: "department", value: "dept-default" },
-            { layer: "course_catalog", value: "catalog-baseline" },
-        ];
-        const r = resolveFact(candidates);
-        expect(r.value).toBe("dept-default");
-        expect(r.winner).toBe("department");
-        expect(r.overridden).toHaveLength(1);
-        expect(r.overridden[0]!.layer).toBe("course_catalog");
-    });
-
-    it("returns undefined when no layer defines the fact", () => {
-        const r = resolveFact<number>([
-            { layer: "school", value: undefined },
-            { layer: "program", value: undefined },
-        ]);
-        expect(r.value).toBeUndefined();
-        expect(r.winner).toBeUndefined();
-        expect(r.overridden).toEqual([]);
-    });
-
-    it("preserves source paths in the winner and overridden entries (for audit logging)", () => {
-        const r = resolveFact<number>([
-            { layer: "program", value: 10, source: "data/programs/cas/foo.json" },
-            { layer: "school", value: 20, source: "data/schools/cas.json" },
-        ]);
-        expect(r.value).toBe(20);
-        expect(r.source).toBe("data/schools/cas.json");
-        expect(r.overridden[0]!.source).toBe("data/programs/cas/foo.json");
     });
 });
 

@@ -31,19 +31,6 @@ export {
     type Meta,
 } from "./provenance/schema.js";
 
-// Phase 0: Catalog-year pinning loader
-export {
-    resolveProgramFile,
-    applicableCatalogYear,
-    type ResolveResult,
-} from "./data/catalogYearLoader.js";
-
-// Phase 0: Departments stub (reserved precedence slot)
-export {
-    loadDepartmentConfig,
-    type DepartmentConfig,
-} from "./data/departmentLoader.js";
-
 // Phase 6 WS4: observability
 export {
     InMemoryFallbackSink,
