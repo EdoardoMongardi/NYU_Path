@@ -25,7 +25,8 @@ import {
 import type { GraduationPathValidatorArgs } from "./graduationPathValidator.js";
 import { hashDprCourseHistory } from "./reconcile.js";
 import type { SolverInput } from "./types.js";
-import { loadOffCatalogCredits } from "../../dataLoader.js";
+import { loadOffCatalogCredits, loadOfferings } from "../../dataLoader.js";
+import type { ConfidenceTier } from "@nyupath/shared";
 import {
     DEFAULT_CREDIT_TARGET_PER_SEMESTER,
     DEFAULT_DOMESTIC_PARTTIME_FLOOR,
@@ -45,6 +46,23 @@ function getOffCatalogCredits(): Map<string, { title: string; credits: number }>
         }
     }
     return OFF_CATALOG_CACHE;
+}
+
+// Module-cached offerings map (Task 1.8 / PLAN-1). Read once per process;
+// a missing file degrades to empty so the absence of courses-offerings.json
+// can't break planning (terms-offered guard is silently skipped, same as
+// before this fix).
+type Season = "fall" | "spring" | "summer" | "january";
+let OFFERINGS_CACHE: Map<string, { termsOffered: Season[]; confidence: ConfidenceTier }> | null = null;
+function getOfferings(): Map<string, { termsOffered: Season[]; confidence: ConfidenceTier }> {
+    if (!OFFERINGS_CACHE) {
+        try {
+            OFFERINGS_CACHE = loadOfferings();
+        } catch {
+            OFFERINGS_CACHE = new Map();
+        }
+    }
+    return OFFERINGS_CACHE;
 }
 
 // ---------------------------------------------------------------------------
@@ -199,8 +217,16 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
         majorGpaFloor: null,
         unmetRequirements,
         prereqs,
-        offerings: new Map(),
-        offeringConfidence: new Map(),
+        ...(() => {
+            const offeringsData = getOfferings();
+            const offerings = new Map<string, Season[]>();
+            const offeringConfidence = new Map<string, ConfidenceTier>();
+            for (const [id, v] of offeringsData) {
+                offerings.set(id, v.termsOffered);
+                offeringConfidence.set(id, v.confidence);
+            }
+            return { offerings, offeringConfidence };
+        })(),
         courseCatalog,
         offCatalogCredits: getOffCatalogCredits(),
         dprCourseHistoryHash,
