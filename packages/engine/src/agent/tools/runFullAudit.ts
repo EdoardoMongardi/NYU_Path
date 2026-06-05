@@ -218,15 +218,20 @@ export const runFullAuditTool = buildTool({
             const completion = dpr.cumulative.creditsRequired && dpr.cumulative.creditsRequired > 0
                 ? Math.min(1, (dpr.cumulative.creditsUsed ?? 0) / dpr.cumulative.creditsRequired)
                 : 0;
-            const inGoodStanding = cumGpa >= 2.0;
+            // DPR-5: use the DPR's per-student required GPA floor as the
+            // good-standing threshold, not a hardcoded 2.0. Schools with
+            // higher floors (e.g. Tandon engineering programs) would
+            // incorrectly show "good standing" at 2.01 without this fix.
+            const floor = dpr.cumulative.cumulativeGpaRequired ?? 2.0;
+            const inGoodStanding = cumGpa >= floor;
             const standing: StandingResult = {
                 level: inGoodStanding ? "good_standing" : "academic_concern",
                 cumulativeGPA: cumGpa,
                 completionRate: completion,
                 inGoodStanding,
                 message: inGoodStanding
-                    ? `Cumulative GPA ${cumGpa.toFixed(3)} ≥ 2.0; you're in good standing per the DPR.`
-                    : `Cumulative GPA ${cumGpa.toFixed(3)} is below the 2.0 floor; the DPR flags academic concern.`,
+                    ? `Cumulative GPA ${cumGpa.toFixed(3)} ≥ ${floor.toFixed(2)} (your DPR-required floor); you're in good standing per the DPR.`
+                    : `Cumulative GPA ${cumGpa.toFixed(3)} is below the ${floor.toFixed(2)} floor (your DPR-required floor); the DPR flags academic concern.`,
                 warnings: [],
             };
             const unsatisfied = notSatisfiedRequirements(dpr.requirementGroups).map((req) => ({
