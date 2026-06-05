@@ -445,6 +445,10 @@ export interface SchoolConfig {
      * Phase 10 Stage 2 — moved out of getCreditCaps.ts magic constant.
      */
     f1FullTimeMinCredits?: number;
+    /** Target credits/semester used by the planner's pacing (per-school; default 16). */
+    creditTargetPerSemester?: number;
+    /** Domestic part-time floor credits/semester (per-school; default 8). */
+    domesticPartTimeFloor?: number;
     overloadRequirements?: OverloadRequirement[];
     /**
      * Per-semester minimum-cumulative-GPA tiers. When present, supersedes
@@ -480,6 +484,9 @@ export interface SchoolConfig {
 
 // ---- Student Profile ----
 
+/** Structural mirror of the engine's DPRAdvisorNotation (advisor waivers). */
+export interface AdvisorNotation { requestId?: string; note: string; advisor?: string; date?: string; }
+
 export interface CourseTaken {
     courseId: string;
     grade: string;
@@ -490,6 +497,10 @@ export interface CourseTaken {
     isOnline?: boolean;
     /** Grade mode: letter (default) or pass/fail [GEN-ACAD] §A3.5 */
     gradeMode?: "letter" | "pf";
+    /** True for DPR rows with type "IP" (enrolled, grade pending). Excluded from GPA. */
+    isInProgress?: boolean;
+    /** DPR repeat code (e.g. "RI" | "R") — drives repeat-grade replacement. */
+    repeatCode?: string;
 }
 
 export interface TransferCredit {
@@ -525,6 +536,8 @@ export interface StudentProfile {
     /** Student-specific flags for conditional exemptions */
     /** e.g. ["nonEnglishSecondary", "eslPathway", "bsBsProgram", "flExemptByExam"] */
     flags?: string[];
+    /** Advisor waivers/notations carried from the DPR (materially change requirements). */
+    advisorNotations?: AdvisorNotation[];
     /** Visa status for enrollment rules: "f1" = full-time required, "domestic" = advisory only */
     visaStatus?: "f1" | "domestic" | "other";
     /**
