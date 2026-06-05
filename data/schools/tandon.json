@@ -17,12 +17,6 @@
   ],
   "_provenance": [
     {
-      "path": "residency.minCredits",
-      "claim": "students must complete a minimum of at least half of the required credits at Tandon in approved Tandon coursework (half of 128 = 64)",
-      "bulletinSection": "Residency Requirement",
-      "sourceLine": 111
-    },
-    {
       "path": "residency.suffix",
       "claim": "Tandon course IDs use the -UY suffix, observed in CP-UY internship designation and MA-UY math course IDs in this bulletin (e.g., MA-UY 914, MA-UY 1024). The Residency Requirement (line 111) defines residency as 'approved Tandon coursework' without naming the suffix.",
       "bulletinSection": "Internships / Mathematics Diagnostic",
@@ -39,18 +33,6 @@
       "claim": "In regards to Tandon minors, one-half of the coursework must be completed at the NYU Tandon School of Engineering",
       "bulletinSection": "Residency Requirement",
       "sourceLine": 111
-    },
-    {
-      "path": "creditCaps[type=non_home_school]",
-      "claim": "Students may take a total of 4 courses or 16 credits in other divisions",
-      "bulletinSection": "Coursework in Other Divisions of NYU and Outside Institutions",
-      "sourceLine": 155
-    },
-    {
-      "path": "creditCaps[type=non_home_school].excludes",
-      "claim": "first cross-school minor, study abroad coursework, and courses required for a major at Tandon do not count towards this 4 course/16 credit limit; nor do test credits and prior transfer credits",
-      "bulletinSection": "Coursework in Other Divisions of NYU and Outside Institutions",
-      "sourceLine": 165
     },
     {
       "path": "creditCaps[type=transfer].maxCredits",
@@ -89,28 +71,10 @@
       "sourceLine": 167
     },
     {
-      "path": "doubleCounting.note",
-      "claim": "some courses may be double counted towards both majors at the discretion of both academic departments",
-      "bulletinSection": "Second Major (Double Major)",
-      "sourceLine": 85
-    },
-    {
       "path": "transferCreditLimits.transferStudentMaxTotal",
       "claim": "maximum number of credits that can be granted is half of the degree (half of 128 = 64)",
       "bulletinSection": "Transfer Credits from other Undergraduate Institutions",
       "sourceLine": 123
-    },
-    {
-      "path": "<transfer-credit grade floor>",
-      "claim": "Undergraduate transfer credit is not given for any course in which a grade less than C or equivalent has been earned. Note: this is a transfer-credit floor, not a per-major grade threshold; gradeThresholds.major is intentionally omitted from this config until a major-specific bulletin source is identified.",
-      "bulletinSection": "Transfer Credits from other Undergraduate Institutions",
-      "sourceLine": 123
-    },
-    {
-      "path": "overallGpaMin",
-      "claim": "undergraduate students must maintain term and cumulative GPAs of 2.0 or greater",
-      "bulletinSection": "Academic Standing and Probation",
-      "sourceLine": 281
     },
     {
       "path": "gpaTierTable",
@@ -135,18 +99,6 @@
       "claim": "Students placed on academic probation are limited to a maximum of 18 credits per semester while on probation, unless otherwise approved by their adviser",
       "bulletinSection": "Academic Probation",
       "sourceLine": 326
-    },
-    {
-      "path": "programExclusions[duplicate_major_other_school]",
-      "claim": "Tandon students may not declare a second major at another NYU School if a similar major, in name and content, is offered at Tandon (e.g., CS, Math)",
-      "bulletinSection": "Second Major (Double Major)",
-      "sourceLine": 91
-    },
-    {
-      "path": "<unprovenanced-at-v1>",
-      "claim": "totalCreditsRequired (128), transferCreditLimits.firstYearMaxTotal (32), goodStandingReturnThreshold (0.67), maxCourseRepeats (2), and advisingContact are NOT explicitly stated in this academic-policies bulletin. They are inherited from CAS-style defaults pending a per-major or NYU-wide bulletin source.",
-      "bulletinSection": "(none)",
-      "sourceLine": null
     }
   ],
   "schoolId": "tandon",
