@@ -82,3 +82,35 @@ describe("get_credit_caps resolves the SPS division from the DPR", () => {
         expect(summary).not.toContain("30 credits");
     });
 });
+
+describe("get_credit_caps SPS division — clarification + unchanged paths", () => {
+    it("career-only DPR → summary asks the student to confirm their division (lists all three)", async () => {
+        const dpr = {
+            programs: [{ programType: "Undergraduate Career", label: "UC-Sch of Prof Studies", requirementTerm: "Fall 2024", requirementStatus: "not_satisfied" }],
+            cumulative: { creditsRequired: 128 },
+        } as unknown as DegreeProgressReport;
+        const ctx = {
+            signal: new AbortController().signal,
+            session: {
+                student: { id: "t", homeSchool: "sps", catalogYear: "2025-2026", declaredPrograms: [], coursesTaken: [] },
+                schoolConfig: sps,
+                degreeProgressReport: dpr,
+            },
+        } as unknown as ToolUseContext;
+        const out = await getCreditCapsTool.call({}, ctx);
+        const summary = getCreditCapsTool.summarizeResult!(out as never);
+        const lower = summary.toLowerCase();
+        expect(lower).toContain("confirm");
+        expect(summary).toContain("64");
+        expect(summary).toContain("80");
+        expect(summary).toContain("30");
+    });
+
+    it("no DPR → still shows all three scoped caps (general policy, status quo)", async () => {
+        const out = await getCreditCapsTool.call({}, spsCtx()); // spsCtx() defined earlier in this file (no DPR)
+        const summary = getCreditCapsTool.summarizeResult!(out as never);
+        expect(summary).toContain("80");
+        expect(summary.toLowerCase()).toContain("associate");
+        expect(summary.toLowerCase()).not.toContain("confirm");
+    });
+});

@@ -189,6 +189,11 @@ export const getCreditCapsTool = buildTool({
             lines.push(
                 `Advanced-standing cap: ${advRes.cap} credits — ${advRes.appliesTo} (from your DPR program: ${advRes.matchedLabel})`,
             );
+        } else if (advRes?.status === "needs_clarification") {
+            lines.push("Advanced-standing cap depends on your SPS division — confirm which applies:");
+            for (const o of advRes.options) {
+                lines.push(`  - ${o.label}: ${o.cap} credits`);
+            }
         }
         if (out.transferCreditLimits) {
             lines.push(`Transfer credit limits: ${JSON.stringify(out.transferCreditLimits)}`);
