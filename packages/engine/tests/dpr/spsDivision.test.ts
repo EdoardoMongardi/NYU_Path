@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveSpsDivision } from "../../src/dpr/spsDivision.js";
+import { resolveSpsDivision, SPS_DIVISION_OPTIONS } from "../../src/dpr/spsDivision.js";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
 
 function dpr(
@@ -69,5 +69,32 @@ describe("resolveSpsDivision — high confidence", () => {
     it("supplies the degree level from creditsRequired when the label has no degree token", () => {
         const r = resolveSpsDivision(dpr([{ programType: "Major", label: "Real Estate" }], 128));
         expect(r.confidence === "high" && r.advancedStandingCap).toBe(64);
+    });
+});
+
+describe("resolveSpsDivision — low confidence (ask the student)", () => {
+    it("career row only (no Major) → low, returns the three options", () => {
+        const r = resolveSpsDivision(dpr([{ programType: "Undergraduate Career", label: "UC-Sch of Prof Studies" }], 128));
+        expect(r.confidence).toBe("low");
+        if (r.confidence !== "low") return;
+        expect(r.options).toEqual(SPS_DIVISION_OPTIONS);
+    });
+
+    it("Major label with no degree token and no creditsRequired → low", () => {
+        const r = resolveSpsDivision(dpr([{ programType: "Major", label: "Real Estate" }], null));
+        expect(r.confidence).toBe("low");
+    });
+
+    it("two Majors in different divisions → low", () => {
+        const r = resolveSpsDivision(dpr([
+            { programType: "Major", label: "Real Estate (BS)" },
+            { programType: "Major", label: "Applied General Studies (BA)" },
+        ], 128));
+        expect(r.confidence).toBe("low");
+    });
+
+    it("label says BS but creditsRequired says associate → conflict dropped → low", () => {
+        const r = resolveSpsDivision(dpr([{ programType: "Major", label: "Real Estate (BS)" }], 60));
+        expect(r.confidence).toBe("low");
     });
 });
