@@ -247,14 +247,29 @@ export function calculateStanding(
 
     // Additional warning when completion rate is below the school's
     // good-standing pace threshold. Only emitted for schools that publish a
-    // completion-rate policy (per-school; no universal default).
+    // completion-rate policy (per-school; no universal default). The computed
+    // rate is cumulative; the message phrases the threshold per the school's
+    // measurement basis (cumulative / annual / term) without implying a
+    // per-period computation we did not perform.
     if (
         completionPolicy
         && completionRate < completionPolicy.goodStandingThreshold
         && level !== "dismissed"
     ) {
         const pct = Math.round(completionPolicy.goodStandingThreshold * 100);
-        warnings.push(`Credit completion rate is ${(completionRate * 100).toFixed(0)}% — below the ${pct}% threshold required for good academic standing.`);
+        const ratePct = (completionRate * 100).toFixed(0);
+        const school = schoolConfig?.name ?? "the school";
+        let warning: string;
+        if (completionPolicy.basis === "annual") {
+            warning = `Cumulative credit completion rate is ${ratePct}%; ${school} requires completing at least ${pct}% of attempted credits each academic year for good academic standing — review your annual pace with an advisor.`;
+        } else if (completionPolicy.basis === "term") {
+            warning = `Cumulative credit completion rate is ${ratePct}%; ${school} requires completing at least ${pct}% of attempted credits each term for good academic standing — review your term-by-term pace with an advisor.`;
+        } else if (completionPolicy.basis === "cumulative") {
+            warning = `Credit completion rate is ${ratePct}% — below the ${pct}% of cumulative attempted credits required for good academic standing.`;
+        } else {
+            warning = `Credit completion rate is ${ratePct}% — below the ${pct}% threshold required for good academic standing.`;
+        }
+        warnings.push(warning);
     }
 
     return {

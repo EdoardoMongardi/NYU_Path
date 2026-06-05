@@ -54,6 +54,7 @@ const creditCapSchema = z.object({
     maxPerDepartment: z.number().optional(),
     schoolId: z.string().optional(),
     subtype: z.string().optional(),
+    appliesTo: z.string().optional(),
     label: z.string().optional(),
     excludes: z.array(z.string()).optional(),
     includesInternship: z.boolean().optional(),
@@ -136,12 +137,14 @@ const completionRatePolicySchema = z.object({
     goodStandingThreshold: z.number().min(0).max(1),
     dismissalThreshold: z.number().min(0).max(1).optional(),
     dismissalAfterSemesters: z.number().int().min(0).optional(),
+    basis: z.enum(["cumulative", "annual", "term"]).optional(),
 }).passthrough();
 
 export const schoolConfigBodySchema = z.object({
     schoolId: z.string(),
     name: z.string(),
-    degreeType: z.string().nullable(),
+    // Step 8e — degreeType removed (zero readers; lossy school-level scalar;
+    // the student's degree type lives in their DPR header).
     courseSuffix: z.array(z.string()),
     // Step 8e — overallGpaMin + doubleCounting removed (GPA floor → DPR; double-counting → DPR+RAG).
     residency: residencyConfigSchema,

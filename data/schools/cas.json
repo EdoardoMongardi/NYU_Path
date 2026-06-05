@@ -13,7 +13,6 @@
   },
   "schoolId": "cas",
   "name": "College of Arts and Science",
-  "degreeType": "BA",
   "courseSuffix": [
     "-UA"
   ],
@@ -96,7 +95,8 @@
   "completionRatePolicy": {
     "goodStandingThreshold": 0.75,
     "dismissalThreshold": 0.5,
-    "dismissalAfterSemesters": 2
+    "dismissalAfterSemesters": 2,
+    "basis": "cumulative"
   },
   "maxCourseRepeats": 2,
   "deansListThreshold": {

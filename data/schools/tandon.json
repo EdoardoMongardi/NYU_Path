@@ -12,7 +12,7 @@
     }
   },
   "_notes": [
-    "gradeThresholds field is intentionally OMITTED. The Tandon academic-policies bulletin only states a C floor for transfer credit (line 123), not for major-grade counting. Until a Tandon major-specific bulletin or department source establishes a per-major grade floor, degreeAudit's resolveGradeThresholds() will fall through to the CAS defaults (major≥C, core≥D). This is documented behavior, not a silent bug. Track for resolution before Tandon programs are authored.",
+    "gradeThresholds field is intentionally OMITTED. The Tandon academic-policies bulletin only states a C floor for transfer credit (line 123), not for major-grade counting. Until a Tandon major-specific bulletin or department source establishes a per-major grade floor, degreeAudit's resolveGradeThresholds() will fall through to the CAS defaults (major\u2265C, core\u2265D). This is documented behavior, not a silent bug. Track for resolution before Tandon programs are authored.",
     "residency.minCredits: 64 ASSUMES a 128-credit BS program (half = 64). The bulletin (line 111) defines residency as 'at least half of the required credits at Tandon', which for 131-credit Mechanical Engineering is 66 and for 134-credit ECE is 67. When the first non-128-credit Tandon program JSON is authored, replace this static field with a per-program override (or compute residency.minCredits = ceil(program.totalCreditsRequired / 2) at audit time)."
   ],
   "_provenance": [
@@ -121,7 +121,7 @@
     {
       "path": "finalProbationGpaFloor",
       "claim": "Any time a student's cumulative GPA falls below 1.5 they are placed on Final Probation regardless of how many credits they have completed.",
-      "bulletinSection": "Minimum Credits and Minimum GPA — footnote",
+      "bulletinSection": "Minimum Credits and Minimum GPA \u2014 footnote",
       "sourceLine": 303
     },
     {
@@ -151,7 +151,6 @@
   ],
   "schoolId": "tandon",
   "name": "Tandon School of Engineering",
-  "degreeType": "BS",
   "courseSuffix": [
     "-UY"
   ],
