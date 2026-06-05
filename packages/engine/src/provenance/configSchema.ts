@@ -40,7 +40,7 @@ const doubleCountPolicySchema = z.enum(["allow", "limit_1", "disallow"]);
 // ---- SchoolConfig body schema ----
 
 const residencyConfigSchema = z.object({
-    type: residencyTypeSchema,
+    type: residencyTypeSchema.optional(),
     suffix: z.string().optional(),
     finalCreditsInResidence: z.number().nullable().optional(),
     majorMinorResidencyPercent: z.number().optional(),
@@ -70,7 +70,7 @@ const passFailConfigSchema = z.object({
     countsForMinor: z.boolean().optional(),
     countsForGenEd: z.boolean().optional(),
     creditType: z.string().optional(),
-    canElect: z.boolean(),
+    canElect: z.boolean().optional(),
     autoExcludedFromLimit: z.array(z.string()).optional(),
     excludedCourseTypes: z.array(z.string()).optional(),
     gradePassEquivalent: z.string().optional(),
@@ -132,37 +132,17 @@ const deansListThresholdSchema = z.object({
     note: z.string().optional(),
 }).passthrough();
 
-const advisingContactSchema = z.object({
-    name: z.string(),
-    email: z.string().optional(),
-    url: z.string().optional(),
-}).passthrough();
-
-const lifecycleConfigSchema = z.object({
-    type: z.string(),
-    expectedTransitionSemesters: z.number().optional(),
-    maxSemesters: z.number().optional(),
-    transitionTarget: z.string().optional(),
-    transitionRequires: z.array(z.string()).optional(),
-    warningThreshold: z.number().optional(),
-    warningMessage: z.string().optional(),
-    dismissalTrigger: z.string().optional(),
-    dualAuditMode: z.boolean().optional(),
-}).passthrough();
-
 export const schoolConfigBodySchema = z.object({
     schoolId: z.string(),
     name: z.string(),
     degreeType: z.string().nullable(),
     courseSuffix: z.array(z.string()),
     // Step 8e — overallGpaMin + doubleCounting removed (GPA floor → DPR; double-counting → DPR+RAG).
-    auditMode: z.enum(["full", "advising_only"]).optional(),
     residency: residencyConfigSchema,
     creditCaps: z.array(creditCapSchema).optional(),
     passFail: passFailConfigSchema.optional(),
     spsPolicy: spsPolicySchema.optional(),
     transferCreditLimits: transferCreditLimitsSchema.optional(),
-    acceptsTransferCredit: z.boolean(),
     maxCreditsPerSemester: z.number().optional(),
     overloadRequirements: z.array(overloadRequirementSchema).optional(),
     gpaTierTable: z.array(z.object({
@@ -174,13 +154,10 @@ export const schoolConfigBodySchema = z.object({
     finalProbationGpaFloor: z.number().optional(),
     goodStandingReturnThreshold: z.number().optional(),
     maxCourseRepeats: z.number().optional(),
-    sharedPrograms: z.array(z.string()).optional(),
-    programExclusions: z.array(z.unknown()).optional(),
     deansListThreshold: deansListThresholdSchema.optional(),
-    supportedProgramTypes: z.array(programTypeSchema).optional(),
-    lifecycle: lifecycleConfigSchema.optional(),
-    advisingContact: advisingContactSchema.optional(),
-    milestones: z.array(z.unknown()).optional(),
+    // Step 8e — dead fields removed: auditMode, acceptsTransferCredit,
+    // sharedPrograms, programExclusions, supportedProgramTypes, lifecycle,
+    // advisingContact, milestones (zero live readers).
 }).passthrough();
 
 // ---- Program body schema ----

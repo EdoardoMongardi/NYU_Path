@@ -46,7 +46,6 @@
     "perTermUnit": "academic_year",
     "countsForMajor": false,
     "countsForMinor": false,
-    "countsForGenEd": false,
     "excludedCourseTypes": [
       "liberal_arts_requirement",
       "historical_cultural_requirement",
@@ -65,18 +64,9 @@
       "Courses graded with P do not count toward the Dean's List 12-credit graded minimum."
     ]
   },
-  "spsPolicy": {
-    "allowed": true,
-    "allowedPrefixes": [],
-    "creditType": "elective_only",
-    "countsTowardResidency": false,
-    "countsAgainstNonHomeSchoolCap": false,
-    "excludedCourseTypes": []
-  },
   "transferCreditLimits": {
     "transferStudentMaxTotal": 64
   },
-  "acceptsTransferCredit": true,
   "maxCreditsPerSemester": 18,
   "f1FullTimeMinCredits": 12,
   "overloadRequirements": [
@@ -92,24 +82,5 @@
     "minCredits": 12,
     "per": "term",
     "note": "Requires 12+ credits in graded (A-F) courses that count toward the GPA; courses graded N, NR, W, or P do not count toward the 12-credit minimum."
-  },
-  "advisingContact": {
-    "name": "Gallatin Office of Academic Advising",
-    "url": "https://gallatin.nyu.edu/academics/advising.html"
-  },
-  "_inferredFields": [
-    "creditCaps.online",
-    "creditCaps.non_home_school",
-    "creditCaps.independent_study",
-    "gradeThresholds.core",
-    "gradeThresholds.major",
-    "gradeThresholds.minor",
-    "passFail.countsForGenEd",
-    "spsPolicy",
-    "doubleCounting.defaultMajorToMajor",
-    "doubleCounting.defaultMajorToMinor",
-    "doubleCounting.defaultMinorToMinor",
-    "doubleCounting.requiresDepartmentApproval"
-  ],
-  "auditMode": "advising_only"
+  }
 }

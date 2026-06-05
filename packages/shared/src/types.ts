@@ -193,7 +193,7 @@ export interface ProgramDeclaration {
 export type ResidencyType = "suffix_based" | "total_nyu_credits";
 
 export interface ResidencyConfig {
-    type: ResidencyType;
+    type?: ResidencyType;
     /** Course-id suffix that counts toward residency, e.g. "-UA" for CAS */
     suffix?: string;
     // Step 8e — residency minimum-credits moved to the DPR
@@ -263,7 +263,7 @@ export interface PassFailConfig {
     /** Restriction on what P credit may count for, e.g. "elective_only" */
     creditType?: string;
     /** Whether students may elect P/F at all (Tandon: false) */
-    canElect: boolean;
+    canElect?: boolean;
     /** Course categories auto-excluded from the P/F limit */
     autoExcludedFromLimit?: string[];
     /** Course categories blocked from P/F (e.g., nursing prereqs) */
@@ -369,25 +369,6 @@ export interface DeansListThreshold {
     note?: string;
 }
 
-export interface AdvisingContact {
-    name: string;
-    email?: string;
-    url?: string;
-}
-
-export interface LifecycleConfig {
-    /** "forced_exit" for Liberal Studies; future kinds for other lifecycles */
-    type: string;
-    expectedTransitionSemesters?: number;
-    maxSemesters?: number;
-    transitionTarget?: string;
-    transitionRequires?: string[];
-    warningThreshold?: number;
-    warningMessage?: string;
-    dismissalTrigger?: string;
-    /** Whether the engine should run a dual-audit against the target school */
-    dualAuditMode?: boolean;
-}
 
 export interface SchoolConfig {
     /** Stable identifier, e.g. "cas", "stern", "tandon" */
@@ -400,8 +381,6 @@ export interface SchoolConfig {
     // Step 8e — overallGpaMin removed: the GPA floor is per-student and comes
     // from the DPR (`dpr.cumulative.cumulativeGpaRequired`). doubleCounting
     // removed: double-counting is answered from the DPR + RAG (no authored rule).
-    /** "advising_only" disables hard rule enforcement (Gallatin) */
-    auditMode?: "full" | "advising_only";
     residency: ResidencyConfig;
     creditCaps?: CreditCap[];
     // Step 8e — gradeThresholds removed: "a C is required in major courses" is a
@@ -410,8 +389,6 @@ export interface SchoolConfig {
     passFail?: PassFailConfig;
     spsPolicy?: SpsPolicy;
     transferCreditLimits?: TransferCreditLimits;
-    /** Whether this school accepts inbound transfer credit */
-    acceptsTransferCredit: boolean;
     maxCreditsPerSemester?: number;
     /**
      * F-1 visa-status full-time minimum credits per semester. Sourced
@@ -448,15 +425,10 @@ export interface SchoolConfig {
      */
     goodStandingReturnThreshold?: number;
     maxCourseRepeats?: number;
-    /** School-level shared programs (e.g., CAS Core) */
-    sharedPrograms?: string[];
-    programExclusions?: unknown[];
     deansListThreshold?: DeansListThreshold;
-    /** Program kinds this school supports (e.g., Stern adds "concentration") */
-    supportedProgramTypes?: ProgramType[];
-    lifecycle?: LifecycleConfig;
-    advisingContact?: AdvisingContact;
-    milestones?: unknown[];
+    // Step 8e — dead fields removed (zero live readers; rule-engine/structural
+    // leftovers): sharedPrograms, programExclusions, supportedProgramTypes,
+    // lifecycle, advisingContact, milestones, auditMode, acceptsTransferCredit.
 }
 
 // ---- Student Profile ----
