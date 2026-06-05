@@ -76,7 +76,9 @@
       "note": "Permission of the department and approval of the Associate Dean for Student Affairs required; per-point fee above 18 credits. GPA threshold inherited from CAS default (Tisch bulletin states no numeric GPA)."
     }
   ],
-  "goodStandingReturnThreshold": 0.5,
+  "completionRatePolicy": {
+    "goodStandingThreshold": 0.5
+  },
   "deansListThreshold": {
     "minGpa": 3.65,
     "note": "GPA of 3.65 or higher for the academic year in at least 28 graded points; no Incompletes"

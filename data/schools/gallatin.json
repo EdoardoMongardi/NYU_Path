@@ -76,7 +76,9 @@
       "note": "To exceed 18 credits: at least a 3.0 GPA, no Incomplete or NR grades, and adviser approval. 19-20 credits by adviser approval on the Plan of Study; more than 20 requires a Petition to the Office of Academic Advising."
     }
   ],
-  "goodStandingReturnThreshold": 0.76,
+  "completionRatePolicy": {
+    "goodStandingThreshold": 0.76
+  },
   "deansListThreshold": {
     "minGpa": 3.85,
     "minCredits": 12,

@@ -93,7 +93,11 @@
       "note": "Adviser approval/clearance required; no published overload GPA gate."
     }
   ],
-  "goodStandingReturnThreshold": 0.75,
+  "completionRatePolicy": {
+    "goodStandingThreshold": 0.75,
+    "dismissalThreshold": 0.5,
+    "dismissalAfterSemesters": 2
+  },
   "maxCourseRepeats": 2,
   "deansListThreshold": {
     "minGpa": 3.65,
