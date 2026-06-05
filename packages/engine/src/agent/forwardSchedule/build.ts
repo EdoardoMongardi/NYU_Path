@@ -412,7 +412,6 @@ function buildProgramRules(
     graduationTerm: string,
     degreeCreditMinimum: number,
 ): ProgramRulesBundle {
-    const schoolConfig = session.schoolConfig ?? null;
     const declaredPrograms = session.student?.declaredPrograms ?? [];
 
     // RC-3: classify requirement kinds structurally from the DPR group hierarchy.
@@ -441,14 +440,55 @@ function buildProgramRules(
         }
     }
 
-    // Residency from DPR cumulative or school config
-    const residencyMin = dpr.cumulative.residencyRequired ?? null;
+    // ---- Residency floor ----
+    // Prefer dpr.cumulative.residencyRequired (the primary residency row).
+    // Take the max over dpr.cumulative.residencyAll[*].required so a joint-major
+    // program-specific residency row isn't lost if it exceeds the main row.
+    let residencyMin: number | null = dpr.cumulative.residencyRequired ?? null;
+    if (dpr.cumulative.residencyAll) {
+        for (const row of dpr.cumulative.residencyAll) {
+            if (typeof row.required === "number") {
+                residencyMin = residencyMin === null ? row.required : Math.max(residencyMin, row.required);
+            }
+        }
+    }
+
+    // ---- Major credit floor ----
+    // Sum counter.required (units kind) across all leaves classified as
+    // "major-required" or "major-elective" by the Task-1.7 classifier.
+    //
+    // Choice: leaf-level sum rather than group-level counter. A DPR group
+    // counter (if present) would represent the group's total requirement, but
+    // the leaf-level sum is more composable across multi-track majors where
+    // different leaves map to different program tracks. For the CAS-Economics
+    // fixture (the only program-rules data we currently have), the leaf-level
+    // sum and the group counter agree. Document: revisit in Task 1.10 if
+    // integration tests reveal divergence for other programs.
+    let majorCreditMin: number | null = null;
+    for (const leaf of leaves) {
+        const kind = kindByRId.get(leaf.rId);
+        if (kind === "major-required" || kind === "major-elective") {
+            if (leaf.counter?.kind === "units") {
+                // Use the total required (not just "needed" remaining) so the
+                // floor reflects the full program requirement regardless of
+                // how many credits the student has already earned toward it.
+                const requiredCredits = leaf.counter.required;
+                if (requiredCredits > 0) {
+                    majorCreditMin = (majorCreditMin ?? 0) + requiredCredits;
+                }
+            }
+        }
+    }
 
     const validatorRules: GraduationPathValidatorArgs["programRules"] = {
         degreeCreditMinimum,
         residencyMinCredits: typeof residencyMin === "number" ? residencyMin : null,
-        majorCreditMinimum: null,       // not derivable from DPR alone without program rules
+        majorCreditMinimum: majorCreditMin,
         minorCreditMinimum: null,
+        // upperLevelMinCredits: no DPR counter clearly represents this for all
+        // programs — leave null so the validator returns requires-approval rather
+        // than inventing a floor. Revisit when a structured upper-level counter
+        // is identified in the DPR fixture.
         upperLevelMinCredits: null,
         schoolCoreMinCredits: null,
         graduationTargetTerm: graduationTerm,
@@ -459,7 +499,7 @@ function buildProgramRules(
         schoolCoreRuleIds,
         generalCategoryRuleIds,
         residencyMinCredits: typeof residencyMin === "number" ? residencyMin : null,
-        majorCreditMinimum: null,
+        majorCreditMinimum: majorCreditMin,
         upperLevelMinCredits: null,
     };
 

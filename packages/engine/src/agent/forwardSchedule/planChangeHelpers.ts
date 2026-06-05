@@ -772,14 +772,40 @@ function buildProgramRulesFromSession(
         }
     }
 
-    const residencyMin = dpr.cumulative.residencyRequired ?? null;
+    // ---- Residency floor (mirrors build.ts buildProgramRules) ----
+    // Prefer dpr.cumulative.residencyRequired; take max over residencyAll
+    // so joint-major program-specific rows aren't lost.
+    let residencyMin: number | null = dpr.cumulative.residencyRequired ?? null;
+    if (dpr.cumulative.residencyAll) {
+        for (const row of dpr.cumulative.residencyAll) {
+            if (typeof row.required === "number") {
+                residencyMin = residencyMin === null ? row.required : Math.max(residencyMin, row.required);
+            }
+        }
+    }
+
+    // ---- Major credit floor (mirrors build.ts buildProgramRules) ----
+    // Sum counter.required (units kind) across leaves classified as
+    // "major-required" or "major-elective".
+    let majorCreditMin: number | null = null;
+    for (const leaf of leaves) {
+        const kind = kindByRId.get(leaf.rId);
+        if (kind === "major-required" || kind === "major-elective") {
+            if (leaf.counter?.kind === "units") {
+                const requiredCredits = leaf.counter.required;
+                if (requiredCredits > 0) {
+                    majorCreditMin = (majorCreditMin ?? 0) + requiredCredits;
+                }
+            }
+        }
+    }
 
     const solverRules: SolverInput["programRules"] = {
         majorRuleKinds,
         schoolCoreRuleIds,
         generalCategoryRuleIds,
         residencyMinCredits: typeof residencyMin === "number" ? residencyMin : null,
-        majorCreditMinimum: null,
+        majorCreditMinimum: majorCreditMin,
         upperLevelMinCredits: null,
     };
 
