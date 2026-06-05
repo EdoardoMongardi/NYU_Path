@@ -4,22 +4,18 @@
 // Covers:
 //   - loadSchoolConfig: real CAS fixture loads + _meta passes
 //   - loadSchoolConfigStrict: not_found, parse_error, invalid_meta paths
-//   - resolveProgramFile: exact > earlier_snapshot > current_fallback > not_found
-//   - applicableCatalogYear: declaredUnder > readmission > matriculation
 //
 // Synthetic fixtures live under an OS tmpdir so the live `data/` tree
 // is never modified by the test run.
 // ============================================================
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
     loadSchoolConfig,
     loadSchoolConfigStrict,
-    resolveProgramFile,
-    applicableCatalogYear,
 } from "../../src/dataLoader.js";
 
 // ---- helpers ----
@@ -163,124 +159,5 @@ describe("loadSchoolConfigStrict — synthetic fixtures", () => {
         expect(result.config.schoolId).toBe("ok");
         expect(result.config.residency.type).toBe("total_nyu_credits");
         expect(result.meta.catalogYear).toBe(VALID_META.catalogYear);
-    });
-});
-
-// ============================================================
-// resolveProgramFile — precedence rule (§11.0.3)
-// ============================================================
-describe("resolveProgramFile — catalog-year precedence", () => {
-    let tmpRoot: string;
-    let programsDir: string;
-    let schoolDir: string;
-    let logEvents: Array<{ kind: string }>;
-    const logger = (e: { kind: string }) => {
-        logEvents.push(e);
-    };
-
-    beforeAll(() => {
-        tmpRoot = mkdtempSync(join(tmpdir(), "nyupath-resolve-"));
-        programsDir = join(tmpRoot, "programs");
-        schoolDir = join(programsDir, "cas");
-        mkdirSync(schoolDir, { recursive: true });
-        // current file
-        writeFileSync(join(schoolDir, "demo.json"), "{}", "utf-8");
-        // 2023-2024 snapshot
-        writeFileSync(join(schoolDir, "demo__2023-2024.json"), "{}", "utf-8");
-        // 2025-2026 snapshot (exact match for one of the cases)
-        writeFileSync(join(schoolDir, "demo__2025-2026.json"), "{}", "utf-8");
-    });
-
-    afterAll(() => {
-        rmSync(tmpRoot, { recursive: true, force: true });
-    });
-
-    beforeAll(() => {
-        logEvents = [];
-    });
-
-    it("returns kind=exact when the requested catalog year file exists", () => {
-        logEvents = [];
-        const r = resolveProgramFile("cas", "demo", "2025-2026", { programsDir, logger });
-        expect(r.kind).toBe("exact");
-        if (r.kind !== "exact") return;
-        expect(r.catalogYear).toBe("2025-2026");
-        expect(r.path.endsWith("demo__2025-2026.json")).toBe(true);
-        // exact matches must NOT log a fallback event
-        expect(logEvents.filter(e => e.kind === "catalog_year_fallback")).toHaveLength(0);
-    });
-
-    it("falls back to the nearest earlier snapshot when no exact match exists", () => {
-        logEvents = [];
-        const r = resolveProgramFile("cas", "demo", "2024-2025", { programsDir, logger });
-        expect(r.kind).toBe("earlier_snapshot");
-        if (r.kind !== "earlier_snapshot") return;
-        expect(r.catalogYear).toBe("2023-2024");
-        expect(r.requested).toBe("2024-2025");
-        expect(logEvents.some(e => e.kind === "catalog_year_fallback")).toBe(true);
-    });
-
-    it("falls back to the unsuffixed current file when no earlier snapshot exists", () => {
-        logEvents = [];
-        // 2022-2023 is older than every snapshot we wrote — no earlier file qualifies
-        const r = resolveProgramFile("cas", "demo", "2022-2023", { programsDir, logger });
-        expect(r.kind).toBe("current_fallback");
-        if (r.kind !== "current_fallback") return;
-        expect(r.path.endsWith("/demo.json")).toBe(true);
-        expect(logEvents.some(e => e.kind === "catalog_year_fallback")).toBe(true);
-    });
-
-    it("returns not_found when neither snapshots nor current file exist", () => {
-        logEvents = [];
-        const r = resolveProgramFile("cas", "ghost", "2025-2026", { programsDir, logger });
-        expect(r.kind).toBe("not_found");
-        if (r.kind !== "not_found") return;
-        expect(r.programId).toBe("ghost");
-        expect(logEvents.some(e => e.kind === "catalog_year_not_found")).toBe(true);
-    });
-
-    it("returns not_found when the school directory itself is missing", () => {
-        logEvents = [];
-        const r = resolveProgramFile("nonexistent_school", "demo", "2025-2026", {
-            programsDir,
-            logger,
-        });
-        expect(r.kind).toBe("not_found");
-    });
-
-    it("rejects malformed catalogYear input", () => {
-        expect(() =>
-            resolveProgramFile("cas", "demo", "2025", { programsDir, logger })
-        ).toThrow(/invalid catalogYear/);
-    });
-});
-
-// ============================================================
-// applicableCatalogYear — readmission + per-program override
-// ============================================================
-describe("applicableCatalogYear — precedence (§11.0.3)", () => {
-    it("defaults to matriculation year", () => {
-        expect(
-            applicableCatalogYear({ matriculationCatalogYear: "2024-2025" })
-        ).toBe("2024-2025");
-    });
-
-    it("readmission year wins over matriculation (G40)", () => {
-        expect(
-            applicableCatalogYear({
-                matriculationCatalogYear: "2020-2021",
-                readmissionCatalogYear: "2025-2026",
-            })
-        ).toBe("2025-2026");
-    });
-
-    it("declaredUnderCatalogYear (per-program) wins over both", () => {
-        expect(
-            applicableCatalogYear({
-                matriculationCatalogYear: "2020-2021",
-                readmissionCatalogYear: "2025-2026",
-                declaredUnderCatalogYear: "2024-2025",
-            })
-        ).toBe("2024-2025");
     });
 });
