@@ -131,6 +131,9 @@ export function calculateStanding(
     let totalCompletedCredits = 0;
 
     for (const ct of coursesTaken) {
+        // In-progress or ungraded rows have no final grade — exclude from
+        // all GPA and completion-rate math (DPR-2 nullable-grade contract).
+        if (ct.isInProgress || ct.grade === null) continue;
         const grade = ct.grade.toUpperCase();
         const credits = ct.credits ?? 4;
 
@@ -292,6 +295,8 @@ export function computeSemesterGPA(coursesTaken: CourseTaken[], semester: string
 
     for (const ct of coursesTaken) {
         if (ct.semester !== semester) continue;
+        // Skip in-progress / ungraded rows — no final grade yet.
+        if (ct.isInProgress || ct.grade === null) continue;
         const grade = ct.grade.toUpperCase();
         // P, TR, W, I, NR are excluded from GPA computation (per CAS bulletin
         // line 344 "Only grades of A through F... are computed in the average").

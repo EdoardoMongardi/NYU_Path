@@ -85,14 +85,16 @@ export function buildStudentProfileFromDpr(
     for (const row of report.courseHistory) {
         if (row.subject === "ELECTIVE") continue; // synthetic transfer-credit row, no audit value
         const courseId = `${row.subject} ${row.catalogNbr}`.replace(/\s+/g, " ").trim();
-        const grade = row.grade ?? (row.type === "IP" ? "C" : "P");
+        const isIP = row.type === "IP";
         coursesTaken.push({
             courseId,
-            grade,
+            grade: row.grade ?? null,
             semester: row.term,
             credits: row.units,
+            ...(isIP ? { isInProgress: true } : {}),
+            ...(row.repeatCode ? { repeatCode: row.repeatCode } : {}),
         });
-        if (row.type === "IP") {
+        if (isIP) {
             (ipRowsByTerm[row.term] ??= []).push({
                 courseId,
                 title: row.courseTitle,

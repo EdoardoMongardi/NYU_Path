@@ -489,7 +489,8 @@ export interface AdvisorNotation { requestId?: string; note: string; advisor?: s
 
 export interface CourseTaken {
     courseId: string;
-    grade: string;
+    /** Letter/PF grade, or null when the course is in progress / ungraded. */
+    grade: string | null;
     semester: string; // e.g. "2023-fall"
     /** Optional explicit credit value for courses not in the master catalog */
     credits?: number;
