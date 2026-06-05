@@ -102,6 +102,22 @@ evals/**/*.js
 evals/**/*.js.map
 evals/**/*.d.ts
 evals/**/*.d.ts.map
+# Same stale tsc-emit artifacts in the tools/ and scripts/ TS-source
+# trees, plus the root vitest config. These dirs are TS-source with
+# noEmit:true, so none of these should ever be tracked. (embed.mjs in
+# tools/course-catalog-embed is a real .mjs source — *.js won't match it.)
+tools/**/*.js
+tools/**/*.js.map
+tools/**/*.d.ts
+tools/**/*.d.ts.map
+scripts/**/*.js
+scripts/**/*.js.map
+scripts/**/*.d.ts
+scripts/**/*.d.ts.map
+/vitest.config.js
+/vitest.config.js.map
+/vitest.config.d.ts
+/vitest.config.d.ts.map
 tsconfig.tsbuildinfo
 
 # Python bytecode cache (e.g. tools/bulletin-scraper)
