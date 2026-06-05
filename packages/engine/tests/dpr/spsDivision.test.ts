@@ -98,3 +98,28 @@ describe("resolveSpsDivision — low confidence (ask the student)", () => {
         expect(r.confidence).toBe("low");
     });
 });
+
+describe("resolveSpsDivision — realistic DPR shape ('Major Approved' + bare label + credits band)", () => {
+    it("bare 'Real Estate' + 128 credits → schack / 64", () => {
+        const r = resolveSpsDivision(dpr([{ programType: "Major Approved", label: "Real Estate" }], 128));
+        expect(r.confidence).toBe("high");
+        if (r.confidence !== "high") return;
+        expect(r.division).toBe("schack");
+        expect(r.advancedStandingCap).toBe(64);
+    });
+
+    it("bare 'Hospitality Management' + 60 credits → daus associate's / 30 (degree-level-first)", () => {
+        const r = resolveSpsDivision(dpr([{ programType: "Major Approved", label: "Hospitality Management" }], 60));
+        expect(r.confidence === "high" && r.advancedStandingCap).toBe(30);
+    });
+
+    it("bare 'Applied General Studies' + 120 credits → daus bachelor's / 80", () => {
+        const r = resolveSpsDivision(dpr([{ programType: "Major Approved", label: "Applied General Studies" }], 120));
+        expect(r.confidence === "high" && r.advancedStandingCap).toBe(80);
+    });
+
+    it("bare 'Sport Management' + 128 credits → tisch_institute / 64", () => {
+        const r = resolveSpsDivision(dpr([{ programType: "Major Approved", label: "Sport Management" }], 128));
+        expect(r.confidence === "high" && r.division).toBe("tisch_institute");
+    });
+});
