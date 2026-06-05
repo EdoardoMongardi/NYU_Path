@@ -57,7 +57,19 @@
     "passFailCapUnits": 32,
     "outsideHomeUsedUnits": 14,
     "outsideHomeCapUnits": 16,
-    "timeLimitYears": 8
+    "timeLimitYears": 8,
+    "residencyAll": [
+      {
+        "rId": "R1001/35",
+        "required": 64,
+        "used": 80
+      },
+      {
+        "rId": "R1142/80",
+        "required": 36,
+        "used": 56
+      }
+    ]
   },
   "requirementGroups": [
     {
