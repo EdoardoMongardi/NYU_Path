@@ -121,8 +121,6 @@ export type {
 } from "./clarifier.js";
 
 export { RecordingLLMClient } from "./recordingClient.js";
-export { RecorderLLMClient } from "./recorderClient.js";
-export type { RecorderOptions, RecorderMatchStrategy } from "./recorderClient.js";
 
 // Phase 15 Task 8 — surface the section-materialization domain types
 // so the apps/web sidebar can type the SSE `forward_materialization_update`
