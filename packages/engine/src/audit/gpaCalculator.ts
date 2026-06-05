@@ -74,6 +74,8 @@ export function computePoolGpa(
     const contributingCourseIds: string[] = [];
 
     for (const ct of coursesTaken) {
+        // Skip in-progress / ungraded rows — no final grade yet (DPR-2).
+        if (ct.isInProgress || ct.grade === null) continue;
         const grade = ct.grade.toUpperCase();
         if (!(grade in GRADE_POINTS)) continue; // P/TR/W/I/NR/etc.
 
