@@ -821,6 +821,21 @@ function deriveCumulative(
     if (!gpa) warnings.push("R1001/20 (Cumulative GPA) not found.");
     if (!credits) warnings.push("R1001/10 (Minimum Credits) not found.");
 
+    // DPR-6: collect ALL residency rows via structural heuristic.
+    // A residency row is one whose title or statusText contains "residenc"
+    // (case-insensitive) AND whose rId is present (i.e., it's a leaf
+    // requirement). Include the row even if the counter is non-units (set
+    // required/used to null) so callers can see the rId and investigate.
+    const residencyAll = allReqs
+        .filter((r) =>
+            /residenc/i.test(`${r.title} ${r.statusText ?? ""}`),
+        )
+        .map((r) => ({
+            rId: r.rId,
+            required: r.counter?.kind === "units" ? r.counter.required : null,
+            used: r.counter?.kind === "units" ? r.counter.used : null,
+        }));
+
     return {
         creditsRequired: credits?.kind === "units" ? credits.required : null,
         creditsUsed: credits?.kind === "units" ? credits.used : null,
@@ -833,6 +848,7 @@ function deriveCumulative(
         outsideHomeUsedUnits: outside?.kind === "units" ? outside.used : null,
         outsideHomeCapUnits: outsideHomeCap,
         timeLimitYears: timeLimit,
+        ...(residencyAll.length > 0 ? { residencyAll } : {}),
     };
 }
 
