@@ -8,7 +8,6 @@
 //   - OpenAIEmbedder (for query-time embedding only — chunk vectors
 //     are precomputed)
 //   - CohereReranker
-//   - Curated policy templates corpus
 //
 // Returns null when any dependency is missing (cache file, OpenAI
 // key, or Cohere key) so the v2 route can degrade gracefully —

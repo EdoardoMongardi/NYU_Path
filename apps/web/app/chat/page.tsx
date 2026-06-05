@@ -129,7 +129,7 @@ interface Message {
     hasRealThinking?: boolean;
 }
 
-type OnboardingStep = "awaiting_dpr" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation" | "complete" | "unsupported_major";
+type OnboardingStep = "awaiting_dpr" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation" | "complete";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ParsedTranscript = Record<string, any>;

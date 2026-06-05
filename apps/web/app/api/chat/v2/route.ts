@@ -25,10 +25,9 @@ import {
     runAgentTurnStreaming,
     buildDefaultRegistry,
     buildSystemPrompt,
-    // Phase 8 A1: preLoopDispatch removed from active path; import
-    // dropped to surface compile-time mistakes if anything tries to
-    // reintroduce the keyword router. runTemplateMatcherOnly stays
-    // for recovery mode (cohortConfig.evalGateFailing).
+    // Phase 8 A1: preLoopDispatch (the keyword/template router) was
+    // removed from the active path — every question enters the agent
+    // loop. runRecoveryMode handles the cohort-gate-failing path.
     validateResponse,
     reviewCompleteness,
     createPrimaryClient,
@@ -487,10 +486,10 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         // + reasoning route, not keyword matchers. We follow the same
         // pattern: every question now enters the agent loop, which
         // calls run_full_audit / search_policy / etc. as needed.
-        // search_policy already consults the same template registry
-        // internally (rag/policySearch.ts:111) — so curated bulletin
-        // quotes are still surfaced when relevant, but the AGENT
-        // decides whether to quote them, blend with DPR data, or skip.
+        // search_policy is pure RAG over the bulletin corpus (the
+        // curated template registry was removed) — the AGENT decides
+        // when to call it and whether to quote, blend with DPR data,
+        // or skip.
         //
         // Recovery mode (cohortConfig.evalGateFailing, above) keeps
         // template-only routing because in that mode we deliberately

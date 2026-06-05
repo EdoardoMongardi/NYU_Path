@@ -28,7 +28,6 @@ export const cohortEnum = pgEnum("cohort", ["alpha", "beta", "invite", "public",
 export const students = pgTable("students", {
     studentId: text("student_id").primaryKey(),
     email: text("email").unique(),
-    parsedTranscript: jsonb("parsed_transcript"),
     declaredPrograms: jsonb("declared_programs").notNull().default("[]"),
     visaStatus: text("visa_status"),
     catalogYear: text("catalog_year"),
