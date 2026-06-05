@@ -185,6 +185,7 @@ describe("classifyRequirementKind — structural independence (not keyword-based
 
 import { buildForwardSchedule } from "../../src/agent/forwardSchedule/build.js";
 import type { ToolSession } from "../../src/agent/tool.js";
+import { buildSolverInputFromSession } from "../../src/agent/forwardSchedule/planChangeHelpers.js";
 
 describe("buildForwardSchedule — programRules mirrors classifier", () => {
     it("R1142/20 lands in majorRuleKinds as must_take", () => {
@@ -256,6 +257,88 @@ describe("buildProgramRulesForTest — classifier drives programRules maps", () 
 });
 
 // ---------------------------------------------------------------------------
+// buildSolverInputFromSession — planChangeHelpers must also use structural
+// classifier, not the old keyword-based inferCategory / buildProgramRulesFromSession
+// (RC-3 / HARD-2 — Task 1.7 completion)
+// ---------------------------------------------------------------------------
+
+describe("buildSolverInputFromSession — structural classifier (RC-3/HARD-2)", () => {
+    it("unmetRequirements entry for R1142/20 has category 'major-required' (not old keyword 'cs_major_required')", () => {
+        const dpr = parse();
+        const session = makeSessionForPlanHelpers();
+        const solverInput = buildSolverInputFromSession(session, dpr);
+
+        const r = solverInput.unmetRequirements.find(req => req.rId === "R1142/20");
+        // R1142/20 may be satisfied in the fixture (the student is near graduation).
+        // If it is unmet, it MUST be "major-required". If it is satisfied, skip this assertion.
+        if (r) {
+            expect(r.category).toBe("major-required");
+            expect(r.category).not.toBe("cs_major_required");
+        }
+    });
+
+    it("unmetRequirements entry for R1142/30 has category 'major-elective' (not old keyword 'free_elective')", () => {
+        const dpr = parse();
+        const session = makeSessionForPlanHelpers();
+        const solverInput = buildSolverInputFromSession(session, dpr);
+
+        const r = solverInput.unmetRequirements.find(req => req.rId === "R1142/30");
+        if (r) {
+            expect(r.category).toBe("major-elective");
+            expect(r.category).not.toBe("free_elective");
+        }
+    });
+
+    it("ALL unmetRequirements have category drawn from RequirementKind (no old keyword categories)", () => {
+        const dpr = parse();
+        const session = makeSessionForPlanHelpers();
+        const solverInput = buildSolverInputFromSession(session, dpr);
+
+        // The old inferCategory returned: "cs_major_required", "cas_core", "free_elective", "general"
+        // The new classifier returns RequirementKind values.
+        const OLD_KEYWORD_CATEGORIES = new Set(["cs_major_required", "cas_core", "free_elective", "general"]);
+        for (const req of solverInput.unmetRequirements) {
+            expect(
+                OLD_KEYWORD_CATEGORIES.has(req.category),
+                `rId ${req.rId} has old keyword category '${req.category}'`,
+            ).toBe(false);
+        }
+    });
+
+    it("programRules.majorRuleKinds contains R1142/20 as must_take (structural, not keyword)", () => {
+        const dpr = parse();
+        const session = makeSessionForPlanHelpers();
+        const solverInput = buildSolverInputFromSession(session, dpr);
+
+        expect(solverInput.programRules?.majorRuleKinds.get("R1142/20")).toBe("must_take");
+    });
+
+    it("programRules.majorRuleKinds contains R1142/30 as choose_n (structural, not keyword)", () => {
+        const dpr = parse();
+        const session = makeSessionForPlanHelpers();
+        const solverInput = buildSolverInputFromSession(session, dpr);
+
+        expect(solverInput.programRules?.majorRuleKinds.get("R1142/30")).toBe("choose_n");
+    });
+
+    it("programRules.schoolCoreRuleIds contains R1004/10 (structural, not keyword)", () => {
+        const dpr = parse();
+        const session = makeSessionForPlanHelpers();
+        const solverInput = buildSolverInputFromSession(session, dpr);
+
+        expect(solverInput.programRules?.schoolCoreRuleIds.has("R1004/10")).toBe(true);
+    });
+
+    it("programRules.majorRuleKinds does NOT contain R1004/10 (CORE must not bleed into major)", () => {
+        const dpr = parse();
+        const session = makeSessionForPlanHelpers();
+        const solverInput = buildSolverInputFromSession(session, dpr);
+
+        expect(solverInput.programRules?.majorRuleKinds.has("R1004/10")).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -271,6 +354,37 @@ function makeSession(): ToolSession {
             catalogYear: "2024",
             homeSchool: "cas",
             declaredPrograms: CS_MATH_DECLARED,
+            coursesTaken: [],
+            visaStatus: "f1",
+        },
+        schoolConfig: {
+            schoolId: "cas",
+            name: "College of Arts and Science",
+            degreeType: "BA",
+            courseSuffix: ["-UA"],
+            totalCreditsRequired: 128,
+            overallGpaMin: 2.0,
+            acceptsTransferCredit: true,
+            maxCreditsPerSemester: 18,
+            f1FullTimeMinCredits: 12,
+            residency: { minCredits: 64, note: null },
+        },
+    };
+}
+
+/**
+ * Session for planChangeHelpers tests — uses the same CS/Math declared program
+ * as the classifier tests so kindByRId correctly resolves the major group.
+ * The `degreeProgressReport` field is omitted intentionally: buildSolverInputFromSession
+ * receives `dpr` as an explicit argument, not from session.
+ */
+function makeSessionForPlanHelpers(): ToolSession {
+    return {
+        student: {
+            id: "test-student",
+            catalogYear: "2024",
+            homeSchool: "cas",
+            declaredPrograms: CS_MATH_DECLARED,  // "Computer Science/Math"
             coursesTaken: [],
             visaStatus: "f1",
         },

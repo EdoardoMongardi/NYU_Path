@@ -22,6 +22,7 @@ import { notSatisfiedRequirements, walkRequirements } from "../../dpr/schema.js"
 import { meetsGradeThreshold } from "../../dpr/gradeComparison.js";
 import { classifyBalanceDelta, computeBalanceScore } from "./balanceScore.js";
 import { hashDprCourseHistory } from "./reconcile.js";
+import { classifyRequirementKind } from "./requirementKind.js";
 
 // ---------------------------------------------------------------------------
 // Shared Zod schemas (used by propose_plan_change + confirm_plan_change)
@@ -362,11 +363,18 @@ export function buildSolverInputFromSession(
 
     const graduationTerm = deriveGraduationTermFromCredits(currentTerm, creditsEarned, graduationCreditMinimum, creditTargetPerSemester);
 
+    // RC-3: classify requirement kinds structurally from the DPR group hierarchy
+    // rather than by substring-matching the leaf's rId/title (mirrors build.ts step 5).
+    const kindByRId = classifyRequirementKind({
+        groups: dpr.requirementGroups,
+        declaredPrograms: student?.declaredPrograms ?? [],
+    });
+
     const unmetReqs = notSatisfiedRequirements(dpr.requirementGroups);
     const unmetRequirements: SolverInput["unmetRequirements"] = unmetReqs.map(req => ({
         rId: req.rId,
         title: req.title,
-        category: inferCategory(req.rId, req.title),
+        category: kindByRId.get(req.rId) ?? "unknown",
         credits: inferRequirementCredits(req),
         candidateCourses: extractCandidateCourseIds(req),
     }));
@@ -716,14 +724,6 @@ function extractCandidateCourseIds(req: { description?: string; statusText: stri
     return Array.from(out);
 }
 
-function inferCategory(rId: string, title: string): string {
-    const blob = `${rId} ${title}`.toLowerCase();
-    if (blob.includes("major")) return "cs_major_required";
-    if (blob.includes("core"))  return "cas_core";
-    if (blob.includes("elective")) return "free_elective";
-    return "general";
-}
-
 function inferRequirementCredits(req: { counter?: import("../../dpr/schema.js").DPRCounter }): number {
     if (!req.counter) return 4;
     if (req.counter.kind === "units") {
@@ -743,19 +743,31 @@ function buildProgramRulesFromSession(
     _graduationTerm: string,
     _degreeCreditMinimum: number,
 ): ProgramRulesBundle {
-    const schoolConfig = session.schoolConfig ?? null;
-    const leaves = walkRequirements(dpr.requirementGroups);
+    const declaredPrograms = session.student?.declaredPrograms ?? [];
+
+    // RC-3: classify requirement kinds structurally from the DPR group hierarchy.
+    // Mirrors the same classifier call in build.ts buildProgramRules().
+    const kindByRId = classifyRequirementKind({
+        groups: dpr.requirementGroups,
+        declaredPrograms,
+    });
+
     const majorRuleKinds = new Map<string, "must_take" | "choose_n">();
     const schoolCoreRuleIds = new Set<string>();
     const generalCategoryRuleIds = new Set<string>();
 
+    // Walk all leaves and populate rule maps from the classifier output.
+    const leaves = walkRequirements(dpr.requirementGroups);
     for (const leaf of leaves) {
-        const blob = `${leaf.rId} ${leaf.title}`.toLowerCase();
-        if (blob.includes("major") || blob.includes("concentration")) {
-            majorRuleKinds.set(leaf.rId, blob.includes("required") ? "must_take" : "choose_n");
-        } else if (blob.includes("core") || blob.includes("cas core")) {
+        const kind = kindByRId.get(leaf.rId);
+        if (kind === "major-required") {
+            majorRuleKinds.set(leaf.rId, "must_take");
+        } else if (kind === "major-elective") {
+            majorRuleKinds.set(leaf.rId, "choose_n");
+        } else if (kind === "school-core") {
             schoolCoreRuleIds.add(leaf.rId);
         } else {
+            // "free-elective", "general-elective", "unknown" → general bucket
             generalCategoryRuleIds.add(leaf.rId);
         }
     }
