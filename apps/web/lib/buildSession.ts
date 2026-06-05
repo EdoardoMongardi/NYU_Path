@@ -142,6 +142,19 @@ export function buildStudentProfileFromDpr(
                 courses: pendingCourses,
             }
             : undefined,
+        // DPR-3: carry adviser waivers onto the profile so the agent can
+        // quote them verbatim and planning tools can factor them in.
+        // Map explicitly to shed the nominal DPRAdvisorNotation type.
+        ...(report.advisorNotations.length > 0
+            ? {
+                advisorNotations: report.advisorNotations.map((n) => ({
+                    requestId: n.requestId,
+                    note: n.note,
+                    advisor: n.advisor,
+                    date: n.date,
+                })),
+            }
+            : {}),
     };
 }
 

@@ -20,10 +20,14 @@
 //   4. SHA256 → hex.
 //
 // Fields outside the canonical input (e.g., `_meta.parsedAt`,
-// `header.preparedDate`, `requirementGroups`, `advisorNotations`) do
-// NOT participate in the fingerprint — those would force a re-plan
-// every time the student re-uploads even when nothing meaningful
-// changed (e.g., parser version bump, adviser added a note).
+// `header.preparedDate`, `requirementGroups`) do NOT participate in
+// the fingerprint — those would force a re-plan every time the student
+// re-uploads even when nothing meaningful changed (e.g., parser version
+// bump).
+//
+// `advisorNotations` DO participate (DPR-3): an adviser waiver is a
+// meaningful change to the student's degree audit — adding or removing
+// one must trigger a re-plan.
 // ============================================================
 
 import { createHash } from "node:crypto";
@@ -36,6 +40,7 @@ export function computeDprFingerprint(report: DegreeProgressReport): string {
             .sort(),
         cumulative: report.cumulative,
         programs: report.programs ?? [],
+        advisorNotations: report.advisorNotations ?? [],
     });
     return createHash("sha256").update(canonical).digest("hex");
 }
