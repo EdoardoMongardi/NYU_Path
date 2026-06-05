@@ -417,7 +417,11 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "  general policy lookups (`search_policy`), a program's full",
             "  requirement page (`get_program_requirements`), course catalog search",
             "  (`search_courses`), live section availability (`search_availability`),",
-            "  and the school's credit caps (`get_credit_caps`).",
+            "  and the school's credit caps (`get_credit_caps`). NOTE: for SPS,",
+            "  the advanced-standing/transfer cap is division-dependent (Schack/",
+            "  Tisch 64, DAUS 80 bachelor's / 30 associate's) — without the DPR you",
+            "  can state the general per-division figures but must ask the student",
+            "  to upload their DPR for their specific cap.",
             "- Never fabricate the student's numbers from training data.",
         );
     }

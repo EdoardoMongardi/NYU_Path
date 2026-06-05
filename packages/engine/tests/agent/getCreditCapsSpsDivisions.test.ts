@@ -12,6 +12,7 @@
 
 import { describe, it, expect } from "vitest";
 import { getCreditCapsTool } from "../../src/agent/tools/getCreditCaps.js";
+import { buildSystemPrompt } from "../../src/agent/systemPrompt.js";
 import { loadSchoolConfig } from "../../src/dataLoader.js";
 import type { ToolUseContext } from "../../src/agent/tool.js";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
@@ -112,5 +113,13 @@ describe("get_credit_caps SPS division — clarification + unchanged paths", () 
         expect(summary).toContain("80");
         expect(summary.toLowerCase()).toContain("associate");
         expect(summary.toLowerCase()).not.toContain("confirm");
+    });
+});
+
+describe("system prompt notes SPS division-dependent caps", () => {
+    it("the NO-DPR section mentions that the SPS advanced-standing cap needs the DPR", () => {
+        const prompt = buildSystemPrompt({ dprLoaded: false } as never);
+        expect(prompt.toLowerCase()).toContain("sps");
+        expect(prompt.toLowerCase()).toContain("division");
     });
 });
