@@ -263,11 +263,15 @@ interface SearchRun {
  * the sound incremental forward-check — so completeness is preserved WITHIN the
  * `maxNodes` budget; once that budget is hit the traversal stops early and sets
  * `truncated` (surfaced to callers as `exhaustive === false`).
+ *
+ * The callback may return `true` to request an early stop after accepting the
+ * leaf (used by findFirstValidPlan to halt after the first valid leaf). Returning
+ * `undefined` / `void` (the default for all other callers) continues the traversal.
  */
 function runSearch(
     ctx: ConstraintContext,
     options: SearchOptions | undefined,
-    onValidLeaf: (plan: PartialPlan, score: number) => void,
+    onValidLeaf: (plan: PartialPlan, score: number) => boolean | void,
 ): SearchRun {
     const weights = options?.weights;
     const fixed = options?.fixed ?? [];
@@ -322,9 +326,11 @@ function runSearch(
 
     // 4. Backtracking with forward-checking + incumbent tracking (no admissible
     //    objective bound, so NOT cost-bounded B&B). Terminates at the maxNodes
-    //    budget (sets `truncated`).
+    //    budget (sets `truncated`), or at the first valid leaf when the caller's
+    //    onValidLeaf callback returns true (sets `stopped`).
     let nodes = 0;
     let truncated = false;
+    let stopped = false;
 
     function recurse(assigned: PlacedCourse[], i: number): void {
         nodes++;
@@ -348,7 +354,7 @@ function runSearch(
                 checkMajorCreditFloor(plan, ctx).ok &&
                 checkResidencyFloor(plan, ctx).ok
             ) {
-                onValidLeaf(plan, scorePlan(plan, ctx, weights));
+                if (onValidLeaf(plan, scorePlan(plan, ctx, weights)) === true) stopped = true;
             }
             return;
         }
@@ -393,7 +399,7 @@ function runSearch(
             // a documented FAST-FOLLOW that would turn this into true cost-bounded
             // B&B and let it prune — see the whole-branch review.)
             recurse([...assigned, value], i + 1);
-            if (truncated) return;
+            if (truncated || stopped) return;
         }
     }
 
@@ -560,6 +566,38 @@ function computeBlockers(run: SearchRun, ctx: ConstraintContext): Blocker[] {
 // ---------------------------------------------------------------------------
 // Public entry points
 // ---------------------------------------------------------------------------
+
+/** Feasibility-first: return the FIRST valid complete leaf and stop. The per-variable
+ *  values are ordered best-first by scorePlan, so the first leaf is a good (not provably
+ *  optimal) plan; a later localImprove step refines it.
+ *
+ *  `exhaustive` SEMANTICS DIFFER from searchBestPlan and matter ONLY when `plan === null`:
+ *    - plan === null, exhaustive === true  → PROVEN infeasible (search ran out within budget).
+ *    - plan === null, exhaustive === false → truncated (hit maxNodes); feasibility unconfirmed.
+ *    - plan !== null                        → a valid plan was found by stopping EARLY (the
+ *      first leaf). `exhaustive` is then `true` (the budget was NOT hit), but it does NOT mean
+ *      "the whole space was explored / this is the optimum" — feasibility-first never proves
+ *      optimality. Consumers MUST treat a found plan as best-effort (see the T7 `optimality`
+ *      signal); they should consult `exhaustive` only on the null path.
+ *  blockers/unsatisfiable are populated exactly as searchBestPlan (via computeBlockers) on null. */
+export function findFirstValidPlan(ctx: ConstraintContext, options?: SearchOptions): SearchResult {
+    let found: PartialPlan | null = null;
+    let foundScore = Infinity;
+    const run = runSearch(ctx, options, (plan, score) => {
+        found = plan;
+        foundScore = score;
+        return true; // stop at the first valid leaf
+    });
+    const blockers: Blocker[] = found === null ? computeBlockers(run, ctx) : [];
+    return {
+        plan: found,
+        score: foundScore,
+        exhaustive: !run.truncated,
+        nodesExplored: run.nodes,
+        unsatisfiable: blockers.map(b => b.rId),
+        blockers,
+    };
+}
 
 export function searchBestPlan(ctx: ConstraintContext, options?: SearchOptions): SearchResult {
     // Keep the SINGLE lowest-score valid leaf. A strictly-lower score always
