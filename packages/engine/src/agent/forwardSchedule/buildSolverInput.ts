@@ -232,13 +232,17 @@ export function buildSolverInputWithRules(
     });
 
     const unmetReqs = notSatisfiedRequirements(dpr.requirementGroups);
-    const unmetRequirements: SolverInput["unmetRequirements"] = unmetReqs.map(req => ({
-        rId: req.rId,
-        title: req.title,
-        category: kindByRId.get(req.rId) ?? "unknown",
-        credits: inferRequirementCredits(req),
-        candidateCourses: extractCandidateCourseIds(req),
-    }));
+    const unmetRequirements: SolverInput["unmetRequirements"] = unmetReqs.map(req => {
+        const { candidateCourses, pool } = extractCandidatesAndPool(req);
+        return {
+            rId: req.rId,
+            title: req.title,
+            category: kindByRId.get(req.rId) ?? "unknown",
+            credits: inferRequirementCredits(req),
+            candidateCourses,
+            ...(pool !== undefined ? { pool } : {}),
+        };
+    });
 
     // ---- 7. Build prereq map + coreq map from session.prereqs ----
     //
@@ -591,14 +595,32 @@ function deriveGraduationTerm(
 }
 
 const COURSE_ID_RE = /\b([A-Z][A-Z0-9]*-[A-Z]{2,3})\s+(\d{1,4}[A-Z]?)\b/g;
+// Range: "CSCI-UA 400-499" or "CSCI-UA 400–499" (en-dash) or "CSCI-UA 400 to 499".
+const COURSE_RANGE_RE = /\b([A-Z][A-Z0-9]*-[A-Z]{2,3})\s+(\d{2,4})\s*(?:-|–|to)\s*(\d{2,4})\b/g;
 
-function extractCandidateCourseIds(req: { description?: string; statusText: string; title: string }): string[] {
+export function extractCandidatesAndPool(req: { description?: string; statusText: string; title: string }): {
+    candidateCourses: string[];
+    pool?: { dept: string; levelMin: number; levelMax: number };
+} {
     const sources = [req.description ?? "", req.statusText, req.title].join(" ");
-    const out = new Set<string>();
-    for (const m of sources.matchAll(COURSE_ID_RE)) {
-        out.add(`${m[1]} ${m[2]}`);
+    // 1. Detect the FIRST range; emit a pool descriptor and BLANK every range span so the
+    //    single-course regex below cannot turn "400" / "499" into phantom courses.
+    let pool: { dept: string; levelMin: number; levelMax: number } | undefined;
+    let m: RegExpExecArray | null;
+    COURSE_RANGE_RE.lastIndex = 0;
+    while ((m = COURSE_RANGE_RE.exec(sources)) !== null) {
+        const dept = m[1]!;
+        const levelMin = parseInt(m[2]!, 10);
+        const levelMax = parseInt(m[3]!, 10);
+        if (levelMax >= levelMin && pool === undefined) {
+            pool = { dept, levelMin, levelMax }; // first valid range becomes the pool descriptor
+        }
     }
-    return Array.from(out);
+    const masked = pool !== undefined ? sources.replace(COURSE_RANGE_RE, " ") : sources;
+    // 2. Enumerate explicit single course ids from the (range-masked) text.
+    const out = new Set<string>();
+    for (const mm of masked.matchAll(COURSE_ID_RE)) out.add(`${mm[1]} ${mm[2]}`);
+    return { candidateCourses: Array.from(out), ...(pool !== undefined ? { pool } : {}) };
 }
 
 function inferRequirementCredits(req: { counter?: import("../../dpr/schema.js").DPRCounter }): number {
