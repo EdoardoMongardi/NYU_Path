@@ -105,6 +105,12 @@ export interface SolverInput {
         /** Specific course IDs that satisfy this requirement (when known).
          *  Empty for placeholder-style requirements like "any free elective". */
         candidateCourses: string[];
+        /** When the requirement is a "choose-N from a range/pool" (e.g. "CSCI-UA 400-499"), this
+         *  carries the pool's dept + inclusive catalog-number range INSTEAD of (or alongside)
+         *  enumerated candidateCourses. Absent for an explicit course list. Consumed by T4's
+         *  feasibility-aware pool placeholders; a placeholder is placeable only where a REAL
+         *  catalog member in [levelMin, levelMax] is offered + prereq/coreq-satisfiable (sound). */
+        pool?: { dept: string; levelMin: number; levelMax: number };
     }>;
 
     // ---- Catalog / parser-output ----
