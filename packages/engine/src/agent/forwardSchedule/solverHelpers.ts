@@ -57,6 +57,60 @@ export function enumerateMainTerms(start: string, end: string): string[] {
     return out;
 }
 
+/** Seasons that the system treats as OPTIONAL terms (P2.8 / PLAN-5): an F-1
+ *  student need not be full-time, the free-elective fill does not pad them, and
+ *  the workload-balance proxies exclude them. Fall/spring are the normal
+ *  full-load terms; summer + january are optional. */
+export function isOptionalTerm(term: string): boolean {
+    const p = parseTerm(term);
+    return p !== null && (p.season === "summer" || p.season === "january");
+}
+
+/** Season decode for a `termOrd` (inverse of SEASON_RANK): index = ord % 4. */
+const SEASON_BY_RANK = ["spring", "summer", "fall", "january"] as const;
+
+/**
+ * Enumerate EVERY season chronologically from `start` (inclusive) to `end`
+ * (inclusive), emitting:
+ *   - fall + spring  ALWAYS;
+ *   - summer  only when `opts.includeSummer`;
+ *   - january only when `opts.includeJTerm`.
+ *
+ * Chronological order is exactly increasing `termOrd`
+ * (spring → summer → fall → january → next-year spring …), so the optional
+ * terms land in their correct calendar position relative to the main terms.
+ *
+ * Back-compat: `enumerateTerms(start, end)` with no flags returns EXACTLY what
+ * `enumerateMainTerms(start, end)` returns (fall/spring only).
+ */
+export function enumerateTerms(
+    start: string,
+    end: string,
+    opts?: { includeSummer?: boolean; includeJTerm?: boolean },
+): string[] {
+    const a = parseTerm(start);
+    const b = parseTerm(end);
+    if (!a || !b) return [];
+    const startOrd = termOrd(a);
+    const endOrd = termOrd(b);
+    const includeSummer = opts?.includeSummer === true;
+    const includeJTerm = opts?.includeJTerm === true;
+
+    const out: string[] = [];
+    // Iterate ordinals directly — each ordinal decodes to a unique {year, season}
+    // and the natural integer order IS chronological order. Cycle-guard mirrors
+    // enumerateMainTerms (bail well past the end year).
+    const guardOrd = (b.year + 10) * 4;
+    for (let ord = startOrd; ord <= endOrd && ord <= guardOrd; ord++) {
+        const season = SEASON_BY_RANK[ord % 4]!;
+        if (season === "summer" && !includeSummer) continue;
+        if (season === "january" && !includeJTerm) continue;
+        const year = Math.floor(ord / 4);
+        out.push(termCode({ year, season }));
+    }
+    return out;
+}
+
 /** Compare two solver-format terms. Returns <0 if a < b, 0 if equal, >0 if a > b. */
 export function compareSolverTerms(a: string, b: string): number {
     const pa = parseTerm(a);

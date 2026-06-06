@@ -60,6 +60,7 @@ import {
     computeDownstreamImpact,
     isCriticalPath,
     isStudyAbroadCourse,
+    isOptionalTerm,
 } from "./solverHelpers.js";
 import { buildIpAssumptions, derivePlanState } from "./solver.js";
 
@@ -705,10 +706,15 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
     // 4. Free-elective fill (mirror solver.ts). Top each term up to its
     //    effective target with free-elective placeholders; above the degree
     //    minimum + F-1 floor they are flagged optional (Decision #8).
+    //
+    //    Optional terms (summer/january, P2.8/PLAN-5) are NOT padded: they carry
+    //    only what the search placed there. The per-term ForwardSemester is still
+    //    emitted below; it simply isn't filled toward the credit target.
     // -----------------------------------------------------------------------
     const degreeCreditsMet = input.creditsEarned >= input.graduationCreditMinimum;
 
     for (const term of futureTerms) {
+        if (isOptionalTerm(term)) continue; // do not pad summer/january
         const cur = perTermCredits.get(term) ?? 0;
         const target = effectiveTermTarget(
             term,
@@ -799,14 +805,18 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
             f1OnlineCreditsPerTermCap: null,
         });
 
-        if (vResult.fullTimeSatisfied.status === "fail") {
+        // Optional terms (summer/january, P2.8/PLAN-5) are exempt from the F-1 /
+        // part-time floor — mirror checkPerTermFloor's exemption so materialize does
+        // not flag a lightly-loaded summer/January term below the floor.
+        const termIsOptional = isOptionalTerm(term);
+        if (!termIsOptional && vResult.fullTimeSatisfied.status === "fail") {
             violations.push({
                 kind: "credit_floor",
                 term,
                 detail: `Below F-1 full-time floor (${termCredits} credits). ${vResult.fullTimeSatisfied.reason}`,
             });
         }
-        if (vResult.creditMinimumSatisfied.status === "fail") {
+        if (!termIsOptional && vResult.creditMinimumSatisfied.status === "fail") {
             violations.push({
                 kind: "credit_floor",
                 term,

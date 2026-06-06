@@ -25,7 +25,7 @@ import type { WorkloadTier, FeasibilityReport, ForwardSemester } from "@nyupath/
 import type { ValidatorAxis } from "./graduationPathValidator.js";
 import { computeBalanceScore, type LoadStyle } from "./balanceScore.js";
 import {
-    enumerateMainTerms,
+    enumerateTerms,
     parseTerm,
     compareSolverTerms,
     computePrereqDepths,
@@ -33,6 +33,7 @@ import {
     checkAllPrereqs,
     isExcludedByNotClause,
     isStudyAbroadCourse,
+    isOptionalTerm,
 } from "./solverHelpers.js";
 import { visaValidator } from "../../dpr/visaValidator.js";
 
@@ -64,13 +65,19 @@ export interface PartialPlan {
 /** Immutable problem context, precomputed once from a SolverInput. */
 export interface ConstraintContext {
     input: SolverInput;
-    futureTerms: string[]; // chronological; from enumerateMainTerms(currentTerm, graduationTerm)
+    /** Chronological planning window from enumerateTerms(currentTerm, graduationTerm,
+     *  { includeSummer, includeJTerm }). Optional terms (summer/january) appear ONLY
+     *  when the student opted in via preferences; fall/spring are always present. */
+    futureTerms: string[];
     prereqDepths: Map<string, number>;
     dependentsIndex: Map<string, string[]>;
 }
 
 export function buildConstraintContext(input: SolverInput): ConstraintContext {
-    const futureTerms = enumerateMainTerms(input.currentTerm, input.graduationTerm);
+    const futureTerms = enumerateTerms(input.currentTerm, input.graduationTerm, {
+        includeSummer: input.preferences?.includeSummer,
+        includeJTerm: input.preferences?.includeJTerm,
+    });
     const allCandidateCourseIds = input.unmetRequirements.flatMap(r => r.candidateCourses);
     const prereqDepths = computePrereqDepths(allCandidateCourseIds, input.prereqs);
     const dependentsIndex = buildDependentsIndex(allCandidateCourseIds, input.prereqs);
@@ -314,7 +321,9 @@ export function checkPerTermCeiling(plan: PartialPlan, ctx: ConstraintContext): 
 
 /** perTermFloor — mirrors solver.ts:1044-1070 (visaValidator per non-empty future term).
  *  Skips terms with 0 placed credits (the search fills terms; an empty mid-plan term
- *  is not a floor violation). */
+ *  is not a floor violation). Also SKIPS optional terms (summer/january, P2.8/PLAN-5):
+ *  an optional term may legitimately carry few/zero credits — an F-1 student need not
+ *  be full-time in summer, so the F-1/part-time floor does not apply there. */
 export function checkPerTermFloor(plan: PartialPlan, ctx: ConstraintContext): HardResult {
     const { input, futureTerms } = ctx;
     const lastTerm = futureTerms[futureTerms.length - 1];
@@ -322,6 +331,7 @@ export function checkPerTermFloor(plan: PartialPlan, ctx: ConstraintContext): Ha
     const violations: HardViolation[] = [];
 
     for (const term of futureTerms) {
+        if (isOptionalTerm(term)) continue; // optional term — no full-time floor
         const termCredits = byTerm.get(term) ?? 0;
         if (termCredits <= 0) continue; // empty term — skipped
 
@@ -557,13 +567,18 @@ export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = { balance: 1, timeToD
  *
  * Components (weighted sum):
  *  - balance: computeBalanceScore over the plan's per-term aggregates, using the
- *    student's loadStyle (ctx.input.preferences?.loadStyle ?? "balanced"). Every term
- *    in ctx.futureTerms contributes an entry (0 credits / 0 hardCount for empty terms)
- *    so variance reflects the full planning window.
- *  - timeToDegree: the 0-based index in ctx.futureTerms of the first term at which the
- *    running total (ctx.input.creditsEarned + cumulative placed credits) reaches
- *    ctx.input.graduationCreditMinimum. Earlier completion ⇒ smaller index ⇒ lower cost.
- *    If the plan never reaches the minimum, uses ctx.futureTerms.length (worst-case).
+ *    student's loadStyle (ctx.input.preferences?.loadStyle ?? "balanced"). Only the
+ *    NON-optional (fall/spring) future terms contribute an entry (0 credits / 0
+ *    hardCount for empty ones) so variance reflects the full normal-load planning
+ *    window. Optional terms (summer/january, P2.8/PLAN-5) are EXCLUDED — opting into
+ *    summer must not inflate variance or pressure the search to spread credits there.
+ *  - timeToDegree: the 0-based index in ctx.futureTerms (ALL terms, optional included)
+ *    of the first term at which the running total (ctx.input.creditsEarned + cumulative
+ *    placed credits) reaches ctx.input.graduationCreditMinimum. Earlier completion ⇒
+ *    smaller index ⇒ lower cost. Optional terms stay in this walk so using summer to
+ *    reach the minimum sooner correctly lowers the cost (the incentive to use summer is
+ *    "graduate sooner / fit a summer-only course", not "balance"). If the plan never
+ *    reaches the minimum, uses ctx.futureTerms.length (worst-case).
  *
  * Final score = weights.balance × balanceCost + weights.timeToDegree × timeToDegreeIndex.
  */
@@ -587,10 +602,15 @@ export function scorePlan(
         }
     }
 
-    const semesterProxies = ctx.futureTerms.map(term => ({
-        plannedCredits: creditsByTerm.get(term) ?? 0,
-        loadRationale: { hardCount: hardCountByTerm.get(term) ?? 0 },
-    }));
+    // Balance proxies from NON-optional (fall/spring) terms ONLY — optional terms
+    // (summer/january) are excluded so opting into summer does not inflate variance
+    // or force the search to spread credits into summer (P2.8/PLAN-5).
+    const semesterProxies = ctx.futureTerms
+        .filter(term => !isOptionalTerm(term))
+        .map(term => ({
+            plannedCredits: creditsByTerm.get(term) ?? 0,
+            loadRationale: { hardCount: hardCountByTerm.get(term) ?? 0 },
+        }));
 
     const loadStyle: LoadStyle = ctx.input.preferences?.loadStyle ?? "balanced";
     // computeBalanceScore only reads plannedCredits + loadRationale.hardCount; the narrow proxy
