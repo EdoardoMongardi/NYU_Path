@@ -293,10 +293,21 @@ describe("solveForwardSchedule — NOT clause (Decision #1)", () => {
         const placed = out.semesters.flatMap(s => s.slots).find(
             s => "courseId" in s && s.courseId === "CSCI-UA 101" && s.kind === "specific_planned"
         );
+        // The NOT-excluded course is never placed as a bound (specific_planned) slot.
         expect(placed).toBeUndefined();
+        // Post-rewire the constraint search enforces the NOT clause directly
+        // (checkNotClauseClear): CSCI-UA 101 has no legal (course, term) value, so
+        // its sole-candidate requirement r1 cannot be placed. The search reports
+        // the unplaceable requirement and the solver surfaces it as a
+        // `prereq_unsatisfiable` violation — an infeasible plan that correctly
+        // refuses the NOT-blocked course. (The old greedy emitted a per-course
+        // `not_clause` violation during its placement loop; the search reports at
+        // the requirement level instead. Either way the course is excluded and the
+        // plan is infeasible.)
+        expect(out.feasibility.feasible).toBe(false);
         expect(
             out.feasibility.constraintViolations.some(
-                v => v.kind === "not_clause" && v.course === "CSCI-UA 101"
+                v => v.kind === "prereq_unsatisfiable" && /\br1\b/.test(v.detail)
             )
         ).toBe(true);
     });

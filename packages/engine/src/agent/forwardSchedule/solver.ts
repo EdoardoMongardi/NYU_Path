@@ -1,223 +1,55 @@
 /**
- * Phase 13 Task 3.1 — Forward-schedule greedy solver.
+ * Phase 2 P2.2c — Forward-schedule solver entry point.
  *
- * Decisions covered:
- *   #1  NOT-clause exclusion
- *   #4  prereqSatisfaction helper (Decision #4 truth-table via isPrereqSatisfied)
- *   #5  lenient course-restricted (catalog-absent → placeholder)
- *   #8  optional electives above credit floor
- *   #21 study-abroad-9000-skip
- *   #22a–d term-constraints + rationale
- *   #24 workloadTier per-slot
- *   #25 balanceScore
- *   #26 candidate ranking: prereq-depth-ascending, workload-weight-descending
- *   #27 forwardFeasibilityScreen at every placement
- *   #29 offeringConfidence per slot
- *   #30 IP assumptions
- *   #32 PlanState 4-state
- *   #34 visaValidator per-term invariants
- *   #35 workloadWeight modifiers
- *   #37 placeholder slots
- *   #39 isCriticalPath
- *   #44 alternativeCandidates (Stage 7 stub distribution probe)
+ * `solveForwardSchedule(input)` is the system's single planning entry point. It
+ * is now a thin orchestration over three pure, individually-tested modules:
  *
- * Phase 13 is a greedy single-pass solver — no backtracking. Phase 15 introduces
- * CSP-style backtracking. The greedy placement IS Stage 6; Stage 7 ships as a
- * stub that probes 3–5 synthetic distributions and emits AlternativePlanSummary.
+ *   1. buildConstraintContext (constraintModel.ts) — precompute the immutable
+ *      problem context (future-term window, prereq depths, dependents index).
+ *   2. searchBestPlan (search.ts) — a COMPLETE backtracking + forward-check +
+ *      branch-and-bound search that assigns each unmet requirement a (course,
+ *      term) on top of caller-supplied FIXED placements (in-progress + pins),
+ *      minimising the soft objective among VALID assignments. Where the old
+ *      greedy was first-fit (and could falsely report infeasible), the search is
+ *      optimal/complete: it finds a valid plan iff one exists.
+ *   3. materializePlan (materializePlan.ts) — turn the search's PartialPlan into
+ *      the full SolverOutput (rich specific_planned slots, placeholders for
+ *      uncovered requirements, free-elective fill, per-term visa invariants,
+ *      Stage-8 global checks, assumptions, balanceScore, coarse state,
+ *      feasibility). This is the verbatim tail the old greedy used to inline.
+ *
+ * This file deletes the old greedy core entirely (Stage-5 candidate ranking, the
+ * pin-placement pass, the Stage-6 greedy placement loop + inline slot building,
+ * the Stage-6c placeholder block, the free-elective fill, the Stage-6d visa
+ * block, the Stage-8 global checks, the post-pass, and the synthetic
+ * `buildAlternativeCandidates` / `ALT_DISTRIBUTIONS` Stage-7 stub). Everything
+ * those stages did now lives in search.ts + materializePlan.ts. Only two helpers
+ * remain here — `buildIpAssumptions` and `derivePlanState` — because
+ * materializePlan re-uses them (and this body uses derivePlanState).
+ *
+ * `alternativeCandidates` is intentionally left undefined; a later task adds the
+ * real top-K distinct plans (the fake distribution probe is gone).
+ *
+ * The `solveForwardSchedule(input: SolverInput): SolverOutput` signature is
+ * FROZEN — build.ts and alternatives.ts call it unchanged.
  */
 
-import type {
-    ScheduleSlot,
-    ScheduleSlotSpecificPlanned,
-    ScheduleSlotPlaceholder,
-    ForwardSemester,
-    FeasibilityReport,
-    SlotRationale,
-    SlotFlexibility,
-    Assumption,
-    AlternativePlanSummary,
-    LoadRationale,
-    ConfidenceTier,
-    WorkloadTier,
-    TermConstraint,
-} from "@nyupath/shared";
+import type { ForwardSemester, FeasibilityReport, Assumption } from "@nyupath/shared";
 import type { SolverInput, SolverOutput } from "./types.js";
-import { visaValidator } from "../../dpr/visaValidator.js";
-import { visaNotesForCredits } from "./visaPolicy.js";
+import { buildConstraintContext, type PlacedCourse } from "./constraintModel.js";
+import { searchBestPlan } from "./search.js";
+import { materializePlan } from "./materializePlan.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
-import { computeBalanceScore } from "./balanceScore.js";
-import { forwardFeasibilityScreen } from "./forwardFeasibility.js";
-import {
-    parseTerm,
-    enumerateMainTerms,
-    compareSolverTerms,
-    termsForPlacement,
-    effectiveTermTarget,
-    computePrereqDepths,
-    isExcludedByNotClause,
-    isStudyAbroadCourse,
-    checkAllPrereqs,
-    buildDependentsIndex,
-    computeDownstreamImpact,
-    isCriticalPath,
-} from "./solverHelpers.js";
+import { parseTerm } from "./solverHelpers.js";
 
-// ---------------------------------------------------------------------------
-// LoadRationale builder
-// ---------------------------------------------------------------------------
-
-function buildLoadRationale(
-    slots: ScheduleSlot[],
-    creditTarget: number,
-    placed: number,
-    alternativeDistributions: LoadRationale["alternativeDistributionsConsidered"],
-): LoadRationale {
-    let weightedCredits = 0;
-    let hardCount = 0;
-    let easyCount = 0;
-
-    for (const s of slots) {
-        if (s.kind === "specific_planned") {
-            weightedCredits += s.credits * (s.workloadWeight ?? 1.0);
-            if ((s.workloadWeight ?? 0) >= 1.0) hardCount++;
-            else easyCount++;
-        } else if (s.kind === "placeholder") {
-            weightedCredits += s.credits * (s.workloadWeight ?? 0.3);
-            easyCount++;
-        }
-    }
-
-    return {
-        strategy: "balanced",
-        creditsTarget: creditTarget,
-        slack: Math.max(0, creditTarget - placed),
-        weightedCredits,
-        hardCount,
-        easyCount,
-        alternativeDistributionsConsidered: alternativeDistributions,
-    };
-}
-
-// ---------------------------------------------------------------------------
-// Stage 7 — synthetic alternativeCandidates emission (stub)
-// Decision #44
-// ---------------------------------------------------------------------------
-
-/** The 3-5 candidate credit distributions for Stage 7 probing. */
-const ALT_DISTRIBUTIONS: number[][] = [
-    [16, 16, 16, 16],
-    [18, 14, 18, 14],
-    [12, 20, 16, 16],
-    [14, 18, 14, 18],
-    [20, 12, 16, 16],
-];
-
-function buildAlternativeCandidates(
-    semesters: ForwardSemester[],
-    greedy: { balanceScore: number },
-): AlternativePlanSummary[] {
-    if (semesters.length === 0) return [];
-    const n = semesters.length;
-
-    const candidates: AlternativePlanSummary[] = [];
-
-    for (let i = 0; i < ALT_DISTRIBUTIONS.length; i++) {
-        const dist = ALT_DISTRIBUTIONS[i]!;
-        // Pad or trim the distribution to match number of semesters
-        const credits: number[] = [];
-        for (let j = 0; j < n; j++) {
-            credits.push(dist[j % dist.length] ?? 16);
-        }
-
-        // Build synthetic ForwardSemester array for scoring
-        const syntheticSems: ForwardSemester[] = semesters.map((sem, j) => ({
-            ...sem,
-            plannedCredits: credits[j]!,
-            loadRationale: {
-                ...sem.loadRationale,
-                creditsTarget: credits[j]!,
-                slack: Math.max(0, credits[j]! - sem.plannedCredits),
-                weightedCredits: credits[j]! * 0.8,
-                hardCount: Math.round((credits[j]! / 4) * 0.6),
-                easyCount: Math.round((credits[j]! / 4) * 0.4),
-            },
-        }));
-
-        const altScore = computeBalanceScore(syntheticSems, "balanced");
-
-        // Feasibility check: skip distributions that put any term below f1 floor
-        // (simplified — a real check would call forwardFeasibilityScreen)
-        const feasible = credits.every(c => c >= 8 && c <= 22);
-        if (!feasible) continue;
-
-        const weightedCreditsByTerm: Record<string, number> = {};
-        const hardCountByTerm: Record<string, number> = {};
-        const easyCountByTerm: Record<string, number> = {};
-        const subjectDistributionByTerm: Record<string, Record<string, number>> = {};
-
-        for (let j = 0; j < n; j++) {
-            const sem = semesters[j]!;
-            weightedCreditsByTerm[sem.term] = credits[j]! * 0.8;
-            hardCountByTerm[sem.term] = Math.round((credits[j]! / 4) * 0.6);
-            easyCountByTerm[sem.term] = Math.round((credits[j]! / 4) * 0.4);
-            subjectDistributionByTerm[sem.term] = {};
-            // Extract subjects from greedy slots (simplified)
-            for (const slot of sem.slots) {
-                if (slot.kind === "specific_planned" || slot.kind === "in_progress") {
-                    const subj = (slot.courseId ?? "").replace(/ \d+.*$/, "");
-                    subjectDistributionByTerm[sem.term]![subj] =
-                        (subjectDistributionByTerm[sem.term]![subj] ?? 0) + slot.credits;
-                }
-            }
-        }
-
-        const topDiffs: Array<{ aspect: string; change: string }> = [];
-        if (altScore < greedy.balanceScore) {
-            topDiffs.push({
-                aspect: "balanceScore",
-                change: `${altScore.toFixed(2)} vs greedy ${greedy.balanceScore.toFixed(2)} (more balanced)`,
-            });
-        } else {
-            topDiffs.push({
-                aspect: "balanceScore",
-                change: `${altScore.toFixed(2)} vs greedy ${greedy.balanceScore.toFixed(2)}`,
-            });
-        }
-
-        candidates.push({
-            planIndex: i + 1,
-            balanceScore: altScore,
-            weightedCreditsByTerm,
-            hardCountByTerm,
-            easyCountByTerm,
-            subjectDistributionByTerm,
-            distinctSubjectsCount: Object.values(subjectDistributionByTerm)
-                .flatMap(d => Object.keys(d))
-                .filter((v, idx, arr) => arr.indexOf(v) === idx).length,
-            // totalPetitionCount uses the WINNER's slots — alternative
-            // distributions in this Phase-13 stub are credit-redistribution
-            // probes, not full re-solves, so the same petition slots persist
-            // across all candidates. Per-variant counts require Phase 15
-            // re-solve.
-            totalPetitionCount: semesters
-                .flatMap(s => s.slots)
-                .filter(s => s.kind === "specific_planned" && s.requiresPetition === true)
-                .length,
-            // totalAssumptionCount is backfilled in solveForwardSchedule's
-            // post-pass after buildIpAssumptions runs (also winner-derived;
-            // see Phase 15 for per-variant re-solve).
-            totalAssumptionCount: 0,
-            graduationTerm: semesters[semesters.length - 1]?.term ?? "",
-            topDiffsFromWinner: topDiffs,
-        });
-    }
-
-    // Sort ascending by balanceScore, cap at 5
-    return candidates.sort((a, b) => a.balanceScore - b.balanceScore).slice(0, 5);
-}
+type Season = "fall" | "spring" | "summer" | "january";
 
 // ---------------------------------------------------------------------------
 // IP assumption builder (Decision #30)
+//
+// Retained here (not moved to materializePlan) because materializePlan imports
+// it from this module. Emits one IP_COURSE_COMPLETION assumption per in-progress
+// course that is a prereq of at least one PLACED (requirement/pin) slot.
 // ---------------------------------------------------------------------------
 
 export function buildIpAssumptions(
@@ -245,6 +77,10 @@ export function buildIpAssumptions(
 
 // ---------------------------------------------------------------------------
 // PlanState derivation (Decision #32 — coarse Task 3.1 approximation)
+//
+// Retained here (not moved to materializePlan) because materializePlan imports
+// it from this module, and the solver body re-derives state after folding in
+// extra (pin / unsatisfiable) violations.
 // ---------------------------------------------------------------------------
 
 export function derivePlanState(
@@ -278,183 +114,94 @@ export function derivePlanState(
 }
 
 // ---------------------------------------------------------------------------
-// Main export
+// Main export — constraint search + materialize
 // ---------------------------------------------------------------------------
 
 export function solveForwardSchedule(input: SolverInput): SolverOutput {
-    const violations: FeasibilityReport["constraintViolations"] = [];
-    const placementRationale: Record<string, string> = {};
+    const ctx = buildConstraintContext(input);
 
-    // -----------------------------------------------------------------------
-    // Stages 1–4: Input prep
-    // -----------------------------------------------------------------------
-
-    // Enumerate future main terms. Phase 13 includes the currentTerm as a
-    // planning target (the solver fills it with specific_planned slots).
-    // In build.ts the current term's existing IP slots are prepended as locked
-    // `in_progress` slots; the solver adds remaining planned slots on top.
-    // We do NOT filter currentTerm here — only summer/january are skipped.
-    const allFutureTerms = enumerateMainTerms(input.currentTerm, input.graduationTerm);
-
-    // For edge case: if graduation == current term, nothing to plan
-    if (allFutureTerms.length === 0) {
-        const emptyFeasibility: FeasibilityReport = {
-            feasible: true,
-            constraintViolations: [],
-            placementRationale: {},
-        };
-        return {
-            semesters: [],
-            feasibility: emptyFeasibility,
-            balanceScore: 0,
-            assumptions: [],
-            state: "valid-clean",
-        };
+    // Empty horizon (graduation == current term): nothing to plan. materializePlan
+    // returns the same empty valid bundle the old greedy did.
+    if (ctx.futureTerms.length === 0) {
+        return materializePlan({ placed: [] }, ctx);
     }
 
-    // Initialize per-term tracking
-    const perTermSlots = new Map<string, ScheduleSlot[]>();
-    const perTermCredits = new Map<string, number>();
-    for (const t of allFutureTerms) {
-        perTermSlots.set(t, []);
-        perTermCredits.set(t, 0);
-    }
+    // Violations the SEARCH/materialize path cannot surface on its own (pins it
+    // had to skip, and requirements the search could not place). Folded into the
+    // materialised feasibility report at the end. Shape = FeasibilityReport's
+    // constraintViolations element.
+    const extraViolations: FeasibilityReport["constraintViolations"] = [];
 
-    // Pre-populate each IP course's term with an in_progress slot so
-    // that slack accounting is correct during placement. Each IP row
-    // carries its own term (current-semester IPs vs pre-registered
-    // future-semester IPs) — see types.ts for the May 2026 post-mortem
-    // context. We mint in_progress ScheduleSlots using the catalog
-    // (when the course is known) so credit counts are accurate.
-    //
-    // Fall back to currentTerm when the row's term is outside the
-    // planning horizon (e.g. a stale Spring IP whose grade hasn't
-    // posted yet but wall-clock has rolled into Fall). Anything else
-    // would silently drop a real DPR row.
+    // -----------------------------------------------------------------------
+    // Build FIXED placements (always present in every candidate plan; the search
+    // assigns requirement courses on top of these).
+    // -----------------------------------------------------------------------
+    const fixed: PlacedCourse[] = [];
+
+    // ---- In-progress courses (source "ip") ----
+    // One per coursesInProgress entry. The placement's term is the row's own
+    // term when it falls inside the planning window, else the current term
+    // (mirrors the old IP pre-population + materialize's IP handling). Credits
+    // from the catalog (default 4 when absent). IP courses satisfy no bound
+    // requirement (satisfiesRId null) — coverage counts only requirement/pin.
     for (const [ipCourseId, { term: ipTerm }] of input.coursesInProgress) {
-        const targetTerm = perTermSlots.has(ipTerm) ? ipTerm : input.currentTerm;
-        const targetSlots = perTermSlots.get(targetTerm);
-        if (targetSlots === undefined) continue;
+        const term = ctx.futureTerms.includes(ipTerm) ? ipTerm : input.currentTerm;
         const meta = input.courseCatalog.get(ipCourseId);
-        const ipCredits = meta?.credits ?? 4; // default 4cr when catalog absent
-        targetSlots.push({
-            kind: "in_progress",
+        const credits = meta?.credits ?? 4;
+        const wt = classifyWorkloadTier({
             courseId: ipCourseId,
-            title: meta?.title ?? ipCourseId,
-            credits: ipCredits,
-        });
-        perTermCredits.set(
-            targetTerm,
-            (perTermCredits.get(targetTerm) ?? 0) + ipCredits,
-        );
-    }
-
-    // plannedPlacements: courseId → term (for isPrereqSatisfied's future-placement path)
-    const plannedPlacements = new Map<string, string>();
-
-    // Gather ALL candidate course IDs across all requirements
-    const allCandidateCourseIds: string[] = [];
-    for (const req of input.unmetRequirements) {
-        for (const cid of req.candidateCourses) allCandidateCourseIds.push(cid);
-    }
-
-    // -----------------------------------------------------------------------
-    // Stage 5: Candidate ranking (Decision #26)
-    // prereq-depth-ascending, workload-weight-descending
-    // -----------------------------------------------------------------------
-
-    const prereqDepths = computePrereqDepths(allCandidateCourseIds, input.prereqs);
-
-    // Build per-course workload weights for ranking (use defaults; no rules yet)
-    function rankingWeight(courseId: string): number {
-        const result = classifyWorkloadTier({
-            courseId,
             satisfiesRules: [],
             majorRuleKinds: input.programRules.majorRuleKinds,
             schoolCoreRuleIds: input.programRules.schoolCoreRuleIds,
             generalCategoryRuleIds: input.programRules.generalCategoryRuleIds,
-            bulletinTitle: input.courseTitles?.get(courseId),
-            bulletinKeywords: input.courseBulletinKeywords?.get(courseId),
+            bulletinTitle: input.courseTitles?.get(ipCourseId),
+            bulletinKeywords: input.courseBulletinKeywords?.get(ipCourseId),
         });
-        return result.weight;
+        fixed.push({
+            courseId: ipCourseId,
+            term,
+            credits,
+            workloadTier: wt.tier,
+            workloadWeight: wt.weight,
+            satisfiesRId: null,
+            source: "ip",
+        });
     }
 
-    // Sort unmetRequirements by (prereq-depth ASC, workload-weight DESC)
-    // This ensures courses with no prereqs and high workload-tier place first.
-    const sortedRequirements = [...input.unmetRequirements].sort((a, b) => {
-        const aCourse = a.candidateCourses[0];
-        const bCourse = b.candidateCourses[0];
-        const aDepth = aCourse ? (prereqDepths.get(aCourse) ?? 0) : 0;
-        const bDepth = bCourse ? (prereqDepths.get(bCourse) ?? 0) : 0;
-        if (aDepth !== bDepth) return aDepth - bDepth; // ascending depth
-        const aWeight = aCourse ? rankingWeight(aCourse) : 0;
-        const bWeight = bCourse ? rankingWeight(bCourse) : 0;
-        return bWeight - aWeight; // descending weight
-    });
-
-    // Build dependents index for downstream-impact
-    const dependentsIndex = buildDependentsIndex(allCandidateCourseIds, input.prereqs);
-
-    // -----------------------------------------------------------------------
-    // Stage 6: Candidate-level filters + placement
-    // -----------------------------------------------------------------------
-
-    const placeholderRequirements: typeof input.unmetRequirements = [];
-    const placedCourseSet = new Set<string>(); // for isCriticalPath and IP assumptions
-
-    // -----------------------------------------------------------------------
-    // Phase 14 Task 3 — (d) Pin-placement pass (Decision #10 / #31)
-    // Pins are mandatory preferences within the valid candidate set.
-    // Pins CANNOT bypass hard filters (offering pattern, catalog-absent).
-    // Pins that violate offering pattern emit an offering_pattern violation.
-    //
-    // Pin / exclusion conflict resolution: if the same courseId appears in
-    // both `preferences.pins` and `preferences.exclusions`, the pin wins.
-    // Decision #31's hierarchy places student pins (rank 4) ABOVE student
-    // soft preferences (rank 5, where exclusions live). Structurally this
-    // happens "for free" because the pin loop runs first, the pinned
-    // course lands in `plannedPlacements`, and the candidate loop's
-    // `plannedPlacements.has(courseId)` skip-check fires before the
-    // exclusion set is consulted.
-    // -----------------------------------------------------------------------
-
+    // ---- Pins (source "pin") ----
+    // Each pin is a hard student preference within the valid candidate set.
+    // A pin CANNOT bypass the offering pattern or escape the planning window:
+    //   - pinned to a non-future term → "other" violation, skipped (not fixed).
+    //   - offering pattern known and season(term) ∉ it → "offering_pattern"
+    //     violation, skipped.
+    // Pin META resolution (mirrors the old pin pass + Step-8d off-catalog
+    // softening): catalog → offCatalogCredits → { title: courseId, credits: 0 }.
+    // PIN COVERAGE: the pin's satisfiesRId is the rId of the FIRST unmet
+    // requirement whose candidateCourses include the pinned course (so the pin
+    // COVERS that requirement and the search skips that variable — see
+    // search.ts's coveredByFixed filter), else null. Workload tier/weight are
+    // classified with satisfiesRules [matchedRId ?? ""].
     for (const pin of input.preferences?.pins ?? []) {
-        if (!allFutureTerms.includes(pin.term)) {
-            violations.push({
+        if (!ctx.futureTerms.includes(pin.term)) {
+            extraViolations.push({
                 kind: "other",
                 course: pin.courseId,
                 detail: `Pinned to ${pin.term}, not a future term in the plan window.`,
             });
             continue;
         }
-        // Step 8d PR-2 — soften the off-catalog pin path. An explicit
-        // student pin is honored even when the course isn't in the
-        // undergraduate planning catalog: resolve real credits from the
-        // bulletin (off-catalog/graduate courses), else place at 0 credits
-        // (never a guessed nonzero) with a "verify in Albert" caveat. Never
-        // silently drop. Auto-planning (candidate placement below) is
-        // unchanged — it still only places catalog courses.
+
+        // Resolve credits (auto-planning never consults offCatalogCredits; this
+        // is the explicit-pin softening path).
         let meta = input.courseCatalog.get(pin.courseId);
-        let pinCaveat: string | null = null;
         if (!meta) {
-            const offCatalog = input.offCatalogCredits?.get(pin.courseId);
-            if (offCatalog) {
-                meta = offCatalog;
-                pinCaveat =
-                    `${pin.courseId} is outside the undergraduate planning catalog ` +
-                    `(graduate/professional) — verify credits and eligibility in Albert.`;
-            } else {
-                meta = { title: pin.courseId, credits: 0 };
-                pinCaveat =
-                    `${pin.courseId} isn't in the current NYU bulletin — it may be ` +
-                    `discontinued or renumbered (e.g. an old course number). Verify the ` +
-                    `current course in Albert.`;
-            }
+            meta = input.offCatalogCredits?.get(pin.courseId) ?? { title: pin.courseId, credits: 0 };
         }
+
         const offered = input.offerings.get(pin.courseId);
-        const seasonOnly = (parseTerm(pin.term)?.season ?? "fall") as "fall" | "spring";
-        if (offered && offered.length > 0 && !offered.includes(seasonOnly)) {
-            violations.push({
+        const season = (parseTerm(pin.term)?.season ?? "fall") as Season;
+        if (offered && offered.length > 0 && !offered.includes(season)) {
+            extraViolations.push({
                 kind: "offering_pattern",
                 course: pin.courseId,
                 term: pin.term,
@@ -463,12 +210,13 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             continue;
         }
 
-        // Build full rich fields for the pinned slot (Decision #10 pin hard constraint)
-        const confidence: ConfidenceTier =
-            input.offeringConfidence.get(pin.courseId) ?? "historically_partial";
-        const wtResult = classifyWorkloadTier({
+        // PIN COVERAGE — first unmet requirement whose candidates include the pin.
+        const matchedRId =
+            input.unmetRequirements.find(r => r.candidateCourses.includes(pin.courseId))?.rId ?? null;
+
+        const wt = classifyWorkloadTier({
             courseId: pin.courseId,
-            satisfiesRules: [],
+            satisfiesRules: [matchedRId ?? ""],
             majorRuleKinds: input.programRules.majorRuleKinds,
             schoolCoreRuleIds: input.programRules.schoolCoreRuleIds,
             generalCategoryRuleIds: input.programRules.generalCategoryRuleIds,
@@ -476,724 +224,46 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             bulletinKeywords: input.courseBulletinKeywords?.get(pin.courseId),
         });
 
-        const latestTermForPin = allFutureTerms[allFutureTerms.length - 1] ?? pin.term;
-
-        const pinRationale: SlotRationale = {
-            satisfiesRequirements: [],
-            termConstraints: [
-                { kind: "offering", detail: `Pinned by student preference to ${pin.term}.` },
-            ],
-            consideredAlternatives: [],
-            decisionsApplied: ["D10-pinHardConstraint", "D31-pinPrecedence"],
-        };
-
-        const pinFlexibility: SlotFlexibility = {
-            earliestPossibleTerm: pin.term,
-            latestPossibleTerm: latestTermForPin,
-            alternativeCourses: [],
-        };
-
-        const pinDownstream = computeDownstreamImpact(pin.courseId, dependentsIndex);
-
-        const pinnedSlot: ScheduleSlotSpecificPlanned = {
-            kind: "specific_planned",
+        fixed.push({
             courseId: pin.courseId,
-            title: meta.title,
+            term: pin.term,
             credits: meta.credits,
-            satisfiesRules: [],
-            reason: `Pinned by student preference to ${pin.term}.${pinCaveat ? ` ${pinCaveat}` : ""}`,
-            rationale: pinRationale,
-            flexibility: pinFlexibility,
-            downstreamImpact: pinDownstream,
-            workloadTier: wtResult.tier,
-            workloadWeight: wtResult.weight ?? 1.0,
-            bindingState: "bound",
-            confidence,
-            isCriticalPath: false,
-        };
-
-        perTermSlots.get(pin.term)!.push(pinnedSlot);
-        perTermCredits.set(pin.term, (perTermCredits.get(pin.term) ?? 0) + meta.credits);
-        plannedPlacements.set(pin.courseId, pin.term);
-        placedCourseSet.add(pin.courseId);
-        placementRationale[pin.courseId] = pinnedSlot.reason;
+            workloadTier: wt.tier,
+            workloadWeight: wt.weight,
+            satisfiesRId: matchedRId,
+            source: "pin",
+        });
     }
 
     // -----------------------------------------------------------------------
-    // Phase 14 Task 3 — (e) Build exclusion set (Decision #11)
-    // Courses in preferences.exclusions are never placed by the solver.
+    // Run the search (requirement placements on top of fixed). If no valid plan
+    // exists, materialise the fixed-only plan (so IP + pins + placeholders still
+    // render) and surface each unsatisfiable requirement as a violation.
     // -----------------------------------------------------------------------
-
-    const excludedCourseSet = new Set(
-        (input.preferences?.exclusions ?? []).map(e => e.courseId),
-    );
-
-    for (const req of sortedRequirements) {
-        // --- Stage 6a: candidate-level filters ---
-
-        // Placeholder if no candidates
-        if (req.candidateCourses.length === 0) {
-            placeholderRequirements.push(req);
-            continue;
-        }
-
-        // Phase 14 Task 3 — (e) Apply exclusions: skip excluded candidates.
-        // Filter the candidate list, then pick the first non-excluded one.
-        const filteredCandidates = req.candidateCourses.filter(
-            c => !excludedCourseSet.has(c),
-        );
-
-        if (filteredCandidates.length === 0) {
-            // All candidates excluded — fall through to placeholder
-            placeholderRequirements.push(req);
-            continue;
-        }
-
-        // Pick the first candidate (greedy; Phase 15 would try all)
-        const courseId = filteredCandidates[0]!;
-
-        // Skip if already placed by the pin pass
-        if (plannedPlacements.has(courseId)) continue;
-
-        const meta = input.courseCatalog.get(courseId);
-
-        // Catalog gap → placeholder (Decision #5 lenient)
-        if (!meta) {
-            placeholderRequirements.push(req);
-            continue;
-        }
-
-        // Decision #21: skip study-abroad courses (≥9000)
-        if (isStudyAbroadCourse(courseId)) {
-            violations.push({
-                kind: "other",
-                course: courseId,
-                detail: `Course ${courseId} is a study-abroad section (≥9000) — skipped in Phase 13 (Decision #21).`,
-            });
-            continue;
-        }
-
-        // Decision #1: NOT-clause exclusion
-        if (isExcludedByNotClause(courseId, input.prereqs, input.coursesTaken, plannedPlacements)) {
-            violations.push({
-                kind: "not_clause",
-                course: courseId,
-                detail: `Course ${courseId} is excluded by a NOT prereq clause (something in coursesTaken blocks it).`,
-            });
-            continue;
-        }
-
-        // Workload tier + weight for this slot
-        const wtResult = classifyWorkloadTier({
-            courseId,
-            satisfiesRules: [req.rId],
-            majorRuleKinds: input.programRules.majorRuleKinds,
-            schoolCoreRuleIds: input.programRules.schoolCoreRuleIds,
-            generalCategoryRuleIds: input.programRules.generalCategoryRuleIds,
-            bulletinTitle: input.courseTitles?.get(courseId),
-            bulletinKeywords: input.courseBulletinKeywords?.get(courseId),
-        });
-
-        const confidence: ConfidenceTier =
-            input.offeringConfidence.get(courseId) ?? "historically_partial";
-        const offered = input.offerings.get(courseId);
-
-        // --- Stage 6c: slack-based placement ---
-        // Walk terms in preference order (frontload / backload / default chronological).
-        let placed = false;
-
-        const termsToTry = termsForPlacement(
-            allFutureTerms,
-            perTermCredits,
-            input.creditTargetPerSemester,
-            input.preferences,
-        );
-
-        for (const term of termsToTry) {
-            const seasonOnly = (parseTerm(term)?.season ?? "fall") as "fall" | "spring";
-            const termTarget = effectiveTermTarget(
-                term,
-                input.creditTargetPerSemester,
-                input.preferences,
-                input.f1Floor,
-                input.domesticPartTimeFloor,
-                input.creditCeiling,
-            );
-            const slack = termTarget - (perTermCredits.get(term) ?? 0);
-
-            // Check offering pattern
-            if (offered && offered.length > 0 && !offered.includes(seasonOnly)) {
-                continue;
-            }
-
-            // Check credit slack
-            if (slack < meta.credits) continue;
-
-            // Check prereqs via the real isPrereqSatisfied helper
-            const prereqResult = checkAllPrereqs(courseId, term, input, plannedPlacements);
-            if (!prereqResult.satisfied && !prereqResult.requiresPetition) {
-                // Prereqs not met — try next term
-                continue;
-            }
-
-            // Phase 14 Task 9 — Decision #14: co-requisite same-term enforcement.
-            // If course C has coreqs [X, Y, ...] that are still unmet (not in
-            // coursesTaken and not yet placed), all of them must fit in this same
-            // term (slack + offering pattern).  If any cannot fit, reject this term
-            // and try the next one.
-            const coreqIds = input.coreqs?.get(courseId) ?? [];
-            let coreqTermRejected = false;
-            const coreqTermConstraintDetails: string[] = [];
-            for (const coreqId of coreqIds) {
-                // If the coreq is already taken, in-progress, or already
-                // planned in some prior term, no enforcement is needed.
-                // (IP courses count as concurrent satisfaction per
-                // Decision #4's optimistic-forward-projection — same
-                // semantics as the prereq path's checkAllPrereqs handles.)
-                if (input.coursesTaken.has(coreqId)) continue;
-                if (input.coursesInProgress.has(coreqId)) continue;
-                if (plannedPlacements.has(coreqId)) continue;
-                // Coreq is unmet — it must be placeable in this same term.
-                const coreqMeta = input.courseCatalog.get(coreqId);
-                if (!coreqMeta) {
-                    // Catalog absent — coreq can't be confirmed; treat as unsatisfiable
-                    // and record it, but do not hard-reject (catalog gaps are lenient).
-                    coreqTermConstraintDetails.push(`${coreqId}:catalog-absent`);
-                    continue;
-                }
-                // Check credit slack against the per-term effective target
-                // (which honors loadStylePerTerm "light"/"heavy" overrides
-                // and explicit creditTargetPerTerm). Falls back to the
-                // hard ceiling so a heavy-load term still has its real
-                // upper bound. Without this min(), preference-driven
-                // light terms would silently accept coreq bundles up to
-                // the hard ceiling, defeating the "light" intent.
-                const projectedCredits = (perTermCredits.get(term) ?? 0) + meta.credits + coreqMeta.credits;
-                const termTargetForCoreq = effectiveTermTarget(
-                    term,
-                    input.creditTargetPerSemester,
-                    input.preferences,
-                    input.f1Floor,
-                    input.domesticPartTimeFloor,
-                    input.creditCeiling,
-                );
-                const coreqCap = Math.min(input.creditCeiling, termTargetForCoreq);
-                if (projectedCredits > coreqCap) {
-                    // Effective per-term cap exceeded — can't fit both in this term
-                    coreqTermRejected = true;
-                    coreqTermConstraintDetails.push(`${coreqId}:ceiling-exceeded`);
-                    break;
-                }
-                // Check offering pattern for coreq
-                const coreqOffered = input.offerings.get(coreqId);
-                if (coreqOffered && coreqOffered.length > 0 && !coreqOffered.includes(seasonOnly)) {
-                    // Coreq not offered this season — can't place together
-                    coreqTermRejected = true;
-                    coreqTermConstraintDetails.push(`${coreqId}:offering-mismatch`);
-                    break;
-                }
-                // Passes: coreq fits offering and credit ceiling
-                coreqTermConstraintDetails.push(`${coreqId}:ok`);
-            }
-            if (coreqTermRejected) {
-                // This term can't accommodate all coreqs — try next term
-                continue;
-            }
-
-            // Decision #27: forward-feasibility screen after trial placement
-            const trialCredits = new Map(perTermCredits);
-            trialCredits.set(term, (trialCredits.get(term) ?? 0) + meta.credits);
-
-            const remainingUnmet = sortedRequirements
-                .filter(r => {
-                    const cid = r.candidateCourses[0];
-                    return cid && !plannedPlacements.has(cid) && cid !== courseId;
-                })
-                .map(r => ({
-                    courseId: r.candidateCourses[0]!,
-                    credits: r.credits,
-                    minDepth: prereqDepths.get(r.candidateCourses[0]!) ?? 0,
-                }));
-
-            const remainingTerms = allFutureTerms.filter(
-                t => compareSolverTerms(t, term) > 0,
-            );
-
-            const creditCeilingMap = new Map<string, number>();
-            for (const t of allFutureTerms) {
-                creditCeilingMap.set(t, input.creditCeiling);
-            }
-
-            const feasible = forwardFeasibilityScreen({
-                placedCreditsByTerm: trialCredits,
-                creditCeilingByTerm: creditCeilingMap,
-                remainingUnmet,
-                remainingTerms,
-                confidenceByCourse: input.offeringConfidence,
-            });
-
-            if (!feasible && remainingTerms.length > 0) {
-                // Try next term (per spec: re-tries are within same course's term-search loop)
-                continue;
-            }
-
-            // Build rationale fields
-            const termConstraints: TermConstraint[] = [];
-            if (offered && offered.length > 0) {
-                termConstraints.push({
-                    kind: "offering",
-                    detail: `${courseId} offered in: ${offered.join(", ")}`,
-                });
-            }
-            if (slack < meta.credits + 4) {
-                // "creditSlack" — slack against creditTargetPerSemester, NOT the
-                // hard ceiling input.creditCeiling. Used for the rationale UI to
-                // explain "this term filled up the target before another candidate
-                // could land here."
-                termConstraints.push({
-                    kind: "creditSlack",
-                    detail: `Slack ${slack} cr constrained placement to term ${term}.`,
-                });
-            }
-            if (prereqResult.decisionsApplied.length > 0) {
-                termConstraints.push({
-                    kind: "prereqChain",
-                    detail: `Prereq chain: ${prereqResult.decisionsApplied.join(", ")}`,
-                });
-            }
-            // Phase 14 Task 9 — record coreq constraint in rationale when coreqs were enforced
-            const satisfiedCoreqIds = coreqIds.filter(
-                c => !input.coursesTaken.has(c) && !plannedPlacements.has(c),
-            );
-            if (satisfiedCoreqIds.length > 0) {
-                termConstraints.push({
-                    kind: "coreqSameTerm",
-                    detail: `Coreqs [${satisfiedCoreqIds.join(", ")}] must be taken same term as ${courseId} (Decision #14).`,
-                });
-            }
-
-            // flexibility.earliestPossibleTerm: first future term matching offering
-            const earliestTerm = allFutureTerms.find(t => {
-                const s = (parseTerm(t)?.season ?? "fall") as "fall" | "spring";
-                return !offered || offered.length === 0 || offered.includes(s);
-            }) ?? term;
-
-            // latestPossibleTerm: last future term before graduation
-            const latestTerm = allFutureTerms[allFutureTerms.length - 1] ?? term;
-
-            // alternativeCourses: other candidates from same requirement
-            const alternativeCourses = req.candidateCourses.filter(c => c !== courseId);
-
-            const rationale: SlotRationale = {
-                satisfiesRequirements: [req.rId],
-                termConstraints,
-                consideredAlternatives: alternativeCourses.map(c => ({
-                    courseId: c,
-                    rejectedBecause: "greedy-first-candidate-wins (Phase 15 will evaluate all)",
-                })),
-                decisionsApplied: [
-                    ...prereqResult.decisionsApplied,
-                    ...(prereqResult.requiresPetition ? ["D3-petitionSoftAllow"] : []),
-                ].filter((v, i, arr) => arr.indexOf(v) === i),
-                ...(prereqResult.requiresPetition
-                    ? {
-                          petitionTrigger: {
-                              fromCourse: courseId,
-                              bulletinText: "Instructor permission required",
-                          },
-                      }
-                    : {}),
-            };
-
-            const flexibility: SlotFlexibility = {
-                earliestPossibleTerm: earliestTerm,
-                latestPossibleTerm: latestTerm,
-                alternativeCourses,
-            };
-
-            const downstreamImpact = computeDownstreamImpact(courseId, dependentsIndex);
-
-            const criticalPath = isCriticalPath(
-                courseId,
-                req.rId,
-                req.candidateCourses,
-                dependentsIndex,
-                input.prereqs,
-            );
-
-            const slot: ScheduleSlotSpecificPlanned = {
-                kind: "specific_planned",
-                courseId,
-                title: meta.title,
-                credits: meta.credits,
-                satisfiesRules: [req.rId],
-                reason: `Required (${req.category}) placed in ${term} via slack-balanced placement.`,
-                ...(prereqResult.requiresPetition ? { requiresPetition: true } : {}),
-                rationale,
-                flexibility,
-                downstreamImpact,
-                workloadTier: wtResult.tier,
-                workloadWeight: wtResult.weight,
-                bindingState: "bound",
-                confidence,
-                isCriticalPath: criticalPath,
-                ...(prereqResult.requiresPetition ? { approvalAuthority: "instructor" as const } : {}),
-            };
-
-            perTermSlots.get(term)!.push(slot);
-            perTermCredits.set(term, (perTermCredits.get(term) ?? 0) + meta.credits);
-            plannedPlacements.set(courseId, term);
-            placedCourseSet.add(courseId);
-            placementRationale[courseId] = slot.reason;
-            placed = true;
-            break; // move to next requirement
-        }
-
-        if (!placed) {
-            const coreqHint = (input.coreqs?.get(courseId) ?? []).length > 0
-                ? ` Co-requisites [${(input.coreqs!.get(courseId)!).join(", ")}] may have prevented placement (Decision #14).`
-                : "";
-            violations.push({
+    const search = searchBestPlan(ctx, { fixed });
+    const planForMaterialize = search.plan ?? { placed: fixed };
+    if (!search.plan) {
+        for (const rId of search.unsatisfiable) {
+            extraViolations.push({
                 kind: "prereq_unsatisfiable",
-                course: courseId,
-                detail: `Could not place ${courseId} — no future term has sufficient slack, matching offering pattern, and satisfied prereqs.${coreqHint}`,
-            });
-            // Still add placeholder so the plan is visible
-            placeholderRequirements.push(req);
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // Stage 6c: Placeholder slots for requirements with empty candidateCourses
-    // or no matching catalog entry (Decision #37)
-    // -----------------------------------------------------------------------
-
-    const degreeCreditsMet = input.creditsEarned >= input.graduationCreditMinimum;
-
-    for (const req of placeholderRequirements) {
-        // Find the earliest term with sufficient slack (respects per-term target overrides)
-        let bestTerm: string | null = null;
-        let bestSlack = -Infinity;
-        for (const t of allFutureTerms) {
-            const tTarget = effectiveTermTarget(
-                t,
-                input.creditTargetPerSemester,
-                input.preferences,
-                input.f1Floor,
-                input.domesticPartTimeFloor,
-                input.creditCeiling,
-            );
-            const slack = tTarget - (perTermCredits.get(t) ?? 0);
-            if (slack >= req.credits && slack > bestSlack) {
-                bestSlack = slack;
-                bestTerm = t;
-            }
-        }
-        if (!bestTerm) {
-            // No room — try force into first term
-            bestTerm = allFutureTerms[0] ?? null;
-        }
-        if (!bestTerm) continue;
-
-        const isImmediate = bestTerm === allFutureTerms[0];
-        const bindingState: "placeholder-pending" | "placeholder-deferred" = isImmediate
-            ? "placeholder-pending"
-            : "placeholder-deferred";
-
-        const wtResult = classifyWorkloadTier({
-            courseId: `placeholder-${req.rId}`,
-            satisfiesRules: [req.rId],
-            majorRuleKinds: input.programRules.majorRuleKinds,
-            schoolCoreRuleIds: input.programRules.schoolCoreRuleIds,
-            generalCategoryRuleIds: input.programRules.generalCategoryRuleIds,
-            isOptional: false,
-        });
-
-        const latestTerm = allFutureTerms[allFutureTerms.length - 1] ?? bestTerm;
-
-        const phRationale: SlotRationale = {
-            satisfiesRequirements: [req.rId],
-            termConstraints: [
-                { kind: "offering", detail: "No specific course assigned — pending advising" },
-            ],
-            consideredAlternatives: req.candidateCourses.map(c => ({
-                courseId: c,
-                rejectedBecause: "not in course catalog or no offering data",
-            })),
-            decisionsApplied: ["D37-PlaceholderSlot"],
-        };
-
-        const phSlot: ScheduleSlotPlaceholder = {
-            kind: "placeholder",
-            category: req.title,
-            credits: req.credits,
-            satisfiesRules: [req.rId],
-            optional: false,
-            reason: `Placeholder for unmet requirement "${req.title}" (${req.category}).`,
-            rationale: phRationale,
-            flexibility: {
-                earliestPossibleTerm: bestTerm,
-                latestPossibleTerm: latestTerm,
-                alternativeCourses: req.candidateCourses,
-            },
-            downstreamImpact: { courseIds: [], graduationDelay: 0 },
-            workloadTier: wtResult.tier,
-            workloadWeight: 0.3, // Decision #37: placeholder default 0.3
-            bindingState,
-            placeholderId: `REQ-${req.rId}`,
-            confidence: "historically_partial",
-            isCriticalPath: req.candidateCourses.length === 0, // only satisfier
-        };
-
-        perTermSlots.get(bestTerm)!.push(phSlot);
-        perTermCredits.set(bestTerm, (perTermCredits.get(bestTerm) ?? 0) + req.credits);
-    }
-
-    // -----------------------------------------------------------------------
-    // Fill remaining capacity with free-elective placeholders (Decision #8)
-    // -----------------------------------------------------------------------
-
-    for (const term of allFutureTerms) {
-        const cur = perTermCredits.get(term) ?? 0;
-        const target = effectiveTermTarget(
-            term,
-            input.creditTargetPerSemester,
-            input.preferences,
-            input.f1Floor,
-            input.domesticPartTimeFloor,
-            input.creditCeiling,
-        );
-        let credits = cur;
-        const latestTerm = allFutureTerms[allFutureTerms.length - 1] ?? term;
-
-        // Fill in 4-credit increments; then add a partial-credit top-off slot
-        // if the target is not a multiple of 4 (e.g. target=18 → 4+4+4+4+2).
-        while (credits < target) {
-            const slotCredits = Math.min(4, target - credits);
-
-            // Decision #8: above F-1 floor + degreeCreditsMet → optional
-            const aboveFloor =
-                credits >= (input.f1Floor ?? input.domesticPartTimeFloor ?? 0);
-            const optional = degreeCreditsMet && aboveFloor;
-
-            const freeRationale: SlotRationale = {
-                satisfiesRequirements: [],
-                termConstraints: [
-                    {
-                        kind: "creditFloor",
-                        detail: optional
-                            ? `Above degree minimum + F-1 floor — optional load.`
-                            : `Fills term to ${target}-credit target.`,
-                    },
-                ],
-                consideredAlternatives: [],
-                decisionsApplied: optional ? ["D8-OptionalElective"] : [],
-            };
-
-            const freeSlot: ScheduleSlotPlaceholder = {
-                kind: "placeholder",
-                category: "Free elective",
-                credits: slotCredits,
-                satisfiesRules: [],
-                optional,
-                reason: optional
-                    ? "Above degree minimum and credit floor — optional load."
-                    : `Brings total to ${target}-credit target.`,
-                rationale: freeRationale,
-                flexibility: {
-                    earliestPossibleTerm: term,
-                    latestPossibleTerm: latestTerm,
-                    alternativeCourses: [],
-                },
-                downstreamImpact: { courseIds: [], graduationDelay: 0 },
-                workloadTier: "free-elective" as WorkloadTier,
-                workloadWeight: 0.3,
-                bindingState: "placeholder-deferred",
-                placeholderId: `FREE-${term}-${credits}`,
-                confidence: "historically_partial",
-                isCriticalPath: false,
-                ...(optional ? { optionalReason: { droppable: true } } : {}),
-            };
-
-            perTermSlots.get(term)!.push(freeSlot);
-            credits += slotCredits;
-        }
-        perTermCredits.set(term, credits);
-    }
-
-    // -----------------------------------------------------------------------
-    // Stage 6d: per-term visa invariants (Decision #34)
-    // -----------------------------------------------------------------------
-
-    const semesters: ForwardSemester[] = allFutureTerms.map(term => {
-        const slots = perTermSlots.get(term) ?? [];
-        const termCredits = slots.reduce((s, x) => s + x.credits, 0);
-        const notes: string[] = [];
-
-        // Visa notes from visaNotesForCredits
-        const visaNotes = visaNotesForCredits({
-            credits: termCredits,
-            visa: input.visaStatus,
-            f1Floor: input.f1Floor,
-            domesticPartTimeFloor: input.domesticPartTimeFloor,
-        });
-        notes.push(...visaNotes);
-
-        // Full visaValidator for per-axis fails
-        const isLastTerm = term === allFutureTerms[allFutureTerms.length - 1];
-        const vResult = visaValidator({
-            termCredits,
-            term,
-            profile: {
-                visaStatus: (input.visaStatus as "f1" | "domestic" | "other" | undefined),
-                isFinalTerm: isLastTerm,
-            },
-            f1Floor: input.f1Floor,
-            domesticPartTimeFloor: input.domesticPartTimeFloor,
-            f1OnlineCreditsPerTermCap: null,
-        });
-
-        // Block on any axis returning "fail"
-        if (vResult.fullTimeSatisfied.status === "fail") {
-            violations.push({
-                kind: "credit_floor",
-                term,
-                detail: `Below F-1 full-time floor (${termCredits} credits). ${vResult.fullTimeSatisfied.reason}`,
+                detail: `Requirement ${rId} could not be placed in any valid (course, term).`,
             });
         }
-        if (vResult.creditMinimumSatisfied.status === "fail") {
-            violations.push({
-                kind: "credit_floor",
-                term,
-                detail: `Below minimum enrollment floor (${termCredits} credits). ${vResult.creditMinimumSatisfied.reason}`,
-            });
-        }
-
-        if (termCredits > input.creditCeiling) {
-            notes.push(`Above credit ceiling of ${input.creditCeiling} — overload approval needed.`);
-            violations.push({
-                kind: "credit_ceiling",
-                term,
-                detail: `Above ceiling (${termCredits} > ${input.creditCeiling}).`,
-            });
-        }
-
-        const loadRationale = buildLoadRationale(
-            slots,
-            input.creditTargetPerSemester,
-            termCredits,
-            [],
-        );
-
-        return {
-            term,
-            locked: false,
-            slots,
-            plannedCredits: termCredits,
-            notes,
-            loadRationale,
-        };
-    });
-
-    // -----------------------------------------------------------------------
-    // Stage 8: global constraint checks
-    // -----------------------------------------------------------------------
-
-    // Graduation total
-    const totalScheduled =
-        input.creditsEarned +
-        semesters.reduce((s, sem) => s + sem.plannedCredits, 0);
-    if (totalScheduled < input.graduationCreditMinimum) {
-        violations.push({
-            kind: "graduation_total",
-            detail: `Projected total ${totalScheduled} < graduation minimum ${input.graduationCreditMinimum}.`,
-        });
     }
 
-    // Pass/fail cap
-    if (input.passFailUsed >= input.passFailCap) {
-        violations.push({
-            kind: "pass_fail_cap",
-            detail: `Student has used ${input.passFailUsed} of ${input.passFailCap} P/F units. Any future placement must be letter-graded.`,
-        });
-    }
+    const out = materializePlan(planForMaterialize, ctx);
+    if (extraViolations.length === 0) return out;
 
-    // Online credit cap
-    if (input.onlineCreditCap != null && input.onlineCreditsUsed > input.onlineCreditCap) {
-        violations.push({
-            kind: "online_credit_cap",
-            detail: `Student has used ${input.onlineCreditsUsed} online credits, exceeding the ${input.onlineCreditCap}-credit cap. Future online courses will not count.`,
-        });
-    }
-
-    // Outside-home credit cap
-    if (
-        input.outsideHomeCreditCap != null &&
-        input.outsideHomeCreditsUsed > input.outsideHomeCreditCap
-    ) {
-        violations.push({
-            kind: "outside_home_credit_cap",
-            detail: `Student has used ${input.outsideHomeCreditsUsed} credits outside ${input.homeSchoolId}, exceeding the ${input.outsideHomeCreditCap}-credit cap.`,
-        });
-    }
-
-    // GPA floors
-    if (input.cumulativeGpa < input.graduationGpaFloor) {
-        violations.push({
-            kind: "gpa_floor",
-            detail: `Cumulative GPA ${input.cumulativeGpa} is below the ${input.graduationGpaFloor} graduation floor. The plan does not address this.`,
-        });
-    }
-    if (
-        input.majorGpaFloor != null &&
-        input.majorGpa != null &&
-        input.majorGpa < input.majorGpaFloor
-    ) {
-        violations.push({
-            kind: "gpa_floor",
-            detail: `Major GPA ${input.majorGpa} is below the ${input.majorGpaFloor} major-completion floor.`,
-        });
-    }
-
-    // -----------------------------------------------------------------------
-    // Post-pass: assumptions, balanceScore, alternativeCandidates, state
-    // -----------------------------------------------------------------------
-
-    const assumptions = buildIpAssumptions(input, placedCourseSet, dependentsIndex);
-
-    const balanceScore = computeBalanceScore(semesters, "balanced");
-
+    // Fold the extra violations into the feasibility report and re-derive state.
+    const constraintViolations = [...out.feasibility.constraintViolations, ...extraViolations];
     const feasibility: FeasibilityReport = {
-        feasible: violations.length === 0,
-        ...(violations.length > 0
-            ? { infeasibilityReason: `${violations.length} constraint violation(s).` }
+        ...out.feasibility,
+        constraintViolations,
+        feasible: constraintViolations.length === 0,
+        ...(constraintViolations.length > 0
+            ? { infeasibilityReason: `${constraintViolations.length} constraint violation(s).` }
             : {}),
-        constraintViolations: violations,
-        placementRationale,
     };
-
-    const state = derivePlanState(semesters, feasibility, assumptions);
-
-    // Stage 7: alternativeCandidates
-    const alternativeCandidates = buildAlternativeCandidates(semesters, { balanceScore });
-
-    // Backfill totalAssumptionCount on each candidate now that assumptions
-    // are computed. Stage 7 emitted summaries with the field set to 0 so
-    // the structural shape was complete; this pass populates the real
-    // count. (Phase 13 ships a single `assumptions[]` per plan — same value
-    // applies to every alternative because the candidates are distribution
-    // probes over the same placed slots; future backtracking phases that
-    // re-run the solver per candidate will fill per-candidate counts.)
-    for (const cand of alternativeCandidates) {
-        cand.totalAssumptionCount = assumptions.length;
-    }
-
-    return {
-        semesters,
-        feasibility,
-        alternativeCandidates: alternativeCandidates.length > 0 ? alternativeCandidates : undefined,
-        balanceScore,
-        assumptions,
-        state,
-    };
+    const state = derivePlanState(out.semesters, feasibility, out.assumptions);
+    return { ...out, feasibility, state };
 }
