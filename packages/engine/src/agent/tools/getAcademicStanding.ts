@@ -52,22 +52,43 @@ export const getAcademicStandingTool = buildTool({
         `standing level, and per-semester GPAs.`,
     async call(_input, { session }) {
         const student = session.student!;
-        const declaredCount = student.declaredPrograms.length;
+        const dpr = session.degreeProgressReport;
+        // PLAN-11: count distinct semesters the student has completed
+        // (not declaredPrograms.length, which is an unrelated count).
+        // Exclude IP rows (no final grade yet) and null-grade rows.
+        // Also exclude transfer credits (TR) and test credits (TE) —
+        // those are not semesters the student completed at NYU.
+        const semestersCompleted = new Set(
+            student.coursesTaken
+                .filter(
+                    (c) =>
+                        !c.isInProgress &&
+                        c.grade !== null &&
+                        c.grade !== "TR" &&
+                        c.grade !== "TE",
+                )
+                .map((c) => c.semester),
+        ).size;
         const standing = calculateStanding(
             student.coursesTaken,
-            declaredCount,
+            semestersCompleted,
             session.schoolConfig ?? null,
-            session.degreeProgressReport?.cumulative.cumulativeGpaRequired ?? null,
+            dpr?.cumulative.cumulativeGpaRequired ?? null,
         );
         return {
-            cumulativeGPA: standing.cumulativeGPA,
+            // DPR-1: return the DPR's pre-computed cumulative GPA as the
+            // authoritative value. Fall back to calculateStanding's local
+            // recompute only when no DPR is present (validateInput already
+            // requires a DPR, so the fallback path is unreachable in
+            // production — kept here for defensive completeness).
+            cumulativeGPA: dpr?.cumulative.cumulativeGpa ?? standing.cumulativeGPA,
             level: standing.level,
             inGoodStanding: standing.inGoodStanding,
             semesterGPA: standing.semesterGPA ?? null,
             completionRate: standing.completionRate,
             message: standing.message,
             warnings: standing.warnings,
-            schoolFloor: session.degreeProgressReport?.cumulative.cumulativeGpaRequired ?? null,
+            schoolFloor: dpr?.cumulative.cumulativeGpaRequired ?? null,
         };
     },
     summarizeResult(out) {

@@ -7,10 +7,12 @@
 // `data/schools/<schoolId>.json` at the repo root with `_meta`
 // validation, re-exported from `data/schoolConfigLoader.ts`.
 // ============================================================
-import type { Course, Prerequisite } from "@nyupath/shared";
+import type { Course, Prerequisite, ConfidenceTier } from "@nyupath/shared";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+type Season = "fall" | "spring" | "summer" | "january";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, "data");
@@ -23,6 +25,22 @@ export function loadCourses(): Course[] {
 export function loadPrereqs(): Prerequisite[] {
     const raw = readFileSync(join(DATA_DIR, "prereqs.json"), "utf-8");
     return JSON.parse(raw) as Prerequisite[];
+}
+
+/**
+ * Task 1.8 / PLAN-1 — wire courses-offerings.json so terms-offered is
+ * enforced by the solver. Returns a map from courseId to { termsOffered,
+ * confidence }. The solver consults this via SolverInput.offerings and
+ * SolverInput.offeringConfidence; previously those maps were always empty.
+ */
+export function loadOfferings(): Map<string, { termsOffered: Season[]; confidence: ConfidenceTier }> {
+    const raw = readFileSync(join(DATA_DIR, "courses-offerings.json"), "utf-8");
+    const obj = JSON.parse(raw) as Record<string, { termsOffered: Season[]; confidence: ConfidenceTier }>;
+    const out = new Map<string, { termsOffered: Season[]; confidence: ConfidenceTier }>();
+    for (const [id, v] of Object.entries(obj)) {
+        out.set(id, { termsOffered: v.termsOffered, confidence: v.confidence });
+    }
+    return out;
 }
 
 /**

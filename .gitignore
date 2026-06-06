@@ -50,8 +50,12 @@ data/
 # PII-containing source DPR PDFs and unredacted text extracts.
 # Only the .redacted.txt + .expected.json fixtures may be committed.
 SAA_STD_DS.pdf
+SAA_STD_DS_WHATIF.pdf
 packages/engine/tests/fixtures/dpr_sample.txt
 packages/engine/tests/fixtures/*.unredacted.*
+
+# Superpowers brainstorming visual-companion mockups (local only).
+.superpowers/
 
 # Scraper progress state (tool-local checkpointing)
 tools/playwright-scraper/.scrape_progress.json
@@ -98,6 +102,22 @@ evals/**/*.js
 evals/**/*.js.map
 evals/**/*.d.ts
 evals/**/*.d.ts.map
+# Same stale tsc-emit artifacts in the tools/ and scripts/ TS-source
+# trees, plus the root vitest config. These dirs are TS-source with
+# noEmit:true, so none of these should ever be tracked. (embed.mjs in
+# tools/course-catalog-embed is a real .mjs source — *.js won't match it.)
+tools/**/*.js
+tools/**/*.js.map
+tools/**/*.d.ts
+tools/**/*.d.ts.map
+scripts/**/*.js
+scripts/**/*.js.map
+scripts/**/*.d.ts
+scripts/**/*.d.ts.map
+/vitest.config.js
+/vitest.config.js.map
+/vitest.config.d.ts
+/vitest.config.d.ts.map
 tsconfig.tsbuildinfo
 
 # Python bytecode cache (e.g. tools/bulletin-scraper)

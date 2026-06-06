@@ -56,9 +56,10 @@ describe("buildStudentProfileFromDpr (Phase 7-E W2.4)", () => {
         const calc1 = p.coursesTaken.find((c) => c.courseId === "MATH-UA 121");
         expect(calc1?.grade).toBe("TE");
 
-        // IP row preserved with grade=C (assumed-passing fallback for current term).
+        // IP row preserved with grade=null and isInProgress=true (DPR-2: no fabricated grade).
         const ml = p.coursesTaken.find((c) => c.courseId === "CSCI-UA 473");
-        expect(ml?.grade).toBe("C");
+        expect(ml?.grade).toBeNull();
+        expect(ml?.isInProgress).toBe(true);
     });
 
     it("aggregates transfer credits via genericTransferCredits", () => {
