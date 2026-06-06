@@ -213,8 +213,35 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
 
         if (p.source === "pin") {
             // ---- Pin slot (mirror solver.ts pin branch) ----
+            // Off-catalog caveat (Step-8d PR-2): an explicit student pin is
+            // honored even when the course isn't in the undergraduate planning
+            // catalog. Reconstruct the SAME caveat the old greedy solver emitted
+            // (the PlacedCourse cannot carry it), keyed only on `input`:
+            //   - in catalog            → no caveat;
+            //   - off-catalog (grad)    → "verify credits/eligibility in Albert";
+            //   - wholly unknown        → "may be discontinued/renumbered; verify in Albert".
+            let pinCaveat: string | null = null;
+            if (!meta) {
+                pinCaveat = input.offCatalogCredits?.has(p.courseId)
+                    ? `${p.courseId} is outside the undergraduate planning catalog ` +
+                      `(graduate/professional) — verify credits and eligibility in Albert.`
+                    : `${p.courseId} isn't in the current NYU bulletin — it may be ` +
+                      `discontinued or renumbered (e.g. an old course number). Verify the ` +
+                      `current course in Albert.`;
+            }
+
+            // A pin that COVERS a requirement (satisfiesRId set by the solver's
+            // pin-coverage pass) must surface that coverage in `satisfiesRules`,
+            // because the search SKIPS the covered requirement variable and the
+            // authoritative runGraduationPathValidator credits a requirement only
+            // from a specific_planned slot's `satisfiesRules`. Without this the
+            // pin would cover the requirement in the search's bookkeeping yet the
+            // validator would still see it unsatisfied (no placeholder is emitted
+            // for a covered requirement either). A non-covering pin keeps [].
+            const pinSatisfies = p.satisfiesRId != null ? [p.satisfiesRId] : [];
+
             const pinRationale: SlotRationale = {
-                satisfiesRequirements: [],
+                satisfiesRequirements: pinSatisfies,
                 termConstraints: [
                     { kind: "offering", detail: `Pinned by student preference to ${p.term}.` },
                 ],
@@ -231,8 +258,8 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
                 courseId: p.courseId,
                 title,
                 credits,
-                satisfiesRules: [],
-                reason: `Pinned by student preference to ${p.term}.`,
+                satisfiesRules: pinSatisfies,
+                reason: `Pinned by student preference to ${p.term}.${pinCaveat ? ` ${pinCaveat}` : ""}`,
                 rationale: pinRationale,
                 flexibility: pinFlexibility,
                 downstreamImpact: computeDownstreamImpact(p.courseId, dependentsIndex),

@@ -610,3 +610,60 @@ describe("searchBestPlan — completeness: dependent considered before prereq vi
         expect(compareSolverTerms(preTerm, depTerm)).toBeLessThan(0);
     });
 });
+
+// ===========================================================================
+// 10. Pin coverage — a fixed pin satisfying a requirement is not double-placed
+// ===========================================================================
+
+describe("searchBestPlan — pin coverage (fixed placement satisfies a requirement)", () => {
+    // A single requirement r1 whose only candidate, PIN-UA 1, is supplied as a
+    // FIXED pin (source "pin", satisfiesRId "r1"). The search must SKIP the r1
+    // variable entirely — it must NOT place a second course for r1 — and the
+    // returned plan must cover r1 via the pin alone.
+    const input = makeInput({
+        currentTerm: "2026-fall",
+        graduationTerm: "2027-spring",
+        unmetRequirements: [
+            {
+                rId: "r1",
+                title: "Requirement One",
+                category: "major_required",
+                credits: 4,
+                candidateCourses: ["PIN-UA 1"],
+            },
+        ],
+        courseCatalog: new Map([["PIN-UA 1", { title: "Pinned Course", credits: 4 }]]),
+        offerings: new Map([["PIN-UA 1", ["fall", "spring"]]]),
+    });
+
+    it("does not place another course for the pinned requirement; coverage holds via the pin", () => {
+        const ctx = buildConstraintContext(input);
+        const fixed: PlacedCourse[] = [
+            placed({
+                courseId: "PIN-UA 1",
+                term: "2026-fall",
+                credits: 4,
+                source: "pin",
+                satisfiesRId: "r1",
+            }),
+        ];
+        const result = searchBestPlan(ctx, { fixed });
+
+        expect(result.plan).not.toBeNull();
+        const plan = result.plan!;
+
+        // r1 is covered (the pin is a bound source counted by coverage).
+        expect(checkRequirementCoverage(plan, ctx).ok).toBe(true);
+
+        // EXACTLY one placement satisfies r1, and it is the pin (source "pin") —
+        // the search added NO second "requirement"-source course for r1.
+        const r1Placements = plan.placed.filter(p => p.satisfiesRId === "r1");
+        expect(r1Placements).toHaveLength(1);
+        expect(r1Placements[0]!.source).toBe("pin");
+        expect(r1Placements[0]!.courseId).toBe("PIN-UA 1");
+
+        // No requirement-source placement exists at all (the only variable was
+        // covered by the pin and skipped).
+        expect(plan.placed.some(p => p.source === "requirement")).toBe(false);
+    });
+});

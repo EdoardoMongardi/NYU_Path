@@ -195,8 +195,19 @@ export function searchBestPlan(ctx: ConstraintContext, options?: SearchOptions):
     const maxNodes = options?.maxNodes ?? DEFAULT_MAX_NODES;
 
     // 1. Variables — only those with ≥1 viable candidate (empty-candidate
-    //    requirements become placeholders downstream; not searched here).
-    const variables = buildRequirementVariables(ctx).filter(v => v.candidates.length > 0);
+    //    requirements become placeholders downstream; not searched here), MINUS
+    //    any requirement already covered by a FIXED placement. A requirement-
+    //    satisfying pin arrives in `fixed` with its satisfiesRId set (the new
+    //    solveForwardSchedule body binds a pin to the first unmet requirement it
+    //    can cover); skipping that variable here prevents the search from placing
+    //    a SECOND course for the same rId (double-placement). Coverage of such a
+    //    requirement is then supplied by the pin in materialize.
+    const coveredByFixed = new Set(
+        fixed.map(p => p.satisfiesRId).filter((rId): rId is string => rId !== null),
+    );
+    const variables = buildRequirementVariables(ctx).filter(
+        v => v.candidates.length > 0 && !coveredByFixed.has(v.rId),
+    );
 
     // 2. Variable ordering (FIXED before search → deterministic). This ordering
     //    is a PERFORMANCE HEURISTIC ONLY — it is NOT a correctness dependency.
