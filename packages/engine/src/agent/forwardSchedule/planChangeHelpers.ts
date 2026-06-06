@@ -20,6 +20,7 @@ import type { ToolSession } from "../tool.js";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import { classifyBalanceDelta, computeBalanceScore } from "./balanceScore.js";
 import { buildSolverInput } from "./buildSolverInput.js";
+import { diffPlanTradeOffs } from "./tradeOffEngine.js";
 
 // ---------------------------------------------------------------------------
 // Shared Zod schemas (used by propose_plan_change + confirm_plan_change)
@@ -453,10 +454,15 @@ export function deriveConsequences(
 
 /**
  * Build a rich PlanDiff from the before and after ForwardSchedule.
- * For Task 5 all fields are populated as accurately as possible
- * from the two schedules; some advanced fields (cascadedShifts,
- * validationResultsChanges) require more context than is available
- * here and are left as empty arrays / empty records.
+ *
+ * Credit / weighted-credit / workload-tier / balance / graduation-term /
+ * planState deltas are computed inline below. The consequence (trade-off)
+ * fields — newRequiresPetition, removedRequiresPetition, newUnmetRequirements,
+ * cascadedShifts, newAssumptions — are delegated to `diffPlanTradeOffs`
+ * (tradeOffEngine.ts, P2.6), which diffs the two schedules' slots directly.
+ *
+ * `validationResultsChanges` still requires the validator's per-axis
+ * before/after (P2.7) and is left as an empty record until then.
  */
 export function buildPlanDiff(
     before: ForwardSchedule | undefined,
@@ -536,17 +542,22 @@ export function buildPlanDiff(
         planStateChange = { from: before.state, to: after.state };
     }
 
+    // Consequence (trade-off) fields — petitions, newly-unmet requirements,
+    // cascaded term shifts, and new assumptions — diffed directly from the
+    // two schedules (P2.6).
+    const tradeOffs = diffPlanTradeOffs(before, after);
+
     return {
         creditsByTermDelta,
         graduationTermShift: gradShift,
-        newRequiresPetition: [],
-        removedRequiresPetition: [],
-        newUnmetRequirements: [],
-        cascadedShifts: [],
+        newRequiresPetition: tradeOffs.newRequiresPetition,
+        removedRequiresPetition: tradeOffs.removedRequiresPetition,
+        newUnmetRequirements: tradeOffs.newUnmetRequirements,
+        cascadedShifts: tradeOffs.cascadedShifts,
         weightedCreditsByTermDelta,
         workloadTierShifts,
         balanceImpact,
-        newAssumptions: [],
+        newAssumptions: tradeOffs.newAssumptions,
         validationResultsChanges: {},
         planStateChange,
     };
