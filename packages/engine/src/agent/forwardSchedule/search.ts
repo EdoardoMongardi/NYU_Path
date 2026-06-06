@@ -53,9 +53,19 @@ import {
     type PlacedCourse,
     type ObjectiveWeights,
     type RequirementVariable,
+    type HardViolation,
 } from "./constraintModel.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
-import { parseTerm, compareSolverTerms } from "./solverHelpers.js";
+import { parseTerm, compareSolverTerms, isOptionalTerm } from "./solverHelpers.js";
+
+/** One binding-constraint explanation for a requirement that could not be placed.
+ *  Additive companion to `unsatisfiable`: same rIds, but each carries WHY (the
+ *  specific hard-constraint kind + a human-readable detail naming the requirement). */
+export interface Blocker {
+    rId: string;
+    kind: HardViolation["kind"];
+    detail: string;
+}
 
 type Season = "fall" | "spring" | "summer" | "january";
 
@@ -79,6 +89,10 @@ export interface SearchResult {
     /** When plan === null: rIds of requirement variables that could not be satisfied
      *  (a variable with no viable (course,term) value given the others). For infeasibility reporting. */
     unsatisfiable: string[];
+    /** When plan === null: the SAME rIds as `unsatisfiable`, each annotated with the
+     *  binding constraint that makes it unplaceable (one representative per rId). Empty
+     *  when a plan was found. Parallel companion to `unsatisfiable` — see computeBlockers. */
+    blockers: Blocker[];
 }
 
 export interface TopKOptions extends SearchOptions {
@@ -96,6 +110,9 @@ export interface TopKResult {
     nodesExplored: number;
     /** When plans is empty: rIds of requirement variables that could not be satisfied. */
     unsatisfiable: string[];
+    /** When plans is empty: the SAME rIds as `unsatisfiable`, each annotated with the
+     *  binding constraint that makes it unplaceable. Empty when a plan was found. */
+    blockers: Blocker[];
 }
 
 const DEFAULT_MAX_NODES = 200_000;
@@ -373,23 +390,148 @@ function planKey(plan: PartialPlan): string {
         .join("|");
 }
 
-/** Best-effort blocker list for an empty result: rIds of variables that have NO
- *  value passing the incremental forward-check against just `fixed` (individually
- *  impossible regardless of the others). Identical to the old searchBestPlan tail. */
-function computeUnsatisfiable(run: SearchRun, ctx: ConstraintContext): string[] {
-    const unsatisfiable: string[] = [];
+/** Fixed kind-priority order for the dominant-failing-incrementalOk tie-break
+ *  (ceiling → offering → coreq → not_clause). Lower index wins a tie. */
+const INCREMENTAL_KIND_ORDER: HardViolation["kind"][] = [
+    "credit_ceiling",
+    "offering_pattern",
+    "other", // coreqsSameTerm violations carry kind "other"
+    "not_clause",
+];
+
+/** The DOMINANT failing incremental-axis kind across a variable's candidate values
+ *  (each evaluated as {placed:[...fixed, value]}). For every value that fails
+ *  incrementalOk we tally which per-axis predicate(s) fire; the kind that fails for
+ *  the MOST values wins (tie-break: INCREMENTAL_KIND_ORDER). Returns null only when
+ *  no value fails any of the four incremental axes (should not happen when the
+ *  caller already established no value passes incrementalOk). */
+function dominantIncrementalKind(
+    v: RequirementVariable,
+    fixed: PlacedCourse[],
+    ctx: ConstraintContext,
+): HardViolation["kind"] | null {
+    const counts = new Map<HardViolation["kind"], number>();
+    for (const value of rawValues(v, ctx)) {
+        const trial: PartialPlan = { placed: [...fixed, value] };
+        // Tally each axis that fails for THIS value (a value may fail several).
+        if (!checkPerTermCeiling(trial, ctx).ok) {
+            counts.set("credit_ceiling", (counts.get("credit_ceiling") ?? 0) + 1);
+        }
+        if (!checkOfferingSeasonMatch(trial, ctx).ok) {
+            counts.set("offering_pattern", (counts.get("offering_pattern") ?? 0) + 1);
+        }
+        if (!checkCoreqsSameTerm(trial, ctx).ok) {
+            counts.set("other", (counts.get("other") ?? 0) + 1);
+        }
+        if (!checkNotClauseClear(trial, ctx).ok) {
+            counts.set("not_clause", (counts.get("not_clause") ?? 0) + 1);
+        }
+    }
+    let best: HardViolation["kind"] | null = null;
+    let bestCount = 0;
+    for (const kind of INCREMENTAL_KIND_ORDER) {
+        const c = counts.get(kind) ?? 0;
+        if (c > bestCount) {
+            best = kind;
+            bestCount = c;
+        }
+    }
+    return best;
+}
+
+/** Human-readable detail for a dominant incremental-failure kind. */
+function incrementalBlockerDetail(v: RequirementVariable, kind: HardViolation["kind"]): string {
+    const head = `${v.title} (${v.rId})`;
+    switch (kind) {
+        case "credit_ceiling":
+            return `${head}: every candidate placement would exceed the per-term credit ceiling given the fixed placements.`;
+        case "offering_pattern":
+            return `${head}: no candidate can be placed in a term matching its offering season given the fixed placements.`;
+        case "other":
+            return `${head}: a co-requisite cannot be co-scheduled in the same term as any candidate given the fixed placements.`;
+        case "not_clause":
+            return `${head}: every candidate is excluded by a NOT prerequisite clause (a co-listed/completed course blocks it).`;
+        default:
+            return `${head}: no candidate placement satisfies the hard constraints given the fixed placements.`;
+    }
+}
+
+/**
+ * Per-requirement binding-constraint analysis for an empty result. A variable is
+ * "unplaceable" — and so gets ONE representative blocker — when EITHER it has no
+ * value passing the incremental forward-check against just `fixed` (the exact
+ * same individual-impossibility test the old computeUnsatisfiable used), OR it is
+ * prereq-depth-blocked (an independent structural block incrementalOk cannot see,
+ * because incrementalOk deliberately excludes prereqs). The representative blocker
+ * is chosen by priority:
+ *
+ *   1. offering-absent — rawValues(v) is empty: not a single (course, term) is
+ *      offering-legal in the planning window. Kind "offering_pattern".
+ *   2. prereq-depth structural block — the MIN prereq depth across the variable's
+ *      candidates exceeds the number of NON-optional future terms, so the prereq
+ *      chain cannot fit the window before graduation. Kind "prereq_unsatisfiable".
+ *      Evaluated INDEPENDENTLY of incrementalOk: a depth-blocked requirement may
+ *      still have incrementalOk-passing values (incrementalOk ignores prereqs), so
+ *      this is the reason the COMPLETE-leaf checkPrereqsSatisfied rejected it.
+ *   3. dominant incrementalOk failure — values exist, none pass incrementalOk;
+ *      report the per-axis kind that fails for the most values.
+ *
+ * The returned `Blocker[]` is parallel to the rId list (`unsatisfiable`): callers
+ * derive `unsatisfiable = blockers.map(b => b.rId)`, so the two never diverge.
+ */
+function computeBlockers(run: SearchRun, ctx: ConstraintContext): Blocker[] {
+    const blockers: Blocker[] = [];
+    // Number of NON-optional (fall/spring) future terms — the window a prereq chain
+    // must fit within (optional summer/january terms don't extend a normal chain).
+    const nonOptionalTermCount = ctx.futureTerms.filter(t => !isOptionalTerm(t)).length;
+    const gradTerm = ctx.input.graduationTerm;
+
     for (const v of run.variables) {
+        const values = rawValues(v, ctx);
+
+        // Individual incrementalOk viability vs just `fixed` (old unplaceability test).
         let anyViable = false;
-        for (const value of rawValues(v, ctx)) {
+        for (const value of values) {
             const trial: PartialPlan = { placed: [...run.fixed, value] };
             if (incrementalOk(trial, ctx)) {
                 anyViable = true;
                 break;
             }
         }
-        if (!anyViable) unsatisfiable.push(v.rId);
+
+        // Prereq-depth structural block — INDEPENDENT of incrementalOk (it ignores
+        // prereqs), so check it whether or not the variable is incrementalOk-viable.
+        const minDepth = minCandidateDepth(v, ctx);
+        const prereqDepthBlocked = values.length > 0 && minDepth > nonOptionalTermCount;
+
+        // Not unplaceable unless one of the two conditions holds.
+        if (anyViable && !prereqDepthBlocked) continue;
+
+        // --- 1. Offering-absent: no offering-legal (course, term) at all. ---
+        if (values.length === 0) {
+            blockers.push({
+                rId: v.rId,
+                kind: "offering_pattern",
+                detail: `${v.title} (${v.rId}): no candidate course is offered in the planning window (${ctx.futureTerms.join(", ")}).`,
+            });
+            continue;
+        }
+
+        // --- 2. Prereq-depth structural block (priority over incrementalOk failure). ---
+        if (prereqDepthBlocked) {
+            blockers.push({
+                rId: v.rId,
+                kind: "prereq_unsatisfiable",
+                detail: `${v.title} (${v.rId}): prerequisite chain (depth ${minDepth}) does not fit the ${nonOptionalTermCount}-term window before ${gradTerm}.`,
+            });
+            continue;
+        }
+
+        // --- 3. Dominant incrementalOk failure. ---
+        const kind = dominantIncrementalKind(v, run.fixed, ctx) ?? "other";
+        blockers.push({ rId: v.rId, kind, detail: incrementalBlockerDetail(v, kind) });
     }
-    return unsatisfiable;
+    return blockers;
 }
 
 // ---------------------------------------------------------------------------
@@ -424,9 +566,11 @@ export function searchBestPlan(ctx: ConstraintContext, options?: SearchOptions):
         }
     });
 
-    // When no plan was found, report a best-effort blocker list (identical to the
-    // old tail). Empty when a plan was found.
-    const unsatisfiable: string[] = best === null ? computeUnsatisfiable(run, ctx) : [];
+    // When no plan was found, analyse each unplaceable requirement's binding
+    // constraint. `unsatisfiable` is derived from `blockers` so the two are always
+    // the SAME rIds (blockers just add the reason). Both empty when a plan exists.
+    const blockers: Blocker[] = best === null ? computeBlockers(run, ctx) : [];
+    const unsatisfiable: string[] = blockers.map(b => b.rId);
 
     return {
         plan: best,
@@ -434,6 +578,7 @@ export function searchBestPlan(ctx: ConstraintContext, options?: SearchOptions):
         exhaustive: !run.truncated,
         nodesExplored: run.nodes,
         unsatisfiable,
+        blockers,
     };
 }
 
@@ -502,7 +647,8 @@ export function searchTopKPlans(ctx: ConstraintContext, options?: TopKOptions): 
         return ka < kb ? -1 : ka > kb ? 1 : 0;
     });
 
-    const unsatisfiable = kept.length === 0 ? computeUnsatisfiable(run, ctx) : [];
+    const blockers: Blocker[] = kept.length === 0 ? computeBlockers(run, ctx) : [];
+    const unsatisfiable = blockers.map(b => b.rId);
 
     return {
         plans: kept.map(e => e.plan),
@@ -510,5 +656,6 @@ export function searchTopKPlans(ctx: ConstraintContext, options?: TopKOptions): 
         exhaustive: !run.truncated,
         nodesExplored: run.nodes,
         unsatisfiable,
+        blockers,
     };
 }

@@ -168,8 +168,13 @@ function buildScheduleFromOutput(
  *
  * When `out.feasibility.feasible` is true, the `schedule` field is
  * populated via `buildScheduleFromOutput`. When infeasible, `schedule`
- * is null and `stillInfeasibleReason` is set to the solver's reported
- * reason (falling back to the provided `fallbackReason`).
+ * is null and `stillInfeasibleReason` carries the REAL binding constraints:
+ * post-P2.9, `out.feasibility.constraintViolations` holds the SPECIFIC
+ * per-requirement blockers (offering / ceiling / coreq / NOT / prereq-depth)
+ * plus the capacity diagnostic, so we join those concrete details rather than
+ * the bare "N constraint violation(s)" count (`infeasibilityReason`). The
+ * provided `fallbackReason` is used only when the solver reported no detail at
+ * all (should not happen for an infeasible plan).
  */
 function buildCandidate(
     relaxation: AlternativeCandidate["relaxation"],
@@ -185,11 +190,18 @@ function buildCandidate(
             schedule: buildScheduleFromOutput(out, input),
         };
     }
+    // Compose the real reason from the concrete constraint violations (the actual
+    // binding constraints), falling back to the solver's count string, then the
+    // strategy's fallback. This is what the relaxation could NOT overcome.
+    const details = out.feasibility.constraintViolations.map(v => v.detail).filter(d => d.length > 0);
+    const stillInfeasibleReason =
+        details.length > 0
+            ? details.join(" ")
+            : (out.feasibility.infeasibilityReason ?? fallbackReason);
     return {
         summary,
         relaxation,
         schedule: null,
-        stillInfeasibleReason:
-            out.feasibility.infeasibilityReason ?? fallbackReason,
+        stillInfeasibleReason,
     };
 }

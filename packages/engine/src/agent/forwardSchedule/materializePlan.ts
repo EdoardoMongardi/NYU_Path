@@ -899,7 +899,7 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
     //    solver.ts). alternativeCandidates is intentionally left undefined —
     //    the real top-K is a later task (do NOT call buildAlternativeCandidates).
     // -----------------------------------------------------------------------
-    const assumptions = buildIpAssumptions(input, placedCourseSet, dependentsIndex);
+    const assumptions = buildIpAssumptions(input, placedCourseSet, dependentsIndex, ctx);
 
     const balanceScore = computeBalanceScore(semesters, "balanced");
 

@@ -296,18 +296,17 @@ describe("solveForwardSchedule — NOT clause (Decision #1)", () => {
         // The NOT-excluded course is never placed as a bound (specific_planned) slot.
         expect(placed).toBeUndefined();
         // Post-rewire the constraint search enforces the NOT clause directly
-        // (checkNotClauseClear): CSCI-UA 101 has no legal (course, term) value, so
-        // its sole-candidate requirement r1 cannot be placed. The search reports
-        // the unplaceable requirement and the solver surfaces it as a
-        // `prereq_unsatisfiable` violation — an infeasible plan that correctly
-        // refuses the NOT-blocked course. (The old greedy emitted a per-course
-        // `not_clause` violation during its placement loop; the search reports at
-        // the requirement level instead. Either way the course is excluded and the
-        // plan is infeasible.)
+        // (checkNotClauseClear): CSCI-UA 101 has no incrementalOk-viable value, so its
+        // sole-candidate requirement r1 cannot be placed. Post-P2.9 (PLAN-13) the
+        // solver surfaces the REAL binding constraint — a `not_clause` violation
+        // naming r1 (the dominant failing incremental axis is the NOT clause) —
+        // rather than the old uncomputable generic `prereq_unsatisfiable` stub. The
+        // plan is still infeasible and the NOT-blocked course is still excluded; the
+        // kind is just tightened from generic-prereq to the accurate not_clause.
         expect(out.feasibility.feasible).toBe(false);
         expect(
             out.feasibility.constraintViolations.some(
-                v => v.kind === "prereq_unsatisfiable" && /\br1\b/.test(v.detail)
+                v => v.kind === "not_clause" && /\br1\b/.test(v.detail)
             )
         ).toBe(true);
     });
