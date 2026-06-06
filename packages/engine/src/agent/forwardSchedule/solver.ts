@@ -50,11 +50,11 @@
  * search default; the public single-arg contract is unaffected.
  */
 
-import type { FeasibilityReport } from "@nyupath/shared";
+import type { FeasibilityReport, AlternativePlanSummary } from "@nyupath/shared";
 import type { SolverInput, SolverOutput } from "./types.js";
 import { buildConstraintContext, type ConstraintContext, type PlacedCourse } from "./constraintModel.js";
-import { findFirstValidPlan } from "./search.js"; // T3 will also import searchTopKPlans/findDiverseValidPlans here
-import { materializePlan } from "./materializePlan.js"; // T3 will re-add buildAlternativeSummaries here
+import { findFirstValidPlan, findDiverseValidPlans } from "./search.js";
+import { materializePlan, buildAlternativeSummaries } from "./materializePlan.js";
 import { localImprove } from "./localImprove.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
 import { parseTerm, isOptionalTerm, derivePlanState } from "./solverHelpers.js";
@@ -333,7 +333,6 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
     // plan is found, exhaustive:true = proven-infeasible, exhaustive:false =
     // truncated-without-finding. `maxNodes` is the test-supporting seam.
     //
-    // TODO(T3): diverse top-K via findDiverseValidPlans for alternativeCandidates.
     // -----------------------------------------------------------------------
     const winner = findFirstValidPlan(ctx, { fixed, ...(maxNodes !== undefined ? { maxNodes } : {}) });
     const winnerPlan = winner.plan ?? { placed: fixed };
@@ -385,10 +384,21 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
     // reserved for a future exhaustive-proof mode.
     const optimality = deriveOptimality(winner.plan !== null);
 
-    // TODO(T3): real diverse top-K via findDiverseValidPlans — populate
+    // T3b: real diverse top-K via findDiverseValidPlans — populate
     // alternativeCandidates with distinct valid plans ranked by balance score.
-    // For now, alternatives are deferred; consumers tolerate undefined.
-    const alternativeCandidates = undefined;
+    // diverse[0] === winner.plan (same first leaf, no forbidden sig); diverse[1..] are
+    // the next DISTINCT valid plans. localImprove each (same refinement the winner gets),
+    // materialise, summarise against the winner's materialised output `out`.
+    let alternativeCandidates: AlternativePlanSummary[] | undefined = undefined;
+    if (winner.plan !== null) {
+        const diverse = findDiverseValidPlans(ctx, {
+            fixed,
+            k: 5,
+            ...(maxNodes !== undefined ? { maxNodes } : {}),
+        });
+        const altOuts = diverse.slice(1).map(p => materializePlan(localImprove(p, ctx), ctx));
+        if (altOuts.length > 0) alternativeCandidates = buildAlternativeSummaries(out, altOuts);
+    }
 
     if (extraViolations.length === 0) {
         return {

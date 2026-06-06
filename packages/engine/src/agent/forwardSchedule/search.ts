@@ -94,6 +94,10 @@ export interface SearchOptions {
      *  (up to creditCeiling) remain reachable. Set only by findFirstValidPlan; absent for
      *  searchBestPlan/searchTopKPlans so their visit order is unchanged. */
     softCreditTarget?: number;
+    /** Requirement-signatures (sorted `rId=courseId@term`) to REJECT at the leaf — used
+     *  by findDiverseValidPlans to skip already-found plans so the search yields the NEXT
+     *  distinct valid leaf. Absent ⇒ no leaf is rejected. */
+    forbiddenSignatures?: Set<string>;
 }
 
 export interface SearchResult {
@@ -365,6 +369,14 @@ function runSearch(
                 checkMajorCreditFloor(plan, ctx).ok &&
                 checkResidencyFloor(plan, ctx).ok
             ) {
+                // Reject leaves whose requirement-assignment signature is in the
+                // forbidden set (used by findDiverseValidPlans to skip already-found
+                // plans). The search continues to the next leaf — this does NOT prune
+                // the branch, just skips the onValidLeaf callback for this leaf.
+                if (options?.forbiddenSignatures !== undefined) {
+                    const sig = reqSignature(plan);
+                    if (options.forbiddenSignatures.has(sig)) return;
+                }
                 if (onValidLeaf(plan, scorePlan(plan, ctx, weights)) === true) stopped = true;
             }
             return;
@@ -432,6 +444,17 @@ function runSearch(
     recurse([], 0);
 
     return { variables, fixed, nodes, truncated };
+}
+
+/** Requirement-assignment signature for a plan: sorted `rId=courseId@term` entries for
+ *  all placements that satisfy a requirement (satisfiesRId !== null). Used by
+ *  findDiverseValidPlans to identify already-found plans and skip them on the next run. */
+export function reqSignature(plan: PartialPlan): string {
+    return plan.placed
+        .filter(p => p.satisfiesRId !== null)
+        .map(p => `${p.satisfiesRId}=${p.courseId}@${p.term}`)
+        .sort()
+        .join(",");
 }
 
 /** A deterministic, stable key for a plan: its sorted `courseId@term` list.
@@ -760,4 +783,32 @@ export function searchTopKPlans(ctx: ConstraintContext, options?: TopKOptions): 
         unsatisfiable,
         blockers,
     };
+}
+
+/**
+ * Up to k distinct valid plans, cheaply: run findFirstValidPlan, record its requirement
+ * signature, re-run forbidding that signature, repeat — until k found or no new plan. NOT a
+ * space-exhausting top-K. Deterministic. plans[0] === findFirstValidPlan's plan.
+ *
+ * Each call to findFirstValidPlan is INCREMENTAL — it stops at the FIRST leaf that is not
+ * in the forbidden set. The forbidden set grows by one signature per iteration, so each
+ * subsequent call skips already-found leaves and returns the NEXT distinct valid plan. This
+ * is O(k × first-plan-cost), not O(full-space). The result is pairwise distinct by
+ * requirement-assignment signature (reqSignature). plans[0] is the same plan as
+ * findFirstValidPlan(ctx, options) would return (no forbidden set on the first call).
+ */
+export function findDiverseValidPlans(
+    ctx: ConstraintContext,
+    options?: SearchOptions & { k?: number },
+): PartialPlan[] {
+    const k = Math.max(1, options?.k ?? 4);
+    const out: PartialPlan[] = [];
+    const forbidden = new Set<string>(options?.forbiddenSignatures ?? []);
+    for (let i = 0; i < k; i++) {
+        const res = findFirstValidPlan(ctx, { ...options, forbiddenSignatures: forbidden });
+        if (res.plan === null) break;
+        out.push(res.plan);
+        forbidden.add(reqSignature(res.plan));
+    }
+    return out;
 }
