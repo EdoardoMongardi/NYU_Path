@@ -28,6 +28,7 @@ import type {
     GraduationPathValidatorResult,
 } from "./graduationPathValidator.js";
 import { buildSolverInputWithRules } from "./buildSolverInput.js";
+import { nextMainTermOrNull } from "./solverHelpers.js";
 
 /** The validator's program-rules shape (superset returned by
  *  `buildProgramRules(...).validatorRules`). Re-exported so the edit
@@ -131,6 +132,16 @@ export interface BuildForwardScheduleArgs {
  * buildSolverInput() (RC-4/PLAN-2) which honors graduationTarget,
  * wall-clock dating, coreqs, offerings, and classifier thresholds.
  */
+/**
+ * Maximum number of extra main terms the relax loop may add to a DERIVED
+ * graduation horizon. 2 is sufficient for any realistic prereq chain depth
+ * (a 4-deep chain needs at most 2 extra semesters beyond the naive 1-term
+ * credit floor). The loop always terminates: it stops as soon as the plan is
+ * feasible, after MAX_HORIZON_RELAX_TERMS extensions, or when
+ * nextMainTermOrNull returns null.
+ */
+const MAX_HORIZON_RELAX_TERMS = 2;
+
 export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSchedule {
     const { session, dpr, graduationTermOverride } = args;
 
@@ -144,11 +155,32 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
     // The rules-aware builder calls buildProgramRules ONCE and hands back
     // `validatorRules` directly — so the validator path no longer re-derives
     // it with a redundant second buildProgramRules call.
-    const { solverInput, validatorRules } = buildSolverInputWithRules(session, dpr, { graduationTermOverride });
+    let { solverInput, validatorRules } = buildSolverInputWithRules(session, dpr, { graduationTermOverride });
+
+    // ---- T2b: add-a-term relax for a too-short DERIVED horizon ----
+    //
+    // WHY THIS LIVES IN build.ts, NOT inside solveForwardSchedule:
+    // Extending the horizon changes `graduationTerm`, and the post-hoc
+    // validator's `graduationTargetTerm` is baked into `validatorRules`
+    // built by `buildSolverInputWithRules`. A relax inside the solver would
+    // extend the internal window but `runGraduationPathValidator` (called in
+    // `finalizeForwardSchedule` below) would still check the ORIGINAL target
+    // and wrongly report the relaxed plan infeasible. The loop at this level
+    // rebuilds both `solverInput` AND `validatorRules` together via a fresh
+    // `buildSolverInputWithRules` call, keeping everything consistent.
+    //
+    // GUARD: only trigger when the graduation term was DERIVED (no student-
+    // stated target, no explicit override). A hard target (graduationTarget or
+    // graduationTermOverride) is NEVER silently extended — we surface the real
+    // binding constraints (PLAN-13) instead.
+
+    // Capture the derivation flag from the FIRST build. Subsequent re-builds
+    // pass graduationTermOverride so their own flag is false, but the local
+    // `wasDerived` variable governs the loop.
+    const wasDerived = solverInput.graduationTermWasDerived === true;
 
     // ---- Call the solver ----
-
-    const solverOutput = solveForwardSchedule(solverInput);
+    let solverOutput = solveForwardSchedule(solverInput);
 
     // ---- Assemble + run the authoritative validator via the shared finalize ----
     //
@@ -157,14 +189,37 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
     // extraction: the assembled literal, the validator call, and the
     // derivePlanStateFromValidator override are byte-identical to the prior
     // inline block.
-    const { schedule } = finalizeForwardSchedule(
-        solverOutput,
-        solverInput,
-        dpr,
-        validatorRules,
-    );
+    let finalized = finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules);
 
-    return schedule;
+    // ---- Relax loop (T2b) ----
+    //
+    // The loop condition uses the VALIDATOR's feasibility verdict (validatorResult.feasible),
+    // NOT the solver's feasibility flag (schedule.feasibility.feasible). The solver can
+    // return feasibility.feasible=true even when requirements become unbound placeholders
+    // (the credit-fill alone satisfies the solver's credit-minimum check). The validator
+    // is the authoritative gate — it checks requirementGroupsSatisfied, which fails when
+    // requirements are covered only by placeholders rather than specific_planned slots.
+    //
+    // FALLBACK: keep the ORIGINAL derived-horizon result. An extension is ADOPTED only when it
+    // actually ACHIEVES validator-feasibility; otherwise we return the original (its honest
+    // binding constraints + the credit-derived graduation term). Extending the horizon for an
+    // infeasibility that more terms cannot fix (a GPA floor, an unbindable/no-candidate
+    // requirement) would otherwise push the graduation term out needlessly on a plan that stays
+    // infeasible — a misleading later grad term. So an unhelpful relax is never "stuck".
+    const derivedFinalized = finalized;
+    let ext = 0;
+    while (!finalized.validatorResult.feasible && wasDerived && ext < MAX_HORIZON_RELAX_TERMS) {
+        const extended = nextMainTermOrNull(solverInput.graduationTerm);
+        if (extended === null) break;
+        ext++;
+        ({ solverInput, validatorRules } = buildSolverInputWithRules(session, dpr, { graduationTermOverride: extended }));
+        solverOutput = solveForwardSchedule(solverInput);
+        finalized = finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules);
+    }
+
+    // Adopt the relaxed result only if it became feasible; else fall back to the original
+    // derived-horizon schedule (no useless grad-term extension on a still-infeasible plan).
+    return (finalized.validatorResult.feasible ? finalized : derivedFinalized).schedule;
 }
 
 // All helpers (inferCurrentTerm, psTermToSolverTerm, deriveGraduationTerm,

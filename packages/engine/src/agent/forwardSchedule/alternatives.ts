@@ -25,6 +25,7 @@
  */
 
 import { solveForwardSchedule } from "./solver.js";
+import { nextMainTermOrNull } from "./solverHelpers.js";
 import type { SolverInput, SolverOutput } from "./types.js";
 import type { AlternativeCandidate, ForwardSchedule } from "@nyupath/shared";
 
@@ -83,7 +84,7 @@ export function simulateAlternatives(input: SolverInput): AlternativeCandidate[]
 
     // ---- Strategy 3: extend graduation by one main term ----
     // spring → same-year fall; fall → next-year spring.
-    const extendedTerm = computeNextMainTerm(input.graduationTerm);
+    const extendedTerm = nextMainTermOrNull(input.graduationTerm);
     if (extendedTerm !== null) {
         const extended: SolverInput = {
             ...input,
@@ -108,22 +109,6 @@ export function simulateAlternatives(input: SolverInput): AlternativeCandidate[]
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Advance a graduation term by one main term:
- *   - YYYY-spring → YYYY-fall (same year)
- *   - YYYY-fall   → (YYYY+1)-spring
- *
- * Returns null when the input term doesn't match the expected pattern
- * (e.g. "2026-summer" or an unparseable string).
- */
-function computeNextMainTerm(term: string): string | null {
-    const m = term.match(/^(\d{4})-(spring|fall)$/);
-    if (!m) return null;
-    const year = parseInt(m[1]!, 10);
-    if (m[2] === "spring") return `${year}-fall`;
-    return `${year + 1}-spring`;
-}
 
 /**
  * Build a `ForwardSchedule` from a feasible `SolverOutput` + the input
