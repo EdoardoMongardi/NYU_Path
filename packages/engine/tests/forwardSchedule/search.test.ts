@@ -27,7 +27,7 @@ import {
 import { searchBestPlan } from "../../src/agent/forwardSchedule/search.js";
 import { compareSolverTerms } from "../../src/agent/forwardSchedule/solverHelpers.js";
 import type { SolverInput } from "../../src/agent/forwardSchedule/types.js";
-import type { PrereqGroup } from "@nyupath/shared";
+import type { PrereqGroup, ConfidenceTier } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
 
 // ---------------------------------------------------------------------------
@@ -440,5 +440,173 @@ describe("searchBestPlan — optimality (small)", () => {
         const reqTerm = result.plan!.placed.find(p => p.satisfiesRId === "r1")!.term;
         // Balancing 8 (fall) + 4 (spring) beats lumping 12 (fall) + 0 (spring).
         expect(reqTerm).toBe("2027-spring");
+    });
+});
+
+// ===========================================================================
+// 8. Completeness regression — low-confidence course near capacity (Fix A)
+// ===========================================================================
+
+describe("searchBestPlan — completeness: low-confidence course near capacity (regression for forwardFeasibilityScreen prune)", () => {
+    // The ONLY valid assignment routes a requirement through a "permission_only"
+    // course, in a window deliberately sized so the OLD forwardFeasibilityScreen
+    // (a hard prune in the forward-check) would have called every R1 branch
+    // infeasible via its 2.0× low-confidence demand multiplier — even though the
+    // REAL credits fit comfortably.
+    //
+    // Setup: 2 future terms (2026-fall, 2027-spring), creditCeiling = 5.
+    //   R1 → REG-UA 1 (4 cr, normal confidence, offered fall+spring)
+    //   R2 → LOW-UA 2 (4 cr, "permission_only", offered fall+spring)
+    // Ordering ties on depth (0) and candidates.length (1); workload weight ties
+    // (both major_elective); rId ASC ⇒ R1 is assigned first, R2 is "remaining".
+    //
+    // OLD screen at i=0 (R1 placed, demand for remaining R2 = 4 × 2.0 = 8):
+    //   place REG in fall  → capacity = max(0,5-4)+max(0,5-0) = 1+5 = 6; 8 > 6 → PRUNE
+    //   place REG in spring→ capacity = max(0,5-0)+max(0,5-4) = 5+1 = 6; 8 > 6 → PRUNE
+    // Both R1 branches pruned ⇒ OLD search returns plan === null (false negative).
+    //
+    // REALITY: REG(4) in one term + LOW(4) in the other ⇒ each term 4 ≤ 5. Valid.
+    // After Fix A (screen removed; only sound checkPerTermCeiling prunes capacity)
+    // the branch survives and the leaf yields a valid plan.
+    const offeringConfidence = new Map<string, ConfidenceTier>([
+        ["LOW-UA 2", "permission_only"],
+    ]);
+    const input = makeInput({
+        currentTerm: "2026-fall",
+        graduationTerm: "2027-spring",
+        creditCeiling: 5,
+        unmetRequirements: [
+            {
+                rId: "r1",
+                title: "Regular",
+                category: "major_elective",
+                credits: 4,
+                candidateCourses: ["REG-UA 1"],
+            },
+            {
+                rId: "r2",
+                title: "Permission Only",
+                category: "major_elective",
+                credits: 4,
+                candidateCourses: ["LOW-UA 2"],
+            },
+        ],
+        courseCatalog: new Map([
+            ["REG-UA 1", { title: "Regular", credits: 4 }],
+            ["LOW-UA 2", { title: "Permission Only", credits: 4 }],
+        ]),
+        offerings: new Map([
+            ["REG-UA 1", ["fall", "spring"]],
+            ["LOW-UA 2", ["fall", "spring"]],
+        ]),
+        offeringConfidence,
+    });
+
+    it("finds the valid plan the 2.0× low-confidence screen would have falsely pruned", () => {
+        const ctx = buildConstraintContext(input);
+        const result = searchBestPlan(ctx);
+
+        expect(result.plan).not.toBeNull();
+        const plan = result.plan!;
+
+        // All requirements covered by their (only) candidate.
+        expect(checkRequirementCoverage(plan, ctx).ok).toBe(true);
+        const r1Course = plan.placed.find(p => p.satisfiesRId === "r1")?.courseId;
+        const r2Course = plan.placed.find(p => p.satisfiesRId === "r2")?.courseId;
+        expect(r1Course).toBe("REG-UA 1");
+        expect(r2Course).toBe("LOW-UA 2");
+
+        // The returned plan passes every incremental (sound) predicate — the real
+        // credits DO fit (each term ≤ ceiling 5), unlike the screen's verdict.
+        expect(checkOfferingSeasonMatch(plan, ctx).ok).toBe(true);
+        expect(checkNotClauseClear(plan, ctx).ok).toBe(true);
+        expect(checkCoreqsSameTerm(plan, ctx).ok).toBe(true);
+        expect(checkPerTermCeiling(plan, ctx).ok).toBe(true);
+        expect(checkPrereqsSatisfied(plan, ctx).ok).toBe(true);
+    });
+});
+
+// ===========================================================================
+// 9. Completeness regression — dependent ordered before its prereq (Fix B)
+// ===========================================================================
+
+describe("searchBestPlan — completeness: dependent considered before prereq via candidate ordering (regression for incremental prereq prune)", () => {
+    // Two requirements arranged so the prereq-depth-ascending variable ordering
+    // considers the DEPENDENT before its PREREQ — which the OLD incremental
+    // checkPrereqsSatisfied prune could not tolerate.
+    //
+    //   Rdep (r1dep) candidates = [DEP-UA 2, ALT-DEP-UA 8]
+    //       DEP-UA 2 has prereq PRE-UA 1 (depth 1); offered SPRING only.
+    //       ALT-DEP-UA 8 is a shallow (depth-0) alternative offered SUMMER only
+    //       → NOT selectable in the fall/spring window, so Rdep is forced to DEP,
+    //         but its presence lowers minCandidateDepth(Rdep) to min(1,0) = 0.
+    //   Rpre (r2pre) candidates = [PRE-UA 1, ALT-PRE-UA 9]
+    //       PRE-UA 1 depth 0; offered FALL only.
+    //       ALT-PRE-UA 9 depth 0, offered SUMMER only → not selectable; gives Rpre
+    //         candidates.length = 2 to match Rdep so the tie-break reaches rId.
+    //
+    // Ordering: both depth 0, both candidates.length 2, workload weight ties
+    // (both major_required) ⇒ rId ASC ⇒ r1dep (Rdep) is assigned FIRST, while its
+    // prereq PRE is still unplaced.
+    //
+    // OLD behaviour: at i=0 the incremental prune evaluates checkPrereqsSatisfied
+    // on a trial with DEP placed but PRE unplaced → prereq unsatisfied → DEP's
+    // only value is pruned → Rdep has no surviving value → plan === null.
+    //
+    // AFTER Fix B: prereqs are NOT in the incremental prune, so DEP survives;
+    // PRE is placed at i=1; the COMPLETE leaf re-checks prereqs with both placed —
+    // PRE (2026-fall) precedes DEP (2027-spring) → satisfied → valid plan.
+    const prereqs = new Map<string, PrereqGroup[]>([
+        ["DEP-UA 2", [{ type: "AND", courses: ["PRE-UA 1"] }]],
+    ]);
+    const input = makeInput({
+        currentTerm: "2026-fall",
+        graduationTerm: "2027-spring",
+        prereqs,
+        unmetRequirements: [
+            {
+                rId: "r1dep",
+                title: "Dependent",
+                category: "major_required",
+                credits: 4,
+                candidateCourses: ["DEP-UA 2", "ALT-DEP-UA 8"],
+            },
+            {
+                rId: "r2pre",
+                title: "Prereq",
+                category: "major_required",
+                credits: 4,
+                candidateCourses: ["PRE-UA 1", "ALT-PRE-UA 9"],
+            },
+        ],
+        courseCatalog: new Map([
+            ["DEP-UA 2", { title: "Dependent", credits: 4 }],
+            ["ALT-DEP-UA 8", { title: "Alt Dependent", credits: 4 }],
+            ["PRE-UA 1", { title: "Prereq", credits: 4 }],
+            ["ALT-PRE-UA 9", { title: "Alt Prereq", credits: 4 }],
+        ]),
+        offerings: new Map([
+            ["DEP-UA 2", ["spring"]],
+            ["ALT-DEP-UA 8", ["summer"]],
+            ["PRE-UA 1", ["fall"]],
+            ["ALT-PRE-UA 9", ["summer"]],
+        ]),
+    });
+
+    it("still finds a valid plan with PRE placed in an earlier term than DEP", () => {
+        const ctx = buildConstraintContext(input);
+        const result = searchBestPlan(ctx);
+
+        expect(result.plan).not.toBeNull();
+        const plan = result.plan!;
+
+        expect(checkRequirementCoverage(plan, ctx).ok).toBe(true);
+        expect(checkPrereqsSatisfied(plan, ctx).ok).toBe(true);
+
+        const preTerm = plan.placed.find(p => p.courseId === "PRE-UA 1")!.term;
+        const depTerm = plan.placed.find(p => p.courseId === "DEP-UA 2")!.term;
+        expect(preTerm).toBe("2026-fall");
+        expect(depTerm).toBe("2027-spring");
+        expect(compareSolverTerms(preTerm, depTerm)).toBeLessThan(0);
     });
 });
