@@ -220,7 +220,7 @@ function buildAlternativeCandidates(
 // IP assumption builder (Decision #30)
 // ---------------------------------------------------------------------------
 
-function buildIpAssumptions(
+export function buildIpAssumptions(
     input: SolverInput,
     placedCourses: Set<string>,
     dependentsIndex: Map<string, string[]>,
@@ -247,7 +247,7 @@ function buildIpAssumptions(
 // PlanState derivation (Decision #32 — coarse Task 3.1 approximation)
 // ---------------------------------------------------------------------------
 
-function derivePlanState(
+export function derivePlanState(
     semesters: ForwardSemester[],
     feasibility: FeasibilityReport,
     assumptions: Assumption[],
