@@ -163,6 +163,26 @@ function computeCapacityDiagnostic(
 // violations) using the imported helper.
 
 // ---------------------------------------------------------------------------
+// T7 — Structured optimality status
+//
+// Map the feasibility-first search result to a structured optimality status.
+// A FOUND plan is best-effort (feasibility-first does not prove the global
+// optimum); an empty result is feasibility-unconfirmed (truncated → a valid
+// plan may exist beyond budget; proven-infeasible → feasible:false already
+// dominates, and "unconfirmed" never misleads a consumer into treating it as
+// optimal). "optimal" is reserved for a future exhaustive-proof mode.
+// ---------------------------------------------------------------------------
+
+/** Map the feasibility-first search result to a structured optimality status. A FOUND plan
+ *  is best-effort (feasibility-first does not prove the global optimum); an empty result is
+ *  feasibility-unconfirmed (truncated → a valid plan may exist beyond budget; proven-infeasible
+ *  → feasible:false already dominates, and "unconfirmed" never misleads a consumer into
+ *  treating it as optimal). "optimal" is reserved for a future exhaustive-proof mode. */
+function deriveOptimality(hasValidPlan: boolean): "optimal" | "best-effort" | "feasibility-unconfirmed" {
+    return hasValidPlan ? "best-effort" : "feasibility-unconfirmed";
+}
+
+// ---------------------------------------------------------------------------
 // Main export — constraint search + materialize
 // ---------------------------------------------------------------------------
 
@@ -178,9 +198,15 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
     // Empty horizon (graduation == current term): nothing to plan. materializePlan
     // returns the same empty valid bundle the old greedy did. (No search runs, so
     // no truncation is possible — only build-time advisories apply here.)
+    // T7: an empty plan is trivially optimal — it is the ONLY possible plan, so
+    // nothing can be preferred over it. Set optimality "optimal" here.
     if (ctx.futureTerms.length === 0) {
         const out = materializePlan({ placed: [] }, ctx);
-        return warningsList.length > 0 ? { ...out, warnings: warningsList } : out;
+        return {
+            ...out,
+            optimality: "optimal" as const,
+            ...(warningsList.length > 0 ? { warnings: warningsList } : {}),
+        };
     }
 
     // Violations the SEARCH/materialize path cannot surface on its own (pins it
@@ -345,6 +371,13 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
 
     const out = materializePlan(winnerPlan, ctx);
 
+    // T7: derive the structured optimality status. A found plan is best-effort
+    // (feasibility-first does not prove the global optimum); no found plan is
+    // feasibility-unconfirmed (truncated) or proven-infeasible (feasible:false
+    // already dominates — "unconfirmed" never misleads a consumer). "optimal" is
+    // reserved for a future exhaustive-proof mode.
+    const optimality = deriveOptimality(winner.plan !== null);
+
     // TODO(T3): real diverse top-K via findDiverseValidPlans — populate
     // alternativeCandidates with distinct valid plans ranked by balance score.
     // For now, alternatives are deferred; consumers tolerate undefined.
@@ -353,6 +386,7 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
     if (extraViolations.length === 0) {
         return {
             ...out,
+            optimality,
             ...(alternativeCandidates !== undefined ? { alternativeCandidates } : {}),
             ...(warningsList.length > 0 ? { warnings: warningsList } : {}),
         };
@@ -373,6 +407,7 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
         ...out,
         feasibility,
         state,
+        optimality,
         ...(alternativeCandidates !== undefined ? { alternativeCandidates } : {}),
         ...(warningsList.length > 0 ? { warnings: warningsList } : {}),
     };

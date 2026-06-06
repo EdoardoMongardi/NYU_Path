@@ -93,6 +93,9 @@ export function finalizeForwardSchedule(
         // agent-facing schedule (e.g. assumed-128 when the DPR omits the
         // degree credit minimum). Omitted when there are none.
         ...(solverOutput.warnings ? { warnings: solverOutput.warnings } : {}),
+        // T7 — thread the structured optimality signal onto the assembled schedule.
+        // Omitted when undefined (back-compat: consumers treat absent as "optimal").
+        ...(solverOutput.optimality !== undefined ? { optimality: solverOutput.optimality } : {}),
     };
 
     const validatorResult = runGraduationPathValidator({

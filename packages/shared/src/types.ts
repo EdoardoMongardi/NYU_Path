@@ -1076,6 +1076,15 @@ export interface ForwardSchedule {
      * present only when the solver surfaced at least one warning.
      */
     warnings?: string[];
+    /** Structured optimality of the returned plan (companion to `warnings`):
+     *  "optimal" — search ran to exhaustion; the winner is the proven optimum (rare on the
+     *    feasibility-first primary path; reserved for a future exhaustive-proof mode).
+     *  "best-effort" — a VALID plan was found (feasibility-first) but it may not be the most
+     *    preferred; surface a confidence caveat ("valid plan; may not be the most preferred —
+     *    tell me your priorities and I'll refine").
+     *  "feasibility-unconfirmed" — no valid plan was found within budget (NOT proven infeasible).
+     *  Omitted is treated as "optimal" by consumers for back-compat. */
+    optimality?: "optimal" | "best-effort" | "feasibility-unconfirmed";
 }
 
 // === Phase 14 — Preferences + Mutation API ===
