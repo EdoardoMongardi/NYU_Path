@@ -27,7 +27,7 @@ import type {
     GraduationPathValidatorArgs,
     GraduationPathValidatorResult,
 } from "./graduationPathValidator.js";
-import { buildSolverInput, buildProgramRules } from "./buildSolverInput.js";
+import { buildSolverInputWithRules } from "./buildSolverInput.js";
 
 /** The validator's program-rules shape (superset returned by
  *  `buildProgramRules(...).validatorRules`). Re-exported so the edit
@@ -89,6 +89,10 @@ export function finalizeForwardSchedule(
         ...(solverOutput.alternativeCandidates !== undefined
             ? { alternativeCandidates: solverOutput.alternativeCandidates }
             : {}),
+        // P2.10 (a) — surface the solver's build-time advisories on the
+        // agent-facing schedule (e.g. assumed-128 when the DPR omits the
+        // degree credit minimum). Omitted when there are none.
+        ...(solverOutput.warnings ? { warnings: solverOutput.warnings } : {}),
     };
 
     const validatorResult = runGraduationPathValidator({
@@ -127,20 +131,17 @@ export interface BuildForwardScheduleArgs {
 export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSchedule {
     const { session, dpr, graduationTermOverride } = args;
 
-    // ---- Build SolverInput via the unified builder ----
+    // ---- Build SolverInput via the unified builder (P2.10 (b)) ----
     //
-    // Graduation term resolution (inside buildSolverInput):
+    // Graduation term resolution (inside buildSolverInputWithRules):
     //   1. graduationTermOverride (explicit, e.g. "what-if" probe)
     //   2. session.graduationTarget (onboarding-stated, display → solver shape)
     //   3. credit-derived default (deriveGraduationTerm)
-    const solverInput = buildSolverInput(session, dpr, { graduationTermOverride });
-
-    // Re-derive the program-rules bundle for the VALIDATOR path (which needs
-    // validatorRules, a superset of what goes into solverInput.programRules).
-    // The buildSolverInput call above already set solverInput.programRules
-    // (solverRules). We call buildProgramRules again to get validatorRules.
-    // This is a cheap second pass (pure computation, no I/O).
-    const programRules = buildProgramRules(session, dpr, solverInput.graduationTerm, solverInput.graduationCreditMinimum);
+    //
+    // The rules-aware builder calls buildProgramRules ONCE and hands back
+    // `validatorRules` directly — so the validator path no longer re-derives
+    // it with a redundant second buildProgramRules call.
+    const { solverInput, validatorRules } = buildSolverInputWithRules(session, dpr, { graduationTermOverride });
 
     // ---- Call the solver ----
 
@@ -157,7 +158,7 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
         solverOutput,
         solverInput,
         dpr,
-        programRules.validatorRules,
+        validatorRules,
     );
 
     return schedule;

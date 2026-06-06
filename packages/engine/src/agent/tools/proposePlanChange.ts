@@ -13,11 +13,10 @@ import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { solveForwardSchedule } from "../forwardSchedule/solver.js";
 import { finalizeForwardSchedule } from "../forwardSchedule/build.js";
-import { buildProgramRules } from "../forwardSchedule/buildSolverInput.js";
 import { runGraduationPathValidator } from "../forwardSchedule/graduationPathValidator.js";
 import {
     applyMutationsToPreferences,
-    buildSolverInputFromSession,
+    buildSolverInputWithRulesFromSession,
     computeSlotDiff,
     deriveConsequences,
     buildPlanDiff,
@@ -130,8 +129,15 @@ export const proposePlanChangeTool = buildTool({
             input.mutations as PlanMutation[],
         );
 
-        // Build a hypothetical SolverInput with the mutated preferences
-        const solverInput = buildSolverInputFromSession(session, dpr, hypotheticalPrefs);
+        // Build a hypothetical SolverInput with the mutated preferences.
+        // P2.10 (b)+(d): one buildProgramRules call yields BOTH the solverInput
+        // and the validatorRules; the mutated prefs are applied as a non-mutating
+        // override (no session write on this read-only path).
+        const { solverInput, validatorRules } = buildSolverInputWithRulesFromSession(
+            session,
+            dpr,
+            hypotheticalPrefs,
+        );
 
         // Run the solver (read-only — we never write the result to session)
         const solverOutput = solveForwardSchedule(solverInput);
@@ -143,13 +149,6 @@ export const proposePlanChangeTool = buildTool({
         // carries the validator-derived state and `feasible` reflects the full
         // 7-axis verdict — closing the PLAN-3 hole where an edit could preview
         // as feasible while a 7-axis check would have failed.
-        const validatorRules = buildProgramRules(
-            session,
-            dpr,
-            solverInput.graduationTerm,
-            solverInput.graduationCreditMinimum,
-        ).validatorRules;
-
         const { schedule: proposedSchedule, validatorResult } = finalizeForwardSchedule(
             solverOutput,
             solverInput,

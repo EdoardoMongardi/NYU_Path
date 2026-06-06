@@ -209,10 +209,14 @@ export function derivePlanState(
 export function solveForwardSchedule(input: SolverInput): SolverOutput {
     const ctx = buildConstraintContext(input);
 
+    // P2.10 (a) — build-time advisories carried onto the output (omitted when none).
+    const warnings = input.warnings.length ? input.warnings : undefined;
+
     // Empty horizon (graduation == current term): nothing to plan. materializePlan
     // returns the same empty valid bundle the old greedy did.
     if (ctx.futureTerms.length === 0) {
-        return materializePlan({ placed: [] }, ctx);
+        const out = materializePlan({ placed: [] }, ctx);
+        return warnings !== undefined ? { ...out, warnings } : out;
     }
 
     // Violations the SEARCH/materialize path cannot surface on its own (pins it
@@ -364,7 +368,11 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
         altOuts.length > 0 ? buildAlternativeSummaries(out, altOuts) : undefined;
 
     if (extraViolations.length === 0) {
-        return alternativeCandidates !== undefined ? { ...out, alternativeCandidates } : out;
+        return {
+            ...out,
+            ...(alternativeCandidates !== undefined ? { alternativeCandidates } : {}),
+            ...(warnings !== undefined ? { warnings } : {}),
+        };
     }
 
     // Fold the extra violations into the feasibility report and re-derive state.
@@ -378,7 +386,11 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             : {}),
     };
     const state = derivePlanState(out.semesters, feasibility, out.assumptions);
-    return alternativeCandidates !== undefined
-        ? { ...out, feasibility, state, alternativeCandidates }
-        : { ...out, feasibility, state };
+    return {
+        ...out,
+        feasibility,
+        state,
+        ...(alternativeCandidates !== undefined ? { alternativeCandidates } : {}),
+        ...(warnings !== undefined ? { warnings } : {}),
+    };
 }

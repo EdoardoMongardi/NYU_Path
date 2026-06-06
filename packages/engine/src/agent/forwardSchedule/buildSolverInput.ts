@@ -76,6 +76,25 @@ export interface BuildSolverInputOpts {
      * the credit-derived default.
      */
     graduationTermOverride?: string;
+    /**
+     * P2.10 (d) — explicit preference override. When supplied it is used as
+     * the effective preferences INSTEAD of session.schedulePreferences,
+     * WITHOUT mutating the session. Replaces the old session mutate→build→
+     * restore dance in buildSolverInputFromSession.
+     */
+    preferencesOverride?: import("@nyupath/shared").SchedulePreferences;
+}
+
+/**
+ * P2.10 (b) — the bundle returned by the rules-aware builder: the SolverInput
+ * plus BOTH program-rule shapes from the SINGLE buildProgramRules call. The
+ * validator path (build.ts / propose / confirm) reads `validatorRules` straight
+ * from here instead of re-deriving it with a second buildProgramRules call.
+ */
+export interface SolverInputWithRules {
+    solverInput: SolverInput;
+    validatorRules: GraduationPathValidatorArgs["programRules"];
+    solverRules: SolverInput["programRules"];
 }
 
 /**
@@ -90,25 +109,52 @@ export interface BuildSolverInputOpts {
  *   2. session.graduationTarget (onboarding-stated goal, converted from display form)
  *   3. Credit-derived default (deriveGraduationTerm from current term + credits remaining)
  *
- * Preferences: read from session.schedulePreferences. The callers in the edit
- * path must write updated preferences onto session BEFORE calling this function
- * (confirm_plan_change does: session.schedulePreferences = newPrefs, then calls
- * buildSolverInputFromSession(session, dpr) which delegates here).
+ * Preferences: opts.preferencesOverride ?? session.schedulePreferences (P2.10 (d)).
+ * When preferencesOverride is set it is used WITHOUT mutating the session.
+ *
+ * Thin wrapper over buildSolverInputWithRules — returns just `.solverInput` so
+ * it stays a drop-in for existing callers. buildProgramRules runs exactly once.
  */
 export function buildSolverInput(
     session: ToolSession,
     dpr: DegreeProgressReport,
     opts: BuildSolverInputOpts = {},
 ): SolverInput {
-    const { graduationTermOverride } = opts;
+    return buildSolverInputWithRules(session, dpr, opts).solverInput;
+}
+
+/**
+ * P2.10 (b) — rules-aware builder. Calls buildProgramRules ONCE and assembles
+ * the SolverInput from `solverRules`, returning the SolverInput alongside both
+ * rule shapes so the validator path never re-computes them.
+ */
+export function buildSolverInputWithRules(
+    session: ToolSession,
+    dpr: DegreeProgressReport,
+    opts: BuildSolverInputOpts = {},
+): SolverInputWithRules {
+    const { graduationTermOverride, preferencesOverride } = opts;
+
+    // P2.10 (d) — effective preferences: explicit override wins, else the
+    // session's. No session mutation either way.
+    const effectivePreferences = preferencesOverride ?? session.schedulePreferences;
 
     const student = session.student;
     const schoolConfig = session.schoolConfig ?? null;
+
+    // ---- 0. Build-time advisories (P2.10 (a)) ----
+    const warnings: string[] = [];
 
     // ---- 1. Derive credit parameters from DPR + school config ----
 
     const creditsEarned = dpr.cumulative.creditsUsed ?? 0;
     const graduationCreditMinimum = dpr.cumulative.creditsRequired ?? 128;
+    if (dpr.cumulative.creditsRequired == null) {
+        warnings.push(
+            `Degree credit minimum not found in the DPR — assuming ${graduationCreditMinimum} credits. ` +
+            "Verify the requirement with your school.",
+        );
+    }
     const creditCeiling = schoolConfig?.maxCreditsPerSemester ?? 18;
     const creditTargetPerSemester = schoolConfig?.creditTargetPerSemester ?? DEFAULT_CREDIT_TARGET_PER_SEMESTER;
     const cumulativeGpa = dpr.cumulative.cumulativeGpa ?? 0;
@@ -213,7 +259,7 @@ export function buildSolverInput(
         }
     }
 
-    // ---- 9. Build program rules ----
+    // ---- 9. Build program rules (SINGLE buildProgramRules call, P2.10 (b)) ----
 
     const programRules = buildProgramRules(session, dpr, graduationTerm, graduationCreditMinimum);
 
@@ -223,7 +269,7 @@ export function buildSolverInput(
 
     // ---- 11. Build and return SolverInput ----
 
-    return {
+    const solverInput: SolverInput = {
         studentId,
         homeSchoolId,
         visaStatus,
@@ -265,7 +311,14 @@ export function buildSolverInput(
         dpr,
         programRules: programRules.solverRules,
         ...(coreqs.size > 0 ? { coreqs } : {}),
-        preferences: session.schedulePreferences,
+        preferences: effectivePreferences,
+        warnings,
+    };
+
+    return {
+        solverInput,
+        validatorRules: programRules.validatorRules,
+        solverRules: programRules.solverRules,
     };
 }
 
@@ -324,7 +377,18 @@ export function buildProgramRules(
         }
     }
 
-    // Major credit floor
+    // Major credit floor.
+    //
+    // P2.10 (c) — DEFERRED: course-count major floors are intentionally NOT
+    // captured here. We sum only units-counter (`kind:"units"`) major leaves
+    // into a CREDIT floor. A DPR counter of `kind:"courses"` (e.g. "complete 18
+    // courses for the major") is a DIFFERENT axis — a course COUNT, not a credit
+    // total — and no current fixture exercises one. Building a new validator
+    // axis + hard predicate for an absent case would violate the project's
+    // "general fixes only / don't build for cases that don't arise" philosophy
+    // (mirrors the non-CAS deferral). Revisit when a real DPR fixture exercises
+    // a course-count major floor; until then a `kind:"courses"` major leaf
+    // contributes nothing to majorCreditMin (it is simply skipped below).
     let majorCreditMin: number | null = null;
     for (const leaf of leaves) {
         const kind = kindByRId.get(leaf.rId);
