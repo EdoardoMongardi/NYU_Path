@@ -6,12 +6,17 @@
  *
  *   1. buildConstraintContext (constraintModel.ts) — precompute the immutable
  *      problem context (future-term window, prereq depths, dependents index).
- *   2. searchBestPlan (search.ts) — a COMPLETE backtracking + forward-check +
- *      branch-and-bound search that assigns each unmet requirement a (course,
- *      term) on top of caller-supplied FIXED placements (in-progress + pins),
- *      minimising the soft objective among VALID assignments. Where the old
- *      greedy was first-fit (and could falsely report infeasible), the search is
- *      optimal/complete: it finds a valid plan iff one exists.
+ *   2. searchTopKPlans (search.ts) — a backtracking + forward-check search with
+ *      incumbent tracking but NO admissible objective bound (so NOT cost-bounded
+ *      branch-and-bound; a sound bound is impossible while the objective is
+ *      non-monotonic). It assigns each unmet requirement a (course, term) on top
+ *      of caller-supplied FIXED placements (in-progress + pins), minimising the
+ *      soft objective among VALID assignments. It is COMPLETE + OPTIMAL only
+ *      WITHIN its `maxNodes` budget and TRUNCATES beyond it. Where the old greedy
+ *      was first-fit (and could falsely report infeasible), an EXHAUSTIVE search
+ *      finds a valid plan iff one exists; a TRUNCATED one is surfaced honestly via
+ *      `exhaustive` (see C1 below) so we never present a truncated search as
+ *      proven-optimal or proven-infeasible.
  *   3. materializePlan (materializePlan.ts) — turn the search's PartialPlan into
  *      the full SolverOutput (rich specific_planned slots, placeholders for
  *      uncovered requirements, free-elective fill, per-term visa invariants,
@@ -23,9 +28,11 @@
  * the Stage-6c placeholder block, the free-elective fill, the Stage-6d visa
  * block, the Stage-8 global checks, the post-pass, and the synthetic
  * `buildAlternativeCandidates` / `ALT_DISTRIBUTIONS` Stage-7 stub). Everything
- * those stages did now lives in search.ts + materializePlan.ts. Only two helpers
- * remain here — `buildIpAssumptions` and `derivePlanState` — because
- * materializePlan re-uses them (and this body uses derivePlanState).
+ * those stages did now lives in search.ts + materializePlan.ts. The two pure
+ * helpers `buildIpAssumptions` and `derivePlanState` — re-used by materializePlan
+ * — were moved to solverHelpers.ts (P2 review M2) to break the
+ * solver ↔ materializePlan import cycle; this file imports them from there and
+ * uses derivePlanState in its body.
  *
  * `alternativeCandidates` is the REAL top-K distinct plans (P2.3): the search
  * returns up to 5 best valid leaves; the winner (plans[0]) is the main plan, and
@@ -33,86 +40,70 @@
  * (the fake distribution probe is gone).
  *
  * The `solveForwardSchedule(input: SolverInput): SolverOutput` signature is
- * FROZEN — build.ts and alternatives.ts call it unchanged.
+ * FROZEN for production callers — build.ts and alternatives.ts call it with a
+ * single argument, unchanged. C1 adds ONE optional, back-compatible trailing
+ * parameter `maxNodes?: number` (a test-supporting seam): it is forwarded to the
+ * search's node budget so a test can FORCE truncation on a small input and assert
+ * the truncation-surfacing behaviour. Production callers omit it and get the
+ * search default; the public single-arg contract is unaffected.
  */
 
-import type { ForwardSemester, FeasibilityReport, Assumption } from "@nyupath/shared";
+import type { FeasibilityReport } from "@nyupath/shared";
 import type { SolverInput, SolverOutput } from "./types.js";
 import { buildConstraintContext, type ConstraintContext, type PlacedCourse } from "./constraintModel.js";
 import { searchTopKPlans } from "./search.js";
 import { materializePlan, buildAlternativeSummaries } from "./materializePlan.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
-import { parseTerm, isOptionalTerm } from "./solverHelpers.js";
+import { parseTerm, isOptionalTerm, derivePlanState } from "./solverHelpers.js";
 
 type Season = "fall" | "spring" | "summer" | "january";
 
+// `buildIpAssumptions` + its private `contingencyAvailableFor` were moved to
+// solverHelpers.ts (P2 review M2) to break the solver ↔ materializePlan import
+// cycle; materializePlan now imports buildIpAssumptions from solverHelpers.
+
 // ---------------------------------------------------------------------------
-// IP assumption builder (Decision #30)
+// Search-truncation advisory (P2 review C1)
 //
-// Retained here (not moved to materializePlan) because materializePlan imports
-// it from this module. Emits one IP_COURSE_COMPLETION assumption per in-progress
-// course that is a prereq of at least one PLACED (requirement/pin) slot.
+// The constraint search is complete + optimal ONLY within its node budget;
+// `exhaustive === false` means the space was NOT fully explored, so a returned
+// plan may not be the OPTIMUM and an empty result is NOT proven infeasible. This
+// pure helper maps (exhaustive, hasValidPlan, nodesExplored) → the honest
+// advisory string (or null when exhaustive, where today's proven verdicts hold):
+//
+//   - exhaustive            → null (no advisory; the search fully explored the
+//                             space, so the winner is the true optimum and an
+//                             empty result is a PROVEN infeasibility).
+//   - truncated, hasValidPlan → "valid but maybe not most-preferred" — the
+//                             returned plan PASSED the completion-leaf check (the
+//                             post-hoc validator confirms it is VALID); it simply
+//                             may not be the best-balanced one.
+//   - truncated, no valid plan → "feasibility could not be confirmed" — NOT a
+//                             proven infeasibility; a valid plan may still exist
+//                             beyond the budget.
+//
+// Extracted as a pure, unit-testable helper; the gating that consumes it lives in
+// solveForwardSchedule.
 // ---------------------------------------------------------------------------
 
-export function buildIpAssumptions(
-    input: SolverInput,
-    placedCourses: Set<string>,
-    dependentsIndex: Map<string, string[]>,
-    ctx: ConstraintContext,
-): Assumption[] {
-    const assumptions: Assumption[] = [];
-    for (const [ipCourseId, { term: ipTerm }] of input.coursesInProgress) {
-        // Only emit an assumption if this IP course is a prereq for at least one placed slot
-        const dependents = dependentsIndex.get(ipCourseId) ?? [];
-        const affectedPlaced = dependents.filter(d => placedCourses.has(d));
-        if (affectedPlaced.length === 0) continue;
-
-        assumptions.push({
-            type: "IP_COURSE_COMPLETION",
-            courseId: ipCourseId,
-            consequenceIfFalse: `Downstream slots ${affectedPlaced.join(", ")} may need to move to a later term.`,
-            cascadingSlots: affectedPlaced,
-            // STRUCTURAL contingency: a contingency exists for this IP course iff EVERY
-            // affected downstream slot could be re-placed in a LATER term within the
-            // window (offering-legal). See contingencyAvailableFor — no full re-solve.
-            contingencyPlanAvailable: contingencyAvailableFor(input, ctx, ipTerm, affectedPlaced),
-        });
+export function truncationWarning(
+    exhaustive: boolean,
+    hasValidPlan: boolean,
+    nodesExplored: number,
+): string | null {
+    if (exhaustive) return null;
+    if (hasValidPlan) {
+        return (
+            `Plan search was truncated after ${nodesExplored} candidate placements; ` +
+            `the returned plan is valid but may not be the most preferred — a ` +
+            `better-balanced plan could exist.`
+        );
     }
-    return assumptions;
-}
-
-/**
- * STRUCTURAL determination of `contingencyPlanAvailable` for an IP course
- * (Decision #30). A contingency IS available iff EVERY affected (cascading)
- * downstream slot could be re-placed in a LATER term within the planning window —
- * i.e. for each dependent there exists a future term STRICTLY AFTER the IP course's
- * own term whose season the dependent's offering allows. This is a structural
- * offering/window check only — it does NOT re-run the search (no full re-solve),
- * matching the "structural check" mandate. A dependent with no/empty offerings is
- * treated as season-agnostic (any later term works). When there are no affected
- * slots the caller does not emit an assumption, so this is only consulted with ≥1.
- */
-function contingencyAvailableFor(
-    input: SolverInput,
-    ctx: ConstraintContext,
-    ipTerm: string,
-    affectedSlots: string[],
-): boolean {
-    // Future terms strictly AFTER the IP course's term (chronological window order).
-    const ipIdx = ctx.futureTerms.indexOf(ipTerm);
-    const laterTerms = ipIdx >= 0 ? ctx.futureTerms.slice(ipIdx + 1) : ctx.futureTerms;
-    if (laterTerms.length === 0) return false; // nowhere later to move anything
-
-    return affectedSlots.every(dep => {
-        const offered = input.offerings.get(dep);
-        // No/empty offering ⇒ season-agnostic ⇒ any later term is legal.
-        if (!offered || offered.length === 0) return true;
-        // Needs ≥1 later term whose season the dependent is offered in.
-        return laterTerms.some(term => {
-            const season = parseTerm(term)?.season;
-            return season !== undefined && offered.includes(season as Season);
-        });
-    });
+    return (
+        `Plan search was truncated after ${nodesExplored} candidate placements ` +
+        `WITHOUT finding a valid plan — feasibility could not be confirmed within ` +
+        `the search budget (a valid plan may still exist). Verify with your adviser.`
+    );
 }
 
 /**
@@ -164,59 +155,30 @@ function computeCapacityDiagnostic(
     };
 }
 
-// ---------------------------------------------------------------------------
-// PlanState derivation (Decision #32 — coarse Task 3.1 approximation)
-//
-// Retained here (not moved to materializePlan) because materializePlan imports
-// it from this module, and the solver body re-derives state after folding in
-// extra (pin / unsatisfiable) violations.
-// ---------------------------------------------------------------------------
-
-export function derivePlanState(
-    semesters: ForwardSemester[],
-    feasibility: FeasibilityReport,
-    assumptions: Assumption[],
-): import("@nyupath/shared").PlanState {
-    // Returns 3 of the 4 PlanState members. The fourth state
-    // ("student-preferred-invalid-draft") is set by Phase 14's mutation
-    // layer when a student confirms a plan despite hard violations — that
-    // input is not available to the solver, so it is not emittable here.
-    if (!feasibility.feasible) return "infeasible-draft";
-
-    // Check for trade-off signals
-    const hasTradeoff =
-        assumptions.length > 0 ||
-        semesters.some(sem =>
-            sem.slots.some(
-                s =>
-                    (s.kind === "specific_planned" && (
-                        s.requiresPetition === true ||
-                        s.confidence === "irregular" ||
-                        s.confidence === "permission_only" ||
-                        (s.approvalAuthority !== undefined)
-                    )) ||
-                    s.kind === "placeholder"
-            )
-        );
-
-    return hasTradeoff ? "valid-with-trade-offs" : "valid-clean";
-}
+// `derivePlanState` was moved to solverHelpers.ts (P2 review M2) alongside
+// buildIpAssumptions to break the solver ↔ materializePlan import cycle. The
+// solver body re-derives state (after folding in extra pin / unsatisfiable
+// violations) using the imported helper.
 
 // ---------------------------------------------------------------------------
 // Main export — constraint search + materialize
 // ---------------------------------------------------------------------------
 
-export function solveForwardSchedule(input: SolverInput): SolverOutput {
+export function solveForwardSchedule(input: SolverInput, maxNodes?: number): SolverOutput {
     const ctx = buildConstraintContext(input);
 
-    // P2.10 (a) — build-time advisories carried onto the output (omitted when none).
-    const warnings = input.warnings.length ? input.warnings : undefined;
+    // P2.10 (a) — build-time advisories carried onto the output. C1 appends a
+    // search-truncation advisory below; the final array is spread onto
+    // SolverOutput.warnings (omitted when empty). Copy so we never mutate
+    // input.warnings.
+    const warningsList: string[] = [...input.warnings];
 
     // Empty horizon (graduation == current term): nothing to plan. materializePlan
-    // returns the same empty valid bundle the old greedy did.
+    // returns the same empty valid bundle the old greedy did. (No search runs, so
+    // no truncation is possible — only build-time advisories apply here.)
     if (ctx.futureTerms.length === 0) {
         const out = materializePlan({ placed: [] }, ctx);
-        return warnings !== undefined ? { ...out, warnings } : out;
+        return warningsList.length > 0 ? { ...out, warnings: warningsList } : out;
     }
 
     // Violations the SEARCH/materialize path cannot surface on its own (pins it
@@ -335,13 +297,27 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
     // When NO valid plan exists (top.plans empty), materialise the fixed-only
     // plan (so IP + pins + placeholders still render) and surface each
     // unsatisfiable requirement as a violation — the exact old infeasible path.
+    //
+    // C1: the search is complete + optimal ONLY within its node budget. We consume
+    // `top.exhaustive` (and `top.nodesExplored`) so a TRUNCATED search never reads
+    // as proven-optimal or proven-infeasible (see gating below). `maxNodes` is the
+    // test-supporting seam (undefined in production → search default).
     // -----------------------------------------------------------------------
-    const top = searchTopKPlans(ctx, { fixed, k: 5 });
+    const top = searchTopKPlans(ctx, { fixed, k: 5, ...(maxNodes !== undefined ? { maxNodes } : {}) });
     const winnerPlan = top.plans[0] ?? { placed: fixed };
+
+    // C1 — honest truncation advisory (null when exhaustive; today's verdicts then
+    // hold unchanged). Appended to the warnings carried onto SolverOutput.
+    const truncMsg = truncationWarning(top.exhaustive, top.plans.length > 0, top.nodesExplored);
+    if (truncMsg !== null) warningsList.push(truncMsg);
+
     if (top.plans.length === 0) {
         // Per-requirement binding constraints — the SPECIFIC reason each unplaceable
         // requirement is blocked (offering / ceiling / coreq / NOT / prereq-depth),
         // replacing the old uncomputable generic "could not be placed" prereq push.
+        // These hold REGARDLESS of truncation (each is an individual-impossibility
+        // proof against just `fixed`), so they are surfaced whether or not the
+        // search was exhaustive.
         for (const b of top.blockers) {
             extraViolations.push({ kind: b.kind, detail: b.detail });
         }
@@ -349,10 +325,17 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
         // Capacity diagnostic (jointly infeasible) — even when no SINGLE requirement
         // is individually unplaceable, the remaining unmet requirements can simply
         // fail to FIT: their total credits exceed the credit capacity left in the
-        // non-optional terms. Compute the true blocker and surface it as a
-        // graduation_total violation ONLY when it genuinely holds (required > avail).
-        const cap = computeCapacityDiagnostic(input, ctx, fixed);
-        if (cap !== null) extraViolations.push(cap);
+        // non-optional terms. This is a JOINT-infeasibility verdict, which is only
+        // PROVEN when the search fully explored the space. C1: gate it on
+        // `top.exhaustive` — when the search was TRUNCATED (no valid plan found
+        // within the budget) feasibility is UNCONFIRMED, not disproven, so we do
+        // NOT emit this "would need N credits"-style infeasibility framing; the
+        // truncation advisory above is the honest signal (any real per-requirement
+        // blockers still stand).
+        if (top.exhaustive) {
+            const cap = computeCapacityDiagnostic(input, ctx, fixed);
+            if (cap !== null) extraViolations.push(cap);
+        }
     }
 
     const out = materializePlan(winnerPlan, ctx);
@@ -371,7 +354,7 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
         return {
             ...out,
             ...(alternativeCandidates !== undefined ? { alternativeCandidates } : {}),
-            ...(warnings !== undefined ? { warnings } : {}),
+            ...(warningsList.length > 0 ? { warnings: warningsList } : {}),
         };
     }
 
@@ -391,6 +374,6 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
         feasibility,
         state,
         ...(alternativeCandidates !== undefined ? { alternativeCandidates } : {}),
-        ...(warnings !== undefined ? { warnings } : {}),
+        ...(warningsList.length > 0 ? { warnings: warningsList } : {}),
     };
 }

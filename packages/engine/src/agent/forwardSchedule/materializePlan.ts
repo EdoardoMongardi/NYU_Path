@@ -20,9 +20,10 @@
  * distribution-probe `buildAlternativeCandidates` is deliberately NOT called.
  *
  * Reuses the pure primitives from solverHelpers.ts (effectiveTermTarget,
- * checkAllPrereqs, computeDownstreamImpact, isCriticalPath, parseTerm) plus the
- * context's pre-built dependents index, and the two helpers exported from
- * solver.ts (buildIpAssumptions, derivePlanState) — none are reimplemented.
+ * checkAllPrereqs, computeDownstreamImpact, isCriticalPath, parseTerm, plus
+ * buildIpAssumptions + derivePlanState — moved there from solver.ts in P2 review
+ * M2 to break the solver ↔ materializePlan import cycle) plus the context's
+ * pre-built dependents index — none are reimplemented.
  */
 
 import type {
@@ -61,8 +62,9 @@ import {
     isCriticalPath,
     isStudyAbroadCourse,
     isOptionalTerm,
+    buildIpAssumptions,
+    derivePlanState,
 } from "./solverHelpers.js";
-import { buildIpAssumptions, derivePlanState } from "./solver.js";
 
 // ---------------------------------------------------------------------------
 // LoadRationale builder — verbatim from solver.ts (kept private; identical

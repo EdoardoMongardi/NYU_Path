@@ -1,8 +1,10 @@
 /**
- * Phase 2 P2.2a — backtracking + forward-check + branch-and-bound search tests
- * (TDD-first). The search assigns each unmet requirement a (course, term) so
- * that all per-placement hard constraints hold and requirement coverage +
- * major/residency floors hold, minimising scorePlan among valid assignments.
+ * Phase 2 P2.2a — backtracking + forward-check search tests (TDD-first). The
+ * search (incumbent tracking, NO admissible objective bound — so NOT cost-bounded
+ * branch-and-bound; complete + optimal only WITHIN the maxNodes budget) assigns
+ * each unmet requirement a (course, term) so that all per-placement hard
+ * constraints hold and requirement coverage + major/residency floors hold,
+ * minimising scorePlan among valid assignments.
  *
  * It places ONLY requirement-satisfying courses (source "requirement") plus
  * caller-supplied fixed placements. It does NOT do free-elective fill — that is
