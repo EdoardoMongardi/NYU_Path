@@ -451,14 +451,19 @@ export function checkResidencyFloor(plan: PartialPlan, ctx: ConstraintContext): 
 }
 
 /** majorCreditFloor — mirrors validator axis 4 major (graduationPathValidator.ts:288-306).
- *  Sums placed credits where workloadTier ∈ {major-required, major-elective} AND source
- *  is bound (requirement / pin / ip). null → no violation. */
+ *  Sums placed credits where workloadTier ∈ {major-required, major-elective}.
+ *  IMPORTANT: only specific_planned-equivalent sources (requirement / pin) count —
+ *  in_progress ("ip") is EXCLUDED, exactly as the validator's major check counts only
+ *  `specific_planned` slots (it excludes in_progress). This asymmetry with residencyFloor
+ *  (which DOES include in_progress) is intentional and matches the validator: counting an
+ *  IP major course toward the major floor would let a plan pass this predicate yet fail the
+ *  validator, breaking the hard ⇒ valid guarantee. null → no violation. */
 export function checkMajorCreditFloor(plan: PartialPlan, ctx: ConstraintContext): HardResult {
     const min = ctx.input.programRules.majorCreditMinimum;
     if (min == null) return OK;
 
     const plannedMajor = plan.placed.reduce((s, p) => {
-        const isBound = p.source === "requirement" || p.source === "pin" || p.source === "ip";
+        const isBound = p.source === "requirement" || p.source === "pin";
         const isMajorTier = p.workloadTier === "major-required" || p.workloadTier === "major-elective";
         return isBound && isMajorTier ? s + p.credits : s;
     }, 0);

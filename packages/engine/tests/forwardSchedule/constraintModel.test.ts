@@ -636,6 +636,20 @@ describe("checkMajorCreditFloor", () => {
         };
         expect(checkMajorCreditFloor(plan, ctx).ok).toBe(false);
     });
+
+    it("major-tier credits from an 'ip' (in-progress) source do NOT count — mirrors the validator's specific_planned-only major check", () => {
+        const ctx = ctxWithMajorMin(8);
+        const plan: PartialPlan = {
+            placed: [
+                placed({ courseId: "A", term: "2026-fall", credits: 4, workloadTier: "major-required", source: "requirement" }),
+                // in_progress major credits must be EXCLUDED (graduationPathValidator axis 4
+                // counts only specific_planned, not in_progress). Residency counts ip; major does not.
+                placed({ courseId: "B", term: "2026-fall", credits: 4, workloadTier: "major-required", source: "ip" }),
+            ],
+        };
+        // 4 bound (requirement) + 4 ip-excluded = 4 < 8 floor → FAIL (would have passed if ip counted)
+        expect(checkMajorCreditFloor(plan, ctx).ok).toBe(false);
+    });
 });
 
 describe("checkGpaFloors", () => {
