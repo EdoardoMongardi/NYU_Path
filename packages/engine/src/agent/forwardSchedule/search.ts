@@ -3,11 +3,25 @@
  *
  * Replaces the greedy, no-backtracking forward solver's requirement-placement
  * core. Given a ConstraintContext, it assigns each unmet requirement variable a
- * (course, term) value so that:
- *   - every per-placement hard predicate holds (offering season, prereqs,
- *     NOT-clause, coreq same-term, per-term ceiling), AND
- *   - requirement coverage + the major-credit and residency floors hold,
- * and it MINIMISES scorePlan among valid assignments (LOWER = better).
+ * (course, term) value so that a COMPLETE assignment satisfies every hard
+ * constraint, and it MINIMISES scorePlan among valid assignments (LOWER =
+ * better).
+ *
+ * COMPLETENESS — the search prunes a branch ONLY on SOUND, later-variable-
+ * independent conditions: the incremental forward-check is exactly
+ * {offeringSeasonMatch, notClauseClear, coreqsSameTerm, perTermCeiling}, each of
+ * which, once violated on a partial plan, stays violated under any further
+ * placement (so pruning never discards a branch that would become valid later).
+ * The remaining hard predicates — prereqs, requirement coverage, the major-
+ * credit floor and the residency floor — are validated at the COMPLETE leaf,
+ * where every course is placed (so a prereq satisfied by a LATER variable placed
+ * in an EARLIER term resolves correctly). A leaf is accepted only if ALL of
+ * {prereqs, coverage, major-credit, residency} pass. There is NO score-based
+ * prune (the objective is not monotonic) and NO forward-feasibility/capacity
+ * screen (the available screen is a false-negative-prone heuristic — unsound as
+ * a hard prune). The prereq-depth-ascending variable ordering is a PERFORMANCE
+ * heuristic, not a correctness dependency. Net effect: a valid plan is found iff
+ * one exists.
  *
  * Boundary (intentional): this search places ONLY requirement-satisfying
  * courses (source "requirement") on top of caller-supplied FIXED placements
@@ -41,7 +55,6 @@ import {
     type RequirementVariable,
 } from "./constraintModel.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
-import { forwardFeasibilityScreen } from "./forwardFeasibility.js";
 import { parseTerm, compareSolverTerms } from "./solverHelpers.js";
 
 type Season = "fall" | "spring" | "summer" | "january";
@@ -140,47 +153,36 @@ function rawValues(v: RequirementVariable, ctx: ConstraintContext): PlacedCourse
     return out;
 }
 
-/** All incremental (per-placement) hard predicates pass on the trial plan. */
+/**
+ * Incremental forward-check predicate set — exactly {offering, NOT, coreq,
+ * ceiling}. SOUNDNESS: each of these is later-variable-independent, i.e. a
+ * violation on the trial plan can NEVER be cleared by adding more placements,
+ * so pruning a branch on any violation here cannot discard a branch that would
+ * become valid later:
+ *   - offeringSeasonMatch: a property of the placed (course, term) alone;
+ *     unaffected by other placements.
+ *   - notClauseClear: the set of blockers only GROWS as courses are added, so a
+ *     NOT-clause exclusion present now persists.
+ *   - coreqsSameTerm: only fires when a coreq is ALREADY placed in a DIFFERENT
+ *     term; it skips unplaced coreqs (those are coverage's concern), so its
+ *     verdict never flips from violation→ok via a future placement.
+ *   - perTermCeiling: a per-term credit SUM that only grows, so an over-ceiling
+ *     term stays over-ceiling.
+ *
+ * checkPrereqsSatisfied is DELIBERATELY EXCLUDED here: as an incremental prune
+ * it is UNSOUND, because a course's prereq may be an unassigned LATER variable
+ * not yet placed — pruning then would discard a branch that becomes valid once
+ * that later variable is placed in an earlier term. Prereqs are instead checked
+ * at the COMPLETION leaf (recurse i === variables.length), where every course
+ * is placed and prereq-in-an-earlier-term is verified correctly.
+ */
 function incrementalOk(trial: PartialPlan, ctx: ConstraintContext): boolean {
     return (
         checkOfferingSeasonMatch(trial, ctx).ok &&
-        checkPrereqsSatisfied(trial, ctx).ok &&
         checkNotClauseClear(trial, ctx).ok &&
         checkCoreqsSameTerm(trial, ctx).ok &&
         checkPerTermCeiling(trial, ctx).ok
     );
-}
-
-/** Forward-feasibility screen: do the REMAINING variables (those after index i)
- *  still fit given the trial's per-term load? Capacity + depth pruning. */
-function remainingStillFit(
-    trial: PartialPlan,
-    remaining: RequirementVariable[],
-    ctx: ConstraintContext,
-): boolean {
-    const placedCreditsByTerm = new Map<string, number>();
-    for (const p of trial.placed) {
-        placedCreditsByTerm.set(p.term, (placedCreditsByTerm.get(p.term) ?? 0) + p.credits);
-    }
-    const creditCeilingByTerm = new Map<string, number>();
-    for (const term of ctx.futureTerms) creditCeilingByTerm.set(term, ctx.input.creditCeiling);
-
-    const remainingUnmet = remaining.map(rv => {
-        const cid = rv.candidates[0]!; // variables are pre-filtered to candidates.length > 0
-        return {
-            courseId: cid,
-            credits: ctx.input.courseCatalog.get(cid)!.credits,
-            minDepth: ctx.prereqDepths.get(cid) ?? 0,
-        };
-    });
-
-    return forwardFeasibilityScreen({
-        placedCreditsByTerm,
-        creditCeilingByTerm,
-        remainingUnmet,
-        remainingTerms: ctx.futureTerms,
-        confidenceByCourse: ctx.input.offeringConfidence,
-    });
 }
 
 // ---------------------------------------------------------------------------
@@ -196,11 +198,18 @@ export function searchBestPlan(ctx: ConstraintContext, options?: SearchOptions):
     //    requirements become placeholders downstream; not searched here).
     const variables = buildRequirementVariables(ctx).filter(v => v.candidates.length > 0);
 
-    // 2. Variable ordering (FIXED before search → deterministic). Sort by:
-    //    (a) prereq-depth ASC (minimum depth across candidates) — guarantees a
-    //        course's prerequisites (shallower) are assigned BEFORE the dependent,
-    //        so the prereq forward-check is valid (placing a dependent before its
-    //        prereq would otherwise prune its whole domain);
+    // 2. Variable ordering (FIXED before search → deterministic). This ordering
+    //    is a PERFORMANCE HEURISTIC ONLY — it is NOT a correctness dependency.
+    //    Search correctness (completeness) does not rely on any variable being
+    //    assigned before another: the only prune conditions are the sound,
+    //    later-variable-independent incremental predicates (incrementalOk), and
+    //    prereqs/coverage/floors are validated at the COMPLETE leaf. Sort by:
+    //    (a) prereq-depth ASC (minimum depth across candidates) — TENDS to place a
+    //        course's prerequisites (shallower) before the dependent, so most
+    //        explored leaves are already prereq-valid (fewer wasted leaves). It
+    //        does NOT guarantee prereqs-are-assigned-first (a requirement's
+    //        candidates can have heterogeneous prereq depths), but correctness no
+    //        longer depends on that guarantee;
     //    (b) candidates.length ASC (fewer options = more constrained, MRV);
     //    (c) workload-weight DESC (heavier first), via classifyWorkloadTier;
     //    (d) rId ASC (stable final tie-break).
@@ -236,8 +245,15 @@ export function searchBestPlan(ctx: ConstraintContext, options?: SearchOptions):
 
         if (i === variables.length) {
             // All variables assigned — a complete (requirement + fixed) candidate.
+            // The leaf is accepted only if ALL of {prereqs, coverage, major-credit,
+            // residency} pass. checkPrereqsSatisfied is verified HERE (not in the
+            // incremental prune) because only at a complete leaf is every course
+            // placed, so a prereq satisfied by a LATER variable placed in an
+            // EARLIER term resolves correctly; checking it incrementally would
+            // unsoundly prune such branches (see incrementalOk).
             const plan: PartialPlan = { placed: [...fixed, ...assigned] };
             if (
+                checkPrereqsSatisfied(plan, ctx).ok &&
                 checkRequirementCoverage(plan, ctx).ok &&
                 checkMajorCreditFloor(plan, ctx).ok &&
                 checkResidencyFloor(plan, ctx).ok
@@ -252,17 +268,22 @@ export function searchBestPlan(ctx: ConstraintContext, options?: SearchOptions):
         }
 
         const v = variables[i]!;
-        const remaining = variables.slice(i + 1);
 
-        // 3. Domain values for this variable. Forward-check each against the trial,
-        //    then ORDER survivors best-first by scorePlan ASC (tie-break: term
-        //    chronological, then courseId ASC) so branch-and-bound finds good
-        //    solutions early.
+        // 3. Domain values for this variable. Forward-check each against the trial
+        //    using ONLY the sound, later-variable-independent incremental
+        //    predicates (incrementalOk = {offering, NOT, coreq, ceiling}); no
+        //    capacity/feasibility screen is applied, because the only available
+        //    screen (forwardFeasibilityScreen) is a documented false-negative-
+        //    prone heuristic (2.0× low-confidence multiplier + candidates[0]-
+        //    derived demand) and a false negative used as a hard prune would
+        //    discard valid branches → incompleteness. checkPerTermCeiling already
+        //    supplies sound per-term capacity pruning. Survivors are then ORDERED
+        //    best-first by scorePlan ASC (tie-break: term chronological, then
+        //    courseId ASC) so branch-and-bound finds good solutions early.
         const candidateValues: Array<{ value: PlacedCourse; score: number }> = [];
         for (const value of rawValues(v, ctx)) {
             const trial: PartialPlan = { placed: [...fixed, ...assigned, value] };
             if (!incrementalOk(trial, ctx)) continue;
-            if (!remainingStillFit(trial, remaining, ctx)) continue;
             candidateValues.push({ value, score: scorePlan(trial, ctx, weights) });
         }
         candidateValues.sort((x, y) => {
