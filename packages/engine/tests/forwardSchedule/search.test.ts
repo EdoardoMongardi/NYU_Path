@@ -22,9 +22,12 @@ import {
     checkCoreqsSameTerm,
     checkPerTermCeiling,
     checkRequirementCoverage,
+    checkMajorCreditFloor,
+    checkResidencyFloor,
+    type PartialPlan,
     type PlacedCourse,
 } from "../../src/agent/forwardSchedule/constraintModel.js";
-import { searchBestPlan } from "../../src/agent/forwardSchedule/search.js";
+import { searchBestPlan, searchTopKPlans } from "../../src/agent/forwardSchedule/search.js";
 import { compareSolverTerms } from "../../src/agent/forwardSchedule/solverHelpers.js";
 import type { SolverInput } from "../../src/agent/forwardSchedule/types.js";
 import type { PrereqGroup, ConfidenceTier } from "@nyupath/shared";
@@ -665,5 +668,215 @@ describe("searchBestPlan — pin coverage (fixed placement satisfies a requireme
         // No requirement-source placement exists at all (the only variable was
         // covered by the pin and skipped).
         expect(plan.placed.some(p => p.source === "requirement")).toBe(false);
+    });
+});
+
+// ===========================================================================
+// 11. searchTopKPlans — multiple valid plans
+// ===========================================================================
+
+/** Stable signature of a plan's requirement assignments: sorted "rId=course@term". */
+function reqSignature(plan: PartialPlan): string {
+    return plan.placed
+        .filter(p => p.satisfiesRId !== null)
+        .map(p => `${p.satisfiesRId}=${p.courseId}@${p.term}`)
+        .sort()
+        .join(",");
+}
+
+describe("searchTopKPlans — multiple valid plans", () => {
+    // Two requirements, each with TWO viable candidates, all offered fall+spring,
+    // generous ceiling → many valid (course, term) assignments. The search must
+    // surface the K best DISTINCT ones.
+    //   R1 ∈ {A-UA 1, B-UA 2}, R2 ∈ {C-UA 3, D-UA 4}; horizon = 2 terms.
+    const input = makeInput({
+        currentTerm: "2026-fall",
+        graduationTerm: "2027-spring",
+        creditCeiling: 18,
+        unmetRequirements: [
+            {
+                rId: "r1",
+                title: "One",
+                category: "major_elective",
+                credits: 4,
+                candidateCourses: ["A-UA 1", "B-UA 2"],
+            },
+            {
+                rId: "r2",
+                title: "Two",
+                category: "major_elective",
+                credits: 4,
+                candidateCourses: ["C-UA 3", "D-UA 4"],
+            },
+        ],
+        courseCatalog: new Map([
+            ["A-UA 1", { title: "A", credits: 4 }],
+            ["B-UA 2", { title: "B", credits: 4 }],
+            ["C-UA 3", { title: "C", credits: 4 }],
+            ["D-UA 4", { title: "D", credits: 4 }],
+        ]),
+        offerings: new Map([
+            ["A-UA 1", ["fall", "spring"]],
+            ["B-UA 2", ["fall", "spring"]],
+            ["C-UA 3", ["fall", "spring"]],
+            ["D-UA 4", ["fall", "spring"]],
+        ]),
+    });
+
+    it("returns up to k DISTINCT valid plans, ascending by score, all passing every hard predicate", () => {
+        const ctx = buildConstraintContext(input);
+        const top = searchTopKPlans(ctx, { k: 5 });
+
+        // At least 2 plans (the fixture has many valid assignments), capped at k.
+        expect(top.plans.length).toBeGreaterThan(1);
+        expect(top.plans.length).toBeLessThanOrEqual(5);
+        expect(top.scores).toHaveLength(top.plans.length);
+        expect(top.exhaustive).toBe(true);
+        expect(top.unsatisfiable).toEqual([]);
+
+        // Scores ascending (non-decreasing), and each parallel to its plan.
+        for (let i = 1; i < top.scores.length; i++) {
+            expect(top.scores[i]!).toBeGreaterThanOrEqual(top.scores[i - 1]!);
+        }
+
+        // Every plan passes the full hard-predicate set (offering / prereq / NOT /
+        // coreq / ceiling / coverage / major / residency).
+        for (const plan of top.plans) {
+            expect(checkOfferingSeasonMatch(plan, ctx).ok).toBe(true);
+            expect(checkPrereqsSatisfied(plan, ctx).ok).toBe(true);
+            expect(checkNotClauseClear(plan, ctx).ok).toBe(true);
+            expect(checkCoreqsSameTerm(plan, ctx).ok).toBe(true);
+            expect(checkPerTermCeiling(plan, ctx).ok).toBe(true);
+            expect(checkRequirementCoverage(plan, ctx).ok).toBe(true);
+            expect(checkMajorCreditFloor(plan, ctx).ok).toBe(true);
+            expect(checkResidencyFloor(plan, ctx).ok).toBe(true);
+        }
+
+        // Pairwise DISTINCT: every plan differs from every other in ≥1 placement.
+        const sigs = top.plans.map(reqSignature);
+        expect(new Set(sigs).size).toBe(sigs.length);
+    });
+
+    it("plans[0] deep-equals searchBestPlan(...).plan on the same input", () => {
+        const ctx = buildConstraintContext(input);
+        const top = searchTopKPlans(ctx, { k: 5 });
+        const best = searchBestPlan(ctx);
+
+        expect(best.plan).not.toBeNull();
+        expect(top.plans[0]!.placed).toEqual(best.plan!.placed);
+        expect(top.scores[0]!).toBe(best.score);
+    });
+
+    it("respects k: a smaller k truncates the list to the k best (still ascending, still a prefix-by-score)", () => {
+        const ctx = buildConstraintContext(input);
+        const all = searchTopKPlans(ctx, { k: 5 });
+        const two = searchTopKPlans(ctx, { k: 2 });
+
+        expect(two.plans.length).toBeLessThanOrEqual(2);
+        expect(two.plans.length).toBeLessThanOrEqual(all.plans.length);
+        // The k=2 result is exactly the first 2 of the k=5 result (same total order).
+        for (let i = 0; i < two.plans.length; i++) {
+            expect(two.plans[i]!.placed).toEqual(all.plans[i]!.placed);
+            expect(two.scores[i]!).toBe(all.scores[i]!);
+        }
+    });
+
+    it("on a single-solution input, returns exactly one plan equal to searchBestPlan's", () => {
+        const single = makeInput({
+            unmetRequirements: [
+                {
+                    rId: "r1",
+                    title: "Only",
+                    category: "major_required",
+                    credits: 4,
+                    candidateCourses: ["ONE-UA 1"],
+                },
+            ],
+            courseCatalog: new Map([["ONE-UA 1", { title: "Only", credits: 4 }]]),
+            // fall-only with a one-term horizon ⇒ exactly one legal (course, term).
+            currentTerm: "2026-fall",
+            graduationTerm: "2026-fall",
+            offerings: new Map([["ONE-UA 1", ["fall"]]]),
+        });
+        const ctx = buildConstraintContext(single);
+        const top = searchTopKPlans(ctx, { k: 5 });
+        const best = searchBestPlan(ctx);
+
+        expect(top.plans).toHaveLength(1);
+        expect(top.plans[0]!.placed).toEqual(best.plan!.placed);
+    });
+});
+
+// ===========================================================================
+// 12. searchTopKPlans — determinism
+// ===========================================================================
+
+describe("searchTopKPlans — determinism", () => {
+    it("identical input → two calls return identical plans + scores", () => {
+        const makeScenario = () =>
+            makeInput({
+                currentTerm: "2026-fall",
+                graduationTerm: "2027-spring",
+                creditCeiling: 12,
+                unmetRequirements: [
+                    {
+                        rId: "r1",
+                        title: "One",
+                        category: "major_elective",
+                        credits: 4,
+                        candidateCourses: ["A-UA 1", "B-UA 2"],
+                    },
+                    {
+                        rId: "r2",
+                        title: "Two",
+                        category: "major_elective",
+                        credits: 4,
+                        candidateCourses: ["C-UA 3", "D-UA 4"],
+                    },
+                ],
+                courseCatalog: new Map([
+                    ["A-UA 1", { title: "A", credits: 4 }],
+                    ["B-UA 2", { title: "B", credits: 4 }],
+                    ["C-UA 3", { title: "C", credits: 4 }],
+                    ["D-UA 4", { title: "D", credits: 4 }],
+                ]),
+                offerings: new Map([
+                    ["A-UA 1", ["fall", "spring"]],
+                    ["B-UA 2", ["fall", "spring"]],
+                    ["C-UA 3", ["fall", "spring"]],
+                    ["D-UA 4", ["fall", "spring"]],
+                ]),
+            });
+
+        const t1 = searchTopKPlans(buildConstraintContext(makeScenario()), { k: 5 });
+        const t2 = searchTopKPlans(buildConstraintContext(makeScenario()), { k: 5 });
+
+        expect(t1.scores).toEqual(t2.scores);
+        expect(t1.plans.map(p => p.placed)).toEqual(t2.plans.map(p => p.placed));
+    });
+
+    it("returns empty plans + the unsatisfiable rId when no valid plan exists", () => {
+        // Summer-only candidate in a fall/spring window ⇒ no legal value.
+        const input = makeInput({
+            currentTerm: "2026-fall",
+            graduationTerm: "2027-spring",
+            unmetRequirements: [
+                {
+                    rId: "rSummer",
+                    title: "Summer Only",
+                    category: "major_required",
+                    credits: 4,
+                    candidateCourses: ["SUM-UA 1"],
+                },
+            ],
+            courseCatalog: new Map([["SUM-UA 1", { title: "Summer Only", credits: 4 }]]),
+            offerings: new Map([["SUM-UA 1", ["summer"]]]),
+        });
+        const ctx = buildConstraintContext(input);
+        const top = searchTopKPlans(ctx, { k: 5 });
+
+        expect(top.plans).toEqual([]);
+        expect(top.scores).toEqual([]);
+        expect(top.unsatisfiable).toContain("rSummer");
     });
 });

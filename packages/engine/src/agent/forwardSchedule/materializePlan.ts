@@ -36,6 +36,7 @@ import type {
     TermConstraint,
     ConfidenceTier,
     WorkloadTier,
+    AlternativePlanSummary,
 } from "@nyupath/shared";
 import type { SolverOutput } from "./types.js";
 import type { ConstraintContext, PartialPlan, PlacedCourse } from "./constraintModel.js";
@@ -691,4 +692,126 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
         assumptions,
         state,
     };
+}
+
+// ---------------------------------------------------------------------------
+// Alternative-plan summaries (P2.3)
+// ---------------------------------------------------------------------------
+
+/** Department prefix of a courseId — everything before the LAST space-separated
+ *  numeric token (e.g. "CSCI-UA 101" → "CSCI-UA", "MATH-UA 9 101" → "MATH-UA 9").
+ *  When the final token is not a bare number (or there is no space), the whole id
+ *  is returned unchanged. */
+function subjectPrefix(courseId: string): string {
+    const idx = courseId.lastIndexOf(" ");
+    if (idx < 0) return courseId;
+    const tail = courseId.slice(idx + 1);
+    // Bare integer (course number) → strip it; otherwise keep the id whole.
+    return /^\d+$/.test(tail) ? courseId.slice(0, idx) : courseId;
+}
+
+/**
+ * Summarise each already-materialised alternative SolverOutput into an
+ * AlternativePlanSummary, computed purely from its `semesters` + `assumptions`
+ * relative to the `winner` plan.
+ *
+ * Per alternative:
+ *   - balanceScore / weighted-credits / hard / easy counts come straight from the
+ *     materialised per-term loadRationale (so they MATCH the rendered semesters).
+ *   - subjectDistributionByTerm sums credits by department prefix over the bound
+ *     specific_planned + in_progress slots (the courses a student actually takes).
+ *   - distinctSubjectsCount is the number of distinct prefixes across the plan.
+ *   - totalPetitionCount counts specific_planned slots flagged requiresPetition.
+ *   - totalAssumptionCount = alt.assumptions.length.
+ *   - graduationTerm = the alt's last semester term (matches the old summary).
+ *   - topDiffsFromWinner: balanceScore always, graduationTerm when it differs (≤3).
+ *   - planIndex is 1-based among the returned (balance-sorted) alternatives.
+ *
+ * Returns [] when `alternatives` is empty. The returned array is sorted ascending
+ * by balanceScore (stable), and planIndex is assigned AFTER that sort.
+ */
+export function buildAlternativeSummaries(
+    winner: SolverOutput,
+    alternatives: SolverOutput[],
+): AlternativePlanSummary[] {
+    if (alternatives.length === 0) return [];
+
+    const winnerBalance = winner.balanceScore;
+    const winnerGradTerm = lastTermOf(winner);
+
+    // Build each summary WITHOUT planIndex (assigned after the balance-sort below).
+    const summaries = alternatives.map((alt): Omit<AlternativePlanSummary, "planIndex"> => {
+        const weightedCreditsByTerm: Record<string, number> = {};
+        const hardCountByTerm: Record<string, number> = {};
+        const easyCountByTerm: Record<string, number> = {};
+        const subjectDistributionByTerm: Record<string, Record<string, number>> = {};
+        const distinctSubjects = new Set<string>();
+        let totalPetitionCount = 0;
+
+        for (const sem of alt.semesters) {
+            weightedCreditsByTerm[sem.term] = sem.loadRationale.weightedCredits;
+            hardCountByTerm[sem.term] = sem.loadRationale.hardCount;
+            easyCountByTerm[sem.term] = sem.loadRationale.easyCount;
+
+            const bySubject: Record<string, number> = {};
+            for (const slot of sem.slots) {
+                if (slot.kind !== "specific_planned" && slot.kind !== "in_progress") continue;
+                const subject = subjectPrefix(slot.courseId);
+                bySubject[subject] = (bySubject[subject] ?? 0) + slot.credits;
+                distinctSubjects.add(subject);
+                if (slot.kind === "specific_planned" && slot.requiresPetition === true) {
+                    totalPetitionCount++;
+                }
+            }
+            subjectDistributionByTerm[sem.term] = bySubject;
+        }
+
+        const graduationTerm = lastTermOf(alt);
+
+        const topDiffsFromWinner: Array<{ aspect: string; change: string }> = [
+            {
+                aspect: "balanceScore",
+                change: `${alt.balanceScore} vs winner ${winnerBalance} (${
+                    alt.balanceScore < winnerBalance
+                        ? "more balanced"
+                        : alt.balanceScore > winnerBalance
+                          ? "less balanced"
+                          : "equally balanced"
+                })`,
+            },
+        ];
+        if (graduationTerm !== winnerGradTerm && topDiffsFromWinner.length < 3) {
+            topDiffsFromWinner.push({
+                aspect: "graduationTerm",
+                change: `${graduationTerm} vs ${winnerGradTerm}`,
+            });
+        }
+
+        return {
+            balanceScore: alt.balanceScore,
+            weightedCreditsByTerm,
+            hardCountByTerm,
+            easyCountByTerm,
+            subjectDistributionByTerm,
+            distinctSubjectsCount: distinctSubjects.size,
+            totalPetitionCount,
+            totalAssumptionCount: alt.assumptions.length,
+            graduationTerm,
+            topDiffsFromWinner,
+        };
+    });
+
+    // Stable ascending sort by balanceScore (preserve input order on ties).
+    const ordered = summaries
+        .map((s, i) => ({ s, i }))
+        .sort((a, b) => (a.s.balanceScore !== b.s.balanceScore ? a.s.balanceScore - b.s.balanceScore : a.i - b.i))
+        .map(x => x.s);
+
+    return ordered.map((s, i) => ({ planIndex: i + 1, ...s }));
+}
+
+/** The last semester's term in a materialised plan ("" when there are none) —
+ *  the graduation/completion term the old summary reported. */
+function lastTermOf(out: SolverOutput): string {
+    return out.semesters.length > 0 ? out.semesters[out.semesters.length - 1]!.term : "";
 }
