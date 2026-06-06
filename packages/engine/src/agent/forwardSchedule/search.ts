@@ -89,6 +89,11 @@ export interface SearchOptions {
     fixed?: PlacedCourse[];
     /** Node budget for guaranteed termination. Default 200_000. */
     maxNodes?: number;
+    /** Soft per-term credit target for value ordering — values keeping a term's running
+     *  credits ≤ this are PREFERRED, before the scorePlan tie-break; placements above it
+     *  (up to creditCeiling) remain reachable. Set only by findFirstValidPlan; absent for
+     *  searchBestPlan/searchTopKPlans so their visit order is unchanged. */
+    softCreditTarget?: number;
 }
 
 export interface SearchResult {
@@ -276,6 +281,12 @@ function runSearch(
     const weights = options?.weights;
     const fixed = options?.fixed ?? [];
     const maxNodes = options?.maxNodes ?? DEFAULT_MAX_NODES;
+    // Soft per-term credit target (T2a). When set (only by findFirstValidPlan), a value
+    // whose post-placement running credits in its term stay ≤ this is PREFERRED as a
+    // PRIMARY sort key, before the scorePlan tie-break — a completeness-preserving REORDER
+    // (no prune; ≤creditCeiling placements stay reachable). Absent for searchBestPlan/
+    // searchTopKPlans, so their candidateValues ordering is byte-identical to pre-T2a.
+    const softCreditTarget = options?.softCreditTarget;
 
     // 1. Variables — only those with ≥1 viable candidate (empty-candidate
     //    requirements become placeholders downstream; not searched here), MINUS
@@ -374,13 +385,28 @@ function runSearch(
         //    courseId ASC) so good solutions surface early — this is a value-
         //    ORDERING heuristic only; with no admissible bound it does NOT prune,
         //    so it cannot affect completeness, only the order leaves are visited.
-        const candidateValues: Array<{ value: PlacedCourse; score: number }> = [];
+        const candidateValues: Array<{ value: PlacedCourse; score: number; withinSoftTarget: 0 | 1 }> = [];
         for (const value of rawValues(v, ctx)) {
             const trial: PartialPlan = { placed: [...fixed, ...assigned, value] };
             if (!incrementalOk(trial, ctx)) continue;
-            candidateValues.push({ value, score: scorePlan(trial, ctx, weights) });
+            // T2a soft-grid PRIMARY key (only when softCreditTarget is set): 0 if this value
+            // keeps its term's post-placement running credits ≤ the soft target, else 1. The
+            // term's running credits are the trial-plan credits summed for value.term (every
+            // placement already in this term plus `value`). When softCreditTarget is undefined
+            // the key is a constant 0 for every value → the sort below is EXACTLY pre-T2a (no
+            // new key), so searchBestPlan/searchTopKPlans are unaffected.
+            let withinSoftTarget: 0 | 1 = 0;
+            if (softCreditTarget !== undefined) {
+                let termCredits = 0;
+                for (const p of trial.placed) if (p.term === value.term) termCredits += p.credits;
+                withinSoftTarget = termCredits <= softCreditTarget ? 0 : 1;
+            }
+            candidateValues.push({ value, score: scorePlan(trial, ctx, weights), withinSoftTarget });
         }
         candidateValues.sort((x, y) => {
+            // PRIMARY (T2a): within-soft-target values first (0 before 1). Constant-0 when
+            // softCreditTarget is undefined → this key is a no-op and the order is pre-T2a.
+            if (x.withinSoftTarget !== y.withinSoftTarget) return x.withinSoftTarget - y.withinSoftTarget;
             if (x.score !== y.score) return x.score - y.score;
             const t = compareSolverTerms(x.value.term, y.value.term);
             if (t !== 0) return t;
@@ -583,7 +609,17 @@ function computeBlockers(run: SearchRun, ctx: ConstraintContext): Blocker[] {
 export function findFirstValidPlan(ctx: ConstraintContext, options?: SearchOptions): SearchResult {
     let found: PartialPlan | null = null;
     let foundScore = Infinity;
-    const run = runSearch(ctx, options, (plan, score) => {
+    // T2a: enable the soft 16-credit/term grid by DEFAULT for the feasibility-first path —
+    // the value ordering prefers values keeping a term's running credits ≤ the soft target
+    // (creditTargetPerSemester, the 16-grid), falling back to higher loads (up to
+    // creditCeiling) only when no ≤-target value fits. A caller may override per-call; the
+    // default is the grid. searchBestPlan/searchTopKPlans do NOT forward this, so their
+    // optimum and visit order are unchanged.
+    const runOptions: SearchOptions = {
+        ...options,
+        softCreditTarget: options?.softCreditTarget ?? ctx.input.creditTargetPerSemester,
+    };
+    const run = runSearch(ctx, runOptions, (plan, score) => {
         found = plan;
         foundScore = score;
         return true; // stop at the first valid leaf
