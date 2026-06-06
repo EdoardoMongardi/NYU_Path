@@ -26,6 +26,7 @@ import {
 } from "../../src/agent/forwardSchedule/constraintModel.js";
 import { findFirstValidPlan, searchBestPlan } from "../../src/agent/forwardSchedule/search.js";
 import { compareSolverTerms } from "../../src/agent/forwardSchedule/solverHelpers.js";
+import { solveForwardSchedule } from "../../src/agent/forwardSchedule/solver.js";
 import type { SolverInput } from "../../src/agent/forwardSchedule/types.js";
 import type { PrereqGroup } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
@@ -246,5 +247,32 @@ describe("findFirstValidPlan — returns a valid plan fast (feasibility-first)",
         expect(best.plan).not.toBeNull();
         // The whole point of feasibility-first: it does NOT enumerate the whole space.
         expect(first.nodesExplored).toBeLessThan(best.nodesExplored);
+    });
+});
+
+describe("solveForwardSchedule — feasibility-first completes a wide input without truncation", () => {
+    it("8 independent 2-candidate requirements over 4 terms: valid, feasible, no truncation warning", () => {
+        const reqs: SolverInput["unmetRequirements"] = [];
+        const catalog = new Map<string, { title: string; credits: number }>();
+        const offerings = new Map<string, Array<"fall" | "spring" | "summer" | "january">>();
+        for (let i = 1; i <= 8; i++) {
+            const a = `AA${i}-UA ${i}`, b = `BB${i}-UA ${i}`;
+            reqs.push({ rId: `r${i}`, title: `Req ${i}`, category: "major_elective", credits: 4, candidateCourses: [a, b] });
+            catalog.set(a, { title: a, credits: 4 }); catalog.set(b, { title: b, credits: 4 });
+            offerings.set(a, ["fall", "spring"]); offerings.set(b, ["fall", "spring"]);
+        }
+        const input = makeInput({
+            currentTerm: "2026-fall", graduationTerm: "2027-fall", creditCeiling: 18,
+            creditsEarned: 96, graduationCreditMinimum: 128,
+            unmetRequirements: reqs, courseCatalog: catalog, offerings,
+        });
+        const out = solveForwardSchedule(input);
+        expect(out.feasibility.feasible).toBe(true);
+        const warns = out.warnings ?? [];
+        expect(warns.some(w => w.includes("truncated"))).toBe(false);
+        const coveredRIds = new Set(
+            out.semesters.flatMap(s => s.slots).flatMap(sl => sl.kind === "specific_planned" ? sl.satisfiesRules : []),
+        );
+        for (let i = 1; i <= 8; i++) expect(coveredRIds.has(`r${i}`)).toBe(true);
     });
 });
