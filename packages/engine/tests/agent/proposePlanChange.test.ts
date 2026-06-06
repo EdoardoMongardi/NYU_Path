@@ -274,30 +274,95 @@ describe("confirmPlanChangeTool — applies change and routes per Decision #32",
         expect(output.storedIn === "forwardSchedule" || output.storedIn === "studentDraftPlan").toBe(true);
     });
 
-    it("routes infeasible result to session.studentDraftPlan (Decision #32)", async () => {
-        // Pin to a term OUTSIDE the plan window → a hard constraint violation
-        // → the solver's coarse state is infeasible-draft, which Decision #32
-        // routes to studentDraftPlan (the last valid forwardSchedule is kept).
+    it("routes a validator-infeasible result to session.studentDraftPlan (Decision #32)", async () => {
+        // RECONCILED (P2.7/PLAN-3): the original version pinned CSCI-UA 102 to
+        // "2099-fall" and asserted the SOLVER's coarse state was infeasible-draft.
+        // That assertion encoded the coarse verdict, which is no longer the
+        // authority. With the validator routing, an unsatisfiable pin is simply
+        // DROPPED and the fallback plan (2026-fall + 2027-spring, 128 credits by
+        // the target term) PASSES all 7 axes — so the validator correctly deems
+        // it feasible and it would route to forwardSchedule. The coarse
+        // "infeasible" was over-pessimistic (it conflated "couldn't honor your
+        // pin" with "the plan is infeasible").
+        //
+        // To preserve this test's REAL invariant (a genuinely-infeasible plan
+        // routes to studentDraftPlan and the last valid forwardSchedule is kept),
+        // we use a DPR with an unmet "Capstone" requirement whose only candidate
+        // course has no offerings/prereqs in the test catalog. The solver can
+        // only cover it with an UNBOUND placeholder slot, so Axis 1
+        // (requirementGroupsSatisfied) fails — exactly the kind of 7-axis miss
+        // the coarse state (valid-with-trade-offs) would have stored as valid.
+        const dpr = makeDpr({
+            cumulative: {
+                creditsRequired: 128,
+                creditsUsed: 120,
+                cumulativeGpa: 3.4,
+                cumulativeGpaRequired: 2.0,
+                residencyRequired: 64,
+                residencyUsed: 64,
+                passFailUsedUnits: 0,
+                passFailCapUnits: 32,
+                outsideHomeUsedUnits: 0,
+                outsideHomeCapUnits: 16,
+                timeLimitYears: 8,
+            },
+            requirementGroups: [
+                {
+                    rgId: "RG1",
+                    title: "CS Core",
+                    status: "not_satisfied",
+                    statusText: "Not Satisfied",
+                    children: [
+                        {
+                            rId: "R100/1",
+                            title: "Capstone",
+                            status: "not_satisfied",
+                            statusText: "Not Satisfied. Choose CSCI-UA 480.",
+                            coursesUsed: [],
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            counter: { kind: "units", required: 4, used: 0 } as any,
+                        },
+                    ],
+                },
+            ],
+            courseHistory: [],
+        });
+        const priorValidSchedule = makeMinimalFeasibleSchedule();
         const session = makeSession({
-            // Pre-populate a valid forward schedule (so validateInput passes)
-            forwardSchedule: makeMinimalFeasibleSchedule(),
+            degreeProgressReport: dpr,
+            // Pre-populate a valid forward schedule (so validateInput passes AND
+            // we can assert it is PRESERVED when the new edit is infeasible).
+            forwardSchedule: priorValidSchedule,
         });
         const ctx = makeCtx(session);
 
         const output = await confirmPlanChangeTool.call(
             {
                 mutations: [{
-                    kind: "pin",
-                    courseId: "CSCI-UA 102",
-                    term: "2099-fall", // not a future term in the plan window
+                    kind: "loadStyleOverride",
+                    style: "balanced",
                 }],
             },
             ctx,
         );
 
+        // The validator (not the coarse solver) is authoritative: this plan
+        // FAILS requirementGroupsSatisfied → infeasible → studentDraftPlan.
+        expect(output.feasible).toBe(false);
         expect(output.storedIn).toBe("studentDraftPlan");
         expect(session.studentDraftPlan).toBeDefined();
         expect(session.studentDraftPlan!.state).toBe("infeasible-draft");
+
+        // The previously-stored valid forwardSchedule MUST be preserved.
+        expect(session.forwardSchedule).toBe(priorValidSchedule);
+
+        // The binding constraint (the failing axis) must surface so the student
+        // sees WHY it landed in the draft slot.
+        const allText = [
+            ...(output.conflicts ?? []).map(c => `${c.kind} ${c.detail}`),
+            ...output.consequences,
+        ].join(" ");
+        expect(allText).toMatch(/requirementGroupsSatisfied/);
     });
 
     it("valid result routes to session.forwardSchedule and clears studentDraftPlan", async () => {

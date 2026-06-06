@@ -133,6 +133,7 @@ function makeRationalePlan(): ReturnType<typeof solveForwardSchedule> {
             majorCreditMinimum: null,
             upperLevelMinCredits: null,
         },
+        warnings: [],
     };
 
     return solveForwardSchedule(input);

@@ -6,18 +6,22 @@
  * up to 3 `AlternativeCandidate` objects for the agent to surface.
  *
  * Strategies (in order):
- *   1. include_summer — add summer term to the planning window.
+ *   1. include_summer — add summer term(s) to the planning window.
  *   2. include_jterm  — add J-term (January intersession) to the window.
  *   3. extend_grad_one_term — push graduationTerm forward by one main term.
  *
- * Phase 13 solver note: `enumerateMainTerms` in solver.ts only enumerates
- * fall/spring terms and does NOT yet read `preferences.includeSummer` or
- * `preferences.includeJTerm`. Those flags are Phase 14 Task 5 wiring.
- * Until then, strategies 1 and 2 will call the solver and, if the solver
- * still returns infeasible, emit a candidate with `schedule: null` and
- * `stillInfeasibleReason` set. Strategy 3 (extend_grad_one_term) DOES
- * cause the solver to enumerate an additional main term and can produce a
- * non-null schedule.
+ * Solver note (P2.8 / PLAN-5): the constraint search now DOES read
+ * `preferences.includeSummer` / `preferences.includeJTerm` —
+ * `buildConstraintContext` enumerates the opted-in optional terms via
+ * `enumerateTerms`, treating them as OPTIONAL (no F-1 floor, no force-fill,
+ * excluded from balance). So strategies 1 and 2 actually enumerate summer /
+ * January and CAN return a non-null `schedule` when an opted-in optional term
+ * lets the remaining requirements fit (e.g. a summer-only course, or summer
+ * credits that reach the degree minimum within the window). When the optional
+ * term still cannot fix the plan, the candidate carries `schedule: null` and
+ * `stillInfeasibleReason`. Strategy 3 (extend_grad_one_term) still expands the
+ * main-term window. The strategy logic below is unchanged — each strategy sets
+ * the flag (or extends the term) and re-solves.
  */
 
 import { solveForwardSchedule } from "./solver.js";
@@ -164,8 +168,13 @@ function buildScheduleFromOutput(
  *
  * When `out.feasibility.feasible` is true, the `schedule` field is
  * populated via `buildScheduleFromOutput`. When infeasible, `schedule`
- * is null and `stillInfeasibleReason` is set to the solver's reported
- * reason (falling back to the provided `fallbackReason`).
+ * is null and `stillInfeasibleReason` carries the REAL binding constraints:
+ * post-P2.9, `out.feasibility.constraintViolations` holds the SPECIFIC
+ * per-requirement blockers (offering / ceiling / coreq / NOT / prereq-depth)
+ * plus the capacity diagnostic, so we join those concrete details rather than
+ * the bare "N constraint violation(s)" count (`infeasibilityReason`). The
+ * provided `fallbackReason` is used only when the solver reported no detail at
+ * all (should not happen for an infeasible plan).
  */
 function buildCandidate(
     relaxation: AlternativeCandidate["relaxation"],
@@ -181,11 +190,18 @@ function buildCandidate(
             schedule: buildScheduleFromOutput(out, input),
         };
     }
+    // Compose the real reason from the concrete constraint violations (the actual
+    // binding constraints), falling back to the solver's count string, then the
+    // strategy's fallback. This is what the relaxation could NOT overcome.
+    const details = out.feasibility.constraintViolations.map(v => v.detail).filter(d => d.length > 0);
+    const stillInfeasibleReason =
+        details.length > 0
+            ? details.join(" ")
+            : (out.feasibility.infeasibilityReason ?? fallbackReason);
     return {
         summary,
         relaxation,
         schedule: null,
-        stillInfeasibleReason:
-            out.feasibility.infeasibilityReason ?? fallbackReason,
+        stillInfeasibleReason,
     };
 }

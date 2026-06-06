@@ -163,6 +163,15 @@ export interface SolverInput {
      * When undefined or empty for a given courseId, no coreq constraint applies.
      */
     coreqs?: Map<string, string[]>;
+
+    // ---- P2.10 (a) — build-time advisory warnings ----
+    /**
+     * Non-fatal advisories surfaced while building this input from the DPR —
+     * e.g. the DPR omitted the degree credit minimum so a default was assumed.
+     * Always present (possibly empty). Carried onto SolverOutput.warnings and
+     * then ForwardSchedule.warnings so the agent-facing schedule shows them.
+     */
+    warnings: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +189,12 @@ export interface SolverOutput {
     assumptions: Assumption[];
     /** Decision #32 — derived from validator + caveat axes. */
     state: PlanState;
+    /**
+     * P2.10 (a) — build-time advisories carried from SolverInput.warnings.
+     * Omitted (undefined) when there are none, so the field stays absent on
+     * the common path. build.ts copies this onto ForwardSchedule.warnings.
+     */
+    warnings?: string[];
 }
 
 // ---------------------------------------------------------------------------

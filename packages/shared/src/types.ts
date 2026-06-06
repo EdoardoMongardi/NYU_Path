@@ -1070,6 +1070,12 @@ export interface ForwardSchedule {
     assumptions: Assumption[];           // Decision #30 (discriminated union per #42)
     /** Decision #44 — top-K alternative-plan summaries from Stage 7. ≤5. */
     alternativeCandidates?: AlternativePlanSummary[];
+    /**
+     * P2.10 (a) — non-fatal build-time advisories (e.g. the DPR omitted the
+     * degree credit minimum so a default was assumed). Additive + optional:
+     * present only when the solver surfaced at least one warning.
+     */
+    warnings?: string[];
 }
 
 // === Phase 14 — Preferences + Mutation API ===

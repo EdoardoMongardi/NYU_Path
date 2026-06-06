@@ -103,6 +103,7 @@ function makeInput(overrides: Partial<SolverInput> = {}): SolverInput {
             majorCreditMinimum: null,
             upperLevelMinCredits: null,
         },
+        warnings: [],
         ...overrides,
     };
 }
@@ -293,10 +294,20 @@ describe("solveForwardSchedule — NOT clause (Decision #1)", () => {
         const placed = out.semesters.flatMap(s => s.slots).find(
             s => "courseId" in s && s.courseId === "CSCI-UA 101" && s.kind === "specific_planned"
         );
+        // The NOT-excluded course is never placed as a bound (specific_planned) slot.
         expect(placed).toBeUndefined();
+        // Post-rewire the constraint search enforces the NOT clause directly
+        // (checkNotClauseClear): CSCI-UA 101 has no incrementalOk-viable value, so its
+        // sole-candidate requirement r1 cannot be placed. Post-P2.9 (PLAN-13) the
+        // solver surfaces the REAL binding constraint — a `not_clause` violation
+        // naming r1 (the dominant failing incremental axis is the NOT clause) —
+        // rather than the old uncomputable generic `prereq_unsatisfiable` stub. The
+        // plan is still infeasible and the NOT-blocked course is still excluded; the
+        // kind is just tightened from generic-prereq to the accurate not_clause.
+        expect(out.feasibility.feasible).toBe(false);
         expect(
             out.feasibility.constraintViolations.some(
-                v => v.kind === "not_clause" && v.course === "CSCI-UA 101"
+                v => v.kind === "not_clause" && /\br1\b/.test(v.detail)
             )
         ).toBe(true);
     });
