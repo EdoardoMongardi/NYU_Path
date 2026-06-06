@@ -55,6 +55,7 @@ import type { SolverInput, SolverOutput } from "./types.js";
 import { buildConstraintContext, type ConstraintContext, type PlacedCourse } from "./constraintModel.js";
 import { findFirstValidPlan } from "./search.js"; // T3 will also import searchTopKPlans/findDiverseValidPlans here
 import { materializePlan } from "./materializePlan.js"; // T3 will re-add buildAlternativeSummaries here
+import { localImprove } from "./localImprove.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
 import { parseTerm, isOptionalTerm, derivePlanState } from "./solverHelpers.js";
 
@@ -369,7 +370,13 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
         }
     }
 
-    const out = materializePlan(winnerPlan, ctx);
+    // T3a: apply validity-preserving local preference descent on the FOUND plan
+    // (pre-fill). Only improve when a real plan was found — the fixed-only fallback
+    // {placed:fixed} (emitted on infeasible) is not a valid search leaf and is not
+    // improved. localImprove uses the eight search-leaf predicates (NOT
+    // checkHardConstraints, whose fill-dependent axes fail on pre-fill plans).
+    const improvedPlan = winner.plan !== null ? localImprove(winnerPlan, ctx) : winnerPlan;
+    const out = materializePlan(improvedPlan, ctx);
 
     // T7: derive the structured optimality status. A found plan is best-effort
     // (feasibility-first does not prove the global optimum); no found plan is
