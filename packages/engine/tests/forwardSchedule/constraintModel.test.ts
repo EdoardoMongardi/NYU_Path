@@ -27,6 +27,8 @@ import {
     checkResidencyFloor,
     checkMajorCreditFloor,
     checkGpaFloors,
+    scorePlan,
+    DEFAULT_OBJECTIVE_WEIGHTS,
     type ConstraintContext,
     type PartialPlan,
     type PlacedCourse,
@@ -953,5 +955,88 @@ describe("equivalence: hard predicates agree with runGraduationPathValidator on 
         const r = checkPerTermCeiling(mutated, ctx);
         expect(r.ok).toBe(false);
         expect(r.violations.some(v => v.kind === "credit_ceiling" && v.term === firstTerm)).toBe(true);
+    });
+});
+
+// ===========================================================================
+// 4. scorePlan — soft objective
+// ===========================================================================
+
+describe("scorePlan", () => {
+    // Base ctx: two-term horizon (fall 2026, spring 2027), 120 earned, min 128.
+    // graduationCreditMinimum small enough that a few placements can reach it.
+    const scoreInput = makeInput({
+        currentTerm: "2026-fall",
+        graduationTerm: "2027-spring",
+        creditsEarned: 120,
+        graduationCreditMinimum: 128,
+    });
+    const ctx = buildConstraintContext(scoreInput);
+
+    it("1. Determinism: same plan + ctx returns the identical score on two calls", () => {
+        const plan: PartialPlan = {
+            placed: [
+                placed({ courseId: "A", term: "2026-fall", credits: 4 }),
+                placed({ courseId: "B", term: "2027-spring", credits: 4 }),
+            ],
+        };
+        const s1 = scorePlan(plan, ctx);
+        const s2 = scorePlan(plan, ctx);
+        expect(s1).toBe(s2);
+    });
+
+    it("2. Balance drives cost: even distribution scores lower than lumpy (weights {balance:1, timeToDegree:0})", () => {
+        const weightsBalanceOnly = { balance: 1, timeToDegree: 0 };
+
+        // Even: 8 cr in each of two terms → low variance.
+        const evenPlan: PartialPlan = {
+            placed: [
+                placed({ courseId: "A", term: "2026-fall", credits: 8 }),
+                placed({ courseId: "B", term: "2027-spring", credits: 8 }),
+            ],
+        };
+        // Lumpy: 16 cr in one term, 0 in the other → high variance.
+        const lumpyPlan: PartialPlan = {
+            placed: [
+                placed({ courseId: "A", term: "2026-fall", credits: 16 }),
+            ],
+        };
+
+        const evenScore = scorePlan(evenPlan, ctx, weightsBalanceOnly);
+        const lumpyScore = scorePlan(lumpyPlan, ctx, weightsBalanceOnly);
+        expect(evenScore).toBeLessThan(lumpyScore);
+    });
+
+    it("3. Time-to-degree: earlier completion scores lower (weights {balance:0, timeToDegree:1})", () => {
+        const weightsTimeOnly = { balance: 0, timeToDegree: 1 };
+
+        // ctx has creditsEarned=120, min=128 → need 8 more credits.
+        // Early plan: crosses threshold in first term (index 0).
+        const earlyPlan: PartialPlan = {
+            placed: [
+                placed({ courseId: "A", term: "2026-fall", credits: 8 }),
+            ],
+        };
+        // Late plan: threshold only crossed in second term (index 1).
+        const latePlan: PartialPlan = {
+            placed: [
+                placed({ courseId: "A", term: "2026-fall", credits: 4 }),
+                placed({ courseId: "B", term: "2027-spring", credits: 4 }),
+            ],
+        };
+
+        const earlyScore = scorePlan(earlyPlan, ctx, weightsTimeOnly);
+        const lateScore = scorePlan(latePlan, ctx, weightsTimeOnly);
+        expect(earlyScore).toBeLessThan(lateScore);
+    });
+
+    it("4. Default weights applied when argument omitted: scorePlan(plan, ctx) === scorePlan(plan, ctx, DEFAULT_OBJECTIVE_WEIGHTS)", () => {
+        const plan: PartialPlan = {
+            placed: [
+                placed({ courseId: "A", term: "2026-fall", credits: 4 }),
+                placed({ courseId: "B", term: "2027-spring", credits: 4 }),
+            ],
+        };
+        expect(scorePlan(plan, ctx)).toBe(scorePlan(plan, ctx, DEFAULT_OBJECTIVE_WEIGHTS));
     });
 });

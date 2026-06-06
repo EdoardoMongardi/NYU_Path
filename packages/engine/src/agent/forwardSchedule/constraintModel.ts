@@ -1,10 +1,10 @@
 /**
- * Phase 2 P2.1b — Hard-constraint model.
+ * Phase 2 P2.1b/c — Hard-constraint model + soft objective.
  *
  * Pure, individually-testable predicates that, given a (partial or complete)
- * candidate plan, report whether it violates each hard constraint. A later
- * task builds the backtracking search that consumes these; a separate task
- * adds the SOFT objective. NO objective/scoring lives here.
+ * candidate plan, report whether it violates each hard constraint. The soft
+ * objective (scorePlan / ObjectiveWeights / DEFAULT_OBJECTIVE_WEIGHTS) also
+ * lives here; a later task builds the backtracking search that minimises it.
  *
  * The authoritative definition of a "valid" plan is `runGraduationPathValidator`
  * (graduationPathValidator.ts). Each predicate documents — via its `axis` —
@@ -21,8 +21,9 @@
  */
 
 import type { SolverInput } from "./types.js";
-import type { WorkloadTier, FeasibilityReport } from "@nyupath/shared";
+import type { WorkloadTier, FeasibilityReport, ForwardSemester } from "@nyupath/shared";
 import type { ValidatorAxis } from "./graduationPathValidator.js";
+import { computeBalanceScore, type LoadStyle } from "./balanceScore.js";
 import {
     enumerateMainTerms,
     parseTerm,
@@ -535,4 +536,79 @@ export function checkHardConstraints(
         violations.push(...c.check(plan, ctx).violations);
     }
     return result(violations);
+}
+
+// ===========================================================================
+// Soft objective
+// ===========================================================================
+
+/** Weights for the two soft-objective components. */
+export interface ObjectiveWeights {
+    /** Weight on workload-balance cost (computeBalanceScore). Default 1. */
+    balance: number;
+    /** Weight on time-to-degree (earlier completion = lower cost). Default 0.5. */
+    timeToDegree: number;
+}
+
+export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = { balance: 1, timeToDegree: 0.5 };
+
+/**
+ * Soft objective — LOWER is better (a cost the search minimises). Deterministic.
+ *
+ * Components (weighted sum):
+ *  - balance: computeBalanceScore over the plan's per-term aggregates, using the
+ *    student's loadStyle (ctx.input.preferences?.loadStyle ?? "balanced"). Every term
+ *    in ctx.futureTerms contributes an entry (0 credits / 0 hardCount for empty terms)
+ *    so variance reflects the full planning window.
+ *  - timeToDegree: the 0-based index in ctx.futureTerms of the first term at which the
+ *    running total (ctx.input.creditsEarned + cumulative placed credits) reaches
+ *    ctx.input.graduationCreditMinimum. Earlier completion ⇒ smaller index ⇒ lower cost.
+ *    If the plan never reaches the minimum, uses ctx.futureTerms.length (worst-case).
+ *
+ * Final score = weights.balance × balanceCost + weights.timeToDegree × timeToDegreeIndex.
+ */
+export function scorePlan(
+    plan: PartialPlan,
+    ctx: ConstraintContext,
+    weights?: ObjectiveWeights,
+): number {
+    const w = weights ?? DEFAULT_OBJECTIVE_WEIGHTS;
+
+    // --- Balance component ---
+    // Build one minimal entry per future term: plannedCredits + hardCount.
+    // computeBalanceScore only reads these two fields from each semester, so we
+    // construct a narrow object and cast — it does not touch any other ForwardSemester field.
+    const creditsByTerm = new Map<string, number>();
+    const hardCountByTerm = new Map<string, number>();
+    for (const p of plan.placed) {
+        creditsByTerm.set(p.term, (creditsByTerm.get(p.term) ?? 0) + p.credits);
+        if (p.workloadWeight >= 1.0) {
+            hardCountByTerm.set(p.term, (hardCountByTerm.get(p.term) ?? 0) + 1);
+        }
+    }
+
+    const semesterProxies = ctx.futureTerms.map(term => ({
+        plannedCredits: creditsByTerm.get(term) ?? 0,
+        loadRationale: { hardCount: hardCountByTerm.get(term) ?? 0 },
+    }));
+
+    const loadStyle: LoadStyle = ctx.input.preferences?.loadStyle ?? "balanced";
+    // computeBalanceScore only reads plannedCredits + loadRationale.hardCount; the narrow proxy
+    // objects above satisfy both fields — the cast is intentional and safe.
+    const balanceCost = computeBalanceScore(semesterProxies as unknown as ForwardSemester[], loadStyle);
+
+    // --- Time-to-degree component ---
+    const { futureTerms } = ctx;
+    const { creditsEarned, graduationCreditMinimum } = ctx.input;
+    let cumulative = creditsEarned;
+    let timeToDegreeIndex = futureTerms.length; // worst: never reached
+    for (let i = 0; i < futureTerms.length; i++) {
+        cumulative += creditsByTerm.get(futureTerms[i]!) ?? 0;
+        if (cumulative >= graduationCreditMinimum) {
+            timeToDegreeIndex = i;
+            break;
+        }
+    }
+
+    return w.balance * balanceCost + w.timeToDegree * timeToDegreeIndex;
 }
