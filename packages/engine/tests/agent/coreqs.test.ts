@@ -93,6 +93,7 @@ function makeInput(overrides: Partial<SolverInput> = {}): SolverInput {
             majorCreditMinimum: null,
             upperLevelMinCredits: null,
         },
+        warnings: [],
         ...overrides,
     };
 }
@@ -152,24 +153,18 @@ describe("co-requisite same-term enforcement", () => {
         // BIOL-UA 100 should be placed
         expect(placements.has("BIOL-UA 100")).toBe(true);
 
-        // If BIOL-UA 12 is placed (it is in unmetRequirements), it should be in the same term
-        // OR at minimum BIOL-UA 100 was placed in a term where BIOL-UA 12 could fit.
-        // The coreq enforcement here checks that the solver didn't reject a valid term.
-        if (placements.has("BIOL-UA 12")) {
-            expect(placements.get("BIOL-UA 12")).toBe(placements.get("BIOL-UA 100"));
-        }
-
-        // The coreqSameTerm constraint should appear in BIOL-UA 100's rationale
-        const fall = out.semesters.find(s => s.term === "2026-fall")!;
-        const biol100Slot = fall?.slots.find(
-            s => s.kind === "specific_planned" && "courseId" in s && s.courseId === "BIOL-UA 100",
-        );
-        if (biol100Slot && biol100Slot.kind === "specific_planned") {
-            const hasCoreqConstraint = biol100Slot.rationale.termConstraints.some(
-                tc => tc.kind === "coreqSameTerm",
-            );
-            expect(hasCoreqConstraint).toBe(true);
-        }
+        // Decision #14 — co-requisite same-term enforcement. BIOL-UA 12 is also
+        // an unmet requirement, so the constraint search places it AND keeps it
+        // in the SAME term as its dependent BIOL-UA 100 (the search's
+        // checkCoreqsSameTerm hard-constraint guarantees this). Post-rewire the
+        // search owns coreq enforcement directly, so we assert the actual
+        // contract — co-placement in one term — rather than a rationale label.
+        // (The old greedy surfaced a "coreqSameTerm" termConstraint on the slot;
+        // materializePlan re-derives offering/creditSlack/prereqChain constraints
+        // only, so that incidental label is no longer emitted while the coreq is
+        // still correctly co-placed.)
+        expect(placements.has("BIOL-UA 12")).toBe(true);
+        expect(placements.get("BIOL-UA 12")).toBe(placements.get("BIOL-UA 100"));
 
         // No violations related to coreq enforcement
         const coreqViolations = out.feasibility.constraintViolations.filter(

@@ -14,12 +14,14 @@ import type {
     PlanChangeOutcome,
     PlanDiff,
     PlanState,
+    ValidationResult,
 } from "@nyupath/shared";
 import type { SolverInput } from "./types.js";
 import type { ToolSession } from "../tool.js";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import { classifyBalanceDelta, computeBalanceScore } from "./balanceScore.js";
-import { buildSolverInput } from "./buildSolverInput.js";
+import { buildSolverInput, buildSolverInputWithRules, type SolverInputWithRules } from "./buildSolverInput.js";
+import { diffPlanTradeOffs } from "./tradeOffEngine.js";
 
 // ---------------------------------------------------------------------------
 // Shared Zod schemas (used by propose_plan_change + confirm_plan_change)
@@ -185,10 +187,11 @@ export function applyMutationsToPreferences(
                 //
                 // Dedupe-by-courseId-only matches `swap`'s semantics
                 // (line 159 above); both rely on the solver's exclusion
-                // set being keyed on courseId only (see solver.ts:854).
-                // If the solver ever becomes term-aware on exclusions,
-                // both `swap` and `move` need to switch to dedupe by the
-                // (courseId, term) tuple together.
+                // set being keyed on courseId only (materializePlan.ts
+                // builds `excludedCourseIds` from preferences.exclusions
+                // by courseId). If the solver ever becomes term-aware on
+                // exclusions, both `swap` and `move` need to switch to
+                // dedupe by the (courseId, term) tuple together.
                 if (!prefs.exclusions) prefs.exclusions = [];
                 prefs.exclusions = prefs.exclusions.filter(e => e.courseId !== m.courseId);
                 prefs.exclusions.push({ courseId: m.courseId, term: m.fromTerm });
@@ -305,40 +308,50 @@ export function applyMutationsToPreferences(
 /**
  * Construct a SolverInput from a ToolSession + DPR.
  *
- * Task 1.10 (RC-4/PLAN-2): this function is now a thin wrapper over the
- * unified buildSolverInput() in buildSolverInput.ts. The three divergences
- * that existed in the old implementation are eliminated:
+ * Task 1.10 (RC-4/PLAN-2): this function is a thin wrapper over the unified
+ * buildSolverInput() in buildSolverInput.ts. The three divergences that
+ * existed in the old implementation are eliminated:
  *   1. Graduation term now honors session.graduationTarget (was credits-only)
  *   2. currentTerm now uses wall-clock via deriveTemporalContext (was last-IP)
  *   3. coreqs are now built (were missing entirely)
  *
- * The callers in proposePlanChange and confirmPlanChange set preferences
- * onto session.schedulePreferences BEFORE calling this function; the unified
- * builder reads session.schedulePreferences directly. The legacy `preferences`
- * parameter is preserved for API compatibility — when supplied it is written
- * to session.schedulePreferences before delegating to the unified builder
- * (confirming the caller's already-set value is what gets used).
- *
- * When `preferences` is NOT supplied, session.schedulePreferences is used
- * as-is (the confirm_plan_change caller already writes it before this call).
+ * P2.10 (d): when `preferences` is supplied it is passed through as an explicit
+ * `preferencesOverride` — the builder uses it WITHOUT mutating the session. The
+ * old save→`session.schedulePreferences = preferences`→build→restore dance is
+ * gone (it briefly mutated the session, a hazard the override eliminates).
+ * When `preferences` is NOT supplied, session.schedulePreferences is used as-is
+ * (the confirm_plan_change caller persists its own value separately before the
+ * read-only build — that intended write is unaffected).
  */
 export function buildSolverInputFromSession(
     session: ToolSession,
     dpr: DegreeProgressReport,
     preferences?: SchedulePreferences,
 ): SolverInput {
-    // If an explicit preferences object is passed, temporarily apply it to the
-    // session so the unified builder picks it up from session.schedulePreferences.
-    // This matches the pre-Task-1.10 semantics for callers that pass preferences.
-    if (preferences !== undefined) {
-        const originalPrefs = session.schedulePreferences;
-        session.schedulePreferences = preferences;
-        const result = buildSolverInput(session, dpr, {});
-        // Restore (so we don't permanently mutate the session on a read-only call)
-        session.schedulePreferences = originalPrefs;
-        return result;
-    }
-    return buildSolverInput(session, dpr, {});
+    return buildSolverInput(
+        session,
+        dpr,
+        preferences !== undefined ? { preferencesOverride: preferences } : {},
+    );
+}
+
+/**
+ * P2.10 (b)+(d) — rules-aware sibling of buildSolverInputFromSession used by the
+ * edit tools (propose / confirm). Returns the SolverInput AND `validatorRules`
+ * from a SINGLE buildProgramRules call, so the tools no longer make a redundant
+ * second buildProgramRules call for the validator path. `preferences` is applied
+ * as a non-mutating override exactly as in buildSolverInputFromSession.
+ */
+export function buildSolverInputWithRulesFromSession(
+    session: ToolSession,
+    dpr: DegreeProgressReport,
+    preferences?: SchedulePreferences,
+): SolverInputWithRules {
+    return buildSolverInputWithRules(
+        session,
+        dpr,
+        preferences !== undefined ? { preferencesOverride: preferences } : {},
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -453,14 +466,25 @@ export function deriveConsequences(
 
 /**
  * Build a rich PlanDiff from the before and after ForwardSchedule.
- * For Task 5 all fields are populated as accurately as possible
- * from the two schedules; some advanced fields (cascadedShifts,
- * validationResultsChanges) require more context than is available
- * here and are left as empty arrays / empty records.
+ *
+ * Credit / weighted-credit / workload-tier / balance / graduation-term /
+ * planState deltas are computed inline below. The consequence (trade-off)
+ * fields — newRequiresPetition, removedRequiresPetition, newUnmetRequirements,
+ * cascadedShifts, newAssumptions — are delegated to `diffPlanTradeOffs`
+ * (tradeOffEngine.ts, P2.6), which diffs the two schedules' slots directly.
+ *
+ * `validationResultsChanges` (P2.7): when `validatorAxes` is supplied, every
+ * axis whose `before`/`after` ValidationResult differs (structurally — by
+ * status OR reason/payload) is recorded as `{ before, after }`. When omitted,
+ * it stays `{}` (backward-compatible: the build path never passes axes).
  */
 export function buildPlanDiff(
     before: ForwardSchedule | undefined,
     after: ForwardSchedule,
+    validatorAxes?: {
+        before?: Record<string, ValidationResult>;
+        after: Record<string, ValidationResult>;
+    },
 ): PlanDiff {
     // creditsByTermDelta
     const beforeCreditsByTerm: Record<string, number> = {};
@@ -536,20 +560,76 @@ export function buildPlanDiff(
         planStateChange = { from: before.state, to: after.state };
     }
 
+    // Consequence (trade-off) fields — petitions, newly-unmet requirements,
+    // cascaded term shifts, and new assumptions — diffed directly from the
+    // two schedules (P2.6).
+    const tradeOffs = diffPlanTradeOffs(before, after);
+
+    // validationResultsChanges (P2.7) — per-axis ValidationResult transitions.
+    // Only populated when the caller supplies the validator's before+after axis
+    // results; the build path omits them and gets an empty record.
+    const validationResultsChanges: Record<string, { before: ValidationResult; after: ValidationResult }> = {};
+    if (validatorAxes) {
+        const beforeAxes = validatorAxes.before ?? {};
+        const afterAxes = validatorAxes.after;
+        for (const axis of Object.keys(afterAxes)) {
+            const a = afterAxes[axis]!;
+            const b = beforeAxes[axis];
+            // Record an axis only when a `before` exists AND the result changed
+            // (by status or reason/payload). The validator always emits the same
+            // 7 axes for both plans, so a missing `before` is not an expected
+            // transition and is skipped rather than recorded as before===after.
+            if (b && !validationResultsEqual(b, a)) {
+                validationResultsChanges[axis] = { before: b, after: a };
+            }
+        }
+    }
+
     return {
         creditsByTermDelta,
         graduationTermShift: gradShift,
-        newRequiresPetition: [],
-        removedRequiresPetition: [],
-        newUnmetRequirements: [],
-        cascadedShifts: [],
+        newRequiresPetition: tradeOffs.newRequiresPetition,
+        removedRequiresPetition: tradeOffs.removedRequiresPetition,
+        newUnmetRequirements: tradeOffs.newUnmetRequirements,
+        cascadedShifts: tradeOffs.cascadedShifts,
         weightedCreditsByTermDelta,
         workloadTierShifts,
         balanceImpact,
-        newAssumptions: [],
-        validationResultsChanges: {},
+        newAssumptions: tradeOffs.newAssumptions,
+        validationResultsChanges,
         planStateChange,
     };
+}
+
+/**
+ * Structural equality for two ValidationResult values. Two results are equal
+ * iff they share a `status` AND the status-specific payload matches:
+ *   - pass             → same `verifiedFrom`
+ *   - assumed-pass     → same `assumption` + `whatWouldFlipIt`
+ *   - requires-approval→ same `authority`
+ *   - fail             → same `reason`
+ * Used by buildPlanDiff to decide whether an axis transitioned (P2.7). A
+ * pass→fail flip, or a fail whose reason changed, both count as a change.
+ */
+function validationResultsEqual(a: ValidationResult, b: ValidationResult): boolean {
+    if (a.status !== b.status) return false;
+    switch (a.status) {
+        case "pass":
+            return a.verifiedFrom === (b as { verifiedFrom: string }).verifiedFrom;
+        case "assumed-pass": {
+            const bb = b as { assumption: string; whatWouldFlipIt: string };
+            return a.assumption === bb.assumption && a.whatWouldFlipIt === bb.whatWouldFlipIt;
+        }
+        case "requires-approval":
+            return a.authority === (b as { authority: string }).authority;
+        case "fail":
+            return a.reason === (b as { reason: string }).reason;
+        default: {
+            const _exhaustive: never = a;
+            void _exhaustive;
+            return true;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

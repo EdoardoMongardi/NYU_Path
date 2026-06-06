@@ -13,9 +13,11 @@
 import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { solveForwardSchedule } from "../forwardSchedule/solver.js";
+import { finalizeForwardSchedule } from "../forwardSchedule/build.js";
+import { runGraduationPathValidator } from "../forwardSchedule/graduationPathValidator.js";
 import {
     applyMutationsToPreferences,
-    buildSolverInputFromSession,
+    buildSolverInputWithRulesFromSession,
     computeSlotDiff,
     deriveConsequences,
     buildPlanDiff,
@@ -27,7 +29,6 @@ import type {
     PlanDiff,
     PlanMutation,
     SchedulePreferences,
-    ForwardSchedule,
 } from "@nyupath/shared";
 
 // ---------------------------------------------------------------------------
@@ -104,38 +105,49 @@ export const confirmPlanChangeTool = buildTool({
         session.schedulePreferences = newPrefs;
 
         // Step 2: Re-run the solver with the updated preferences.
-        const solverInput = buildSolverInputFromSession(session, dpr, newPrefs);
+        // P2.10 (b)+(d): one buildProgramRules call yields BOTH the solverInput
+        // and the validatorRules. `newPrefs` is passed as a non-mutating override
+        // — it is ALSO the value just persisted to session.schedulePreferences
+        // above (that intended write is separate and unaffected), so the effective
+        // preferences are identical either way.
+        const { solverInput, validatorRules } = buildSolverInputWithRulesFromSession(
+            session,
+            dpr,
+            newPrefs,
+        );
         const solverOutput = solveForwardSchedule(solverInput);
 
-        // Build a ForwardSchedule from solver output.
-        const plannedCredits = solverOutput.semesters.reduce((sum, s) => sum + s.plannedCredits, 0);
-        const degreeCreditsMet =
-            (dpr.cumulative.creditsUsed ?? 0) + plannedCredits >= (dpr.cumulative.creditsRequired ?? 128);
+        // ---- Route through the AUTHORITATIVE 7-axis validator (P2.7/PLAN-3) ----
+        //
+        // PLAN-3 hole: previously the Decision #32 routing keyed on the SOLVER's
+        // coarse `state`, so a confirmed edit could be stored to
+        // session.forwardSchedule ("valid") without runGraduationPathValidator
+        // passing. We now run the SAME finalize step the build path uses; the
+        // schedule carries the validator-derived state and the routing keys on
+        // `validatorResult.feasible`. The `validatorRules` come from the single
+        // bundle above (no redundant second buildProgramRules call).
 
-        const newSchedule: ForwardSchedule = {
-            studentId: currentPlan.studentId,
-            homeSchoolId: currentPlan.homeSchoolId,
-            graduationTerm: solverInput.graduationTerm,
-            creditTargetPerSemester: solverInput.creditTargetPerSemester,
-            f1Floor: solverInput.f1Floor,
-            domesticPartTimeFloor: solverInput.domesticPartTimeFloor,
-            graduationCreditMinimum: solverInput.graduationCreditMinimum,
-            degreeCreditsMet,
-            semesters: solverOutput.semesters,
-            dprCourseHistoryHash: solverInput.dprCourseHistoryHash,
-            computedAt: Date.now(),
-            feasibility: solverOutput.feasibility,
-            state: solverOutput.state,
-            balanceScore: solverOutput.balanceScore,
-            assumptions: solverOutput.assumptions,
-            ...(solverOutput.alternativeCandidates !== undefined
-                ? { alternativeCandidates: solverOutput.alternativeCandidates }
-                : {}),
-        };
+        // Validate the BEFORE plan too (cheap, pure) for validationResultsChanges.
+        const beforeAxes = runGraduationPathValidator({
+            plan: currentPlan,
+            dpr,
+            programRules: validatorRules,
+        }).axisResults;
 
-        // Step 3: Decision #32 routing.
+        const { schedule: newSchedule, validatorResult } = finalizeForwardSchedule(
+            solverOutput,
+            solverInput,
+            dpr,
+            validatorRules,
+        );
+
+        // Step 3: Decision #32 routing — keyed on the VALIDATOR's verdict.
+        // An edit may be stored to session.forwardSchedule ONLY when the
+        // authoritative validator deems it feasible (state valid-clean /
+        // valid-with-trade-offs). Otherwise it lands in studentDraftPlan and
+        // the last valid forwardSchedule is preserved.
         let storedIn: ConfirmPlanChangeOutput["storedIn"];
-        if (newSchedule.state === "valid-clean" || newSchedule.state === "valid-with-trade-offs") {
+        if (validatorResult.feasible) {
             session.forwardSchedule = newSchedule;
             delete session.studentDraftPlan;
             storedIn = "forwardSchedule";
@@ -176,15 +188,34 @@ export const confirmPlanChangeTool = buildTool({
         // Step 4: Build outcome.
         const diff = computeSlotDiff(currentPlan, newSchedule);
         const consequences = deriveConsequences(diff, newSchedule, noOpConsequences);
-        const planDiff = buildPlanDiff(currentPlan, newSchedule);
+        const planDiff = buildPlanDiff(currentPlan, newSchedule, {
+            before: beforeAxes,
+            after: validatorResult.axisResults,
+        });
 
-        const conflicts = solverOutput.feasibility.constraintViolations.map(v => ({
-            kind: v.kind as string,
-            detail: v.detail,
-        }));
+        // Conflicts + the binding-constraint consequence come from the
+        // VALIDATOR's verdict (the authoritative gate), not the solver's coarse
+        // feasibility. When the validator fails an axis the solver missed, name
+        // the failing axes + binding constraint so the student sees WHY the edit
+        // landed in the draft slot rather than the live plan.
+        const conflicts: Array<{ kind: string; detail: string }> = [];
+        if (!validatorResult.feasible && validatorResult.infeasibilityReport) {
+            const failingAxes = Object.entries(validatorResult.axisResults)
+                .filter(([, v]) => v.status === "fail")
+                .map(([axis]) => axis);
+            conflicts.push({
+                kind: validatorResult.infeasibilityReport.conflictSource,
+                detail: validatorResult.infeasibilityReport.conflictDetail,
+            });
+            consequences.push(
+                `Plan fails graduation-path validation (${failingAxes.join(", ")}): ` +
+                `${validatorResult.infeasibilityReport.conflictDetail}. ` +
+                "Stored as a draft; your last valid plan is unchanged.",
+            );
+        }
 
         return {
-            feasible: solverOutput.feasibility.feasible,
+            feasible: validatorResult.feasible,
             diff,
             consequences,
             conflicts: conflicts.length > 0 ? conflicts : undefined,

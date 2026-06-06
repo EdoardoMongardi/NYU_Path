@@ -94,6 +94,7 @@ function makeInput(
             upperLevelMinCredits: null,
         },
         preferences: prefs,
+        warnings: [],
         ...overrides,
     };
 }

@@ -12,9 +12,11 @@
 import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { solveForwardSchedule } from "../forwardSchedule/solver.js";
+import { finalizeForwardSchedule } from "../forwardSchedule/build.js";
+import { runGraduationPathValidator } from "../forwardSchedule/graduationPathValidator.js";
 import {
     applyMutationsToPreferences,
-    buildSolverInputFromSession,
+    buildSolverInputWithRulesFromSession,
     computeSlotDiff,
     deriveConsequences,
     buildPlanDiff,
@@ -127,48 +129,59 @@ export const proposePlanChangeTool = buildTool({
             input.mutations as PlanMutation[],
         );
 
-        // Build a hypothetical SolverInput with the mutated preferences
-        const solverInput = buildSolverInputFromSession(session, dpr, hypotheticalPrefs);
+        // Build a hypothetical SolverInput with the mutated preferences.
+        // P2.10 (b)+(d): one buildProgramRules call yields BOTH the solverInput
+        // and the validatorRules; the mutated prefs are applied as a non-mutating
+        // override (no session write on this read-only path).
+        const { solverInput, validatorRules } = buildSolverInputWithRulesFromSession(
+            session,
+            dpr,
+            hypotheticalPrefs,
+        );
 
         // Run the solver (read-only — we never write the result to session)
         const solverOutput = solveForwardSchedule(solverInput);
 
-        // Build a minimal ForwardSchedule from solver output (mirrors alternatives.ts)
-        const plannedCredits = solverOutput.semesters.reduce((sum, s) => sum + s.plannedCredits, 0);
-        const degreeCreditsMet =
-            (dpr.cumulative.creditsUsed ?? 0) + plannedCredits >= (dpr.cumulative.creditsRequired ?? 128);
+        // ---- Route through the AUTHORITATIVE 7-axis validator (P2.7/PLAN-3) ----
+        //
+        // The solver's coarse `feasibility`/`state` is NOT trusted here. We run
+        // the SAME finalize step the build path uses, so the proposed schedule
+        // carries the validator-derived state and `feasible` reflects the full
+        // 7-axis verdict — closing the PLAN-3 hole where an edit could preview
+        // as feasible while a 7-axis check would have failed.
+        const { schedule: proposedSchedule, validatorResult } = finalizeForwardSchedule(
+            solverOutput,
+            solverInput,
+            dpr,
+            validatorRules,
+        );
 
-        const proposedSchedule: ForwardSchedule = {
-            studentId: currentPlan.studentId,
-            homeSchoolId: currentPlan.homeSchoolId,
-            graduationTerm: solverInput.graduationTerm,
-            creditTargetPerSemester: solverInput.creditTargetPerSemester,
-            f1Floor: solverInput.f1Floor,
-            domesticPartTimeFloor: solverInput.domesticPartTimeFloor,
-            graduationCreditMinimum: solverInput.graduationCreditMinimum,
-            degreeCreditsMet,
-            semesters: solverOutput.semesters,
-            dprCourseHistoryHash: solverInput.dprCourseHistoryHash,
-            computedAt: Date.now(),
-            feasibility: solverOutput.feasibility,
-            state: solverOutput.state,
-            balanceScore: solverOutput.balanceScore,
-            assumptions: solverOutput.assumptions,
-            ...(solverOutput.alternativeCandidates !== undefined
-                ? { alternativeCandidates: solverOutput.alternativeCandidates }
-                : {}),
-        };
+        // Validate the BEFORE plan too (cheap, pure) so the planDiff can report
+        // per-axis validation transitions (validationResultsChanges, P2.7).
+        const beforeAxes = runGraduationPathValidator({
+            plan: currentPlan,
+            dpr,
+            programRules: validatorRules,
+        }).axisResults;
 
         // Compute diff and consequences
         const diff = computeSlotDiff(currentPlan, proposedSchedule);
         const consequences = deriveConsequences(diff, proposedSchedule, noOpConsequences);
-        const planDiff = buildPlanDiff(currentPlan, proposedSchedule);
+        const planDiff = buildPlanDiff(currentPlan, proposedSchedule, {
+            before: beforeAxes,
+            after: validatorResult.axisResults,
+        });
 
-        // Build conflicts array from feasibility violations
-        const conflicts = solverOutput.feasibility.constraintViolations.map(v => ({
-            kind: v.kind as string,
-            detail: v.detail,
-        }));
+        // Build conflicts from the VALIDATOR's verdict (not the solver's coarse
+        // feasibility): when infeasible, surface the binding constraint (failing
+        // axes) from the validator's infeasibilityReport.
+        const conflicts: Array<{ kind: string; detail: string }> = [];
+        if (!validatorResult.feasible && validatorResult.infeasibilityReport) {
+            conflicts.push({
+                kind: validatorResult.infeasibilityReport.conflictSource,
+                detail: validatorResult.infeasibilityReport.conflictDetail,
+            });
+        }
 
         // Phase 17 — deterministic confirm-bubble template. Use the
         // first mutation in the batch as the "headline" mutation. The
@@ -179,7 +192,7 @@ export const proposePlanChangeTool = buildTool({
         const explanation = explainPlanDiff(planDiff, firstMutation);
 
         return {
-            feasible: solverOutput.feasibility.feasible,
+            feasible: validatorResult.feasible,
             diff,
             consequences,
             conflicts: conflicts.length > 0 ? conflicts : undefined,

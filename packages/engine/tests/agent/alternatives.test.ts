@@ -108,6 +108,7 @@ function infeasibleInput(overrides: Partial<SolverInput> = {}): SolverInput {
             majorCreditMinimum: null,
             upperLevelMinCredits: null,
         },
+        warnings: [],
         ...overrides,
     };
 }
