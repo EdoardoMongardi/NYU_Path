@@ -27,8 +27,10 @@
  * remain here — `buildIpAssumptions` and `derivePlanState` — because
  * materializePlan re-uses them (and this body uses derivePlanState).
  *
- * `alternativeCandidates` is intentionally left undefined; a later task adds the
- * real top-K distinct plans (the fake distribution probe is gone).
+ * `alternativeCandidates` is the REAL top-K distinct plans (P2.3): the search
+ * returns up to 5 best valid leaves; the winner (plans[0]) is the main plan, and
+ * each remaining leaf is materialised + summarised into an AlternativePlanSummary
+ * (the fake distribution probe is gone).
  *
  * The `solveForwardSchedule(input: SolverInput): SolverOutput` signature is
  * FROZEN — build.ts and alternatives.ts call it unchanged.
@@ -37,8 +39,8 @@
 import type { ForwardSemester, FeasibilityReport, Assumption } from "@nyupath/shared";
 import type { SolverInput, SolverOutput } from "./types.js";
 import { buildConstraintContext, type PlacedCourse } from "./constraintModel.js";
-import { searchBestPlan } from "./search.js";
-import { materializePlan } from "./materializePlan.js";
+import { searchTopKPlans } from "./search.js";
+import { materializePlan, buildAlternativeSummaries } from "./materializePlan.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
 import { parseTerm } from "./solverHelpers.js";
 
@@ -236,14 +238,17 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
     }
 
     // -----------------------------------------------------------------------
-    // Run the search (requirement placements on top of fixed). If no valid plan
-    // exists, materialise the fixed-only plan (so IP + pins + placeholders still
-    // render) and surface each unsatisfiable requirement as a violation.
+    // Run the search (requirement placements on top of fixed). The WINNER —
+    // top.plans[0] — is the optimal valid plan (=== the old searchBestPlan plan);
+    // top.plans[1..] are the next-best DISTINCT valid plans (≤4 alternatives).
+    // When NO valid plan exists (top.plans empty), materialise the fixed-only
+    // plan (so IP + pins + placeholders still render) and surface each
+    // unsatisfiable requirement as a violation — the exact old infeasible path.
     // -----------------------------------------------------------------------
-    const search = searchBestPlan(ctx, { fixed });
-    const planForMaterialize = search.plan ?? { placed: fixed };
-    if (!search.plan) {
-        for (const rId of search.unsatisfiable) {
+    const top = searchTopKPlans(ctx, { fixed, k: 5 });
+    const winnerPlan = top.plans[0] ?? { placed: fixed };
+    if (top.plans.length === 0) {
+        for (const rId of top.unsatisfiable) {
             extraViolations.push({
                 kind: "prereq_unsatisfiable",
                 detail: `Requirement ${rId} could not be placed in any valid (course, term).`,
@@ -251,8 +256,21 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
         }
     }
 
-    const out = materializePlan(planForMaterialize, ctx);
-    if (extraViolations.length === 0) return out;
+    const out = materializePlan(winnerPlan, ctx);
+
+    // Materialise each alternative leaf the SAME way as the winner, then summarise
+    // them against the winner. The alternatives are NOT subjected to the pin/
+    // unsatisfiable extra-violation fold (those describe the whole problem, not a
+    // per-alternative defect) — and buildAlternativeSummaries reads only the
+    // winner's balanceScore + last term, both unaffected by that fold. Left
+    // undefined when there are no alternatives.
+    const altOuts = top.plans.slice(1).map(p => materializePlan(p, ctx));
+    const alternativeCandidates =
+        altOuts.length > 0 ? buildAlternativeSummaries(out, altOuts) : undefined;
+
+    if (extraViolations.length === 0) {
+        return alternativeCandidates !== undefined ? { ...out, alternativeCandidates } : out;
+    }
 
     // Fold the extra violations into the feasibility report and re-derive state.
     const constraintViolations = [...out.feasibility.constraintViolations, ...extraViolations];
@@ -265,5 +283,7 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
             : {}),
     };
     const state = derivePlanState(out.semesters, feasibility, out.assumptions);
-    return { ...out, feasibility, state };
+    return alternativeCandidates !== undefined
+        ? { ...out, feasibility, state, alternativeCandidates }
+        : { ...out, feasibility, state };
 }
