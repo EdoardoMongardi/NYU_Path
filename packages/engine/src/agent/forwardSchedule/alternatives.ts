@@ -160,6 +160,9 @@ function buildScheduleFromOutput(
         ...(out.alternativeCandidates !== undefined
             ? { alternativeCandidates: out.alternativeCandidates }
             : {}),
+        // T7 — thread the structured optimality signal onto the alternative schedule.
+        // Omitted when undefined (back-compat: consumers treat absent as "optimal").
+        ...(out.optimality !== undefined ? { optimality: out.optimality } : {}),
     };
 }
 
