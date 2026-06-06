@@ -194,6 +194,12 @@ export type DPRAdvisorNotation = z.infer<typeof dprAdvisorNotationSchema>;
  * - passFailUsedUnits:  R1680/10 — units taken with the P/F option
  * - outsideHomeUsedUnits: R1680/30 — units taken outside the home school (cap typically 16)
  * - timeLimitYears:     R1680/60 — degree time limit (typically 8 years)
+ * - residencyAll:       all residency rows found in the DPR (structural
+ *                       heuristic: title/statusText contains "residenc").
+ *                       Includes R1001/35 plus any joint-major or program-
+ *                       specific residency rows (e.g., R1142/80). The
+ *                       required/used fields are null when the counter is
+ *                       not a "units" counter.
  *
  * All numeric fields are optional because PeopleSoft sometimes omits
  * them for students with custom programs; the parser surfaces null
@@ -211,6 +217,16 @@ export const dprCumulativeSchema = z.object({
     outsideHomeUsedUnits: z.number().nullable(),
     outsideHomeCapUnits: z.number().nullable(), // 16 in CAS
     timeLimitYears: z.number().nullable(),
+    /** All residency rows found in the DPR (DPR-6). */
+    residencyAll: z
+        .array(
+            z.object({
+                rId: z.string(),
+                required: z.number().nullable(),
+                used: z.number().nullable(),
+            }),
+        )
+        .optional(),
 });
 export type DPRCumulative = z.infer<typeof dprCumulativeSchema>;
 

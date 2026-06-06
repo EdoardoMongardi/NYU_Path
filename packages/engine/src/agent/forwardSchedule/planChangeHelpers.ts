@@ -18,10 +18,8 @@ import type {
 import type { SolverInput } from "./types.js";
 import type { ToolSession } from "../tool.js";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
-import { notSatisfiedRequirements, walkRequirements } from "../../dpr/schema.js";
-import { meetsGradeThreshold } from "../../dpr/gradeComparison.js";
 import { classifyBalanceDelta, computeBalanceScore } from "./balanceScore.js";
-import { hashDprCourseHistory } from "./reconcile.js";
+import { buildSolverInput } from "./buildSolverInput.js";
 
 // ---------------------------------------------------------------------------
 // Shared Zod schemas (used by propose_plan_change + confirm_plan_change)
@@ -301,129 +299,46 @@ export function applyMutationsToPreferences(
 }
 
 // ---------------------------------------------------------------------------
-// buildSolverInputFromSession — factors the SolverInput construction from
-// build.ts so proposePlanChange / confirmPlanChange don't duplicate it.
+// buildSolverInputFromSession — thin wrapper over the unified builder
 // ---------------------------------------------------------------------------
 
 /**
- * Construct a SolverInput from a ToolSession + DPR, optionally overriding
- * the preferences field. This is a pure refactor of the construction
- * block in build.ts (steps 1–10, minus step 11 which calls the solver).
+ * Construct a SolverInput from a ToolSession + DPR.
  *
- * When `preferences` is supplied it overrides `session.schedulePreferences`.
+ * Task 1.10 (RC-4/PLAN-2): this function is now a thin wrapper over the
+ * unified buildSolverInput() in buildSolverInput.ts. The three divergences
+ * that existed in the old implementation are eliminated:
+ *   1. Graduation term now honors session.graduationTarget (was credits-only)
+ *   2. currentTerm now uses wall-clock via deriveTemporalContext (was last-IP)
+ *   3. coreqs are now built (were missing entirely)
+ *
+ * The callers in proposePlanChange and confirmPlanChange set preferences
+ * onto session.schedulePreferences BEFORE calling this function; the unified
+ * builder reads session.schedulePreferences directly. The legacy `preferences`
+ * parameter is preserved for API compatibility — when supplied it is written
+ * to session.schedulePreferences before delegating to the unified builder
+ * (confirming the caller's already-set value is what gets used).
+ *
+ * When `preferences` is NOT supplied, session.schedulePreferences is used
+ * as-is (the confirm_plan_change caller already writes it before this call).
  */
 export function buildSolverInputFromSession(
     session: ToolSession,
     dpr: DegreeProgressReport,
     preferences?: SchedulePreferences,
 ): SolverInput {
-    const student = session.student;
-    const schoolConfig = session.schoolConfig ?? null;
-
-    const creditsEarned = dpr.cumulative.creditsUsed ?? 0;
-    const graduationCreditMinimum = dpr.cumulative.creditsRequired ?? 128;
-    const creditCeiling = schoolConfig?.maxCreditsPerSemester ?? 18;
-    const creditTargetPerSemester = 16;
-    const cumulativeGpa = dpr.cumulative.cumulativeGpa ?? 0;
-    const f1Floor =
-        student?.visaStatus === "f1"
-            ? (schoolConfig?.f1FullTimeMinCredits ?? 12)
-            : null;
-    const domesticPartTimeFloor = 8;
-
-    const passFailCap = dpr.cumulative.passFailCapUnits ?? 32;
-    const passFailUsed = dpr.cumulative.passFailUsedUnits ?? 0;
-    const outsideHomeCreditCap = dpr.cumulative.outsideHomeCapUnits ?? null;
-    const outsideHomeCreditsUsed = dpr.cumulative.outsideHomeUsedUnits ?? 0;
-
-    const studentId = student?.id ?? "unknown";
-    const homeSchoolId = student?.homeSchool ?? schoolConfig?.schoolId ?? "cas";
-    const visaStatus = student?.visaStatus;
-
-    // currentTerm is computed first because the IP-row term-fallback
-    // path needs it. See build.ts for the post-mortem context — IP rows
-    // carry a per-row term that the solver depends on for correct
-    // placement; flattening would re-introduce the 28-credit phantom.
-    const currentTerm = inferCurrentTermFromDpr(dpr);
-
-    const coursesTaken = new Set<string>();
-    const coursesInProgress = new Map<string, { term: string }>();
-    for (const row of dpr.courseHistory) {
-        const key = `${row.subject} ${row.catalogNbr}`;
-        if (row.type === "IP") {
-            const rowTerm = psTermToSolverTerm(row.term) ?? currentTerm;
-            coursesInProgress.set(key, { term: rowTerm });
-            continue;
-        }
-        if (row.grade && meetsGradeThreshold(row.grade, "D")) {
-            coursesTaken.add(key);
-        }
+    // If an explicit preferences object is passed, temporarily apply it to the
+    // session so the unified builder picks it up from session.schedulePreferences.
+    // This matches the pre-Task-1.10 semantics for callers that pass preferences.
+    if (preferences !== undefined) {
+        const originalPrefs = session.schedulePreferences;
+        session.schedulePreferences = preferences;
+        const result = buildSolverInput(session, dpr, {});
+        // Restore (so we don't permanently mutate the session on a read-only call)
+        session.schedulePreferences = originalPrefs;
+        return result;
     }
-
-    const graduationTerm = deriveGraduationTermFromCredits(currentTerm, creditsEarned, graduationCreditMinimum, creditTargetPerSemester);
-
-    const unmetReqs = notSatisfiedRequirements(dpr.requirementGroups);
-    const unmetRequirements: SolverInput["unmetRequirements"] = unmetReqs.map(req => ({
-        rId: req.rId,
-        title: req.title,
-        category: inferCategory(req.rId, req.title),
-        credits: inferRequirementCredits(req),
-        candidateCourses: extractCandidateCourseIds(req),
-    }));
-
-    const prereqsMap = new Map<string, import("@nyupath/shared").PrereqGroup[]>();
-    if (session.prereqs) {
-        for (const p of session.prereqs) {
-            prereqsMap.set(p.course, p.prereqGroups);
-        }
-    }
-
-    const courseCatalog = new Map<string, { title: string; credits: number }>();
-    if (session.courses) {
-        for (const c of session.courses) {
-            courseCatalog.set(c.id, { title: c.title, credits: c.credits });
-        }
-    }
-
-    const programRules = buildProgramRulesFromSession(session, dpr, graduationTerm, graduationCreditMinimum);
-    const dprCourseHistoryHash = hashDprCourseHistory(dpr);
-
-    const effectivePreferences = preferences ?? session.schedulePreferences;
-
-    return {
-        studentId,
-        homeSchoolId,
-        visaStatus,
-        coursesTaken,
-        coursesInProgress,
-        currentTerm,
-        graduationTerm,
-        creditTargetPerSemester,
-        f1Floor,
-        domesticPartTimeFloor,
-        creditCeiling,
-        graduationCreditMinimum,
-        creditsEarned,
-        passFailCap,
-        passFailUsed,
-        onlineCreditCap: null,
-        onlineCreditsUsed: 0,
-        outsideHomeCreditCap,
-        outsideHomeCreditsUsed,
-        cumulativeGpa,
-        majorGpa: null,
-        graduationGpaFloor: dpr.cumulative.cumulativeGpaRequired ?? 2.0,
-        majorGpaFloor: null,
-        unmetRequirements,
-        prereqs: prereqsMap,
-        offerings: new Map(),
-        offeringConfidence: new Map(),
-        courseCatalog,
-        dprCourseHistoryHash,
-        dpr,
-        programRules: programRules.solverRules,
-        preferences: effectivePreferences,
-    };
+    return buildSolverInput(session, dpr, {});
 }
 
 // ---------------------------------------------------------------------------
@@ -638,7 +553,7 @@ export function buildPlanDiff(
 }
 
 // ---------------------------------------------------------------------------
-// Private helpers (mirrors the private section of build.ts)
+// Private helpers (termDelta used by buildPlanDiff above)
 // ---------------------------------------------------------------------------
 
 const SEASON_ORD: Record<string, number> = { spring: 0, summer: 1, fall: 2, january: 3 };
@@ -658,120 +573,6 @@ function termDelta(a: string | undefined, b: string): number {
     const ordA = pa.year * 4 + (SEASON_ORD[pa.season] ?? 0);
     const ordB = pb.year * 4 + (SEASON_ORD[pb.season] ?? 0);
     return ordB - ordA;
-}
-
-function inferCurrentTermFromDpr(dpr: DegreeProgressReport): string {
-    const ipRows = dpr.courseHistory.filter(r => r.type === "IP");
-    if (ipRows.length > 0) {
-        const latestTerm = ipRows[ipRows.length - 1]!.term;
-        const converted = psTermToSolverTerm(latestTerm);
-        if (converted) return converted;
-    }
-    return "2026-fall";
-}
-
-function psTermToSolverTerm(psTerm: string): string | null {
-    const m = psTerm.match(/^(\d{4})\s+(Fall|Spring|Summer|J Term|Spr|Sum)$/i);
-    if (!m) return null;
-    const year = m[1]!;
-    const seasonRaw = m[2]!.toLowerCase();
-    const season =
-        seasonRaw.startsWith("fa") ? "fall" :
-        seasonRaw.startsWith("sp") ? "spring" :
-        seasonRaw.startsWith("su") ? "summer" :
-        seasonRaw.startsWith("j")  ? "january" : null;
-    if (!season) return null;
-    return `${year}-${season}`;
-}
-
-function deriveGraduationTermFromCredits(
-    currentTerm: string,
-    creditsEarned: number,
-    graduationCreditMinimum: number,
-    creditTargetPerSemester: number,
-): string {
-    const creditsNeeded = Math.max(0, graduationCreditMinimum - creditsEarned);
-    const semestersNeeded = Math.ceil(creditsNeeded / creditTargetPerSemester);
-    const m = currentTerm.match(/^(\d{4})-(spring|summer|fall|january)$/);
-    if (!m) return "2028-spring";
-    let year = parseInt(m[1]!, 10);
-    let season = m[2]!;
-    for (let i = 0; i < Math.max(1, semestersNeeded); i++) {
-        if (season === "spring") { season = "fall"; }
-        else if (season === "fall") { year += 1; season = "spring"; }
-        else if (season === "summer") { season = "fall"; }
-        else { season = "spring"; }
-    }
-    return `${year}-${season}`;
-}
-
-const COURSE_ID_RE = /\b([A-Z][A-Z0-9]*-[A-Z]{2,3})\s+(\d{1,4}[A-Z]?)\b/g;
-
-function extractCandidateCourseIds(req: { description?: string; statusText: string; title: string }): string[] {
-    const sources = [req.description ?? "", req.statusText, req.title].join(" ");
-    const out = new Set<string>();
-    for (const m of sources.matchAll(COURSE_ID_RE)) {
-        out.add(`${m[1]} ${m[2]}`);
-    }
-    return Array.from(out);
-}
-
-function inferCategory(rId: string, title: string): string {
-    const blob = `${rId} ${title}`.toLowerCase();
-    if (blob.includes("major")) return "cs_major_required";
-    if (blob.includes("core"))  return "cas_core";
-    if (blob.includes("elective")) return "free_elective";
-    return "general";
-}
-
-function inferRequirementCredits(req: { counter?: import("../../dpr/schema.js").DPRCounter }): number {
-    if (!req.counter) return 4;
-    if (req.counter.kind === "units") {
-        const needed = "needed" in req.counter ? (req.counter.needed ?? 0) : Math.max(0, req.counter.required - req.counter.used);
-        return needed > 0 ? needed : 4;
-    }
-    return 4;
-}
-
-interface ProgramRulesBundle {
-    solverRules: SolverInput["programRules"];
-}
-
-function buildProgramRulesFromSession(
-    session: ToolSession,
-    dpr: DegreeProgressReport,
-    _graduationTerm: string,
-    _degreeCreditMinimum: number,
-): ProgramRulesBundle {
-    const schoolConfig = session.schoolConfig ?? null;
-    const leaves = walkRequirements(dpr.requirementGroups);
-    const majorRuleKinds = new Map<string, "must_take" | "choose_n">();
-    const schoolCoreRuleIds = new Set<string>();
-    const generalCategoryRuleIds = new Set<string>();
-
-    for (const leaf of leaves) {
-        const blob = `${leaf.rId} ${leaf.title}`.toLowerCase();
-        if (blob.includes("major") || blob.includes("concentration")) {
-            majorRuleKinds.set(leaf.rId, blob.includes("required") ? "must_take" : "choose_n");
-        } else if (blob.includes("core") || blob.includes("cas core")) {
-            schoolCoreRuleIds.add(leaf.rId);
-        } else {
-            generalCategoryRuleIds.add(leaf.rId);
-        }
-    }
-
-    const residencyMin = dpr.cumulative.residencyRequired ?? null;
-
-    const solverRules: SolverInput["programRules"] = {
-        majorRuleKinds,
-        schoolCoreRuleIds,
-        generalCategoryRuleIds,
-        residencyMinCredits: typeof residencyMin === "number" ? residencyMin : null,
-        majorCreditMinimum: null,
-        upperLevelMinCredits: null,
-    };
-
-    return { solverRules };
 }
 
 // Re-export PlanState for tools that need it

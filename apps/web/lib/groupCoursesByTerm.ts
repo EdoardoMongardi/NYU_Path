@@ -215,7 +215,8 @@ function buildTermsFromCoursesTaken(
             courseId: c.courseId,
             title: c.courseId,
             credits: c.credits ?? 0,
-            grade: c.grade,
+            // grade is nullable (DPR-2); fall back to "—" for display.
+            grade: c.grade ?? "—",
         })),
     }));
     const current: TermBucket[] = currentSemester && currentSemester.courses.length > 0

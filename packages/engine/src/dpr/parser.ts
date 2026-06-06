@@ -185,11 +185,18 @@ function extractHeader(lines: string[]): DPRHeader | null {
     // the same y-coordinate in the source PDF. Allow either form by
     // matching `contains` rather than equality, and stripping any
     // leading "Page N of M" prefix from the title line.
+    //
+    // What-If / Career Simulation Reports have the title line:
+    //   "Degree Progress Report What-If Report"
+    // followed by a "Career Simulation Report" sub-title line before
+    // the "For <name> prepared on <date>" line. Accept both variants
+    // by checking that the stripped title *starts with* "Degree Progress
+    // Report" rather than matching it exactly.
     let titleIdx = -1;
     for (let i = 0; i < Math.min(lines.length, 20); i++) {
         const trimmed = lines[i]!.trim();
         const stripped = trimmed.replace(/^Page\s+\d+\s+of\s+\d+\s*/i, "");
-        if (stripped === "Degree Progress Report") {
+        if (/^Degree Progress Report/i.test(stripped)) {
             titleIdx = i;
             break;
         }
@@ -197,9 +204,14 @@ function extractHeader(lines: string[]): DPRHeader | null {
     if (titleIdx === -1) return null;
 
     // Next non-empty line: "For <name> prepared on <date>". Also strip
-    // any "Page N of M" prefix that landed on the same line.
+    // any "Page N of M" prefix that landed on the same line. Skip over
+    // the "Career Simulation Report" sub-title line that appears in
+    // What-If reports between the DPR title and the name line.
     let nameLineIdx = titleIdx + 1;
-    while (nameLineIdx < lines.length && lines[nameLineIdx]!.trim() === "") nameLineIdx++;
+    while (nameLineIdx < lines.length && (
+        lines[nameLineIdx]!.trim() === ""
+        || /^career simulation report$/i.test(lines[nameLineIdx]!.trim())
+    )) nameLineIdx++;
     const nameLine = (lines[nameLineIdx]?.trim() ?? "")
         .replace(/^Page\s+\d+\s+of\s+\d+\s*/i, "");
     const nameMatch = nameLine.match(/^For (.+?) prepared on (\S+)$/);
@@ -809,6 +821,21 @@ function deriveCumulative(
     if (!gpa) warnings.push("R1001/20 (Cumulative GPA) not found.");
     if (!credits) warnings.push("R1001/10 (Minimum Credits) not found.");
 
+    // DPR-6: collect ALL residency rows via structural heuristic.
+    // A residency row is one whose title or statusText contains "residenc"
+    // (case-insensitive) AND whose rId is present (i.e., it's a leaf
+    // requirement). Include the row even if the counter is non-units (set
+    // required/used to null) so callers can see the rId and investigate.
+    const residencyAll = allReqs
+        .filter((r) =>
+            /residenc/i.test(`${r.title} ${r.statusText ?? ""}`),
+        )
+        .map((r) => ({
+            rId: r.rId,
+            required: r.counter?.kind === "units" ? r.counter.required : null,
+            used: r.counter?.kind === "units" ? r.counter.used : null,
+        }));
+
     return {
         creditsRequired: credits?.kind === "units" ? credits.required : null,
         creditsUsed: credits?.kind === "units" ? credits.used : null,
@@ -821,6 +848,7 @@ function deriveCumulative(
         outsideHomeUsedUnits: outside?.kind === "units" ? outside.used : null,
         outsideHomeCapUnits: outsideHomeCap,
         timeLimitYears: timeLimit,
+        ...(residencyAll.length > 0 ? { residencyAll } : {}),
     };
 }
 

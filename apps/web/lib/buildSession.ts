@@ -85,14 +85,16 @@ export function buildStudentProfileFromDpr(
     for (const row of report.courseHistory) {
         if (row.subject === "ELECTIVE") continue; // synthetic transfer-credit row, no audit value
         const courseId = `${row.subject} ${row.catalogNbr}`.replace(/\s+/g, " ").trim();
-        const grade = row.grade ?? (row.type === "IP" ? "C" : "P");
+        const isIP = row.type === "IP";
         coursesTaken.push({
             courseId,
-            grade,
+            grade: row.grade ?? null,
             semester: row.term,
             credits: row.units,
+            ...(isIP ? { isInProgress: true } : {}),
+            ...(row.repeatCode ? { repeatCode: row.repeatCode } : {}),
         });
-        if (row.type === "IP") {
+        if (isIP) {
             (ipRowsByTerm[row.term] ??= []).push({
                 courseId,
                 title: row.courseTitle,
@@ -140,6 +142,19 @@ export function buildStudentProfileFromDpr(
                 courses: pendingCourses,
             }
             : undefined,
+        // DPR-3: carry adviser waivers onto the profile so the agent can
+        // quote them verbatim and planning tools can factor them in.
+        // Map explicitly to shed the nominal DPRAdvisorNotation type.
+        ...(report.advisorNotations.length > 0
+            ? {
+                advisorNotations: report.advisorNotations.map((n) => ({
+                    requestId: n.requestId,
+                    note: n.note,
+                    advisor: n.advisor,
+                    date: n.date,
+                })),
+            }
+            : {}),
     };
 }
 
@@ -193,17 +208,18 @@ function deriveHomeSchool(report: DegreeProgressReport): string {
     if (programLabels.includes("gallatin") || programLabels.includes("individualized")) return "gallatin";
     if (programLabels.includes("liberal studies")) return "liberal_studies";
     if (programLabels.includes("sps") || programLabels.includes("professional studies")) return "sps";
-    // Phase E (de-CAS) — no school indicator matched. Don't SILENTLY assert
-    // CAS: warn (telemetry) so an operator sees the derivation was a guess.
-    // The home school should ideally be confirmed at onboarding rather than
-    // inferred from DPR program labels; non-CAS support is best-effort until
-    // then. We still return a functioning default so scope/audit work.
+    // CAS-1 (Task 1.5) — no school indicator matched. Degrade to the
+    // school-agnostic value "unknown" (DPR-only caps; no school-specific
+    // requirement rules applied) rather than silently claiming this is a CAS
+    // student. The home school MUST be confirmed at onboarding via
+    // homeSchoolOverride; until then the planner operates in school-agnostic
+    // mode (schoolConfig === null → falls back to schoolDefaults constants).
     console.warn(
         "[buildSession] deriveHomeSchool: no school indicator matched the DPR program " +
-        `labels (${programLabels.slice(0, 120)}); falling back to "cas". If this student ` +
-        "is not CAS, set their home school explicitly via onboarding.",
+        `labels (${programLabels.slice(0, 120)}); degrading to school-agnostic NYU ` +
+        "(DPR-only caps). Home school should be confirmed at onboarding via homeSchoolOverride.",
     );
-    return "cas";
+    return "unknown";
 }
 
 function deriveCatalogYear(report: DegreeProgressReport): string {

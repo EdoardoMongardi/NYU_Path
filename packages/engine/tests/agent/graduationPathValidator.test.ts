@@ -577,7 +577,11 @@ describe("Axis 4 — thresholdsMet: residency shortfall", () => {
         expect(result.feasible).toBe(false);
     });
 
-    it("returns pass when all thresholds are null or met", () => {
+    // PLAN-4 Bug A fix: null thresholds for residency/major axes now return
+    // "requires-approval" instead of silently passing. A null majorCreditMinimum
+    // means we could not derive the major floor from the DPR, so the advisor
+    // must confirm — it is NOT a clean pass. Updated from "pass" → "requires-approval".
+    it("returns requires-approval when majorCreditMinimum is null (cannot verify major floor)", () => {
         const dpr = makeDpr({
             cumulative: {
                 creditsRequired: 128,
@@ -618,14 +622,16 @@ describe("Axis 4 — thresholdsMet: residency shortfall", () => {
             dpr,
             programRules: makeProgramRules({
                 residencyMinCredits: 64,
-                majorCreditMinimum: null,
+                majorCreditMinimum: null,   // null → cannot verify → requires-approval
                 minorCreditMinimum: null,
                 upperLevelMinCredits: null,
                 schoolCoreMinCredits: null,
             }),
         };
         const result = runGraduationPathValidator(args);
-        expect(result.axisResults.thresholdsMet.status).toBe("pass");
+        // After PLAN-4 Bug A fix: null major floor → requires-approval (not silent pass).
+        expect(result.axisResults.thresholdsMet.status).toBe("requires-approval");
+        // Note: overall feasible depends on other axes; we only assert the thresholds axis here.
     });
 });
 
@@ -1014,8 +1020,11 @@ describe("Axis 7 — graduationTargetMet", () => {
 // Test 8 (multi-axis): valid-clean plan — all axes pass
 // ---------------------------------------------------------------------------
 
-describe("Multi-axis: valid-clean plan", () => {
-    it("returns feasible=true and valid-clean when all axes pass (no trade-offs)", () => {
+// PLAN-4 Bug A fix: this test previously used majorCreditMinimum: null and expected
+// "valid-clean". After the de-null-gate fix, null major → requires-approval →
+// valid-with-trade-offs (plan is feasible but needs advisor confirmation on major floor).
+describe("Multi-axis: valid-with-trade-offs plan (null major threshold)", () => {
+    it("returns feasible=true and valid-with-trade-offs when majorCreditMinimum is null", () => {
         const dpr = makeDpr({
             requirementGroups: [
                 {
@@ -1110,7 +1119,9 @@ describe("Multi-axis: valid-clean plan", () => {
         expect(result.feasible).toBe(true);
         expect(result.infeasibilityReport).toBeUndefined();
         const state = derivePlanStateFromValidator(result, plan);
-        expect(state).toBe("valid-clean");
+        // After PLAN-4 Bug A fix: null majorCreditMinimum → requires-approval
+        // on thresholdsMet axis → valid-with-trade-offs (needs advisor sign-off).
+        expect(state).toBe("valid-with-trade-offs");
     });
 });
 
@@ -1463,22 +1474,24 @@ describe("historically_likely + isCriticalPath + no alternatives — trade-off, 
         // The slot is specific_planned with no assumptions but IS critical-path
         // isCriticalPath lives on the slot, not a validator axis — so state routing
         // depends on whether there's a tradeoff signal. No petition, no IP, no placeholder.
-        // With only a historically_likely critical-path slot: valid-clean.
+        // However: PLAN-4 Bug A fix means null residency + null major thresholds produce
+        // "requires-approval" on the thresholds axis → valid-with-trade-offs.
         // (The spec says "historically_likely + isCriticalPath + no alternatives →
         //  trade-off but not fail; verify Axis 1 returns pass". The test verifies
-        //  Axis 1 passes; PlanState depends on plan signals only.)
+        //  Axis 1 passes; PlanState depends on plan signals + threshold signals.)
         expect(state === "valid-clean" || state === "valid-with-trade-offs").toBe(true);
-        // Critical path alone (no petition, no IP assumption) → valid-clean
-        expect(state).toBe("valid-clean");
+        // After PLAN-4 Bug A fix: null thresholds → requires-approval → valid-with-trade-offs
+        expect(state).toBe("valid-with-trade-offs");
     });
 });
 
 // ---------------------------------------------------------------------------
-// Test 12: historically_likely + alternatives → Axis 1 pass; PlanState valid-clean
+// Test 12: historically_likely + alternatives → Axis 1 pass; PlanState valid-with-trade-offs
+// (PLAN-4 Bug A fix: null thresholds produce requires-approval → valid-with-trade-offs)
 // ---------------------------------------------------------------------------
 
-describe("historically_likely + alternatives → Axis 1 pass; PlanState valid-clean", () => {
-    it("returns pass for Axis 1 and valid-clean when course is satisfied in DPR", () => {
+describe("historically_likely + alternatives → Axis 1 pass; PlanState valid-with-trade-offs", () => {
+    it("returns pass for Axis 1 and valid-with-trade-offs when null thresholds after PLAN-4 fix", () => {
         const dpr = makeDpr({
             requirementGroups: [
                 {
@@ -1606,7 +1619,9 @@ describe("historically_likely + alternatives → Axis 1 pass; PlanState valid-cl
         expect(result.axisResults.requirementGroupsSatisfied.status).toBe("pass");
         expect(result.feasible).toBe(true);
         const state = derivePlanStateFromValidator(result, plan);
-        expect(state).toBe("valid-clean");
+        // After PLAN-4 Bug A fix: residencyMinCredits: null + majorCreditMinimum: null
+        // → requires-approval on thresholds axis → valid-with-trade-offs (not valid-clean).
+        expect(state).toBe("valid-with-trade-offs");
     });
 });
 
