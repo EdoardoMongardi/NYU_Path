@@ -10,9 +10,9 @@
  * (graduationPathValidator.ts). Each predicate documents — via its `axis` —
  * which validator axis it mirrors, so that a complete plan passing every hard
  * predicate here also passes `runGraduationPathValidator`. The per-placement
- * predicates (offering / prereq / NOT / coreq) mirror the EXACT placement-time
- * checks in solver.ts; the per-term and completion predicates mirror the
- * validator's 7 axes.
+ * predicates (offering / prereq / NOT / coreq) mirror the placement-time checks
+ * the old greedy solver applied (now in solverHelpers.ts / materializePlan.ts);
+ * the per-term and completion predicates mirror the validator's 7 axes.
  *
  * Reuses the pure primitives from solverHelpers.ts (enumerateMainTerms,
  * parseTerm, compareSolverTerms, computePrereqDepths, buildDependentsIndex,
@@ -228,7 +228,7 @@ export function checkOfferingSeasonMatch(plan: PartialPlan, ctx: ConstraintConte
     return result(violations);
 }
 
-/** prereqsSatisfied — mirrors solver.ts:633-637 (checkAllPrereqs; petition soft-allows).
+/** prereqsSatisfied — mirrors checkAllPrereqs in solverHelpers.ts (petition soft-allows).
  *  source "ip" is exempt (IP courses are assumed-passing forward projections). */
 export function checkPrereqsSatisfied(plan: PartialPlan, ctx: ConstraintContext): HardResult {
     const violations: HardViolation[] = [];
@@ -248,7 +248,7 @@ export function checkPrereqsSatisfied(plan: PartialPlan, ctx: ConstraintContext)
     return result(violations);
 }
 
-/** notClauseClear — mirrors solver.ts:577 (isExcludedByNotClause). A course never
+/** notClauseClear — mirrors isExcludedByNotClause in solverHelpers.ts. A course never
  *  excludes itself: the placedBefore set passed per-course omits the course itself. */
 export function checkNotClauseClear(plan: PartialPlan, ctx: ConstraintContext): HardResult {
     const violations: HardViolation[] = [];
@@ -270,9 +270,10 @@ export function checkNotClauseClear(plan: PartialPlan, ctx: ConstraintContext): 
     return result(violations);
 }
 
-/** coreqsSameTerm — mirrors the same-term intent of solver.ts:644-701. For each
- *  unmet coreq (NOT in coursesTaken / coursesInProgress) that IS placed in the plan,
- *  it must share the dependent's term. Unplaced coreqs are coverage's concern. */
+/** coreqsSameTerm — mirrors the same-term coreq intent of the old greedy solver
+ *  (Decision #14). For each unmet coreq (NOT in coursesTaken / coursesInProgress)
+ *  that IS placed in the plan, it must share the dependent's term. Unplaced coreqs
+ *  are coverage's concern. */
 export function checkCoreqsSameTerm(plan: PartialPlan, ctx: ConstraintContext): HardResult {
     const coreqMap = ctx.input.coreqs;
     if (!coreqMap || coreqMap.size === 0) return OK;
@@ -282,7 +283,8 @@ export function checkCoreqsSameTerm(plan: PartialPlan, ctx: ConstraintContext): 
     for (const p of plan.placed) {
         const coreqIds = coreqMap.get(p.courseId) ?? [];
         for (const coreqId of coreqIds) {
-            // Already satisfied concurrently — no enforcement (matches solver.ts:653-655).
+            // Already satisfied concurrently — no enforcement (matches the old
+            // greedy solver's coreq handling: a taken/IP coreq needs no co-placement).
             if (ctx.input.coursesTaken.has(coreqId)) continue;
             if (ctx.input.coursesInProgress.has(coreqId)) continue;
             const coreqTerm = placements.get(coreqId);
@@ -300,7 +302,8 @@ export function checkCoreqsSameTerm(plan: PartialPlan, ctx: ConstraintContext): 
     return result(violations);
 }
 
-/** perTermCeiling — mirrors solver.ts:1072 (termCredits > creditCeiling). */
+/** perTermCeiling — mirrors the materializePlan.ts credit-ceiling check
+ *  (termCredits > creditCeiling → credit_ceiling violation). */
 export function checkPerTermCeiling(plan: PartialPlan, ctx: ConstraintContext): HardResult {
     const violations: HardViolation[] = [];
     for (const [term, credits] of perTermCredits(plan)) {
@@ -319,7 +322,8 @@ export function checkPerTermCeiling(plan: PartialPlan, ctx: ConstraintContext): 
 // Completion predicates (mirror the validator's 7 axes)
 // ===========================================================================
 
-/** perTermFloor — mirrors solver.ts:1044-1070 (visaValidator per non-empty future term).
+/** perTermFloor — mirrors the materializePlan.ts visa-floor check (visaValidator per
+ *  non-empty future term).
  *  Skips terms with 0 placed credits (the search fills terms; an empty mid-plan term
  *  is not a floor violation). Also SKIPS optional terms (summer/january, P2.8/PLAN-5):
  *  an optional term may legitimately carry few/zero credits — an F-1 student need not
@@ -494,8 +498,8 @@ export function checkMajorCreditFloor(plan: PartialPlan, ctx: ConstraintContext)
     ]);
 }
 
-/** gpaFloors — mirrors solver.ts:1141-1156 (feeds validator axis 5 via gpa_floor kind).
- *  Placement-independent: same result for any plan. */
+/** gpaFloors — mirrors the materializePlan.ts GPA-floor checks (feeds validator
+ *  axis 5 via gpa_floor kind). Placement-independent: same result for any plan. */
 export function checkGpaFloors(_plan: PartialPlan, ctx: ConstraintContext): HardResult {
     const { input } = ctx;
     const violations: HardViolation[] = [];

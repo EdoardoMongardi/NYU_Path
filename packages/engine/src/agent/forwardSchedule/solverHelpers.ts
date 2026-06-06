@@ -7,8 +7,15 @@ import type {
     PrereqGroup,
     SchedulePreferences,
     DownstreamImpact,
+    ForwardSemester,
+    FeasibilityReport,
+    Assumption,
+    PlanState,
 } from "@nyupath/shared";
 import type { SolverInput } from "./types.js";
+// TYPE-ONLY import (erased at compile, no runtime edge) — keeps solverHelpers a
+// cycle-free leaf even though constraintModel.ts imports values from here.
+import type { ConstraintContext } from "./constraintModel.js";
 import { isPrereqSatisfied } from "../../dpr/prereqSatisfaction.js";
 
 // ---------------------------------------------------------------------------
@@ -421,4 +428,113 @@ export function isCriticalPath(
         if (soleCount >= 2) return true;
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// IP assumption builder (Decision #30)
+//
+// Moved here from solver.ts (P2 review M2) to break the solver ↔ materializePlan
+// import cycle: materializePlan re-uses buildIpAssumptions + derivePlanState, and
+// both are pure, so they belong in this cycle-free leaf. Emits one
+// IP_COURSE_COMPLETION assumption per in-progress course that is a prereq of at
+// least one PLACED (requirement/pin) slot.
+// ---------------------------------------------------------------------------
+
+export function buildIpAssumptions(
+    input: SolverInput,
+    placedCourses: Set<string>,
+    dependentsIndex: Map<string, string[]>,
+    ctx: ConstraintContext,
+): Assumption[] {
+    const assumptions: Assumption[] = [];
+    for (const [ipCourseId, { term: ipTerm }] of input.coursesInProgress) {
+        // Only emit an assumption if this IP course is a prereq for at least one placed slot
+        const dependents = dependentsIndex.get(ipCourseId) ?? [];
+        const affectedPlaced = dependents.filter(d => placedCourses.has(d));
+        if (affectedPlaced.length === 0) continue;
+
+        assumptions.push({
+            type: "IP_COURSE_COMPLETION",
+            courseId: ipCourseId,
+            consequenceIfFalse: `Downstream slots ${affectedPlaced.join(", ")} may need to move to a later term.`,
+            cascadingSlots: affectedPlaced,
+            // STRUCTURAL contingency: a contingency exists for this IP course iff EVERY
+            // affected downstream slot could be re-placed in a LATER term within the
+            // window (offering-legal). See contingencyAvailableFor — no full re-solve.
+            contingencyPlanAvailable: contingencyAvailableFor(input, ctx, ipTerm, affectedPlaced),
+        });
+    }
+    return assumptions;
+}
+
+/**
+ * STRUCTURAL determination of `contingencyPlanAvailable` for an IP course
+ * (Decision #30). A contingency IS available iff EVERY affected (cascading)
+ * downstream slot could be re-placed in a LATER term within the planning window —
+ * i.e. for each dependent there exists a future term STRICTLY AFTER the IP course's
+ * own term whose season the dependent's offering allows. This is a structural
+ * offering/window check only — it does NOT re-run the search (no full re-solve),
+ * matching the "structural check" mandate. A dependent with no/empty offerings is
+ * treated as season-agnostic (any later term works). When there are no affected
+ * slots the caller does not emit an assumption, so this is only consulted with ≥1.
+ */
+function contingencyAvailableFor(
+    input: SolverInput,
+    ctx: ConstraintContext,
+    ipTerm: string,
+    affectedSlots: string[],
+): boolean {
+    // Future terms strictly AFTER the IP course's term (chronological window order).
+    const ipIdx = ctx.futureTerms.indexOf(ipTerm);
+    const laterTerms = ipIdx >= 0 ? ctx.futureTerms.slice(ipIdx + 1) : ctx.futureTerms;
+    if (laterTerms.length === 0) return false; // nowhere later to move anything
+
+    return affectedSlots.every(dep => {
+        const offered = input.offerings.get(dep);
+        // No/empty offering ⇒ season-agnostic ⇒ any later term is legal.
+        if (!offered || offered.length === 0) return true;
+        // Needs ≥1 later term whose season the dependent is offered in.
+        return laterTerms.some(term => {
+            const season = parseTerm(term)?.season;
+            return season !== undefined && offered.includes(season as "fall" | "spring" | "summer" | "january");
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// PlanState derivation (Decision #32 — coarse Task 3.1 approximation)
+//
+// Moved here from solver.ts (P2 review M2) alongside buildIpAssumptions to break
+// the solver ↔ materializePlan import cycle. Pure: derived from the materialised
+// semesters + feasibility + assumptions.
+// ---------------------------------------------------------------------------
+
+export function derivePlanState(
+    semesters: ForwardSemester[],
+    feasibility: FeasibilityReport,
+    assumptions: Assumption[],
+): PlanState {
+    // Returns 3 of the 4 PlanState members. The fourth state
+    // ("student-preferred-invalid-draft") is set by Phase 14's mutation
+    // layer when a student confirms a plan despite hard violations — that
+    // input is not available to the solver, so it is not emittable here.
+    if (!feasibility.feasible) return "infeasible-draft";
+
+    // Check for trade-off signals
+    const hasTradeoff =
+        assumptions.length > 0 ||
+        semesters.some(sem =>
+            sem.slots.some(
+                s =>
+                    (s.kind === "specific_planned" && (
+                        s.requiresPetition === true ||
+                        s.confidence === "irregular" ||
+                        s.confidence === "permission_only" ||
+                        (s.approvalAuthority !== undefined)
+                    )) ||
+                    s.kind === "placeholder"
+            )
+        );
+
+    return hasTradeoff ? "valid-with-trade-offs" : "valid-clean";
 }

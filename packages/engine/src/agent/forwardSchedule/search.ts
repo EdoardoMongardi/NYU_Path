@@ -7,21 +7,34 @@
  * constraint, and it MINIMISES scorePlan among valid assignments (LOWER =
  * better).
  *
- * COMPLETENESS — the search prunes a branch ONLY on SOUND, later-variable-
- * independent conditions: the incremental forward-check is exactly
- * {offeringSeasonMatch, notClauseClear, coreqsSameTerm, perTermCeiling}, each of
- * which, once violated on a partial plan, stays violated under any further
- * placement (so pruning never discards a branch that would become valid later).
- * The remaining hard predicates — prereqs, requirement coverage, the major-
- * credit floor and the residency floor — are validated at the COMPLETE leaf,
- * where every course is placed (so a prereq satisfied by a LATER variable placed
- * in an EARLIER term resolves correctly). A leaf is accepted only if ALL of
- * {prereqs, coverage, major-credit, residency} pass. There is NO score-based
- * prune (the objective is not monotonic) and NO forward-feasibility/capacity
- * screen (the available screen is a false-negative-prone heuristic — unsound as
- * a hard prune). The prereq-depth-ascending variable ordering is a PERFORMANCE
- * heuristic, not a correctness dependency. Net effect: a valid plan is found iff
- * one exists.
+ * ALGORITHM — backtracking + forward-checking with INCUMBENT TRACKING but NO
+ * admissible objective bound. This is NOT cost-bounded branch-and-bound: a sound
+ * lower bound is impossible while the objective is non-monotonic (balance variance
+ * can DROP as placements are added, e.g. [16,0] scores worse than [8,8]), so the
+ * search keeps the best incumbent(s) but CANNOT prune a branch on score. It is
+ * therefore COMPLETE + OPTIMAL only WITHIN the `maxNodes` budget, and TRUNCATES
+ * beyond it (surfaced to callers via the `exhaustive` flag). Do not read this as
+ * unconditionally complete/optimal.
+ *
+ * BUDGET-BOUNDED COMPLETENESS — within the node budget the search prunes a branch
+ * ONLY on SOUND, later-variable-independent conditions: the incremental forward-
+ * check is exactly {offeringSeasonMatch, notClauseClear, coreqsSameTerm,
+ * perTermCeiling}, each of which, once violated on a partial plan, stays violated
+ * under any further placement (so pruning never discards a branch that would
+ * become valid later). The remaining hard predicates — prereqs, requirement
+ * coverage, the major-credit floor and the residency floor — are validated at the
+ * COMPLETE leaf, where every course is placed (so a prereq satisfied by a LATER
+ * variable placed in an EARLIER term resolves correctly). A leaf is accepted only
+ * if ALL of {prereqs, coverage, major-credit, residency} pass. There is NO
+ * score-based prune (the objective is not monotonic) and NO forward-feasibility/
+ * capacity screen (the available screen is a false-negative-prone heuristic —
+ * unsound as a hard prune). The prereq-depth-ascending variable ordering is a
+ * PERFORMANCE heuristic, not a correctness dependency. Net effect: IF the search
+ * runs to exhaustion (`exhaustive === true`) a valid plan is found iff one exists
+ * and the winner is the true optimum; if it TRUNCATES (`exhaustive === false`) any
+ * plan returned is still VALID (it passed the completion-leaf check) but may not be
+ * the optimum, and an EMPTY result means "none found within the budget" — NOT
+ * proven infeasible.
  *
  * Boundary (intentional): this search places ONLY requirement-satisfying
  * courses (source "requirement") on top of caller-supplied FIXED placements
@@ -237,7 +250,8 @@ interface SearchRun {
 }
 
 /**
- * The single backtracking + forward-check + branch-and-bound traversal.
+ * The single backtracking + forward-check traversal (incumbent tracking, NO
+ * admissible objective bound — so NOT cost-bounded branch-and-bound).
  * `onValidLeaf(plan, score)` is invoked at EVERY valid complete leaf — a leaf
  * that passes prereqs + coverage + major-credit + residency — with the plan
  * `{ placed: [...fixed, ...assigned] }` and its scorePlan. The traversal itself
@@ -246,7 +260,9 @@ interface SearchRun {
  * score) and searchTopKPlans (keep the K lowest scores) explore the IDENTICAL
  * tree and visit the IDENTICAL leaves in the IDENTICAL order. There is NO
  * score-based prune (the objective is not monotonic) — pruning relies solely on
- * the sound incremental forward-check — so completeness is preserved.
+ * the sound incremental forward-check — so completeness is preserved WITHIN the
+ * `maxNodes` budget; once that budget is hit the traversal stops early and sets
+ * `truncated` (surfaced to callers as `exhaustive === false`).
  */
 function runSearch(
     ctx: ConstraintContext,
@@ -304,7 +320,9 @@ function runSearch(
         return a.rId < b.rId ? -1 : a.rId > b.rId ? 1 : 0;
     });
 
-    // 4. Backtracking with forward-checking + branch-and-bound.
+    // 4. Backtracking with forward-checking + incumbent tracking (no admissible
+    //    objective bound, so NOT cost-bounded B&B). Terminates at the maxNodes
+    //    budget (sets `truncated`).
     let nodes = 0;
     let truncated = false;
 
@@ -347,7 +365,9 @@ function runSearch(
         //    discard valid branches → incompleteness. checkPerTermCeiling already
         //    supplies sound per-term capacity pruning. Survivors are then ORDERED
         //    best-first by scorePlan ASC (tie-break: term chronological, then
-        //    courseId ASC) so branch-and-bound finds good solutions early.
+        //    courseId ASC) so good solutions surface early — this is a value-
+        //    ORDERING heuristic only; with no admissible bound it does NOT prune,
+        //    so it cannot affect completeness, only the order leaves are visited.
         const candidateValues: Array<{ value: PlacedCourse; score: number }> = [];
         for (const value of rawValues(v, ctx)) {
             const trial: PartialPlan = { placed: [...fixed, ...assigned, value] };
@@ -362,13 +382,16 @@ function runSearch(
         });
 
         for (const { value } of candidateValues) {
-            // Branch-and-bound (SOUND only): scorePlan is NOT monotonic in
-            // placements — balance variance can go DOWN as courses are added
-            // (e.g. [16,0] has higher variance than [8,8]). So we do NOT prune a
-            // branch merely because the partial's score ≥ bestScore; that would be
-            // unsound and could skip the optimum. Pruning relies solely on the
-            // forward-check above. (An admissible lower-bound on the objective is a
-            // future optimisation that would make this true cost-bounded B&B.)
+            // NO objective bound (so this is NOT cost-bounded branch-and-bound):
+            // scorePlan is NOT monotonic in placements — balance variance can go
+            // DOWN as courses are added (e.g. [16,0] has higher variance than
+            // [8,8]). So we do NOT prune a branch merely because the partial's
+            // score ≥ the best incumbent; that would be unsound and could skip the
+            // optimum. Pruning relies solely on the sound incremental forward-check
+            // above; the incumbent is tracked (by the caller's onValidLeaf) but
+            // never used as a bound. (An admissible lower-bound on the objective is
+            // a documented FAST-FOLLOW that would turn this into true cost-bounded
+            // B&B and let it prune — see the whole-branch review.)
             recurse([...assigned, value], i + 1);
             if (truncated) return;
         }
@@ -597,8 +620,13 @@ export function searchBestPlan(ctx: ConstraintContext, options?: SearchOptions):
  * smallest planKey (searchBestPlan applies the identical tie-break), so the two
  * agree even when several distinct leaves tie at the global minimum.
  *
- * No score-based prune: the same complete tree is explored as searchBestPlan, so
- * completeness holds and plans[0] is the true optimum.
+ * No score-based prune: the same tree is explored as searchBestPlan (visiting the
+ * IDENTICAL leaves in the IDENTICAL order). So WHEN THE SEARCH RUNS TO EXHAUSTION
+ * (`exhaustive === true`) plans[0] is the true optimum; when it TRUNCATES
+ * (`exhaustive === false`) every returned plan is still VALID but may not be the
+ * optimum, and an empty `plans` means "none found within the budget" — NOT proven
+ * infeasible. Callers must consult `exhaustive` before treating plans[0] as
+ * optimal or an empty result as infeasible.
  */
 export function searchTopKPlans(ctx: ConstraintContext, options?: TopKOptions): TopKResult {
     const k = Math.max(0, options?.k ?? DEFAULT_K);
