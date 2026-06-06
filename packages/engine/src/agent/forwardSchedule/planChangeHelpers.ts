@@ -20,7 +20,7 @@ import type { SolverInput } from "./types.js";
 import type { ToolSession } from "../tool.js";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import { classifyBalanceDelta, computeBalanceScore } from "./balanceScore.js";
-import { buildSolverInput } from "./buildSolverInput.js";
+import { buildSolverInput, buildSolverInputWithRules, type SolverInputWithRules } from "./buildSolverInput.js";
 import { diffPlanTradeOffs } from "./tradeOffEngine.js";
 
 // ---------------------------------------------------------------------------
@@ -307,40 +307,50 @@ export function applyMutationsToPreferences(
 /**
  * Construct a SolverInput from a ToolSession + DPR.
  *
- * Task 1.10 (RC-4/PLAN-2): this function is now a thin wrapper over the
- * unified buildSolverInput() in buildSolverInput.ts. The three divergences
- * that existed in the old implementation are eliminated:
+ * Task 1.10 (RC-4/PLAN-2): this function is a thin wrapper over the unified
+ * buildSolverInput() in buildSolverInput.ts. The three divergences that
+ * existed in the old implementation are eliminated:
  *   1. Graduation term now honors session.graduationTarget (was credits-only)
  *   2. currentTerm now uses wall-clock via deriveTemporalContext (was last-IP)
  *   3. coreqs are now built (were missing entirely)
  *
- * The callers in proposePlanChange and confirmPlanChange set preferences
- * onto session.schedulePreferences BEFORE calling this function; the unified
- * builder reads session.schedulePreferences directly. The legacy `preferences`
- * parameter is preserved for API compatibility — when supplied it is written
- * to session.schedulePreferences before delegating to the unified builder
- * (confirming the caller's already-set value is what gets used).
- *
- * When `preferences` is NOT supplied, session.schedulePreferences is used
- * as-is (the confirm_plan_change caller already writes it before this call).
+ * P2.10 (d): when `preferences` is supplied it is passed through as an explicit
+ * `preferencesOverride` — the builder uses it WITHOUT mutating the session. The
+ * old save→`session.schedulePreferences = preferences`→build→restore dance is
+ * gone (it briefly mutated the session, a hazard the override eliminates).
+ * When `preferences` is NOT supplied, session.schedulePreferences is used as-is
+ * (the confirm_plan_change caller persists its own value separately before the
+ * read-only build — that intended write is unaffected).
  */
 export function buildSolverInputFromSession(
     session: ToolSession,
     dpr: DegreeProgressReport,
     preferences?: SchedulePreferences,
 ): SolverInput {
-    // If an explicit preferences object is passed, temporarily apply it to the
-    // session so the unified builder picks it up from session.schedulePreferences.
-    // This matches the pre-Task-1.10 semantics for callers that pass preferences.
-    if (preferences !== undefined) {
-        const originalPrefs = session.schedulePreferences;
-        session.schedulePreferences = preferences;
-        const result = buildSolverInput(session, dpr, {});
-        // Restore (so we don't permanently mutate the session on a read-only call)
-        session.schedulePreferences = originalPrefs;
-        return result;
-    }
-    return buildSolverInput(session, dpr, {});
+    return buildSolverInput(
+        session,
+        dpr,
+        preferences !== undefined ? { preferencesOverride: preferences } : {},
+    );
+}
+
+/**
+ * P2.10 (b)+(d) — rules-aware sibling of buildSolverInputFromSession used by the
+ * edit tools (propose / confirm). Returns the SolverInput AND `validatorRules`
+ * from a SINGLE buildProgramRules call, so the tools no longer make a redundant
+ * second buildProgramRules call for the validator path. `preferences` is applied
+ * as a non-mutating override exactly as in buildSolverInputFromSession.
+ */
+export function buildSolverInputWithRulesFromSession(
+    session: ToolSession,
+    dpr: DegreeProgressReport,
+    preferences?: SchedulePreferences,
+): SolverInputWithRules {
+    return buildSolverInputWithRules(
+        session,
+        dpr,
+        preferences !== undefined ? { preferencesOverride: preferences } : {},
+    );
 }
 
 // ---------------------------------------------------------------------------

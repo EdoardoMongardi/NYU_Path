@@ -14,11 +14,10 @@ import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { solveForwardSchedule } from "../forwardSchedule/solver.js";
 import { finalizeForwardSchedule } from "../forwardSchedule/build.js";
-import { buildProgramRules } from "../forwardSchedule/buildSolverInput.js";
 import { runGraduationPathValidator } from "../forwardSchedule/graduationPathValidator.js";
 import {
     applyMutationsToPreferences,
-    buildSolverInputFromSession,
+    buildSolverInputWithRulesFromSession,
     computeSlotDiff,
     deriveConsequences,
     buildPlanDiff,
@@ -106,7 +105,16 @@ export const confirmPlanChangeTool = buildTool({
         session.schedulePreferences = newPrefs;
 
         // Step 2: Re-run the solver with the updated preferences.
-        const solverInput = buildSolverInputFromSession(session, dpr, newPrefs);
+        // P2.10 (b)+(d): one buildProgramRules call yields BOTH the solverInput
+        // and the validatorRules. `newPrefs` is passed as a non-mutating override
+        // — it is ALSO the value just persisted to session.schedulePreferences
+        // above (that intended write is separate and unaffected), so the effective
+        // preferences are identical either way.
+        const { solverInput, validatorRules } = buildSolverInputWithRulesFromSession(
+            session,
+            dpr,
+            newPrefs,
+        );
         const solverOutput = solveForwardSchedule(solverInput);
 
         // ---- Route through the AUTHORITATIVE 7-axis validator (P2.7/PLAN-3) ----
@@ -116,13 +124,8 @@ export const confirmPlanChangeTool = buildTool({
         // session.forwardSchedule ("valid") without runGraduationPathValidator
         // passing. We now run the SAME finalize step the build path uses; the
         // schedule carries the validator-derived state and the routing keys on
-        // `validatorResult.feasible`.
-        const validatorRules = buildProgramRules(
-            session,
-            dpr,
-            solverInput.graduationTerm,
-            solverInput.graduationCreditMinimum,
-        ).validatorRules;
+        // `validatorResult.feasible`. The `validatorRules` come from the single
+        // bundle above (no redundant second buildProgramRules call).
 
         // Validate the BEFORE plan too (cheap, pure) for validationResultsChanges.
         const beforeAxes = runGraduationPathValidator({
