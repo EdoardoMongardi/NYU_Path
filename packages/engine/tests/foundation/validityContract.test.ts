@@ -296,6 +296,223 @@ describe("PLAN-4 Contract 1: unbound placeholder does NOT satisfy a required rul
 });
 
 // ---------------------------------------------------------------------------
+// Contract 3 — unbound placeholders do NOT count toward major-credit floor
+// ---------------------------------------------------------------------------
+
+describe("PLAN-4 Contract 3: unbound placeholders excluded from major-credit total (Fix 1)", () => {
+    /**
+     * Setup:
+     *   - programRules.majorCreditMinimum = 32 (non-null → must be checked)
+     *   - Plan has semesters whose ONLY major-tier slots are UNBOUND placeholders
+     *     (kind: "placeholder", workloadTier: "major-required", credits: 4 each × 8 = 32)
+     *   - No specific_planned major slots exist at all
+     *   - residencyMinCredits = null (skip residency check; isolate the major-credit axis)
+     *
+     * Before Fix 1: placeholder credits were counted (|| slot.kind === "placeholder"),
+     *   so 8 × 4 = 32 >= 32 → thresholdsMet would pass. BUG.
+     * After Fix 1: only specific_planned counts → 0 credits < 32 → thresholdsMet FAILS.
+     */
+    it("thresholdsMet does NOT pass when only major-tier slots are unbound placeholders", () => {
+        const dpr = makeBaseDpr({
+            requirementGroups: [],  // no unmet requirements — isolate Axis 4
+            cumulative: {
+                creditsRequired: 128,
+                creditsUsed: 96,
+                cumulativeGpa: 3.4,
+                cumulativeGpaRequired: 2.0,
+                residencyRequired: null,
+                residencyUsed: null,
+                passFailUsedUnits: 4,
+                passFailCapUnits: 32,
+                outsideHomeUsedUnits: 0,
+                outsideHomeCapUnits: 16,
+                timeLimitYears: 8,
+            },
+        });
+
+        // Build 8 unbound placeholder slots with major-required tier (8 × 4 = 32 credits)
+        const makeMajorPlaceholder = (id: string, term: string) => ({
+            kind: "placeholder" as const,
+            category: "major-required",
+            credits: 4,
+            satisfiesRules: [],
+            optional: false,
+            reason: "Major requirement placeholder",
+            rationale: {
+                satisfiesRequirements: [],
+                termConstraints: [],
+                consideredAlternatives: [],
+                decisionsApplied: [],
+            },
+            flexibility: {
+                earliestPossibleTerm: term,
+                latestPossibleTerm: "2027-spring",
+                alternativeCourses: [],
+            },
+            downstreamImpact: { courseIds: [], graduationDelay: 0 },
+            workloadTier: "major-required" as const,
+            workloadWeight: 1.0,
+            bindingState: "placeholder-pending" as const,  // UNBOUND
+            placeholderId: id,
+            confidence: "historically_likely" as const,
+            isCriticalPath: false,
+        });
+
+        const plan = makeBasePlan({
+            semesters: [
+                makeSemester("2026-fall", 16, [
+                    makeMajorPlaceholder("PH-MAJ-1", "2026-fall"),
+                    makeMajorPlaceholder("PH-MAJ-2", "2026-fall"),
+                    makeMajorPlaceholder("PH-MAJ-3", "2026-fall"),
+                    makeMajorPlaceholder("PH-MAJ-4", "2026-fall"),
+                ]),
+                makeSemester("2027-spring", 16, [
+                    makeMajorPlaceholder("PH-MAJ-5", "2027-spring"),
+                    makeMajorPlaceholder("PH-MAJ-6", "2027-spring"),
+                    makeMajorPlaceholder("PH-MAJ-7", "2027-spring"),
+                    makeMajorPlaceholder("PH-MAJ-8", "2027-spring"),
+                ]),
+            ],
+        });
+
+        const args: GraduationPathValidatorArgs = {
+            plan,
+            dpr,
+            programRules: makeProgramRules({
+                // residencyMinCredits must be non-null (and already met by DPR) so the
+                // function doesn't short-circuit to "requires-approval" before reaching
+                // the major-credit check. The DPR has residencyUsed = null here, so we
+                // set residencyMinCredits = 0 (floor trivially met by 0 planned residency).
+                residencyMinCredits: 0,
+                majorCreditMinimum: 32,       // 8 × 4 = 32 placeholder credits — must NOT satisfy this
+                degreeCreditMinimum: 112,     // 96 + 32 = 128 > 112 → total-credits axis passes
+                graduationTargetTerm: "2027-spring",
+            }),
+        };
+
+        const result = runGraduationPathValidator(args);
+
+        // After Fix 1: unbound placeholders do NOT count → 0 planned major credits < 32 → FAIL
+        expect(result.axisResults.thresholdsMet.status).toBe("fail");
+        if (result.axisResults.thresholdsMet.status === "fail") {
+            expect(result.axisResults.thresholdsMet.reason).toMatch(/major/i);
+        }
+        expect(result.feasible).toBe(false);
+    });
+
+    /**
+     * Counterpoint: a mix of bound specific_planned (major-tier) + unbound
+     * placeholders (major-tier), where the specific_planned slots alone meet
+     * the floor — should PASS (placeholders don't help, but bound slots do).
+     */
+    it("thresholdsMet passes when specific_planned major credits alone meet the floor (placeholders ignored)", () => {
+        const dpr = makeBaseDpr({
+            requirementGroups: [],
+            cumulative: {
+                creditsRequired: 128,
+                creditsUsed: 96,
+                cumulativeGpa: 3.4,
+                cumulativeGpaRequired: 2.0,
+                residencyRequired: null,
+                residencyUsed: null,
+                passFailUsedUnits: 4,
+                passFailCapUnits: 32,
+                outsideHomeUsedUnits: 0,
+                outsideHomeCapUnits: 16,
+                timeLimitYears: 8,
+            },
+        });
+
+        const makeBoundMajorSlot = (courseId: string) => ({
+            kind: "specific_planned" as const,
+            courseId,
+            title: `Major Course ${courseId}`,
+            credits: 4,
+            satisfiesRules: [],
+            reason: "Major required",
+            rationale: {
+                satisfiesRequirements: [],
+                termConstraints: [],
+                consideredAlternatives: [],
+                decisionsApplied: [],
+            },
+            flexibility: {
+                earliestPossibleTerm: "2026-fall",
+                latestPossibleTerm: "2027-spring",
+                alternativeCourses: [],
+            },
+            downstreamImpact: { courseIds: [], graduationDelay: 0 },
+            workloadTier: "major-required" as const,
+            workloadWeight: 1.0,
+            bindingState: "bound" as const,
+            confidence: "historically_likely" as const,
+            isCriticalPath: false,
+        });
+
+        const plan = makeBasePlan({
+            semesters: [
+                makeSemester("2026-fall", 16, [
+                    makeBoundMajorSlot("ECON-UA 1"),
+                    makeBoundMajorSlot("ECON-UA 2"),
+                    makeBoundMajorSlot("ECON-UA 3"),
+                    makeBoundMajorSlot("ECON-UA 4"),  // 4 × 4 = 16 bound credits
+                ]),
+                makeSemester("2027-spring", 20, [
+                    makeBoundMajorSlot("ECON-UA 5"),
+                    makeBoundMajorSlot("ECON-UA 6"),
+                    makeBoundMajorSlot("ECON-UA 7"),
+                    makeBoundMajorSlot("ECON-UA 8"),  // 4 × 4 = 16 bound credits (total = 32)
+                    // 1 unbound placeholder: should be ignored by the reducer
+                    {
+                        kind: "placeholder" as const,
+                        category: "major-elective",
+                        credits: 4,
+                        satisfiesRules: [],
+                        optional: false,
+                        reason: "Extra major elective",
+                        rationale: {
+                            satisfiesRequirements: [],
+                            termConstraints: [],
+                            consideredAlternatives: [],
+                            decisionsApplied: [],
+                        },
+                        flexibility: {
+                            earliestPossibleTerm: "2027-spring",
+                            latestPossibleTerm: "2027-spring",
+                            alternativeCourses: [],
+                        },
+                        downstreamImpact: { courseIds: [], graduationDelay: 0 },
+                        workloadTier: "major-elective" as const,
+                        workloadWeight: 0.8,
+                        bindingState: "placeholder-pending" as const,
+                        placeholderId: "PH-EXTRA",
+                        confidence: "historically_likely" as const,
+                        isCriticalPath: false,
+                    },
+                ]),
+            ],
+        });
+
+        const args: GraduationPathValidatorArgs = {
+            plan,
+            dpr,
+            programRules: makeProgramRules({
+                // residencyMinCredits = 0 so the residency check passes trivially
+                // (0 >= 0), allowing execution to reach the major-credit check.
+                residencyMinCredits: 0,
+                majorCreditMinimum: 32,       // 8 bound × 4 = 32 → exactly meets floor
+                degreeCreditMinimum: 112,
+                graduationTargetTerm: "2027-spring",
+            }),
+        };
+
+        const result = runGraduationPathValidator(args);
+        // 32 bound major credits >= 32 minimum → should pass (placeholder ignored)
+        expect(result.axisResults.thresholdsMet.status).toBe("pass");
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Contract 2 — majorCreditMinimum floor actually checked when non-null
 // ---------------------------------------------------------------------------
 

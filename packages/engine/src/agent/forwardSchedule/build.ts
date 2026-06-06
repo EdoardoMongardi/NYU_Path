@@ -457,13 +457,13 @@ function buildProgramRules(
     // Sum counter.required (units kind) across all leaves classified as
     // "major-required" or "major-elective" by the Task-1.7 classifier.
     //
-    // Choice: leaf-level sum rather than group-level counter. A DPR group
-    // counter (if present) would represent the group's total requirement, but
-    // the leaf-level sum is more composable across multi-track majors where
-    // different leaves map to different program tracks. For the CAS-Economics
-    // fixture (the only program-rules data we currently have), the leaf-level
-    // sum and the group counter agree. Document: revisit in Task 1.10 if
-    // integration tests reveal divergence for other programs.
+    // This is a conservative floor: it captures only leaves that carry a
+    // units-counter with a positive required value. Course-count-only
+    // requirements (e.g. a group summary stating "18 courses required") are
+    // NOT captured here — they have no units counter and therefore do not
+    // contribute to majorCreditMin. For the CAS-Economics fixture, the
+    // units-leaf sum = 36 credits; the group's course-count summary = 18
+    // courses — these are independent counters and do NOT agree in kind.
     let majorCreditMin: number | null = null;
     for (const leaf of leaves) {
         const kind = kindByRId.get(leaf.rId);
