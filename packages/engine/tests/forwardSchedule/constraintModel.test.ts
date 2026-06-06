@@ -406,6 +406,20 @@ describe("checkRequirementCoverage", () => {
         expect(checkRequirementCoverage(plan, ctx).ok).toBe(false);
     });
 
+    it("an 'ip' (in-progress) placement does NOT count as a satisfier — mirrors validator axis 1's specific_planned-only counting", () => {
+        // A ScheduleSlotInProgress structurally has no satisfiesRules, so the validator
+        // never treats an IP course as a *bound* satisfier (axis 1 builds its satisfier set
+        // from specific_planned slots only). Counting it here would pass this predicate yet
+        // fail the validator — the hard ⇒ valid break the major-credit floor also guards.
+        const ctx = buildConstraintContext(reqInput);
+        const plan: PartialPlan = {
+            placed: [
+                placed({ courseId: "REQ-UA 1", term: "2026-fall", satisfiesRId: "r1", source: "ip" }),
+            ],
+        };
+        expect(checkRequirementCoverage(plan, ctx).ok).toBe(false);
+    });
+
     it("a requirement with no viable candidates is NOT required to be covered", () => {
         // Candidate course not in catalog → empty candidates → placeholder downstream.
         const ctx = buildConstraintContext(

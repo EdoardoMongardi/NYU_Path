@@ -35,6 +35,10 @@ import {
 } from "./solverHelpers.js";
 import { visaValidator } from "../../dpr/visaValidator.js";
 
+/** Offering seasons. `parseTerm` returns `season: string` but the regex only ever
+ *  yields one of these, so narrowing it for `offerings.includes(...)` is sound. */
+type Season = "fall" | "spring" | "summer" | "january";
+
 // ---------------------------------------------------------------------------
 // Plan / context types
 // ---------------------------------------------------------------------------
@@ -104,6 +108,8 @@ export function buildRequirementVariables(ctx: ConstraintContext): RequirementVa
                 !isStudyAbroadCourse(cid),
         );
 
+        // Pre-computed (courseId, term) domain for the SEARCH's variable-ordering /
+        // forward-checking. Not consumed by any predicate in this module.
         const domain: Array<{ courseId: string; term: string }> = [];
         for (const cid of candidates) {
             const offered = input.offerings.get(cid);
@@ -111,7 +117,7 @@ export function buildRequirementVariables(ctx: ConstraintContext): RequirementVa
                 const parsed = parseTerm(term);
                 if (!parsed) continue;
                 // Legal by offering season (empty/absent offerings ⇒ any season).
-                if (offered && offered.length > 0 && !offered.includes(parsed.season as never)) {
+                if (offered && offered.length > 0 && !offered.includes(parsed.season as Season)) {
                     continue;
                 }
                 domain.push({ courseId: cid, term });
@@ -202,7 +208,7 @@ export function checkOfferingSeasonMatch(plan: PartialPlan, ctx: ConstraintConte
         if (!offered || offered.length === 0) continue;
         const parsed = parseTerm(p.term);
         const season = parsed?.season;
-        if (!season || !offered.includes(season as never)) {
+        if (!season || !offered.includes(season as Season)) {
             violations.push({
                 kind: "offering_pattern",
                 course: p.courseId,
@@ -334,35 +340,36 @@ export function checkPerTermFloor(plan: PartialPlan, ctx: ConstraintContext): Ha
             violations.push({
                 kind: "credit_floor",
                 term,
-                detail: `Below F-1 full-time floor (${termCredits} credits). ${
-                    vResult.fullTimeSatisfied.status === "fail" ? vResult.fullTimeSatisfied.reason : ""
-                }`,
+                detail: `Below F-1 full-time floor (${termCredits} credits). ${vResult.fullTimeSatisfied.reason}`,
             });
         }
         if (vResult.creditMinimumSatisfied.status === "fail") {
             violations.push({
                 kind: "credit_floor",
                 term,
-                detail: `Below minimum enrollment floor (${termCredits} credits). ${
-                    vResult.creditMinimumSatisfied.status === "fail" ? vResult.creditMinimumSatisfied.reason : ""
-                }`,
+                detail: `Below minimum enrollment floor (${termCredits} credits). ${vResult.creditMinimumSatisfied.reason}`,
             });
         }
     }
     return result(violations);
 }
 
-/** requirementCoverage — mirrors validator axis 1 (graduationPathValidator.ts:85-184).
- *  Every requirement variable with ≥1 viable candidate must be covered by a BOUND
- *  placement (source ∈ {requirement, pin, ip}); placeholders/free do NOT count. */
+/** requirementCoverage — mirrors validator axis 1 (checkRequirementGroupsSatisfied).
+ *  Every requirement variable with ≥1 viable candidate must be covered by a
+ *  specific_planned-equivalent placement (source ∈ {requirement, pin}). free/placeholder
+ *  do NOT count, and neither does in_progress ("ip"): the validator builds its satisfier
+ *  set from specific_planned slots only, and a ScheduleSlotInProgress structurally has no
+ *  satisfiesRules. Counting an IP course as a bound satisfier would let a plan pass this
+ *  predicate yet fail validator axis 1 — the same hard ⇒ valid break the major-credit floor
+ *  guards against. */
 export function checkRequirementCoverage(plan: PartialPlan, ctx: ConstraintContext): HardResult {
     const variables = buildRequirementVariables(ctx);
 
-    // rId → set of courseIds covering it via a bound source.
+    // rId → covered via a specific_planned-equivalent (bound) source.
     const coveredRIds = new Set<string>();
     for (const p of plan.placed) {
         if (p.satisfiesRId === null) continue;
-        if (p.source === "requirement" || p.source === "pin" || p.source === "ip") {
+        if (p.source === "requirement" || p.source === "pin") {
             coveredRIds.add(p.satisfiesRId);
         }
     }
