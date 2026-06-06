@@ -17,12 +17,89 @@
 import type { ToolSession } from "../tool.js";
 import type { ForwardSchedule } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
+import type { SolverInput, SolverOutput } from "./types.js";
 import { solveForwardSchedule } from "./solver.js";
 import {
     runGraduationPathValidator,
     derivePlanStateFromValidator,
 } from "./graduationPathValidator.js";
+import type {
+    GraduationPathValidatorArgs,
+    GraduationPathValidatorResult,
+} from "./graduationPathValidator.js";
 import { buildSolverInput, buildProgramRules } from "./buildSolverInput.js";
+
+/** The validator's program-rules shape (superset returned by
+ *  `buildProgramRules(...).validatorRules`). Re-exported so the edit
+ *  tools can type their `validatorRules` argument without reaching into
+ *  the validator module directly. */
+export type ValidatorRules = GraduationPathValidatorArgs["programRules"];
+
+/**
+ * Result of `finalizeForwardSchedule`: the fully-assembled schedule with
+ * the AUTHORITATIVE validator-derived `state`, plus the raw validator
+ * result (so callers can read `feasible`, per-axis `axisResults`, and the
+ * `infeasibilityReport` binding constraint without re-running the validator).
+ */
+export interface FinalizedSchedule {
+    schedule: ForwardSchedule;
+    validatorResult: GraduationPathValidatorResult;
+}
+
+/**
+ * Shared finalize step (P2.7/PLAN-3): one search → one validator for EVERY
+ * path. Assembles the `ForwardSchedule` from `solverOutput` + `solverInput`
+ * (the literal previously duplicated in build.ts / proposePlanChange /
+ * confirmPlanChange), runs `runGraduationPathValidator`, and derives the
+ * authoritative `state` from the validator (NOT the solver's coarse state).
+ *
+ * Behavior-preserving for the build path (it already validated); the value
+ * is that the EDIT tools now share the same authoritative gate instead of
+ * trusting `solverOutput.state` / `solverOutput.feasibility.feasible`.
+ *
+ * `computedAt` uses `Date.now()` to match the existing call sites — this
+ * introduces no nondeterminism beyond what every prior assembly already had.
+ */
+export function finalizeForwardSchedule(
+    solverOutput: SolverOutput,
+    solverInput: SolverInput,
+    dpr: DegreeProgressReport,
+    validatorRules: ValidatorRules,
+): FinalizedSchedule {
+    const plannedCredits = solverOutput.semesters.reduce((sum, sem) => sum + sem.plannedCredits, 0);
+    const degreeCreditsMet =
+        (solverInput.creditsEarned + plannedCredits) >= solverInput.graduationCreditMinimum;
+
+    const assembled: ForwardSchedule = {
+        studentId: solverInput.studentId,
+        homeSchoolId: solverInput.homeSchoolId,
+        graduationTerm: solverInput.graduationTerm,
+        creditTargetPerSemester: solverInput.creditTargetPerSemester,
+        f1Floor: solverInput.f1Floor,
+        domesticPartTimeFloor: solverInput.domesticPartTimeFloor,
+        graduationCreditMinimum: solverInput.graduationCreditMinimum,
+        degreeCreditsMet,
+        semesters: solverOutput.semesters,
+        dprCourseHistoryHash: solverInput.dprCourseHistoryHash,
+        computedAt: Date.now(),
+        feasibility: solverOutput.feasibility,
+        state: solverOutput.state,           // solver's coarse state (overridden below)
+        balanceScore: solverOutput.balanceScore,
+        assumptions: solverOutput.assumptions,
+        ...(solverOutput.alternativeCandidates !== undefined
+            ? { alternativeCandidates: solverOutput.alternativeCandidates }
+            : {}),
+    };
+
+    const validatorResult = runGraduationPathValidator({
+        plan: assembled,
+        dpr,
+        programRules: validatorRules,
+    });
+    const state = derivePlanStateFromValidator(validatorResult, assembled);
+
+    return { schedule: { ...assembled, state }, validatorResult };
+}
 // Re-export for test files that import buildProgramRulesForTest from build.js
 // (backward-compat; the authoritative copy lives in buildSolverInput.ts)
 export { buildProgramRulesForTest } from "./buildSolverInput.js";
@@ -69,40 +146,21 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
 
     const solverOutput = solveForwardSchedule(solverInput);
 
-    // ---- Build initial ForwardSchedule from solver output ----
-
-    const plannedCredits = solverOutput.semesters.reduce((sum, sem) => sum + sem.plannedCredits, 0);
-    const degreeCreditsMet = (solverInput.creditsEarned + plannedCredits) >= solverInput.graduationCreditMinimum;
-
-    const initialSchedule: ForwardSchedule = {
-        studentId: solverInput.studentId,
-        homeSchoolId: solverInput.homeSchoolId,
-        graduationTerm: solverInput.graduationTerm,
-        creditTargetPerSemester: solverInput.creditTargetPerSemester,
-        f1Floor: solverInput.f1Floor,
-        domesticPartTimeFloor: solverInput.domesticPartTimeFloor,
-        graduationCreditMinimum: solverInput.graduationCreditMinimum,
-        degreeCreditsMet,
-        semesters: solverOutput.semesters,
-        dprCourseHistoryHash: solverInput.dprCourseHistoryHash,
-        computedAt: Date.now(),
-        feasibility: solverOutput.feasibility,
-        state: solverOutput.state,           // solver's coarse state (overridden below)
-        balanceScore: solverOutput.balanceScore,
-        assumptions: solverOutput.assumptions,
-        ...(solverOutput.alternativeCandidates ? { alternativeCandidates: solverOutput.alternativeCandidates } : {}),
-    };
-
-    // ---- 13. Run full runGraduationPathValidator to get authoritative state ----
-
-    const validatorResult = runGraduationPathValidator({
-        plan: initialSchedule,
+    // ---- Assemble + run the authoritative validator via the shared finalize ----
+    //
+    // The same single-search → single-validator step the edit tools now use
+    // (P2.7/PLAN-3). For the build path this is a behavior-preserving
+    // extraction: the assembled literal, the validator call, and the
+    // derivePlanStateFromValidator override are byte-identical to the prior
+    // inline block.
+    const { schedule } = finalizeForwardSchedule(
+        solverOutput,
+        solverInput,
         dpr,
-        programRules: programRules.validatorRules,
-    });
-    const finalState = derivePlanStateFromValidator(validatorResult, initialSchedule);
+        programRules.validatorRules,
+    );
 
-    return { ...initialSchedule, state: finalState };
+    return schedule;
 }
 
 // All helpers (inferCurrentTerm, psTermToSolverTerm, deriveGraduationTerm,

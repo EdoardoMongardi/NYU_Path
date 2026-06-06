@@ -14,6 +14,7 @@ import type {
     PlanChangeOutcome,
     PlanDiff,
     PlanState,
+    ValidationResult,
 } from "@nyupath/shared";
 import type { SolverInput } from "./types.js";
 import type { ToolSession } from "../tool.js";
@@ -461,12 +462,18 @@ export function deriveConsequences(
  * cascadedShifts, newAssumptions — are delegated to `diffPlanTradeOffs`
  * (tradeOffEngine.ts, P2.6), which diffs the two schedules' slots directly.
  *
- * `validationResultsChanges` still requires the validator's per-axis
- * before/after (P2.7) and is left as an empty record until then.
+ * `validationResultsChanges` (P2.7): when `validatorAxes` is supplied, every
+ * axis whose `before`/`after` ValidationResult differs (structurally — by
+ * status OR reason/payload) is recorded as `{ before, after }`. When omitted,
+ * it stays `{}` (backward-compatible: the build path never passes axes).
  */
 export function buildPlanDiff(
     before: ForwardSchedule | undefined,
     after: ForwardSchedule,
+    validatorAxes?: {
+        before?: Record<string, ValidationResult>;
+        after: Record<string, ValidationResult>;
+    },
 ): PlanDiff {
     // creditsByTermDelta
     const beforeCreditsByTerm: Record<string, number> = {};
@@ -547,6 +554,26 @@ export function buildPlanDiff(
     // two schedules (P2.6).
     const tradeOffs = diffPlanTradeOffs(before, after);
 
+    // validationResultsChanges (P2.7) — per-axis ValidationResult transitions.
+    // Only populated when the caller supplies the validator's before+after axis
+    // results; the build path omits them and gets an empty record.
+    const validationResultsChanges: Record<string, { before: ValidationResult; after: ValidationResult }> = {};
+    if (validatorAxes) {
+        const beforeAxes = validatorAxes.before ?? {};
+        const afterAxes = validatorAxes.after;
+        for (const axis of Object.keys(afterAxes)) {
+            const a = afterAxes[axis]!;
+            const b = beforeAxes[axis];
+            // Record an axis only when a `before` exists AND the result changed
+            // (by status or reason/payload). The validator always emits the same
+            // 7 axes for both plans, so a missing `before` is not an expected
+            // transition and is skipped rather than recorded as before===after.
+            if (b && !validationResultsEqual(b, a)) {
+                validationResultsChanges[axis] = { before: b, after: a };
+            }
+        }
+    }
+
     return {
         creditsByTermDelta,
         graduationTermShift: gradShift,
@@ -558,9 +585,40 @@ export function buildPlanDiff(
         workloadTierShifts,
         balanceImpact,
         newAssumptions: tradeOffs.newAssumptions,
-        validationResultsChanges: {},
+        validationResultsChanges,
         planStateChange,
     };
+}
+
+/**
+ * Structural equality for two ValidationResult values. Two results are equal
+ * iff they share a `status` AND the status-specific payload matches:
+ *   - pass             → same `verifiedFrom`
+ *   - assumed-pass     → same `assumption` + `whatWouldFlipIt`
+ *   - requires-approval→ same `authority`
+ *   - fail             → same `reason`
+ * Used by buildPlanDiff to decide whether an axis transitioned (P2.7). A
+ * pass→fail flip, or a fail whose reason changed, both count as a change.
+ */
+function validationResultsEqual(a: ValidationResult, b: ValidationResult): boolean {
+    if (a.status !== b.status) return false;
+    switch (a.status) {
+        case "pass":
+            return a.verifiedFrom === (b as { verifiedFrom: string }).verifiedFrom;
+        case "assumed-pass": {
+            const bb = b as { assumption: string; whatWouldFlipIt: string };
+            return a.assumption === bb.assumption && a.whatWouldFlipIt === bb.whatWouldFlipIt;
+        }
+        case "requires-approval":
+            return a.authority === (b as { authority: string }).authority;
+        case "fail":
+            return a.reason === (b as { reason: string }).reason;
+        default: {
+            const _exhaustive: never = a;
+            void _exhaustive;
+            return true;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
