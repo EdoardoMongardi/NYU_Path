@@ -30,6 +30,7 @@ import type {
     ScheduleSlot,
     Assumption,
     PlanMutation,
+    ValidationResult,
 } from "@nyupath/shared";
 
 // ---------------------------------------------------------------------------
@@ -359,5 +360,40 @@ describe("buildPlanDiff + explainPlanDiff — previously-dead renderer branch no
         const rendered = explainPlanDiff(diff, mutation);
         expect(rendered).toMatch(/New petition required/);
         expect(rendered).toContain("CORE-UA 555");
+    });
+});
+
+// ===========================================================================
+// validationResultsChanges (P2.7) — per-axis ValidationResult transitions
+// ===========================================================================
+
+describe("buildPlanDiff — validationResultsChanges (P2.7)", () => {
+    const before = forwardSchedule([semester("2026-fall", [specificSlot("CSCI-UA 1", { rules: ["R1"] })])]);
+    const after = forwardSchedule([semester("2026-fall", [])]);
+
+    it("records an axis whose ValidationResult changed (pass → fail) and skips unchanged axes", () => {
+        const beforeAxes: Record<string, ValidationResult> = {
+            requirementGroupsSatisfied: { status: "pass", verifiedFrom: "DPR" },
+            totalCreditsMeetMinimum: { status: "pass", verifiedFrom: "DPR" },
+        };
+        const afterAxes: Record<string, ValidationResult> = {
+            requirementGroupsSatisfied: { status: "fail", reason: "R1 not satisfied by plan or DPR" },
+            totalCreditsMeetMinimum: { status: "pass", verifiedFrom: "DPR" },
+        };
+
+        const diff = buildPlanDiff(before, after, { before: beforeAxes, after: afterAxes });
+
+        // The flipped axis is recorded with both endpoints...
+        expect(diff.validationResultsChanges.requirementGroupsSatisfied).toEqual({
+            before: { status: "pass", verifiedFrom: "DPR" },
+            after: { status: "fail", reason: "R1 not satisfied by plan or DPR" },
+        });
+        // ...and the unchanged axis is NOT recorded.
+        expect(diff.validationResultsChanges.totalCreditsMeetMinimum).toBeUndefined();
+    });
+
+    it("is empty {} when no validator axes are supplied (backward-compatible build path)", () => {
+        const diff = buildPlanDiff(before, after);
+        expect(diff.validationResultsChanges).toEqual({});
     });
 });
