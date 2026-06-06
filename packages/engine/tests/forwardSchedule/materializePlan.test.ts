@@ -803,10 +803,8 @@ describe("solveForwardSchedule — alternativeCandidates integration", () => {
     }
 
     it("populates alternativeCandidates on a multi-plan fixture; each alternative is a plan distinct from the main one", () => {
-        // T3 restores alternativeCandidates via findDiverseValidPlans. T1b (feasibility-first)
-        // sets alternativeCandidates = undefined; this test is relaxed to tolerate that.
-        // The validity + feasibility assertions still hold — those are the load-bearing checks.
         // Two requirements, each with TWO viable candidates → many valid plans.
+        // T3b restores alternativeCandidates via findDiverseValidPlans.
         const input = makeInput({
             currentTerm: "2026-fall",
             graduationTerm: "2027-spring",
@@ -851,31 +849,28 @@ describe("solveForwardSchedule — alternativeCandidates integration", () => {
 
         const out = solveForwardSchedule(input);
 
-        // T3 restores alternativeCandidates: skip the populated-alts assertions when undefined.
-        // The core validity invariants always hold.
         expect(out.feasibility.feasible).toBe(true);
         const winnerSig = planSubjectSig(out);
         expect(winnerSig.length).toBeGreaterThan(0);
 
-        if (out.alternativeCandidates !== undefined) {
-            // T3 restores alternativeCandidates: these assertions re-activate when populated.
-            const alts = out.alternativeCandidates;
-            expect(alts.length).toBeGreaterThanOrEqual(1);
-            expect(alts.length).toBeLessThanOrEqual(4); // k=5 → winner + ≤4 alternatives
-            // planIndex is 1-based and dense.
-            alts.forEach((a, i) => expect(a.planIndex).toBe(i + 1));
-            for (const a of alts) {
-                expect(Number.isFinite(a.balanceScore)).toBe(true);
-                expect(typeof a.graduationTerm).toBe("string");
-                expect(Array.isArray(a.topDiffsFromWinner)).toBe(true);
-                expect(a.totalAssumptionCount).toBe(out.assumptions.length);
-            }
-            for (const a of alts) {
-                const hasAnySubject = Object.values(a.subjectDistributionByTerm).some(
-                    m => Object.keys(m).length > 0,
-                );
-                expect(hasAnySubject).toBe(true);
-            }
+        // T3b: alternativeCandidates must now be defined and populated.
+        expect(out.alternativeCandidates).toBeDefined();
+        const alts = out.alternativeCandidates!;
+        expect(alts.length).toBeGreaterThanOrEqual(1);
+        expect(alts.length).toBeLessThanOrEqual(4); // k=5 → winner + ≤4 alternatives
+        // planIndex is 1-based and dense.
+        alts.forEach((a, i) => expect(a.planIndex).toBe(i + 1));
+        for (const a of alts) {
+            expect(Number.isFinite(a.balanceScore)).toBe(true);
+            expect(typeof a.graduationTerm).toBe("string");
+            expect(Array.isArray(a.topDiffsFromWinner)).toBe(true);
+            expect(a.totalAssumptionCount).toBe(out.assumptions.length);
+        }
+        for (const a of alts) {
+            const hasAnySubject = Object.values(a.subjectDistributionByTerm).some(
+                m => Object.keys(m).length > 0,
+            );
+            expect(hasAnySubject).toBe(true);
         }
     });
 
