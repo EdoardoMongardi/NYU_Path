@@ -40,16 +40,26 @@ import type {
 } from "@nyupath/shared";
 import type { SolverOutput } from "./types.js";
 import type { ConstraintContext, PartialPlan, PlacedCourse } from "./constraintModel.js";
+import {
+    scorePlan,
+    checkOfferingSeasonMatch,
+    checkPrereqsSatisfied,
+    checkNotClauseClear,
+    checkCoreqsSameTerm,
+    checkPerTermCeiling,
+} from "./constraintModel.js";
 import { visaValidator } from "../../dpr/visaValidator.js";
 import { visaNotesForCredits } from "./visaPolicy.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
 import { computeBalanceScore } from "./balanceScore.js";
 import {
     parseTerm,
+    compareSolverTerms,
     effectiveTermTarget,
     checkAllPrereqs,
     computeDownstreamImpact,
     isCriticalPath,
+    isStudyAbroadCourse,
 } from "./solverHelpers.js";
 import { buildIpAssumptions, derivePlanState } from "./solver.js";
 
@@ -87,6 +97,177 @@ function buildLoadRationale(
         hardCount,
         easyCount,
         alternativeDistributionsConsidered: [],
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Per-slot rationale helpers (P2.5) — make the search's REAL reasoning legible.
+//
+// The search chose course C for requirement R in term T because every OTHER
+// candidate C′ was either hard-infeasible at (C′, T) given the rest of the plan,
+// or feasible-but-objective-worse. These helpers re-derive that verdict by a
+// COUNTERFACTUAL swap C→C′ against the FINAL plan, reusing the SAME incremental
+// hard predicates + scorePlan the search used (no reimplementation), so each
+// rejected alternative carries the concrete reason an advisor can quote.
+// ---------------------------------------------------------------------------
+
+/** The five incremental hard predicates, in the order the search applies them.
+ *  A counterfactual swap is rejected on the FIRST that fails. */
+const INCREMENTAL_PREDICATES: ReadonlyArray<{
+    check: (plan: PartialPlan, ctx: ConstraintContext) => { ok: boolean; violations: Array<{ detail: string }> };
+}> = [
+    { check: checkOfferingSeasonMatch },
+    { check: checkPrereqsSatisfied },
+    { check: checkNotClauseClear },
+    { check: checkCoreqsSameTerm },
+    { check: checkPerTermCeiling },
+];
+
+/** Workload tier/weight for a counterfactual requirement placement of `courseId`
+ *  bound to `rId` — IDENTICAL to search.ts's buildValue wiring (satisfiesRules:[rId]). */
+function classifyTrialTier(
+    courseId: string,
+    rId: string,
+    ctx: ConstraintContext,
+): { tier: WorkloadTier; weight: number } {
+    const wt = classifyWorkloadTier({
+        courseId,
+        satisfiesRules: [rId],
+        majorRuleKinds: ctx.input.programRules.majorRuleKinds,
+        schoolCoreRuleIds: ctx.input.programRules.schoolCoreRuleIds,
+        generalCategoryRuleIds: ctx.input.programRules.generalCategoryRuleIds,
+        bulletinTitle: ctx.input.courseTitles?.get(courseId),
+        bulletinKeywords: ctx.input.courseBulletinKeywords?.get(courseId),
+    });
+    return { tier: wt.tier, weight: wt.weight };
+}
+
+/**
+ * Why was alternative `altCourseId` not chosen for requirement `rId` (whose chosen
+ * placement is `chosen`)? Returns the concrete `rejectedBecause`:
+ *  - Non-viable (excluded / off-catalog / study-abroad) → the viability message
+ *    (the search never even ranked it; it isn't in the requirement's candidates).
+ *  - Else swap chosen→alt in the chosen term against `finalPlan`, run the 5
+ *    incremental predicates; the FIRST violation's `detail` is the reason.
+ *  - Else (hard-feasible) compare scorePlan(trial) vs `finalScore`: the chosen
+ *    course balances the plan better — cite both objective values.
+ */
+function rejectionReasonForAlternative(
+    altCourseId: string,
+    chosen: PlacedCourse,
+    rId: string,
+    finalPlan: PartialPlan,
+    finalScore: number,
+    ctx: ConstraintContext,
+    excludedCourseIds: Set<string>,
+): string {
+    const { input } = ctx;
+    const altMeta = input.courseCatalog.get(altCourseId);
+    if (
+        excludedCourseIds.has(altCourseId) ||
+        altMeta === undefined ||
+        isStudyAbroadCourse(altCourseId)
+    ) {
+        return "not a viable candidate (excluded, off-catalog, or study-abroad)";
+    }
+
+    // Counterfactual: replace the chosen placement with an alt placement in the
+    // SAME term, leaving every other placement intact. Tier/weight + credits come
+    // from alt's catalog entry, exactly as the search would have built this value.
+    const trialTier = classifyTrialTier(altCourseId, rId, ctx);
+    const altPlacement: PlacedCourse = {
+        courseId: altCourseId,
+        term: chosen.term,
+        credits: altMeta.credits,
+        workloadTier: trialTier.tier,
+        workloadWeight: trialTier.weight,
+        satisfiesRId: rId,
+        source: "requirement",
+    };
+    const trialPlan: PartialPlan = {
+        placed: finalPlan.placed.map(p => (p.courseId === chosen.courseId ? altPlacement : p)),
+    };
+
+    for (const { check } of INCREMENTAL_PREDICATES) {
+        const res = check(trialPlan, ctx);
+        if (!res.ok && res.violations.length > 0) {
+            return res.violations[0]!.detail;
+        }
+    }
+
+    // Hard-feasible alternative — it lost on the soft objective.
+    const altScore = scorePlan(trialPlan, ctx);
+    return (
+        `feasible but the chosen course balances the plan better ` +
+        `(objective ${altScore.toFixed(2)} vs ${finalScore.toFixed(2)})`
+    );
+}
+
+/**
+ * Real feasible-term window for chosen course `courseId` in the FINAL plan.
+ *
+ * earliestPossibleTerm = the earliest future term where the course is offered
+ *   (season matches, or offerings empty/absent) AND every one of its prereqs is
+ *   either already taken / in-progress or placed in a STRICTLY earlier term.
+ * latestPossibleTerm   = the latest future term where the course is offered,
+ *   bounded by the planning window (which already ends at the graduation term).
+ *
+ * Falls back to the chosen term / last term when no term satisfies the bound
+ * (defensive — the chosen placement is itself feasible, so earliest ≤ chosen).
+ */
+function feasibleTermWindow(
+    courseId: string,
+    chosenTerm: string,
+    ctx: ConstraintContext,
+    plannedPlacements: Map<string, string>,
+): { earliestPossibleTerm: string; latestPossibleTerm: string } {
+    const { input, futureTerms } = ctx;
+    const offered = input.offerings.get(courseId);
+    const offeredInTerm = (term: string): boolean => {
+        if (!offered || offered.length === 0) return true;
+        const season = parseTerm(term)?.season;
+        return season != null && offered.includes(season as "fall" | "spring" | "summer" | "january");
+    };
+
+    // Direct prereq course ids (non-NOT groups) — the courses that must precede.
+    const prereqIds = new Set<string>();
+    for (const g of input.prereqs.get(courseId) ?? []) {
+        if (g.type === "NOT") continue;
+        for (const dep of g.courses) {
+            if (dep) prereqIds.add(dep);
+        }
+    }
+    const prereqsPrecede = (term: string): boolean => {
+        for (const dep of prereqIds) {
+            if (input.coursesTaken.has(dep)) continue;
+            if (input.coursesInProgress.has(dep)) continue;
+            const depTerm = plannedPlacements.get(dep);
+            // Unmet & either unplaced or not strictly-before this term → blocks it.
+            if (depTerm === undefined) return false;
+            if (compareSolverTerms(depTerm, term) >= 0) return false;
+        }
+        return true;
+    };
+
+    let earliest: string | undefined;
+    for (const t of futureTerms) {
+        if (offeredInTerm(t) && prereqsPrecede(t)) {
+            earliest = t;
+            break;
+        }
+    }
+    let latest: string | undefined;
+    for (let i = futureTerms.length - 1; i >= 0; i--) {
+        const t = futureTerms[i]!;
+        if (offeredInTerm(t)) {
+            latest = t;
+            break;
+        }
+    }
+
+    return {
+        earliestPossibleTerm: earliest ?? chosenTerm,
+        latestPossibleTerm: latest ?? futureTerms[futureTerms.length - 1] ?? chosenTerm,
     };
 }
 
@@ -143,6 +324,15 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
 
     const plannedPlacements = new Map<string, string>();
     for (const p of plan.placed) plannedPlacements.set(p.courseId, p.term);
+
+    // P2.5 — per-slot rationale inputs (computed once, reused per requirement slot):
+    //  - excludedCourseIds: student exclusions (a course the search never ranks);
+    //  - finalScore: the objective of the FINAL plan, the baseline each
+    //    feasible-but-rejected alternative is compared against.
+    const excludedCourseIds = new Set<string>(
+        (input.preferences?.exclusions ?? []).map(e => e.courseId),
+    );
+    const finalScore = scorePlan(plan, ctx);
 
     // Dependents index over all candidate course ids — identical to the
     // ctx.dependentsIndex (built in buildConstraintContext) and to the greedy
@@ -320,21 +510,50 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
                 detail: `Prereq chain: ${prereqResult.decisionsApplied.join(", ")}`,
             });
         }
+        // coreqSameTerm (P2.5 — restores the P2.2c-deferred label): if this course
+        // has UNMET coreqs (not already taken/IP) that ARE co-placed in THIS term,
+        // record the same-term constraint (Decision #14) so the agent can explain
+        // why the coreq pair must share the term.
+        const coPlacedCoreqs = (input.coreqs?.get(p.courseId) ?? []).filter(coreqId => {
+            if (input.coursesTaken.has(coreqId)) return false;
+            if (input.coursesInProgress.has(coreqId)) return false;
+            return plannedPlacements.get(coreqId) === p.term;
+        });
+        if (coPlacedCoreqs.length > 0) {
+            termConstraints.push({
+                kind: "coreqSameTerm",
+                detail: `Coreqs [${coPlacedCoreqs.join(", ")}] must be taken the same term as ${p.courseId} (Decision #14).`,
+            });
+        }
 
-        // flexibility.earliestPossibleTerm: first future term matching offering.
-        const earliestTerm =
-            futureTerms.find(t => {
-                const s = (parseTerm(t)?.season ?? "fall") as "fall" | "spring";
-                return !offered || offered.length === 0 || offered.includes(s);
-            }) ?? p.term;
         const alternativeCourses = candidateCourses.filter(c => c !== p.courseId);
+
+        // flexibility (P2.5): the REAL earliest/latest feasible-term window for the
+        // chosen course (offering season + prereq-precedence bounded), against the
+        // final plan — lets the agent answer "why not term T".
+        const window = feasibleTermWindow(p.courseId, p.term, ctx, plannedPlacements);
 
         const rationale: SlotRationale = {
             satisfiesRequirements: p.satisfiesRId != null ? [p.satisfiesRId] : [],
             termConstraints,
+            // consideredAlternatives (P2.5): each OTHER candidate carries the
+            // search's REAL reason it lost — the first hard-constraint violation of
+            // the counterfactual swap C→C′ in term T, or (if feasible) the objective
+            // comparison. p.satisfiesRId is set for every requirement placement.
             consideredAlternatives: alternativeCourses.map(c => ({
                 courseId: c,
-                rejectedBecause: "search selected a different candidate to satisfy this requirement",
+                rejectedBecause:
+                    p.satisfiesRId != null
+                        ? rejectionReasonForAlternative(
+                              c,
+                              p,
+                              p.satisfiesRId,
+                              plan,
+                              finalScore,
+                              ctx,
+                              excludedCourseIds,
+                          )
+                        : "search selected a different candidate to satisfy this requirement",
             })),
             decisionsApplied: [
                 ...prereqResult.decisionsApplied,
@@ -351,8 +570,8 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
         };
 
         const flexibility: SlotFlexibility = {
-            earliestPossibleTerm: earliestTerm,
-            latestPossibleTerm: lastTerm,
+            earliestPossibleTerm: window.earliestPossibleTerm,
+            latestPossibleTerm: window.latestPossibleTerm,
             alternativeCourses,
         };
 
