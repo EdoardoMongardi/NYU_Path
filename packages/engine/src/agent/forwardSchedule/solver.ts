@@ -38,11 +38,11 @@
 
 import type { ForwardSemester, FeasibilityReport, Assumption } from "@nyupath/shared";
 import type { SolverInput, SolverOutput } from "./types.js";
-import { buildConstraintContext, type PlacedCourse } from "./constraintModel.js";
+import { buildConstraintContext, type ConstraintContext, type PlacedCourse } from "./constraintModel.js";
 import { searchTopKPlans } from "./search.js";
 import { materializePlan, buildAlternativeSummaries } from "./materializePlan.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
-import { parseTerm } from "./solverHelpers.js";
+import { parseTerm, isOptionalTerm } from "./solverHelpers.js";
 
 type Season = "fall" | "spring" | "summer" | "january";
 
@@ -58,9 +58,10 @@ export function buildIpAssumptions(
     input: SolverInput,
     placedCourses: Set<string>,
     dependentsIndex: Map<string, string[]>,
+    ctx: ConstraintContext,
 ): Assumption[] {
     const assumptions: Assumption[] = [];
-    for (const ipCourseId of input.coursesInProgress.keys()) {
+    for (const [ipCourseId, { term: ipTerm }] of input.coursesInProgress) {
         // Only emit an assumption if this IP course is a prereq for at least one placed slot
         const dependents = dependentsIndex.get(ipCourseId) ?? [];
         const affectedPlaced = dependents.filter(d => placedCourses.has(d));
@@ -71,10 +72,96 @@ export function buildIpAssumptions(
             courseId: ipCourseId,
             consequenceIfFalse: `Downstream slots ${affectedPlaced.join(", ")} may need to move to a later term.`,
             cascadingSlots: affectedPlaced,
-            contingencyPlanAvailable: false,
+            // STRUCTURAL contingency: a contingency exists for this IP course iff EVERY
+            // affected downstream slot could be re-placed in a LATER term within the
+            // window (offering-legal). See contingencyAvailableFor — no full re-solve.
+            contingencyPlanAvailable: contingencyAvailableFor(input, ctx, ipTerm, affectedPlaced),
         });
     }
     return assumptions;
+}
+
+/**
+ * STRUCTURAL determination of `contingencyPlanAvailable` for an IP course
+ * (Decision #30). A contingency IS available iff EVERY affected (cascading)
+ * downstream slot could be re-placed in a LATER term within the planning window —
+ * i.e. for each dependent there exists a future term STRICTLY AFTER the IP course's
+ * own term whose season the dependent's offering allows. This is a structural
+ * offering/window check only — it does NOT re-run the search (no full re-solve),
+ * matching the "structural check" mandate. A dependent with no/empty offerings is
+ * treated as season-agnostic (any later term works). When there are no affected
+ * slots the caller does not emit an assumption, so this is only consulted with ≥1.
+ */
+function contingencyAvailableFor(
+    input: SolverInput,
+    ctx: ConstraintContext,
+    ipTerm: string,
+    affectedSlots: string[],
+): boolean {
+    // Future terms strictly AFTER the IP course's term (chronological window order).
+    const ipIdx = ctx.futureTerms.indexOf(ipTerm);
+    const laterTerms = ipIdx >= 0 ? ctx.futureTerms.slice(ipIdx + 1) : ctx.futureTerms;
+    if (laterTerms.length === 0) return false; // nowhere later to move anything
+
+    return affectedSlots.every(dep => {
+        const offered = input.offerings.get(dep);
+        // No/empty offering ⇒ season-agnostic ⇒ any later term is legal.
+        if (!offered || offered.length === 0) return true;
+        // Needs ≥1 later term whose season the dependent is offered in.
+        return laterTerms.some(term => {
+            const season = parseTerm(term)?.season;
+            return season !== undefined && offered.includes(season as Season);
+        });
+    });
+}
+
+/**
+ * Capacity diagnostic (jointly-infeasible blocker). When the search returns NO
+ * plan, even with no single requirement individually unplaceable the remaining
+ * unmet requirements may simply not FIT: their summed credits exceed the credit
+ * capacity left in the NON-optional (fall/spring) terms after the fixed placements.
+ *
+ *   requiredCredits   = Σ credits of unmet requirements NOT already covered by a
+ *                       fixed placement (a fixed placement covers a requirement when
+ *                       its satisfiesRId === the requirement's rId).
+ *   availableCapacity = Σ over non-optional future terms of
+ *                       (creditCeiling − fixed credits already placed in that term),
+ *                       clamped at 0 per term (an over-ceiling fixed term adds none).
+ *
+ * Returns a `graduation_total` violation ONLY when requiredCredits > availableCapacity
+ * (the true "would need 22 cr in spring, over the 18 ceiling"-style blocker); else
+ * null — never fabricated.
+ */
+function computeCapacityDiagnostic(
+    input: SolverInput,
+    ctx: ConstraintContext,
+    fixed: PlacedCourse[],
+): FeasibilityReport["constraintViolations"][number] | null {
+    const coveredByFixed = new Set(
+        fixed.map(p => p.satisfiesRId).filter((rId): rId is string => rId !== null),
+    );
+    const requiredCredits = input.unmetRequirements
+        .filter(r => !coveredByFixed.has(r.rId))
+        .reduce((s, r) => s + r.credits, 0);
+
+    const nonOptionalTerms = ctx.futureTerms.filter(t => !isOptionalTerm(t));
+    const fixedCreditsByTerm = new Map<string, number>();
+    for (const p of fixed) {
+        fixedCreditsByTerm.set(p.term, (fixedCreditsByTerm.get(p.term) ?? 0) + p.credits);
+    }
+    const availableCapacity = nonOptionalTerms.reduce((s, term) => {
+        const used = fixedCreditsByTerm.get(term) ?? 0;
+        return s + Math.max(0, input.creditCeiling - used);
+    }, 0);
+
+    if (requiredCredits <= availableCapacity) return null;
+    return {
+        kind: "graduation_total",
+        detail:
+            `The remaining requirements need ~${requiredCredits} credits, but only ${availableCapacity} ` +
+            `credits of capacity exist in the ${nonOptionalTerms.length} term${nonOptionalTerms.length === 1 ? "" : "s"} ` +
+            `through ${input.graduationTerm} — add summer/J-term or extend the graduation target.`,
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -248,12 +335,20 @@ export function solveForwardSchedule(input: SolverInput): SolverOutput {
     const top = searchTopKPlans(ctx, { fixed, k: 5 });
     const winnerPlan = top.plans[0] ?? { placed: fixed };
     if (top.plans.length === 0) {
-        for (const rId of top.unsatisfiable) {
-            extraViolations.push({
-                kind: "prereq_unsatisfiable",
-                detail: `Requirement ${rId} could not be placed in any valid (course, term).`,
-            });
+        // Per-requirement binding constraints — the SPECIFIC reason each unplaceable
+        // requirement is blocked (offering / ceiling / coreq / NOT / prereq-depth),
+        // replacing the old uncomputable generic "could not be placed" prereq push.
+        for (const b of top.blockers) {
+            extraViolations.push({ kind: b.kind, detail: b.detail });
         }
+
+        // Capacity diagnostic (jointly infeasible) — even when no SINGLE requirement
+        // is individually unplaceable, the remaining unmet requirements can simply
+        // fail to FIT: their total credits exceed the credit capacity left in the
+        // non-optional terms. Compute the true blocker and surface it as a
+        // graduation_total violation ONLY when it genuinely holds (required > avail).
+        const cap = computeCapacityDiagnostic(input, ctx, fixed);
+        if (cap !== null) extraViolations.push(cap);
     }
 
     const out = materializePlan(winnerPlan, ctx);
