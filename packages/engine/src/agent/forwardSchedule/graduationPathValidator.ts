@@ -279,11 +279,17 @@ function checkThresholdsMet(
     }
 
     // Major credit check
+    // Fix: PLAN-4 Bug B follow-up — only BOUND specific_planned slots count toward
+    // the major-credit floor. Unbound placeholder slots (bindingState:
+    // "placeholder-pending" / "placeholder-deferred") are intentionally excluded:
+    // a placeholder represents a course yet to be chosen, so counting its credits
+    // would allow an unfilled plan to falsely meet the major-credit minimum.
+    // This mirrors the same fix applied to Axis 1 (requirementGroupsSatisfied).
     if (majorMin !== null) {
         const plannedMajor = plan.semesters.reduce((sum, sem) => {
             return sum + sem.slots.reduce((s2, slot) => {
                 if (
-                    (slot.kind === "specific_planned" || slot.kind === "placeholder") &&
+                    slot.kind === "specific_planned" &&
                     (slot.workloadTier === "major-required" || slot.workloadTier === "major-elective")
                 ) {
                     return s2 + slot.credits;
@@ -314,6 +320,13 @@ function checkThresholdsMet(
     if (residencyMin === null || majorMin === null) {
         return { status: "requires-approval", authority: "advisor" };
     }
+
+    // NOTE: upperLevelMinCredits is intentionally NOT checked here.
+    // No DPR counter reliably represents the upper-level credit floor across
+    // all NYU programs (the relevant counter varies by school/major and is not
+    // consistently structured in the DPR). The field is left null in
+    // programRules until a structured source is identified in a later phase.
+    // Its absence is by design — not an oversight.
 
     return { status: "pass", verifiedFrom: "program-rules" };
 }
