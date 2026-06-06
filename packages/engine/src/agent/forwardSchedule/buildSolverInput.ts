@@ -217,6 +217,13 @@ export function buildSolverInputWithRules(
         ?? toSolverShape(session.graduationTarget)
         ?? deriveGraduationTerm(currentTerm, creditsEarned, graduationCreditMinimum, creditTargetPerSemester);
 
+    // T2b — true when the term fell through to the credit-derived default (no
+    // stated target, no override). build.ts reads this flag to decide whether
+    // a too-short horizon may be automatically extended by one main term.
+    // A student-stated HARD target is never silently extended (PLAN-13).
+    const graduationTermWasDerived =
+        graduationTermOverride == null && toSolverShape(session.graduationTarget) == null;
+
     // ---- 6. Build unmet requirements from DPR ----
 
     const kindByRId = classifyRequirementKind({
@@ -313,6 +320,7 @@ export function buildSolverInputWithRules(
         ...(coreqs.size > 0 ? { coreqs } : {}),
         preferences: effectivePreferences,
         warnings,
+        graduationTermWasDerived,
     };
 
     return {

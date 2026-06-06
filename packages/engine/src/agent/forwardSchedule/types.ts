@@ -172,6 +172,16 @@ export interface SolverInput {
      * then ForwardSchedule.warnings so the agent-facing schedule shows them.
      */
     warnings: string[];
+
+    // ---- T2b — derived-horizon flag (for add-a-term relax) ----
+    /**
+     * True when the `graduationTerm` was derived from credits (no student-stated
+     * target and no explicit override). Used by `buildForwardSchedule` (build.ts)
+     * to decide whether a too-short horizon may be automatically extended by one
+     * main term. Undefined is treated as false (the safe default), so existing
+     * test factories that do not set this field remain unaffected.
+     */
+    graduationTermWasDerived?: boolean;
 }
 
 // ---------------------------------------------------------------------------
