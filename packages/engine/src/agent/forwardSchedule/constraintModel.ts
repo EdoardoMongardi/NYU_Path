@@ -33,6 +33,7 @@ import {
     checkAllPrereqs,
     isExcludedByNotClause,
     isStudyAbroadCourse,
+    parseCourseComponents,
     isOptionalTerm,
 } from "./solverHelpers.js";
 import { visaValidator } from "../../dpr/visaValidator.js";
@@ -118,20 +119,6 @@ export interface RequirementVariable {
     domain: Array<{ courseId: string; term: string }>; // legal by offering-season + catalog
 }
 
-/** Parse a course id into its department prefix + catalog number.
- *  "CORE-UA 412" → { dept: "CORE-UA", num: 412 }; "MATH-UA 9 101" → { dept: "MATH-UA 9", num: 101 }.
- *  Uses the same trailing-number regex as isStudyAbroadCourse / workloadTier's parseCourseNumber.
- *  Returns null when no numeric suffix is present. */
-function parseCourseId(courseId: string): { dept: string; num: number } | null {
-    const m = courseId.match(/[- ](\d+)[A-Za-z]*\s*$/);
-    if (!m) return null;
-    const num = parseInt(m[1]!, 10);
-    if (isNaN(num)) return null;
-    // dept = everything before the matched number token (trimmed of the separator).
-    const dept = courseId.slice(0, m.index! + 1).trimEnd();
-    return { dept, num };
-}
-
 /**
  * Expand a "choose-N from a pool" requirement to its REAL catalog members (T4a).
  *
@@ -159,7 +146,7 @@ export function poolMembersFor(
     const members = new Set<string>();
     // Range members: catalog ids matching dept + [levelMin, levelMax].
     for (const cid of input.courseCatalog.keys()) {
-        const parsed = parseCourseId(cid);
+        const parsed = parseCourseComponents(cid);
         if (parsed === null) continue;
         if (parsed.dept !== pool.dept) continue;
         if (parsed.num < pool.levelMin || parsed.num > pool.levelMax) continue;
