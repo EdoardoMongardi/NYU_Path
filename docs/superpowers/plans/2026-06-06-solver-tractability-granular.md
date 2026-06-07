@@ -807,6 +807,13 @@ git commit -m "fix(planner): range parsing emits a pool descriptor, never a phan
 
 Represent choose-N pools as sound placeholders, not enumerated members. **T4a** = pool variable + search domain-legality; **T4b** = materialize the pool placeholder + bind-time. Depends on T5 (pool descriptor) + T1.
 
+> **OWNER DECISION (2026-06-07): Option B — resolvable pool placeholder (plan-faithful).** The validator (post-PLAN-4) counts only BOUND `specific_planned` slots for axis-1 coverage, so an unbound pool placeholder is reported infeasible today. Chosen design:
+> 1. **Expand** each `req.pool {dept, levelMin, levelMax}` (from T5) to its REAL catalog members (courses in `courseCatalog` matching dept + number ∈ range) → these become `poolBinding.candidates`. No invention; if the catalog lacks members, fall back to the existing unbound-placeholder behavior (no regression).
+> 2. **Search** places a single HEAVY (weight 1.0) synthetic `POOL-<rId>` placement, legal in term T **iff ≥1 real member is offered in T AND prereq/coreq-satisfiable by T** given the rest of the plan (sound legality — no false reservation). One pool unit, not N branches.
+> 3. **Materialize** it as a `ScheduleSlotPlaceholder` carrying `poolBinding {poolId, candidates: members, satisfiesRule: rId}` + heavy weight + members as `alternativeCourses`; binding stays deferred (the existing `bindPoolSlot`/`promotePoolSlotToConcrete` re-validates a student's pick).
+> 4. **Validator axis-1 refinement (the sensitive change):** count a RESOLVABLE pool placeholder (one with a `poolBinding` whose candidates axis 2 confirms resolvable) as satisfying its rId. This is a NARROWED re-allow of the PLAN-4 Bug-B fix — only resolvable POOL placeholders count, NOT empty/unknown placeholders — so it does not reintroduce the bug. Axis 2 (`poolSlotsResolvable`) still gates resolvability + non-over-saturation.
+> 5. **Chain-linked members:** if any pool member is a PREREQ-PROVIDER of another unmet requirement's course (appears in `input.prereqs`/`dependentsIndex`), do NOT pool that requirement — ENUMERATE its members as a normal specific multi-candidate variable so the concrete prereq-provider gets placed (feasibility-first keeps this tractable). Pool only TERMINAL requirements (the common CORE-distribution / major-elective case).
+
 ---
 
 ## Task T4a — Pool placeholder variable + sound domain legality
