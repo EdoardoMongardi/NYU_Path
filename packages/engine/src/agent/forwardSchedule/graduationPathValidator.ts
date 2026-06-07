@@ -281,9 +281,27 @@ function checkThresholdsMet(
         // Approximate: count all planned credits as contributing to residency
         // (conservative — the real check needs school-suffix filtering)
         const plannedResidency = plan.semesters.reduce((sum, sem) => {
-            // Count all specific_planned and in_progress slots as residency
+            // Count all specific_planned and in_progress slots as residency.
+            //
+            // T4b/I1 — NARROWED re-allow (mirrors axis-1): a RESOLVABLE pool
+            // placeholder (kind:"placeholder" + poolBinding present + candidates
+            // non-empty) also counts toward residency. Axis 2 (checkPoolSlotsResolvable)
+            // separately guarantees the placeholder has ≥1 un-consumed candidate and is
+            // not over-saturated, so when bound it WILL contribute the credits (never
+            // false-valid). This keeps the post-hoc validator consistent with the
+            // search-side checkResidencyFloor (constraintModel.ts), which counts
+            // source∈{requirement,pin,ip} — including the POOL-<rId> placement.
+            // An EMPTY/generic placeholder (no poolBinding, or candidates.length === 0)
+            // is still excluded: the PLAN-4 narrowing holds.
             return sum + sem.slots.reduce((s2, slot) => {
                 if (slot.kind === "specific_planned" || slot.kind === "in_progress") {
+                    return s2 + slot.credits;
+                }
+                if (
+                    slot.kind === "placeholder" &&
+                    slot.poolBinding &&
+                    slot.poolBinding.candidates.length > 0
+                ) {
                     return s2 + slot.credits;
                 }
                 return s2;
@@ -305,11 +323,29 @@ function checkThresholdsMet(
     // a placeholder represents a course yet to be chosen, so counting its credits
     // would allow an unfilled plan to falsely meet the major-credit minimum.
     // This mirrors the same fix applied to Axis 1 (requirementGroupsSatisfied).
+    //
+    // T4b/I1 — NARROWED re-allow (mirrors axis-1): a RESOLVABLE pool placeholder
+    // (kind:"placeholder" + poolBinding present + candidates non-empty) whose
+    // workloadTier is "major-required" or "major-elective" also counts. Axis 2
+    // (checkPoolSlotsResolvable) separately guarantees resolvability + non-over-
+    // saturation, so the bound member WILL contribute major credits (never false-valid).
+    // This keeps the post-hoc validator consistent with the search-side
+    // checkMajorCreditFloor (constraintModel.ts), which counts the POOL-<rId>
+    // placement (source "requirement") toward the floor. An EMPTY/generic placeholder
+    // (no poolBinding, or candidates.length === 0) is still excluded: PLAN-4 holds.
     if (majorMin !== null) {
         const plannedMajor = plan.semesters.reduce((sum, sem) => {
             return sum + sem.slots.reduce((s2, slot) => {
                 if (
                     slot.kind === "specific_planned" &&
+                    (slot.workloadTier === "major-required" || slot.workloadTier === "major-elective")
+                ) {
+                    return s2 + slot.credits;
+                }
+                if (
+                    slot.kind === "placeholder" &&
+                    slot.poolBinding &&
+                    slot.poolBinding.candidates.length > 0 &&
                     (slot.workloadTier === "major-required" || slot.workloadTier === "major-elective")
                 ) {
                     return s2 + slot.credits;
