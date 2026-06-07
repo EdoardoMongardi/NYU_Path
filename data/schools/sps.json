@@ -21,6 +21,13 @@
     "suffix": "-UC",
     "majorMinorResidencyPercent": 50
   },
+  "doubleCounting": {
+    "cap": { "majorToMajor": 2, "majorToMinor": 2, "minorToMinor": 2 },
+    "noTripleCounting": true,
+    "requiresApproval": true,
+    "note": "Up to two courses may be shared between two majors, a major and a minor, or two minors, only if the academic departments consider it appropriate; some departments are stricter. No course may be triple-counted.",
+    "sourceRef": "data/bulletin-raw/undergraduate/professional-studies/academic-policies/_index.md:611"
+  },
   "creditCaps": [
     {
       "type": "advanced_standing",

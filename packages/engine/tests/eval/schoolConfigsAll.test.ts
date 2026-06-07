@@ -49,13 +49,31 @@ describe("all school configs (Step 8c PR-B)", () => {
         // Pass/Fail policy *unit* varies (Stern counts courses, not credits).
         expect(get("stern").passFail?.careerLimitType).toBe("courses");
         expect(get("steinhardt").passFail?.careerLimitType).toBe("percent_of_program");
+        // doubleCounting — re-introduced 2026-06-07, cited per school.
+        // CAS + SPS use the CAP model; NYUAD uses the FLOOR model; Shanghai is HYBRID.
+        const cas = get("cas").doubleCounting;
+        expect(cas?.cap?.majorToMinor).toBe(2);
+        expect(cas?.noTripleCounting).toBe(true);
+        const sps = get("sps").doubleCounting;
+        expect(sps?.cap?.majorToMajor).toBe(2);
+        // Provenance proves SPS is bulletin-sourced, not a CAS copy.
+        expect(sps?.sourceRef).toContain("professional-studies");
+        const nyuad = get("nyuad").doubleCounting;
+        expect(nyuad?.floor?.minDistinctCreditsPerMajor).toBe(30);
+        expect(nyuad?.cap).toBeUndefined(); // floor-only — structurally NOT CAS
+        const shanghai = get("shanghai").doubleCounting;
+        expect(shanghai?.cap?.majorToMajor).toBe(2);
+        expect(shanghai?.floor?.minUniqueCreditsPerMinor).toBe(12); // hybrid
+        // The 7 schools with no clear bulletin rule carry NO config (no invention).
+        for (const s of ["stern", "tandon", "tisch", "steinhardt", "gallatin", "liberal_studies", "nursing"]) {
+            expect(get(s).doubleCounting, `${s} must have no authored doubleCounting`).toBeUndefined();
+        }
         // Dropped fields (Step 8c/8e) must NOT reappear on any config.
         for (const s of SCHOOLS) {
             const c = get(s) as Record<string, unknown>;
             expect(c.totalCreditsRequired).toBeUndefined();
             expect(c.timeLimitYears).toBeUndefined();
             expect(c.overallGpaMin).toBeUndefined();
-            expect(c.doubleCounting).toBeUndefined();
             expect(c.gradeThresholds).toBeUndefined();
             // Replaced by completionRatePolicy (per-school) in the standing fix.
             expect(c.goodStandingReturnThreshold).toBeUndefined();

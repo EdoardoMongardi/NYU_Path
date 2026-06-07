@@ -22,6 +22,13 @@
     "finalCreditsInResidence": 32,
     "majorMinorResidencyPercent": 50
   },
+  "doubleCounting": {
+    "cap": { "majorToMajor": 2, "majorToMinor": 2, "minorToMinor": 2 },
+    "noTripleCounting": true,
+    "requiresApproval": true,
+    "note": "Up to two courses may be shared between two majors, a major and a minor, or two minors, with both DUSs' written approval; some departments set a stricter limit (one shared course, or none). No course may be triple-counted.",
+    "sourceRef": "data/bulletin-raw/undergraduate/arts-science/academic-policies/_index.md:126"
+  },
   "creditCaps": [
     {
       "type": "online",
