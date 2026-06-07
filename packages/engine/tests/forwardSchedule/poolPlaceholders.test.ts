@@ -24,8 +24,15 @@ import {
     checkRequirementCoverage,
 } from "../../src/agent/forwardSchedule/constraintModel.js";
 import { findFirstValidPlan } from "../../src/agent/forwardSchedule/search.js";
-import type { SolverInput } from "../../src/agent/forwardSchedule/types.js";
+import { materializePlan } from "../../src/agent/forwardSchedule/materializePlan.js";
+import {
+    runGraduationPathValidator,
+    type GraduationPathValidatorArgs,
+} from "../../src/agent/forwardSchedule/graduationPathValidator.js";
+import { finalizeForwardSchedule } from "../../src/agent/forwardSchedule/build.js";
+import type { SolverInput, SolverOutput } from "../../src/agent/forwardSchedule/types.js";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
+import type { ForwardSchedule } from "@nyupath/shared";
 
 // ---------------------------------------------------------------------------
 // Shared minimal DPR + SolverInput factories (copied from search.test.ts)
@@ -106,6 +113,111 @@ function makeInput(overrides: Partial<SolverInput> = {}): SolverInput {
         warnings: [],
         ...overrides,
     };
+}
+
+/**
+ * Wrap a SolverOutput into a ForwardSchedule for the validator — mirrors
+ * build.ts's `initialSchedule` construction (copied from materializePlan.test.ts).
+ */
+function toForwardSchedule(input: SolverInput, out: SolverOutput): ForwardSchedule {
+    const plannedCredits = out.semesters.reduce((s, sem) => s + sem.plannedCredits, 0);
+    const degreeCreditsMet = input.creditsEarned + plannedCredits >= input.graduationCreditMinimum;
+    return {
+        studentId: input.studentId,
+        homeSchoolId: input.homeSchoolId,
+        graduationTerm: input.graduationTerm,
+        creditTargetPerSemester: input.creditTargetPerSemester,
+        f1Floor: input.f1Floor,
+        domesticPartTimeFloor: input.domesticPartTimeFloor,
+        graduationCreditMinimum: input.graduationCreditMinimum,
+        degreeCreditsMet,
+        semesters: out.semesters,
+        dprCourseHistoryHash: input.dprCourseHistoryHash,
+        computedAt: 0,
+        feasibility: out.feasibility,
+        state: out.state,
+        balanceScore: out.balanceScore,
+        assumptions: out.assumptions,
+        ...(out.alternativeCandidates ? { alternativeCandidates: out.alternativeCandidates } : {}),
+    };
+}
+
+/** Build the validator args from a SolverInput + ForwardSchedule (mirrors build.ts). */
+function makeValidatorArgs(input: SolverInput, plan: ForwardSchedule): GraduationPathValidatorArgs {
+    return {
+        plan,
+        dpr: input.dpr,
+        programRules: {
+            degreeCreditMinimum: input.graduationCreditMinimum,
+            residencyMinCredits: input.programRules.residencyMinCredits,
+            majorCreditMinimum: input.programRules.majorCreditMinimum,
+            minorCreditMinimum: null,
+            upperLevelMinCredits: input.programRules.upperLevelMinCredits,
+            schoolCoreMinCredits: null,
+            graduationTargetTerm: input.graduationTerm,
+        },
+    };
+}
+
+/** A 16-member CSCI-UA 4xx pool input (offered fall+spring), with a matching
+ *  DPR `not_satisfied` leaf for the pool requirement so the authoritative
+ *  validator axis 1 actually sees the gap. Used by the materialize + validator
+ *  + end-to-end pool tests below. */
+function poolInputWithDprLeaf(overrides: Partial<SolverInput> = {}): SolverInput {
+    const catalog = new Map<string, { title: string; credits: number }>();
+    const offerings = new Map<string, Array<"fall" | "spring" | "summer" | "january">>();
+    for (let n = 421; n <= 436; n++) {
+        const id = `CSCI-UA ${n}`;
+        catalog.set(id, { title: id, credits: 4 });
+        offerings.set(id, ["fall", "spring"]);
+    }
+    const dpr = makeMinimalDpr({
+        requirementGroups: [
+            {
+                rgId: "RGCS",
+                title: "CS Electives",
+                status: "overall_not_satisfied",
+                statusText: "Overall Requirement Not Satisfied: CS Electives",
+                children: [
+                    {
+                        rId: "r1",
+                        title: "CS Elective",
+                        status: "not_satisfied",
+                        statusText: "Not Satisfied: CS Elective",
+                        coursesUsed: [],
+                    },
+                ],
+            },
+        ],
+    });
+    return makeInput({
+        currentTerm: "2026-fall",
+        graduationTerm: "2027-spring",
+        creditsEarned: 120,
+        graduationCreditMinimum: 128,
+        dpr,
+        unmetRequirements: [
+            {
+                rId: "r1",
+                title: "CS Elective",
+                category: "major_elective",
+                credits: 4,
+                candidateCourses: [],
+                pool: { dept: "CSCI-UA", levelMin: 400, levelMax: 499 },
+            },
+        ],
+        courseCatalog: catalog,
+        offerings,
+        programRules: {
+            majorRuleKinds: new Map([["r1", "choose_n"]]),
+            schoolCoreRuleIds: new Set(),
+            generalCategoryRuleIds: new Set(),
+            residencyMinCredits: null,
+            majorCreditMinimum: null,
+            upperLevelMinCredits: null,
+        },
+        ...overrides,
+    });
 }
 
 // ===========================================================================
@@ -555,5 +667,173 @@ describe("pool placeholder — legality counts in-progress prereqs", () => {
         expect(res.plan).not.toBeNull();
         const poolPlacement = res.plan!.placed.find(p => p.satisfiesRId === "r1")!;
         expect(poolPlacement.courseId).toBe("POOL-r1");
+    });
+});
+
+// ===========================================================================
+// 8. T4b — Materialize a POOL placement as a resolvable pool PLACEHOLDER slot.
+// ===========================================================================
+
+describe("pool placeholder — materialize renders a resolvable pool placeholder (T4b)", () => {
+    it("a POOL placement materializes as a heavy pool PLACEHOLDER slot carrying poolBinding members (not a phantom specific course)", () => {
+        const input = poolInputWithDprLeaf();
+        const ctx = buildConstraintContext(input);
+        const res = findFirstValidPlan(ctx);
+        expect(res.plan).not.toBeNull();
+
+        // The members the pool expands to (real catalog ids).
+        const members: string[] = [];
+        for (let n = 421; n <= 436; n++) members.push(`CSCI-UA ${n}`);
+
+        const out = materializePlan(res.plan!, ctx);
+        const allSlots = out.semesters.flatMap(s => s.slots);
+
+        // NO specific_planned slot with the synthetic POOL- courseId (the bug T4b fixes).
+        const phantom = allSlots.find(
+            s => s.kind === "specific_planned" && s.courseId.startsWith("POOL-"),
+        );
+        expect(phantom).toBeUndefined();
+
+        // The pool requirement is rendered as a placeholder carrying a resolvable poolBinding.
+        const poolSlot = allSlots.find(
+            s =>
+                s.kind === "placeholder" &&
+                s.satisfiesRules.includes("r1") &&
+                s.poolBinding !== undefined,
+        );
+        expect(poolSlot).toBeDefined();
+        if (poolSlot && poolSlot.kind === "placeholder") {
+            expect(poolSlot.satisfiesRules).toEqual(["r1"]);
+            // poolBinding.candidates = the real members (non-empty, resolvable).
+            expect(poolSlot.poolBinding).toBeDefined();
+            expect(poolSlot.poolBinding!.poolId).toBe("POOL-r1");
+            expect(poolSlot.poolBinding!.satisfiesRule).toBe("r1");
+            expect(new Set(poolSlot.poolBinding!.candidates)).toEqual(new Set(members));
+            expect(poolSlot.poolBinding!.candidates.length).toBeGreaterThan(0);
+            // HEAVY weight (≥1.0) — a major-elective pool, not a 0.3 free placeholder.
+            expect(poolSlot.workloadWeight).toBeGreaterThanOrEqual(1.0);
+            // flexibility.alternativeCourses lists the real members too.
+            expect(new Set(poolSlot.flexibility.alternativeCourses)).toEqual(new Set(members));
+            expect(poolSlot.placeholderId).toBe("POOL-r1");
+        }
+
+        // The placeholder pass did NOT also emit a generic REQ-r1 placeholder for the
+        // covered pool requirement (no double-emit).
+        const genericReqPlaceholder = allSlots.find(
+            s => s.kind === "placeholder" && s.placeholderId === "REQ-r1",
+        );
+        expect(genericReqPlaceholder).toBeUndefined();
+    });
+});
+
+// ===========================================================================
+// 9. T4b — Validator axis 1 counts a RESOLVABLE pool placeholder as satisfying.
+// ===========================================================================
+
+describe("pool placeholder — validator axis-1 narrowed re-allow (T4b)", () => {
+    it("the post-hoc validator counts a resolvable pool placeholder as satisfying its requirement (axis 1)", () => {
+        const input = poolInputWithDprLeaf();
+        const ctx = buildConstraintContext(input);
+        const res = findFirstValidPlan(ctx);
+        expect(res.plan).not.toBeNull();
+
+        const out = materializePlan(res.plan!, ctx);
+        const fs = toForwardSchedule(input, out);
+        const validator = runGraduationPathValidator(makeValidatorArgs(input, fs));
+
+        // r1 (the pool requirement, a not_satisfied DPR leaf) is covered ONLY by a
+        // resolvable pool placeholder. Axis 1 must NOT fail (pass or assumed-pass).
+        expect(validator.axisResults.requirementGroupsSatisfied.status).not.toBe("fail");
+        expect(validator.feasible).toBe(true);
+    });
+
+    it("an EMPTY/non-pool placeholder still does NOT satisfy axis 1 (the PLAN-4 narrowing holds)", () => {
+        // rGap's only candidate is off-catalog → buildRequirementVariables yields an
+        // empty-candidate variable → the search cannot place it → materializePlan emits
+        // a GENERIC placeholder (no poolBinding). That placeholder must NOT satisfy axis 1.
+        const dpr = makeMinimalDpr({
+            requirementGroups: [
+                {
+                    rgId: "RGGAP",
+                    title: "Gap Group",
+                    status: "overall_not_satisfied",
+                    statusText: "Overall Requirement Not Satisfied: Gap Group",
+                    children: [
+                        {
+                            rId: "rGap",
+                            title: "Unmappable Requirement",
+                            status: "not_satisfied",
+                            statusText: "Not Satisfied: Unmappable Requirement",
+                            coursesUsed: [],
+                        },
+                    ],
+                },
+            ],
+        });
+        const input = makeInput({
+            currentTerm: "2026-fall",
+            graduationTerm: "2027-spring",
+            creditsEarned: 120,
+            graduationCreditMinimum: 128,
+            dpr,
+            unmetRequirements: [
+                {
+                    rId: "rGap",
+                    title: "Unmappable Requirement",
+                    category: "cas_core",
+                    credits: 4,
+                    candidateCourses: ["MISSING-UA 99"], // off-catalog → empty candidates
+                },
+            ],
+            courseCatalog: new Map(), // no catalog members, no pool descriptor
+            offerings: new Map(),
+        });
+        const ctx = buildConstraintContext(input);
+        const out = materializePlan(findFirstValidPlan(ctx).plan!, ctx);
+
+        // The emitted placeholder for rGap carries NO poolBinding.
+        const gapPlaceholder = out.semesters
+            .flatMap(s => s.slots)
+            .find(s => s.kind === "placeholder" && s.satisfiesRules.includes("rGap"));
+        expect(gapPlaceholder).toBeDefined();
+        if (gapPlaceholder && gapPlaceholder.kind === "placeholder") {
+            expect(gapPlaceholder.poolBinding).toBeUndefined();
+        }
+
+        const fs = toForwardSchedule(input, out);
+        const validator = runGraduationPathValidator(makeValidatorArgs(input, fs));
+        expect(validator.axisResults.requirementGroupsSatisfied.status).toBe("fail");
+        expect(validator.feasible).toBe(false);
+    });
+});
+
+// ===========================================================================
+// 10. T4b — End-to-end: a pool requirement yields a VALID plan (Option B proof).
+// ===========================================================================
+
+describe("pool placeholder — end-to-end VALID plan (T4b/Option B)", () => {
+    it("a CAS student with a pool requirement gets a VALID plan (state not infeasible-draft)", () => {
+        const input = poolInputWithDprLeaf();
+        const ctx = buildConstraintContext(input);
+        const res = findFirstValidPlan(ctx);
+        expect(res.plan).not.toBeNull();
+
+        const out = materializePlan(res.plan!, ctx);
+        // Derive the AUTHORITATIVE state via the validator (finalizeForwardSchedule
+        // runs runGraduationPathValidator + derivePlanStateFromValidator).
+        const validatorRules: GraduationPathValidatorArgs["programRules"] = {
+            degreeCreditMinimum: input.graduationCreditMinimum,
+            residencyMinCredits: input.programRules.residencyMinCredits,
+            majorCreditMinimum: input.programRules.majorCreditMinimum,
+            minorCreditMinimum: null,
+            upperLevelMinCredits: input.programRules.upperLevelMinCredits,
+            schoolCoreMinCredits: null,
+            graduationTargetTerm: input.graduationTerm,
+        };
+        const finalized = finalizeForwardSchedule(out, input, input.dpr, validatorRules);
+
+        // The resolvable pool placeholder satisfies coverage → a valid plan state.
+        expect(finalized.validatorResult.feasible).toBe(true);
+        expect(finalized.schedule.state).toMatch(/^valid/);
     });
 });
