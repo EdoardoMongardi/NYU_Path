@@ -127,8 +127,28 @@ function checkRequirementGroupsSatisfied(
                     planSatisfiers.get(rId)!.add(slot.courseId);
                 }
             }
-            // placeholder slots (bindingState: "placeholder-pending" | "placeholder-deferred")
-            // are intentionally excluded — they are unbound and do not satisfy requirements.
+            // NARROWED re-allow of the PLAN-4 Bug-B fix (T4b/Option B): a RESOLVABLE
+            // pool placeholder — a kind:"placeholder" slot carrying a `poolBinding`
+            // whose `candidates` are non-empty — IS a genuine "choose one of these
+            // REAL courses" satisfier and counts toward its requirement. Axis 2
+            // (checkPoolSlotsResolvable) separately validates that each such slot has
+            // ≥1 un-consumed candidate and is not over-saturated. The `poolBinding.poolId`
+            // (a "POOL-..." sentinel, never a real course id) is used as the satisfier
+            // marker so the IP-assumption check below cannot mistake it for an IP course.
+            //
+            // An EMPTY/unknown placeholder (no poolBinding, or candidates.length === 0)
+            // is still NOT a satisfier — the PLAN-4 narrowing holds: a yet-to-be-chosen
+            // course with no resolvable candidates does not satisfy a requirement.
+            if (
+                slot.kind === "placeholder" &&
+                slot.poolBinding &&
+                slot.poolBinding.candidates.length > 0
+            ) {
+                for (const rId of slot.satisfiesRules) {
+                    if (!planSatisfiers.has(rId)) planSatisfiers.set(rId, new Set());
+                    planSatisfiers.get(rId)!.add(slot.poolBinding.poolId);
+                }
+            }
         }
     }
 

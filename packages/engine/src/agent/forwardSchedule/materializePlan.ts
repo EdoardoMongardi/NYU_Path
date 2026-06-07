@@ -48,6 +48,7 @@ import {
     checkNotClauseClear,
     checkCoreqsSameTerm,
     checkPerTermCeiling,
+    poolMembersFor,
 } from "./constraintModel.js";
 import { visaValidator } from "../../dpr/visaValidator.js";
 import { visaNotesForCredits } from "./visaPolicy.js";
@@ -468,6 +469,58 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
             placedCourseSet.add(p.courseId);
             placementRationale[p.courseId] = pinnedSlot.reason;
             continue;
+        }
+
+        // ---- Pool placeholder slot (T4b/Option B) ----
+        // A synthetic `POOL-<rId>` placement (T4a) is NOT a real course — rendering
+        // it as a specific_planned with courseId "POOL-r1" would surface a phantom id.
+        // Instead emit a RESOLVABLE pool placeholder: a kind:"placeholder" slot whose
+        // `poolBinding.candidates` are the REAL catalog members of the pool, so the
+        // existing bindPoolSlot tool can promote a chosen member to a concrete slot,
+        // and the narrowed validator axis-1 re-allow credits it as a "choose one of
+        // these real courses" satisfier (axis 2 separately validates resolvability).
+        if (p.courseId.startsWith("POOL-")) {
+            const poolReq = p.satisfiesRId != null ? reqByRId.get(p.satisfiesRId) : undefined;
+            const members = poolReq !== undefined ? poolMembersFor(poolReq, ctx) : [];
+            const poolSlot: ScheduleSlotPlaceholder = {
+                kind: "placeholder",
+                category: poolReq?.title ?? "Elective pool",
+                credits: p.credits,
+                satisfiesRules: p.satisfiesRId != null ? [p.satisfiesRId] : [],
+                optional: false,
+                reason: `Choose one course from the ${poolReq?.title ?? "elective"} pool (placed in ${p.term}; bind a specific course to confirm).`,
+                rationale: {
+                    satisfiesRequirements: p.satisfiesRId != null ? [p.satisfiesRId] : [],
+                    termConstraints: [
+                        { kind: "offering", detail: `A pool member is offered in ${p.term}.` },
+                    ],
+                    consideredAlternatives: [],
+                    decisionsApplied: ["D28-PoolLateBinding"],
+                },
+                flexibility: {
+                    earliestPossibleTerm: p.term,
+                    latestPossibleTerm: lastTerm,
+                    alternativeCourses: members,
+                },
+                downstreamImpact: { courseIds: [], graduationDelay: 0 },
+                workloadTier: p.workloadTier, // HEAVY (from T4a's representative-member classification)
+                workloadWeight: p.workloadWeight, // HEAVY (≥1.0)
+                bindingState: p.term === futureTerms[0] ? "placeholder-pending" : "placeholder-deferred",
+                placeholderId: `POOL-${p.satisfiesRId}`,
+                confidence: "historically_partial",
+                isCriticalPath: false,
+                poolBinding: {
+                    poolId: `POOL-${p.satisfiesRId}`,
+                    candidates: members,
+                    satisfiesRule: p.satisfiesRId ?? "",
+                },
+            };
+            perTermSlots.get(p.term)!.push(poolSlot);
+            perTermCredits.set(p.term, (perTermCredits.get(p.term) ?? 0) + p.credits);
+            // NOTE: do NOT add POOL-<rId> to placedCourseSet (it's not a real course);
+            // the pool credits ARE counted above.
+            placementRationale[p.courseId] = poolSlot.reason;
+            continue; // skip the normal specific_planned build
         }
 
         // ---- Requirement slot (mirror solver.ts requirement branch) ----
