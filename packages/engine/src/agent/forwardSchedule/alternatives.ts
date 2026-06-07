@@ -27,7 +27,9 @@
 import { solveForwardSchedule } from "./solver.js";
 import { nextMainTermOrNull } from "./solverHelpers.js";
 import type { SolverInput, SolverOutput } from "./types.js";
-import type { AlternativeCandidate, ForwardSchedule } from "@nyupath/shared";
+import type { AlternativeCandidate } from "@nyupath/shared";
+import { finalizeForwardSchedule } from "./build.js";
+import type { ValidatorRules } from "./build.js";
 
 // ---------------------------------------------------------------------------
 // Public export
@@ -107,56 +109,44 @@ export function simulateAlternatives(input: SolverInput): AlternativeCandidate[]
 }
 
 // ---------------------------------------------------------------------------
-// Private helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Build a `ForwardSchedule` from a feasible `SolverOutput` + the input
- * that produced it. Mirrors the construction in `build.ts` without
- * invoking the full graduation-path-validator pass (Decision #32 routing
- * is `planForwardDegreeTool`'s responsibility; here we trust the solver's
- * coarse state derivation, which is sufficient for alternative-candidate
- * display).
+ * Reconstruct the `ValidatorRules` shape from a `SolverInput`.
+ *
+ * Mirrors what `buildProgramRules` produces in `buildSolverInput.ts`:
+ *   - `minorCreditMinimum` and `schoolCoreMinCredits` are always null there.
+ *   - `upperLevelMinCredits` is always null (no DPR counter reliably captures it).
+ *   - All other fields come straight from the SolverInput fields that
+ *     `buildProgramRules` populated them from.
+ *
+ * Exported for use in tests.
  */
-function buildScheduleFromOutput(
-    out: SolverOutput,
-    input: SolverInput,
-): ForwardSchedule {
-    const plannedCredits = out.semesters.reduce((sum, s) => sum + s.plannedCredits, 0);
-    const degreeCreditsMet =
-        input.creditsEarned + plannedCredits >= input.graduationCreditMinimum;
-
+export function validatorRulesFromInput(input: SolverInput): ValidatorRules {
     return {
-        studentId: input.studentId,
-        homeSchoolId: input.homeSchoolId,
-        graduationTerm: input.graduationTerm,
-        creditTargetPerSemester: input.creditTargetPerSemester,
-        f1Floor: input.f1Floor,
-        domesticPartTimeFloor: input.domesticPartTimeFloor,
-        graduationCreditMinimum: input.graduationCreditMinimum,
-        degreeCreditsMet,
-        semesters: out.semesters,
-        dprCourseHistoryHash: input.dprCourseHistoryHash,
-        computedAt: Date.now(),
-        feasibility: out.feasibility,
-        state: out.state,
-        balanceScore: out.balanceScore,
-        assumptions: out.assumptions,
-        ...(out.alternativeCandidates !== undefined
-            ? { alternativeCandidates: out.alternativeCandidates }
-            : {}),
-        // T7 — thread the structured optimality signal onto the alternative schedule.
-        // Omitted when undefined (back-compat: consumers treat absent as "optimal").
-        ...(out.optimality !== undefined ? { optimality: out.optimality } : {}),
+        degreeCreditMinimum: input.graduationCreditMinimum,
+        residencyMinCredits: input.programRules.residencyMinCredits,
+        majorCreditMinimum: input.programRules.majorCreditMinimum,
+        minorCreditMinimum: null,
+        upperLevelMinCredits: null,
+        schoolCoreMinCredits: null,
+        graduationTargetTerm: input.graduationTerm,
     };
 }
 
 /**
  * Construct a single `AlternativeCandidate` from a solver run.
  *
- * When `out.feasibility.feasible` is true, the `schedule` field is
- * populated via `buildScheduleFromOutput`. When infeasible, `schedule`
- * is null and `stillInfeasibleReason` carries the REAL binding constraints:
+ * When the solver reports coarse-feasible, we run `finalizeForwardSchedule`
+ * which assembles the `ForwardSchedule` AND runs `runGraduationPathValidator`
+ * to derive the AUTHORITATIVE `state`. We then gate on the VALIDATOR's
+ * `feasible` verdict — a coarse-feasible-but-validator-infeasible alternative
+ * becomes a `stillInfeasibleReason` entry, not a falsely-valid schedule (T8/M3).
+ *
+ * When `out.feasibility.feasible` is false (solver already knows it's
+ * infeasible), we skip finalization and emit the reason directly.
+ * `stillInfeasibleReason` carries the REAL binding constraints:
  * post-P2.9, `out.feasibility.constraintViolations` holds the SPECIFIC
  * per-requirement blockers (offering / ceiling / coreq / NOT / prereq-depth)
  * plus the capacity diagnostic, so we join those concrete details rather than
@@ -172,15 +162,22 @@ function buildCandidate(
     fallbackReason: string,
 ): AlternativeCandidate {
     if (out.feasibility.feasible) {
-        return {
-            summary,
-            relaxation,
-            schedule: buildScheduleFromOutput(out, input),
-        };
+        // Route through the validator to get the AUTHORITATIVE state (T8/M3).
+        const { schedule, validatorResult } = finalizeForwardSchedule(
+            out,
+            input,
+            input.dpr,
+            validatorRulesFromInput(input),
+        );
+        if (validatorResult.feasible) {
+            return { summary, relaxation, schedule };
+        }
+        // Coarse-feasible but validator-infeasible — surface as a stillInfeasibleReason.
+        const reason =
+            validatorResult.infeasibilityReport?.conflictDetail ?? fallbackReason;
+        return { summary, relaxation, schedule: null, stillInfeasibleReason: reason };
     }
-    // Compose the real reason from the concrete constraint violations (the actual
-    // binding constraints), falling back to the solver's count string, then the
-    // strategy's fallback. This is what the relaxation could NOT overcome.
+    // Solver already knows it's infeasible — compose from concrete constraint violations.
     const details = out.feasibility.constraintViolations.map(v => v.detail).filter(d => d.length > 0);
     const stillInfeasibleReason =
         details.length > 0
