@@ -61,6 +61,7 @@ import {
     checkRequirementCoverage,
     checkMajorCreditFloor,
     checkResidencyFloor,
+    poolTermLegal,
     type ConstraintContext,
     type PartialPlan,
     type PlacedCourse,
@@ -89,6 +90,15 @@ export interface SearchOptions {
     fixed?: PlacedCourse[];
     /** Node budget for guaranteed termination. Default 200_000. */
     maxNodes?: number;
+    /** Soft per-term credit target for value ordering — values keeping a term's running
+     *  credits ≤ this are PREFERRED, before the scorePlan tie-break; placements above it
+     *  (up to creditCeiling) remain reachable. Set only by findFirstValidPlan; absent for
+     *  searchBestPlan/searchTopKPlans so their visit order is unchanged. */
+    softCreditTarget?: number;
+    /** Requirement-signatures (sorted `rId=courseId@term`) to REJECT at the leaf — used
+     *  by findDiverseValidPlans to skip already-found plans so the search yields the NEXT
+     *  distinct valid leaf. Absent ⇒ no leaf is rejected. */
+    forbiddenSignatures?: Set<string>;
 }
 
 export interface SearchResult {
@@ -184,11 +194,47 @@ function buildValue(v: RequirementVariable, courseId: string, term: string, ctx:
     };
 }
 
-/** All (courseId, term) values for a variable that are legal by offering season.
- *  Empty/absent offerings ⇒ any season. (Same legality rule as the domain pre-built
- *  in buildRequirementVariables, recomputed here to keep search self-contained.) */
+/** Build a synthetic `POOL-<rId>` placement value for a pool variable in `term` (T4a).
+ *  Credits = the requirement's credits. The workload tier/weight is classified using a
+ *  REPRESENTATIVE real member (poolMembers[0]) — NOT the synthetic POOL id, which would
+ *  classify as free/light (no number, no rule-bearing id) and understate the load. The
+ *  member + satisfiesRules:[rId] yield the real pool tier (e.g. major-elective ⇒ ≥1.0). */
+function buildPoolValue(v: RequirementVariable, term: string, ctx: ConstraintContext): PlacedCourse {
+    const representative = v.poolMembers[0]!; // pool variables always have ≥1 member
+    const wt = classifyWorkloadTier({
+        courseId: representative,
+        satisfiesRules: [v.rId],
+        majorRuleKinds: ctx.input.programRules.majorRuleKinds,
+        schoolCoreRuleIds: ctx.input.programRules.schoolCoreRuleIds,
+        generalCategoryRuleIds: ctx.input.programRules.generalCategoryRuleIds,
+        bulletinTitle: ctx.input.courseTitles?.get(representative),
+        bulletinKeywords: ctx.input.courseBulletinKeywords?.get(representative),
+    });
+    return {
+        courseId: `POOL-${v.rId}`,
+        term,
+        credits: v.credits,
+        workloadTier: wt.tier,
+        workloadWeight: wt.weight,
+        satisfiesRId: v.rId,
+        source: "requirement",
+    };
+}
+
+/** All values for a variable that are legal in the planning window.
+ *  - kind "pool": ONE synthetic `POOL-<rId>` value per term where a REAL member fits
+ *    (poolTermLegal: ≥1 member offered + prereq-satisfiable-by-taken/IP). NOT N branches.
+ *  - kind "specific": per-(candidate × offering-legal term), as before. Empty/absent
+ *    offerings ⇒ any season. (Same legality rule as the domain pre-built in
+ *    buildRequirementVariables, recomputed here to keep search self-contained.) */
 function rawValues(v: RequirementVariable, ctx: ConstraintContext): PlacedCourse[] {
     const out: PlacedCourse[] = [];
+    if (v.kind === "pool") {
+        for (const term of ctx.futureTerms) {
+            if (poolTermLegal(v.poolMembers, term, ctx)) out.push(buildPoolValue(v, term, ctx));
+        }
+        return out;
+    }
     for (const cid of v.candidates) {
         const offered = ctx.input.offerings.get(cid);
         for (const term of ctx.futureTerms) {
@@ -263,15 +309,25 @@ interface SearchRun {
  * the sound incremental forward-check — so completeness is preserved WITHIN the
  * `maxNodes` budget; once that budget is hit the traversal stops early and sets
  * `truncated` (surfaced to callers as `exhaustive === false`).
+ *
+ * The callback may return `true` to request an early stop after accepting the
+ * leaf (used by findFirstValidPlan to halt after the first valid leaf). Returning
+ * `undefined` / `void` (the default for all other callers) continues the traversal.
  */
 function runSearch(
     ctx: ConstraintContext,
     options: SearchOptions | undefined,
-    onValidLeaf: (plan: PartialPlan, score: number) => void,
+    onValidLeaf: (plan: PartialPlan, score: number) => boolean | void,
 ): SearchRun {
     const weights = options?.weights;
     const fixed = options?.fixed ?? [];
     const maxNodes = options?.maxNodes ?? DEFAULT_MAX_NODES;
+    // Soft per-term credit target (T2a). When set (only by findFirstValidPlan), a value
+    // whose post-placement running credits in its term stay ≤ this is PREFERRED as a
+    // PRIMARY sort key, before the scorePlan tie-break — a completeness-preserving REORDER
+    // (no prune; ≤creditCeiling placements stay reachable). Absent for searchBestPlan/
+    // searchTopKPlans, so their candidateValues ordering is byte-identical to pre-T2a.
+    const softCreditTarget = options?.softCreditTarget;
 
     // 1. Variables — only those with ≥1 viable candidate (empty-candidate
     //    requirements become placeholders downstream; not searched here), MINUS
@@ -322,9 +378,11 @@ function runSearch(
 
     // 4. Backtracking with forward-checking + incumbent tracking (no admissible
     //    objective bound, so NOT cost-bounded B&B). Terminates at the maxNodes
-    //    budget (sets `truncated`).
+    //    budget (sets `truncated`), or at the first valid leaf when the caller's
+    //    onValidLeaf callback returns true (sets `stopped`).
     let nodes = 0;
     let truncated = false;
+    let stopped = false;
 
     function recurse(assigned: PlacedCourse[], i: number): void {
         nodes++;
@@ -348,7 +406,15 @@ function runSearch(
                 checkMajorCreditFloor(plan, ctx).ok &&
                 checkResidencyFloor(plan, ctx).ok
             ) {
-                onValidLeaf(plan, scorePlan(plan, ctx, weights));
+                // Reject leaves whose requirement-assignment signature is in the
+                // forbidden set (used by findDiverseValidPlans to skip already-found
+                // plans). The search continues to the next leaf — this does NOT prune
+                // the branch, just skips the onValidLeaf callback for this leaf.
+                if (options?.forbiddenSignatures !== undefined) {
+                    const sig = reqSignature(plan);
+                    if (options.forbiddenSignatures.has(sig)) return;
+                }
+                if (onValidLeaf(plan, scorePlan(plan, ctx, weights)) === true) stopped = true;
             }
             return;
         }
@@ -368,13 +434,28 @@ function runSearch(
         //    courseId ASC) so good solutions surface early — this is a value-
         //    ORDERING heuristic only; with no admissible bound it does NOT prune,
         //    so it cannot affect completeness, only the order leaves are visited.
-        const candidateValues: Array<{ value: PlacedCourse; score: number }> = [];
+        const candidateValues: Array<{ value: PlacedCourse; score: number; withinSoftTarget: 0 | 1 }> = [];
         for (const value of rawValues(v, ctx)) {
             const trial: PartialPlan = { placed: [...fixed, ...assigned, value] };
             if (!incrementalOk(trial, ctx)) continue;
-            candidateValues.push({ value, score: scorePlan(trial, ctx, weights) });
+            // T2a soft-grid PRIMARY key (only when softCreditTarget is set): 0 if this value
+            // keeps its term's post-placement running credits ≤ the soft target, else 1. The
+            // term's running credits are the trial-plan credits summed for value.term (every
+            // placement already in this term plus `value`). When softCreditTarget is undefined
+            // the key is a constant 0 for every value → the sort below is EXACTLY pre-T2a (no
+            // new key), so searchBestPlan/searchTopKPlans are unaffected.
+            let withinSoftTarget: 0 | 1 = 0;
+            if (softCreditTarget !== undefined) {
+                let termCredits = 0;
+                for (const p of trial.placed) if (p.term === value.term) termCredits += p.credits;
+                withinSoftTarget = termCredits <= softCreditTarget ? 0 : 1;
+            }
+            candidateValues.push({ value, score: scorePlan(trial, ctx, weights), withinSoftTarget });
         }
         candidateValues.sort((x, y) => {
+            // PRIMARY (T2a): within-soft-target values first (0 before 1). Constant-0 when
+            // softCreditTarget is undefined → this key is a no-op and the order is pre-T2a.
+            if (x.withinSoftTarget !== y.withinSoftTarget) return x.withinSoftTarget - y.withinSoftTarget;
             if (x.score !== y.score) return x.score - y.score;
             const t = compareSolverTerms(x.value.term, y.value.term);
             if (t !== 0) return t;
@@ -393,13 +474,24 @@ function runSearch(
             // a documented FAST-FOLLOW that would turn this into true cost-bounded
             // B&B and let it prune — see the whole-branch review.)
             recurse([...assigned, value], i + 1);
-            if (truncated) return;
+            if (truncated || stopped) return;
         }
     }
 
     recurse([], 0);
 
     return { variables, fixed, nodes, truncated };
+}
+
+/** Requirement-assignment signature for a plan: sorted `rId=courseId@term` entries for
+ *  all placements that satisfy a requirement (satisfiesRId !== null). Used by
+ *  findDiverseValidPlans to identify already-found plans and skip them on the next run. */
+export function reqSignature(plan: PartialPlan): string {
+    return plan.placed
+        .filter(p => p.satisfiesRId !== null)
+        .map(p => `${p.satisfiesRId}=${p.courseId}@${p.term}`)
+        .sort()
+        .join(",");
 }
 
 /** A deterministic, stable key for a plan: its sorted `courseId@term` list.
@@ -561,6 +653,48 @@ function computeBlockers(run: SearchRun, ctx: ConstraintContext): Blocker[] {
 // Public entry points
 // ---------------------------------------------------------------------------
 
+/** Feasibility-first: return the FIRST valid complete leaf and stop. The per-variable
+ *  values are ordered best-first by scorePlan, so the first leaf is a good (not provably
+ *  optimal) plan; a later localImprove step refines it.
+ *
+ *  `exhaustive` SEMANTICS DIFFER from searchBestPlan and matter ONLY when `plan === null`:
+ *    - plan === null, exhaustive === true  → PROVEN infeasible (search ran out within budget).
+ *    - plan === null, exhaustive === false → truncated (hit maxNodes); feasibility unconfirmed.
+ *    - plan !== null                        → a valid plan was found by stopping EARLY (the
+ *      first leaf). `exhaustive` is then `true` (the budget was NOT hit), but it does NOT mean
+ *      "the whole space was explored / this is the optimum" — feasibility-first never proves
+ *      optimality. Consumers MUST treat a found plan as best-effort (see the T7 `optimality`
+ *      signal); they should consult `exhaustive` only on the null path.
+ *  blockers/unsatisfiable are populated exactly as searchBestPlan (via computeBlockers) on null. */
+export function findFirstValidPlan(ctx: ConstraintContext, options?: SearchOptions): SearchResult {
+    let found: PartialPlan | null = null;
+    let foundScore = Infinity;
+    // T2a: enable the soft 16-credit/term grid by DEFAULT for the feasibility-first path —
+    // the value ordering prefers values keeping a term's running credits ≤ the soft target
+    // (creditTargetPerSemester, the 16-grid), falling back to higher loads (up to
+    // creditCeiling) only when no ≤-target value fits. A caller may override per-call; the
+    // default is the grid. searchBestPlan/searchTopKPlans do NOT forward this, so their
+    // optimum and visit order are unchanged.
+    const runOptions: SearchOptions = {
+        ...options,
+        softCreditTarget: options?.softCreditTarget ?? ctx.input.creditTargetPerSemester,
+    };
+    const run = runSearch(ctx, runOptions, (plan, score) => {
+        found = plan;
+        foundScore = score;
+        return true; // stop at the first valid leaf
+    });
+    const blockers: Blocker[] = found === null ? computeBlockers(run, ctx) : [];
+    return {
+        plan: found,
+        score: foundScore,
+        exhaustive: !run.truncated,
+        nodesExplored: run.nodes,
+        unsatisfiable: blockers.map(b => b.rId),
+        blockers,
+    };
+}
+
 export function searchBestPlan(ctx: ConstraintContext, options?: SearchOptions): SearchResult {
     // Keep the SINGLE lowest-score valid leaf. A strictly-lower score always
     // replaces; an EQUAL score replaces only when the new leaf's planKey (sorted
@@ -686,4 +820,32 @@ export function searchTopKPlans(ctx: ConstraintContext, options?: TopKOptions): 
         unsatisfiable,
         blockers,
     };
+}
+
+/**
+ * Up to k distinct valid plans, cheaply: run findFirstValidPlan, record its requirement
+ * signature, re-run forbidding that signature, repeat — until k found or no new plan. NOT a
+ * space-exhausting top-K. Deterministic. plans[0] === findFirstValidPlan's plan.
+ *
+ * Each call to findFirstValidPlan is INCREMENTAL — it stops at the FIRST leaf that is not
+ * in the forbidden set. The forbidden set grows by one signature per iteration, so each
+ * subsequent call skips already-found leaves and returns the NEXT distinct valid plan. This
+ * is O(k × first-plan-cost), not O(full-space). The result is pairwise distinct by
+ * requirement-assignment signature (reqSignature). plans[0] is the same plan as
+ * findFirstValidPlan(ctx, options) would return (no forbidden set on the first call).
+ */
+export function findDiverseValidPlans(
+    ctx: ConstraintContext,
+    options?: SearchOptions & { k?: number },
+): PartialPlan[] {
+    const k = Math.max(1, options?.k ?? 4);
+    const out: PartialPlan[] = [];
+    const forbidden = new Set<string>(options?.forbiddenSignatures ?? []);
+    for (let i = 0; i < k; i++) {
+        const res = findFirstValidPlan(ctx, { ...options, forbiddenSignatures: forbidden });
+        if (res.plan === null) break;
+        out.push(res.plan);
+        forbidden.add(reqSignature(res.plan));
+    }
+    return out;
 }

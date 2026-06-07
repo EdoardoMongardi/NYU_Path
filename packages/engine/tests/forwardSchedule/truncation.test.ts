@@ -219,10 +219,18 @@ describe("searchTopKPlans — tiny maxNodes truncates", () => {
 // ===========================================================================
 
 describe("solveForwardSchedule — truncation surfacing + gating (C1)", () => {
-    // ---- (a) truncated WITH a valid winner ----
-    it("truncated-with-plan: warnings carry the 'valid but maybe not preferred' advisory; the plan is NOT downgraded", () => {
-        // Multi-leaf feasible input. A budget large enough to find a valid winner
-        // but too small to exhaust the space → exhaustive false, plans non-empty.
+    // ---- (a) a valid winner under a tiny budget ----
+    // T1b made the primary path FEASIBILITY-FIRST (findFirstValidPlan): finding a leaf
+    // STOPS the search, so a found plan always carries exhaustive=true and NO truncation
+    // string advisory ever fires for it. The old "truncated-with-plan → valid but may not
+    // be most preferred" string is therefore SUPERSEDED (not merely deferred) — that
+    // (exhaustive=false, plan!=null) state is unreachable via feasibility-first. The honest
+    // "this found plan may not be the most preferred" signal is restored STRUCTURALLY by
+    // T7's `optimality: "best-effort"` field (set on EVERY found plan — stronger than the
+    // old truncation-conditional string). The pure-helper truncationWarning tests above
+    // still cover all 3 branches of that function. This test now asserts only that a tiny
+    // budget which finds the first leaf returns a VALID plan with NO truncation advisory.
+    it("a tiny budget that finds the first valid leaf returns a valid plan with no truncation advisory (feasibility-first)", () => {
         const input = makeInput({
             currentTerm: "2026-fall",
             graduationTerm: "2027-spring",
@@ -246,23 +254,21 @@ describe("solveForwardSchedule — truncation surfacing + gating (C1)", () => {
             ]),
         });
 
-        // maxNodes 6: reaches ≥1 valid leaf (first leaf is at recursion depth 2)
-        // yet truncates before exhausting the multi-leaf tree.
+        // maxNodes=6: findFirstValidPlan finds the first valid leaf (≈3 nodes) and stops
+        // early with exhaustive=true → no truncation warning. The winner is still valid.
         const out = solveForwardSchedule(input, 6);
 
-        expect(out.warnings).toBeDefined();
-        const advisory = out.warnings!.find(w => w.startsWith(TRUNC_PREFIX));
-        expect(advisory).toBeDefined();
-        expect(advisory!).toMatch(/valid but may not be the most preferred/i);
-
-        // The winner is materialised normally — both requirements are placed as
-        // specific courses (the valid winner is returned as-is, not downgraded to
-        // an all-placeholder/infeasible plan).
+        // Validity is NOT regressed — both requirements are placed.
         const placedCourseIds = out.semesters
             .flatMap(s => s.slots)
             .filter(s => s.kind === "specific_planned")
             .map(s => (s as { courseId: string }).courseId);
         expect(placedCourseIds.length).toBeGreaterThanOrEqual(2);
+        expect(out.feasibility.feasible).toBe(true);
+
+        // No truncation advisory with maxNodes=6 (found the plan before the budget ran out).
+        const advisory = (out.warnings ?? []).find(w => w.startsWith(TRUNC_PREFIX));
+        expect(advisory).toBeUndefined();
     });
 
     // ---- (b) truncated WITHOUT a valid plan, no real blockers ----

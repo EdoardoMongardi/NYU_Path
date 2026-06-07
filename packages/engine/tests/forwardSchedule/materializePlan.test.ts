@@ -393,9 +393,21 @@ describe("materializePlan — free-elective fill meets target", () => {
         const ctx = buildConstraintContext(input);
         const out = materializePlan(searchBestPlan(ctx).plan!, ctx);
 
-        // Each term hits the 16-credit target.
+        // T6: For F-1 students, the FINAL graduating term takes the degree-minimum remainder
+        // (not the full 16-credit target) — padding the last term with junk electives was
+        // the bug T6 fixes. Non-final terms still hit the 16-credit target.
+        // solvableInput: creditsEarned=100, graduationMin=128, 2 terms (fall, spring).
+        // After fall fills to 16: remaining = 128 - (100 + 16) = 12 → spring gets 12.
+        const lastTerm = out.semesters[out.semesters.length - 1]!.term;
         for (const sem of out.semesters) {
-            expect(sem.plannedCredits).toBe(input.creditTargetPerSemester);
+            if (sem.term === lastTerm && input.visaStatus === "f1") {
+                // Final F-1 term takes the degree-minimum REMAINDER, NOT the 16 target:
+                // 128 − (100 earned + 16 in fall) = 12. Pinned so a regression that re-pads
+                // the final term back to 16 is caught here (not only in f1FloorEdges).
+                expect(sem.plannedCredits).toBe(12);
+            } else {
+                expect(sem.plannedCredits).toBe(input.creditTargetPerSemester);
+            }
         }
 
         // Total earned + planned clears the graduation minimum.
@@ -804,6 +816,7 @@ describe("solveForwardSchedule — alternativeCandidates integration", () => {
 
     it("populates alternativeCandidates on a multi-plan fixture; each alternative is a plan distinct from the main one", () => {
         // Two requirements, each with TWO viable candidates → many valid plans.
+        // T3b restores alternativeCandidates via findDiverseValidPlans.
         const input = makeInput({
             currentTerm: "2026-fall",
             graduationTerm: "2027-spring",
@@ -848,32 +861,23 @@ describe("solveForwardSchedule — alternativeCandidates integration", () => {
 
         const out = solveForwardSchedule(input);
 
+        expect(out.feasibility.feasible).toBe(true);
+        const winnerSig = planSubjectSig(out);
+        expect(winnerSig.length).toBeGreaterThan(0);
+
+        // T3b: alternativeCandidates must now be defined and populated.
         expect(out.alternativeCandidates).toBeDefined();
         const alts = out.alternativeCandidates!;
         expect(alts.length).toBeGreaterThanOrEqual(1);
         expect(alts.length).toBeLessThanOrEqual(4); // k=5 → winner + ≤4 alternatives
-
         // planIndex is 1-based and dense.
         alts.forEach((a, i) => expect(a.planIndex).toBe(i + 1));
-
-        // Each summary carries the required scalar fields.
         for (const a of alts) {
             expect(Number.isFinite(a.balanceScore)).toBe(true);
             expect(typeof a.graduationTerm).toBe("string");
             expect(Array.isArray(a.topDiffsFromWinner)).toBe(true);
-            // totalAssumptionCount matches the winner's (no IP courses here → 0).
             expect(a.totalAssumptionCount).toBe(out.assumptions.length);
         }
-
-        // The MAIN plan (winner) is feasible and its course set differs from at
-        // least one alternative's distribution (the alternatives are distinct plans).
-        expect(out.feasibility.feasible).toBe(true);
-        const winnerSig = planSubjectSig(out);
-        // Re-derive each alternative's subject signature from its summary's
-        // subjectDistributionByTerm keys (term → subject → credits) is not 1:1 with
-        // courseIds, so instead assert the distribution objects are not all empty
-        // and the winner has bound courses too.
-        expect(winnerSig.length).toBeGreaterThan(0);
         for (const a of alts) {
             const hasAnySubject = Object.values(a.subjectDistributionByTerm).some(
                 m => Object.keys(m).length > 0,

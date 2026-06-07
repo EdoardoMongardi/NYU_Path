@@ -105,6 +105,12 @@ export interface SolverInput {
         /** Specific course IDs that satisfy this requirement (when known).
          *  Empty for placeholder-style requirements like "any free elective". */
         candidateCourses: string[];
+        /** When the requirement is a "choose-N from a range/pool" (e.g. "CSCI-UA 400-499"), this
+         *  carries the pool's dept + inclusive catalog-number range INSTEAD of (or alongside)
+         *  enumerated candidateCourses. Absent for an explicit course list. Consumed by T4's
+         *  feasibility-aware pool placeholders; a placeholder is placeable only where a REAL
+         *  catalog member in [levelMin, levelMax] is offered + prereq/coreq-satisfiable (sound). */
+        pool?: { dept: string; levelMin: number; levelMax: number };
     }>;
 
     // ---- Catalog / parser-output ----
@@ -172,6 +178,16 @@ export interface SolverInput {
      * then ForwardSchedule.warnings so the agent-facing schedule shows them.
      */
     warnings: string[];
+
+    // ---- T2b — derived-horizon flag (for add-a-term relax) ----
+    /**
+     * True when the `graduationTerm` was derived from credits (no student-stated
+     * target and no explicit override). Used by `buildForwardSchedule` (build.ts)
+     * to decide whether a too-short horizon may be automatically extended by one
+     * main term. Undefined is treated as false (the safe default), so existing
+     * test factories that do not set this field remain unaffected.
+     */
+    graduationTermWasDerived?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -195,6 +211,15 @@ export interface SolverOutput {
      * the common path. build.ts copies this onto ForwardSchedule.warnings.
      */
     warnings?: string[];
+    /** Structured optimality of the returned plan (companion to `warnings`):
+     *  "optimal" — search ran to exhaustion; the winner is the proven optimum (rare on the
+     *    feasibility-first primary path; reserved for a future exhaustive-proof mode).
+     *  "best-effort" — a VALID plan was found (feasibility-first) but it may not be the most
+     *    preferred; surface a confidence caveat ("valid plan; may not be the most preferred —
+     *    tell me your priorities and I'll refine").
+     *  "feasibility-unconfirmed" — no valid plan was found within budget (NOT proven infeasible).
+     *  Omitted is treated as "optimal" by consumers for back-compat. */
+    optimality?: "optimal" | "best-effort" | "feasibility-unconfirmed";
 }
 
 // ---------------------------------------------------------------------------

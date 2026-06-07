@@ -46,6 +46,26 @@ export function nextMainTerm(p: { year: number; season: string }): { year: numbe
     return { year: p.year, season: "spring" };
 }
 
+/**
+ * T2b — Advance a graduation term by one main term and return the solver-shape
+ * string, or null when the input is not a recognised spring/fall term.
+ *
+ * Exported so build.ts can use it for the add-a-term relax loop without
+ * duplicating the logic that alternatives.ts previously kept private.
+ *
+ * Mapping:
+ *   YYYY-spring → YYYY-fall   (same year)
+ *   YYYY-fall   → (YYYY+1)-spring
+ *   Any other season (summer, january) → null
+ */
+export function nextMainTermOrNull(term: string): string | null {
+    const p = parseTerm(term);
+    if (!p) return null;
+    if (p.season === "spring") return termCode({ year: p.year, season: "fall" });
+    if (p.season === "fall") return termCode({ year: p.year + 1, season: "spring" });
+    return null;
+}
+
 /** Enumerate fall/spring main terms from start (inclusive) to end (inclusive).
  *  Phase 13 skips summer + january. */
 export function enumerateMainTerms(start: string, end: string): string[] {
@@ -250,15 +270,31 @@ export function isExcludedByNotClause(
 }
 
 // ---------------------------------------------------------------------------
+// Shared course-id parsing
+// ---------------------------------------------------------------------------
+
+/** Parse a course id into its department prefix + catalog number.
+ *  "CORE-UA 412" → { dept: "CORE-UA", num: 412 }; "MATH-UA 9 101" → { dept: "MATH-UA 9", num: 101 }.
+ *  Single source of the trailing-number regex shared by isStudyAbroadCourse,
+ *  constraintModel's pool expansion, and workloadTier's parseCourseNumber.
+ *  Returns null when no numeric suffix is present. */
+export function parseCourseComponents(courseId: string): { dept: string; num: number } | null {
+    const m = courseId.match(/[- ](\d+)[A-Za-z]*\s*$/);
+    if (!m) return null;
+    const num = parseInt(m[1]!, 10);
+    if (isNaN(num)) return null;
+    // dept = everything before the matched number token (trimmed of the separator).
+    const dept = courseId.slice(0, m.index! + 1).trimEnd();
+    return { dept, num };
+}
+
+// ---------------------------------------------------------------------------
 // Decision #21 — study-abroad-9000-skip
 // ---------------------------------------------------------------------------
 
 export function isStudyAbroadCourse(courseId: string): boolean {
-    // Study-abroad courses have catalog numbers ≥ 9000
-    const m = courseId.match(/[- ](\d+)[A-Za-z]*\s*$/);
-    if (!m) return false;
-    const n = parseInt(m[1]!, 10);
-    return !isNaN(n) && n >= 9000;
+    // Study-abroad courses have catalog numbers ≥ 9000.
+    return (parseCourseComponents(courseId)?.num ?? -1) >= 9000;
 }
 
 // ---------------------------------------------------------------------------

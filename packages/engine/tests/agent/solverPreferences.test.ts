@@ -152,34 +152,41 @@ describe("solveForwardSchedule — load styles", () => {
         ).toBe(true);
     });
 
-    it("loadStylePerTerm 'light' pulls credit target down to F-1 floor (12)", () => {
-        // F-1 student with f1Floor=12. "light" for 2027-spring should cap
-        // free-elective fill at 12 credits (f1Floor), not 16 (default target).
+    it("loadStylePerTerm 'light' on a non-final F-1 term caps fill at the F-1 floor (12)", () => {
+        // T6: On a NON-final F-1 term, "light" baseTarget = f1Floor (12), and the
+        // non-final clamping keeps it at max(12, 12) = 12. On the FINAL F-1 term,
+        // T6 fills to the degree-minimum remainder, not the per-term preference —
+        // if the student needs 16 in their last term to graduate, they get 16
+        // (the remainder takes precedence so graduation is not blocked).
+        // Test the "light" preference on the fall (non-final) term instead of spring.
         const input = makeInput(
-            { loadStylePerTerm: { "2027-spring": "light" } },
+            { loadStylePerTerm: { "2026-fall": "light" } },
             {
                 unmetRequirements: [],
                 // No hard requirements — all slots will be free-elective placeholders.
             },
         );
         const out = solveForwardSchedule(input);
-        const spring = out.semesters.find(s => s.term === "2027-spring")!;
-        // With light load the fill loop should stop at 12 credits (F-1 floor),
-        // not 16.
-        expect(spring.plannedCredits).toBe(12);
+        const fall = out.semesters.find(s => s.term === "2026-fall")!;
+        // Non-final F-1 term with "light" preference → clamped at max(f1Floor, baseTarget).
+        // baseTarget("light") = f1Floor = 12; max(12,12)=12.
+        expect(fall.plannedCredits).toBe(12);
     });
 
-    it("loadStylePerTerm 'heavy' pushes credit target up to school ceiling (18)", () => {
+    it("loadStylePerTerm 'heavy' on a non-final F-1 term pushes fill up to the school ceiling (18)", () => {
+        // T6: On a NON-final F-1 term, "heavy" baseTarget = ceiling (18). The final F-1
+        // term fills to the degree-minimum remainder (not the preference). Test "heavy" on
+        // the fall (non-final) term to verify the ceiling is respected there.
         const input = makeInput(
-            { loadStylePerTerm: { "2027-spring": "heavy" } },
+            { loadStylePerTerm: { "2026-fall": "heavy" } },
             {
                 unmetRequirements: [],
             },
         );
         const out = solveForwardSchedule(input);
-        const spring = out.semesters.find(s => s.term === "2027-spring")!;
-        // With heavy load the fill loop should go up to 18 (ceiling).
-        expect(spring.plannedCredits).toBe(18);
+        const fall = out.semesters.find(s => s.term === "2026-fall")!;
+        // Non-final F-1 term with "heavy" preference → fills to ceiling (18).
+        expect(fall.plannedCredits).toBe(18);
     });
 
     // Regression: a non-F-1 student with f1Floor=null + domesticPartTimeFloor=8
