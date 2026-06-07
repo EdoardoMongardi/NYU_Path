@@ -141,6 +141,14 @@ export interface TopKResult {
 const DEFAULT_MAX_NODES = 200_000;
 const DEFAULT_K = 5;
 
+/** Per-iteration node cap for findDiverseValidPlans. Alternatives are best-effort:
+ *  the terminal "no more distinct plans" iteration must search to prove null, so we
+ *  bound it well below DEFAULT_MAX_NODES. The WINNER is found separately by
+ *  findFirstValidPlan with the full budget (solver.ts) and is NOT affected.
+ *  Exported so the perf test can assert the cap value + that it bounds the terminal
+ *  iteration. */
+export const DIVERSE_MAX_NODES = 20_000;
+
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
@@ -827,12 +835,22 @@ export function searchTopKPlans(ctx: ConstraintContext, options?: TopKOptions): 
  * signature, re-run forbidding that signature, repeat — until k found or no new plan. NOT a
  * space-exhausting top-K. Deterministic. plans[0] === findFirstValidPlan's plan.
  *
- * Each call to findFirstValidPlan is INCREMENTAL — it stops at the FIRST leaf that is not
- * in the forbidden set. The forbidden set grows by one signature per iteration, so each
- * subsequent call skips already-found leaves and returns the NEXT distinct valid plan. This
- * is O(k × first-plan-cost), not O(full-space). The result is pairwise distinct by
- * requirement-assignment signature (reqSignature). plans[0] is the same plan as
- * findFirstValidPlan(ctx, options) would return (no forbidden set on the first call).
+ * Each call to findFirstValidPlan stops at the FIRST leaf not in the forbidden set, AND is
+ * NODE-CAPPED at DIVERSE_MAX_NODES (the caller may override via `options.maxNodes`). The cap
+ * matters for the TERMINAL iteration: to return `plan === null` ("no more distinct plans")
+ * the search must run to exhaustion or its node budget — it cannot know the space is empty
+ * without searching it. Capping that iteration at DIVERSE_MAX_NODES (20k) instead of the full
+ * DEFAULT_MAX_NODES (200k) keeps it fast (the pre-cap terminal iteration burned ~200k nodes
+ * on zero-slack near-graduate inputs).
+ *
+ * Consequence: the result is BEST-EFFORT and MAY RETURN FEWER THAN `k` distinct plans when an
+ * additional distinct plan only exists beyond the per-iteration cap. That is acceptable —
+ * these are ALTERNATIVES. The WINNER used by the solver is computed SEPARATELY by
+ * findFirstValidPlan with the FULL budget (solver.ts) and is UNAFFECTED by this cap.
+ *
+ * The result is pairwise distinct by requirement-assignment signature (reqSignature). plans[0]
+ * is the same plan findFirstValidPlan(ctx, options) returns (no forbidden set on the first
+ * call), as long as the winner is found within the per-iteration cap.
  */
 export function findDiverseValidPlans(
     ctx: ConstraintContext,
@@ -842,7 +860,11 @@ export function findDiverseValidPlans(
     const out: PartialPlan[] = [];
     const forbidden = new Set<string>(options?.forbiddenSignatures ?? []);
     for (let i = 0; i < k; i++) {
-        const res = findFirstValidPlan(ctx, { ...options, forbiddenSignatures: forbidden });
+        const res = findFirstValidPlan(ctx, {
+            ...options,
+            forbiddenSignatures: forbidden,
+            maxNodes: options?.maxNodes ?? DIVERSE_MAX_NODES,
+        });
         if (res.plan === null) break;
         out.push(res.plan);
         forbidden.add(reqSignature(res.plan));
