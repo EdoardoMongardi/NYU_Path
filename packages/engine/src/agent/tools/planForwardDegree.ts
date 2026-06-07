@@ -13,6 +13,8 @@ import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { buildForwardSchedule } from "../forwardSchedule/build.js";
 import { computeDprFingerprint } from "../../dpr/fingerprint.js";
+import { renderEnvelopeMeta, type Disclaimer } from "../toolEnvelope.js";
+import { buildDoubleCountAdvisory } from "../forwardSchedule/doubleCountAdvisory.js";
 import type { ForwardSchedule } from "@nyupath/shared";
 
 /** Convert a display-form ("Spring 2027" / "2027 Spring" / "spring2027") or
@@ -47,6 +49,10 @@ interface PlanForwardDegreeOutput {
     storedIn: "forwardSchedule" | "studentDraftPlan";
     /** Brief human-readable summary for the agent. */
     summary: string;
+    /** Phase 10 envelope — advisory disclaimers (e.g. the double-counting heads-up
+     *  for multi-program students). Surfaced verbatim by summarizeResult. Advisory
+     *  only — never affects storedIn / feasibility / the schedule. */
+    disclaimers?: Disclaimer[];
 }
 
 // ---------------------------------------------------------------------------
@@ -161,10 +167,16 @@ export const planForwardDegreeTool = buildTool({
         }
 
         const summary = buildSummary(schedule, storedIn);
-        return { schedule, storedIn, summary };
+        // Phase 10 envelope — derive the double-count advisory from the DPR +
+        // school config and attach it as an advisory disclaimer. Advisory only:
+        // it never affects schedule/storedIn/feasibility above.
+        const advisory = buildDoubleCountAdvisory(dpr, session.schoolConfig);
+        const disclaimers = advisory ? [advisory] : undefined;
+        return { schedule, storedIn, summary, ...(disclaimers ? { disclaimers } : {}) };
     },
     summarizeResult(output) {
-        return output.summary;
+        const env = renderEnvelopeMeta({ disclaimers: output.disclaimers });
+        return env ? `${output.summary}\n\n${env}` : output.summary;
     },
 });
 
