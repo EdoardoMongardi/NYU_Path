@@ -23,6 +23,7 @@ import {
     PlanMutationSchema,
 } from "../forwardSchedule/planChangeHelpers.js";
 import { explainPlanDiff } from "../forwardSchedule/explainPlanDiff.js";
+import { buildDoubleCountAdvisory } from "../forwardSchedule/doubleCountAdvisory.js";
 import type {
     ForwardSchedule,
     PlanChangeOutcome,
@@ -167,6 +168,8 @@ export const proposePlanChangeTool = buildTool({
         // Compute diff and consequences
         const diff = computeSlotDiff(currentPlan, proposedSchedule);
         const consequences = deriveConsequences(diff, proposedSchedule, noOpConsequences);
+        const dcAdvisory = buildDoubleCountAdvisory(dpr, session.schoolConfig);
+        if (dcAdvisory) consequences.push(dcAdvisory.text);
         const planDiff = buildPlanDiff(currentPlan, proposedSchedule, {
             before: beforeAxes,
             after: validatorResult.axisResults,

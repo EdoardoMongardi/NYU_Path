@@ -22,6 +22,14 @@
     "finalCreditsInResidence": null,
     "note": "Semester-based residency: minimum 6 fall/spring semesters at the NYU Shanghai campus, final semester in residence. The 64-credit figure is the major-declaration gate, not a residency floor."
   },
+  "doubleCounting": {
+    "cap": { "majorToMajor": 2 },
+    "floor": { "minUniqueCreditsPerMinor": 12 },
+    "noTripleCounting": true,
+    "requiresApproval": true,
+    "note": "No more than two courses may be double-counted between two majors unless otherwise specified in the major section (cap source: this page :122); a minor must include at least 12 credits unique to it (minor-floor source: this page :132). Core Curriculum courses are exempt from double-counting limits, but no single course may satisfy more than two requirements.",
+    "sourceRef": "data/bulletin-raw/undergraduate/shanghai/academic-policies/_index.md:122"
+  },
   "creditCaps": [
     {
       "type": "advanced_standing",
