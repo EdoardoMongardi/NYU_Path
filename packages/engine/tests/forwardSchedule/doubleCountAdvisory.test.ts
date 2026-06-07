@@ -52,6 +52,10 @@ describe("countDeclaredPrograms", () => {
         );
         expect(countDeclaredPrograms(dpr)).toBe(2);
     });
+    it("counts a concentration", () => {
+        const dpr = makeDpr([{ programType: "Major", label: "X" }, { programType: "Concentration", label: "Y" }], []);
+        expect(countDeclaredPrograms(dpr)).toBe(2);
+    });
 });
 
 describe("detectSharedCourses", () => {
@@ -70,6 +74,23 @@ describe("detectSharedCourses", () => {
             leaf("R2", [row("MATH-UA", "121")]),
         ]);
         expect(detectSharedCourses(dpr).sharedCourseCount).toBe(0);
+    });
+    it("does not count a course repeated within a single leaf as shared", () => {
+        const dpr = makeDpr([{ programType: "Major", label: "M" }], [
+            leaf("R1", [row("ECON-UA", "1"), row("ECON-UA", "1")]),
+        ]);
+        expect(detectSharedCourses(dpr).sharedCourseCount).toBe(0);
+    });
+    it("walks nested requirement groups", () => {
+        const dpr = makeDpr([{ programType: "Major", label: "M" }], []);
+        dpr.requirementGroups = [{
+            rgId: "RG1", title: "root", status: "satisfied", statusText: "",
+            children: [{
+                rgId: "RG2", title: "sub", status: "satisfied", statusText: "",
+                children: [leaf("R1", [row("ECON-UA", "1")]), leaf("R2", [row("ECON-UA", "1")])],
+            }],
+        }];
+        expect(detectSharedCourses(dpr).sharedCourseCount).toBe(1);
     });
 });
 
@@ -112,5 +133,28 @@ describe("buildDoubleCountAdvisory", () => {
     it("returns null when schoolConfig is null and student is single-program", () => {
         const dpr = makeDpr([{ programType: "Major", label: "M" }], []);
         expect(buildDoubleCountAdvisory(dpr, null)).toBeNull();
+    });
+    it("degrades to a well-formed number-free advisory when a config yields no numeric clause", () => {
+        const dpr = makeDpr(twoPrograms, []);
+        const emptyDc: SchoolConfig["doubleCounting"] = {
+            cap: {}, floor: {}, noTripleCounting: true, requiresApproval: true,
+            sourceRef: "data/bulletin-raw/x:1",
+        };
+        const d = buildDoubleCountAdvisory(dpr, schoolConfig(emptyDc, "Edge School"));
+        expect(d).not.toBeNull();
+        expect(d!.text).not.toContain(", ."); // no malformed empty clause
+        expect(d!.text).not.toContain("  "); // no double space
+        expect(d!.text.toLowerCase()).toContain("double-count");
+        expect(d!.bulletinSource).toBe("data/bulletin-raw/x:1"); // still cites the config
+    });
+    it("surfaces the cited note nuance in the quantified advisory", () => {
+        const dpr = makeDpr(twoPrograms, []);
+        const dcWithNote: SchoolConfig["doubleCounting"] = {
+            cap: { majorToMajor: 2 }, noTripleCounting: true, requiresApproval: true,
+            note: "some departments allow only one shared course",
+            sourceRef: "data/bulletin-raw/y:2",
+        };
+        const d = buildDoubleCountAdvisory(dpr, schoolConfig(dcWithNote));
+        expect(d!.text).toContain("some departments allow only one shared course");
     });
 });
