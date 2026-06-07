@@ -30,6 +30,8 @@ import {
     type GraduationPathValidatorArgs,
 } from "../../src/agent/forwardSchedule/graduationPathValidator.js";
 import { finalizeForwardSchedule } from "../../src/agent/forwardSchedule/build.js";
+import { solveForwardSchedule } from "../../src/agent/forwardSchedule/solver.js";
+import { validatorRulesFromInput } from "../../src/agent/forwardSchedule/alternatives.js";
 import type { SolverInput, SolverOutput } from "../../src/agent/forwardSchedule/types.js";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
 import type { ForwardSchedule } from "@nyupath/shared";
@@ -839,5 +841,158 @@ describe("pool placeholder — end-to-end VALID plan (T4b/Option B)", () => {
         // The resolvable pool placeholder satisfies coverage → a valid plan state.
         expect(finalized.validatorResult.feasible).toBe(true);
         expect(finalized.schedule.state).toMatch(/^valid/);
+    });
+});
+
+// ===========================================================================
+// 11. I1 — validator axis-4 (thresholdsMet) must count resolvable pool
+//     placeholders toward the major-credit floor (search ↔ validator consistency).
+//
+// Bug: the search counts the POOL-<rId> placement toward checkMajorCreditFloor
+// (source∈{requirement,pin}), but axis 4 only counted specific_planned slots.
+// That disagreement produces false-INFEASIBLE plans when the pool is the ONLY
+// source of major credits AND majorCreditMinimum != null.
+// ===========================================================================
+
+describe("pool placeholder — validator axis-4 counts resolvable pool toward major-credit floor (I1)", () => {
+    /**
+     * Build a SolverInput where the pool requirement is the ONLY source of
+     * major credits and majorCreditMinimum exactly requires those 4 credits.
+     * creditsEarned=124, graduationCreditMinimum=128 → the 4-credit pool
+     * closes the credit gap AND the major floor. residencyMinCredits is null
+     * so the only threshold that can fail is the major one.
+     */
+    function makeI1Input(): SolverInput {
+        const catalog = new Map<string, { title: string; credits: number }>();
+        const offerings = new Map<string, Array<"fall" | "spring" | "summer" | "january">>();
+        for (let n = 421; n <= 436; n++) {
+            const id = `CSCI-UA ${n}`;
+            catalog.set(id, { title: id, credits: 4 });
+            offerings.set(id, ["fall", "spring"]);
+        }
+        // DPR: creditsUsed=124 (matches creditsEarned), not_satisfied leaf for rPool.
+        const baseDpr = makeMinimalDpr();
+        const dpr: DegreeProgressReport = {
+            ...baseDpr,
+            cumulative: { ...baseDpr.cumulative, creditsUsed: 124 },
+            requirementGroups: [
+                {
+                    rgId: "RGPOOL",
+                    title: "CS Electives",
+                    status: "overall_not_satisfied",
+                    statusText: "Overall Requirement Not Satisfied: CS Electives",
+                    children: [
+                        {
+                            rId: "rPool",
+                            title: "CS Elective",
+                            status: "not_satisfied",
+                            statusText: "Not Satisfied: CS Elective",
+                            coursesUsed: [],
+                        },
+                    ],
+                },
+            ],
+        };
+        return makeInput({
+            currentTerm: "2026-fall",
+            graduationTerm: "2027-spring",
+            creditsEarned: 124,
+            graduationCreditMinimum: 128,
+            dpr,
+            unmetRequirements: [
+                {
+                    rId: "rPool",
+                    title: "CS Elective",
+                    category: "major_elective",
+                    credits: 4,
+                    candidateCourses: [],
+                    pool: { dept: "CSCI-UA", levelMin: 400, levelMax: 499 },
+                },
+            ],
+            courseCatalog: catalog,
+            offerings,
+            programRules: {
+                majorRuleKinds: new Map([["rPool", "choose_n"]]),
+                schoolCoreRuleIds: new Set(),
+                generalCategoryRuleIds: new Set(),
+                residencyMinCredits: null,       // no residency floor — isolates the major check
+                majorCreditMinimum: 4,           // exactly the pool's 4 credits
+                upperLevelMinCredits: null,
+            },
+        });
+    }
+
+    it("major-credit floor is met when the ONLY major credits come from a resolvable pool placeholder (axis-4 I1 repro)", () => {
+        const input = makeI1Input();
+        const out = solveForwardSchedule(input);
+        const finalized = finalizeForwardSchedule(out, input, input.dpr, validatorRulesFromInput(input));
+
+        // The resolvable pool placeholder must count toward the major-credit floor.
+        // Pre-fix: thresholdsMet="fail", feasible=false (false-infeasible).
+        expect(finalized.validatorResult.axisResults.thresholdsMet.status).not.toBe("fail");
+        expect(finalized.validatorResult.feasible).toBe(true);
+    });
+
+    it("major-credit floor still FAILS when the only major source is a GENERIC (empty) placeholder — narrowing guard (I1)", () => {
+        // rGap has NO pool descriptor and NO catalog candidates → the search cannot
+        // place it → materializePlan emits a GENERIC placeholder (no poolBinding).
+        // That empty placeholder MUST NOT count toward the major floor.
+        const dprGap = makeMinimalDpr({
+            cumulative: { ...makeMinimalDpr().cumulative, creditsUsed: 124 },
+            requirementGroups: [
+                {
+                    rgId: "RGGAP",
+                    title: "Gap Group",
+                    status: "overall_not_satisfied",
+                    statusText: "Overall Requirement Not Satisfied: Gap Group",
+                    children: [
+                        {
+                            rId: "rGap",
+                            title: "Unmappable Major Requirement",
+                            status: "not_satisfied",
+                            statusText: "Not Satisfied: Unmappable Major Requirement",
+                            coursesUsed: [],
+                        },
+                    ],
+                },
+            ],
+        });
+        const inputGap = makeInput({
+            currentTerm: "2026-fall",
+            graduationTerm: "2027-spring",
+            creditsEarned: 124,
+            graduationCreditMinimum: 128,
+            dpr: dprGap,
+            unmetRequirements: [
+                {
+                    rId: "rGap",
+                    title: "Unmappable Major Requirement",
+                    category: "major_elective",    // major tier so it would count IF the fix were wrong
+                    credits: 4,
+                    candidateCourses: ["MISSING-UA 99"], // off-catalog → empty candidates
+                },
+            ],
+            courseCatalog: new Map(),  // no catalog members, no pool descriptor
+            offerings: new Map(),
+            programRules: {
+                majorRuleKinds: new Map(),
+                schoolCoreRuleIds: new Set(),
+                generalCategoryRuleIds: new Set(),
+                residencyMinCredits: null,
+                majorCreditMinimum: 4,  // requires 4 major credits; only the empty placeholder "could" satisfy
+                upperLevelMinCredits: null,
+            },
+        });
+        const outGap = solveForwardSchedule(inputGap);
+        const finalizedGap = finalizeForwardSchedule(
+            outGap,
+            inputGap,
+            inputGap.dpr,
+            validatorRulesFromInput(inputGap),
+        );
+
+        // An EMPTY/generic placeholder (no poolBinding) must NOT satisfy the major floor.
+        // If the fix were too broad, this would wrongly pass — the guard must fail.
+        expect(finalizedGap.validatorResult.axisResults.thresholdsMet.status).toBe("fail");
     });
 });
