@@ -17,6 +17,8 @@
 
 import { describe, it, expect } from "vitest";
 import { planForwardDegreeTool } from "../../src/agent/tools/planForwardDegree.js";
+import { proposePlanChangeTool } from "../../src/agent/tools/proposePlanChange.js";
+import { confirmPlanChangeTool } from "../../src/agent/tools/confirmPlanChange.js";
 import type { ToolSession, ToolUseContext } from "../../src/agent/tool.js";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
 import type { SchoolConfig } from "@nyupath/shared";
@@ -145,5 +147,75 @@ describe("plan_forward_degree — double-count advisory wiring", () => {
         // The schedule is still produced (advisory never suppresses it).
         expect(multi.schedule).toBeTruthy();
         expect(single.schedule).toBeTruthy();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Edit-tool wiring (propose_plan_change / confirm_plan_change)
+//
+// These tools surface the advisory in `consequences[]` (NOT an envelope
+// Disclaimer). Both require an existing plan in the session, so each case
+// first runs plan_forward_degree on the SAME session (which writes
+// session.forwardSchedule — the multi-program synthetic DPR plans feasibly,
+// as the plan_forward_degree block above proves) and then runs the edit tool.
+// The mutation is a plan-level `loadStyleOverride: balanced` — the simplest
+// PlanMutation that applies cleanly (no no-op) and never depends on a real
+// course catalog. The advisory is purely additive: it must NEVER change
+// feasible / storedIn / the schedule — only add a string to consequences.
+// ---------------------------------------------------------------------------
+
+const SET_BALANCED_LOAD = { kind: "loadStyleOverride", style: "balanced" } as const;
+
+function hasDoubleCountConsequence(consequences: string[]): boolean {
+    return consequences.some((c) => /double-count/i.test(c));
+}
+
+describe("plan-change tools — double-count advisory wiring", () => {
+    it("propose_plan_change pushes a double-count consequence for a multi-program student", async () => {
+        const session = makeSession(TWO_PROGRAMS, CAS_DC);
+        // Seed session.forwardSchedule so propose_plan_change's validateInput
+        // passes and currentPlan is present.
+        const plan = await planForwardDegreeTool.call({}, makeCtx(session));
+        expect(plan.storedIn).toBe("forwardSchedule");
+        expect(session.forwardSchedule).toBeTruthy();
+
+        const output = await proposePlanChangeTool.call(
+            { mutations: [SET_BALANCED_LOAD] },
+            makeCtx(session),
+        );
+
+        expect(hasDoubleCountConsequence(output.consequences)).toBe(true);
+    });
+
+    it("confirm_plan_change pushes a double-count consequence for a multi-program student", async () => {
+        const session = makeSession(TWO_PROGRAMS, CAS_DC);
+        const plan = await planForwardDegreeTool.call({}, makeCtx(session));
+        expect(plan.storedIn).toBe("forwardSchedule");
+        expect(session.forwardSchedule).toBeTruthy();
+
+        const output = await confirmPlanChangeTool.call(
+            { mutations: [SET_BALANCED_LOAD] },
+            makeCtx(session),
+        );
+
+        expect(hasDoubleCountConsequence(output.consequences)).toBe(true);
+    });
+
+    it("does NOT push a double-count consequence for a single-program student", async () => {
+        const session = makeSession(ONE_PROGRAM, CAS_DC);
+        const plan = await planForwardDegreeTool.call({}, makeCtx(session));
+        expect(session.forwardSchedule ?? session.studentDraftPlan).toBeTruthy();
+
+        const proposed = await proposePlanChangeTool.call(
+            { mutations: [SET_BALANCED_LOAD] },
+            makeCtx(session),
+        );
+        const confirmed = await confirmPlanChangeTool.call(
+            { mutations: [SET_BALANCED_LOAD] },
+            makeCtx(session),
+        );
+
+        expect(hasDoubleCountConsequence(proposed.consequences)).toBe(false);
+        expect(hasDoubleCountConsequence(confirmed.consequences)).toBe(false);
     });
 });
