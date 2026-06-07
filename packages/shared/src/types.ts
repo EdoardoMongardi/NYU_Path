@@ -302,32 +302,48 @@ export interface SpsPolicy {
     excludedCourseTypes?: string[];
 }
 
+/**
+ * Per-school double-counting limit, authored from the school's bulletin
+ * academic-policies page. Two complementary models — a school may use one
+ * or BOTH (NYU Shanghai uses a course CAP for majors and a credit FLOOR for
+ * minors). Surfaced to multi-program students as a CITED advisory; NOT
+ * enforced by the solver/validator (cross-program attribution is not modeled
+ * — see docs/superpowers/plans/2026-06-07-double-count-data-advisory.md).
+ */
 export interface DoubleCountingConfig {
-    /** Default max courses double-counted between two majors */
-    defaultMajorToMajor: number | null;
-    /** Default max courses double-counted between major and minor */
-    defaultMajorToMinor: number | null;
-    /** Default max courses double-counted between two minors */
-    defaultMinorToMinor?: number | null;
-    /** Default max courses double-counted between two concentrations */
-    defaultConcentrationToConcentration?: number | null;
-    /** Default max courses double-counted between a major and a concentration */
-    defaultMajorToConcentration?: number | null;
-    /** Default max courses double-counted between a minor and a concentration */
-    defaultMinorToConcentration?: number | null;
-    /** Whether triple-counting is forbidden across all programs */
-    noTripleCounting: boolean;
-    /** Whether department approval is required for double-counting */
-    requiresDepartmentApproval: boolean;
     /**
-     * Per-program overrides. May be `true` (overrides allowed program-by-program)
-     * or a map of programId → per-pair override values.
+     * CAP model — maximum number of courses that may be SHARED (double-counted)
+     * across two programs. Omit a pair the school does not express as a course cap.
      */
-    overrideByProgram?:
-        | boolean
-        | Record<string, { majorToMajor?: number; majorToMinor?: number }>;
-    exceptions?: string[];
+    cap?: {
+        /** Max courses shared between two majors. */
+        majorToMajor?: number;
+        /** Max courses shared between a major and a minor. */
+        majorToMinor?: number;
+        /** Max courses shared between two minors. */
+        minorToMinor?: number;
+    };
+    /**
+     * FLOOR model — minimum coursework each program must keep UNIQUE (the
+     * inverse of a cap; it bounds sharing indirectly). Used by NYU Abu Dhabi
+     * and NYU Shanghai (minors).
+     */
+    floor?: {
+        /** Min credits each major must keep distinct from any other program. */
+        minDistinctCreditsPerMajor?: number;
+        /** Min courses each minor must keep unique to that minor. */
+        minUniqueCoursesPerMinor?: number;
+        /** Min credits each minor must keep unique to that minor. */
+        minUniqueCreditsPerMinor?: number;
+    };
+    /** Triple-counting (one course → three programs) is never permitted. */
+    noTripleCounting: boolean;
+    /** Sharing always requires explicit department/DUS approval (never automatic). */
+    requiresApproval: boolean;
+    /** Bulletin nuance (e.g. Shanghai "Core courses exempt; stricter depts may differ"). */
     note?: string;
+    /** Provenance — the bulletin-raw `path:line` this limit was read from. */
+    sourceRef: string;
 }
 
 export interface TransferCreditLimits {
@@ -426,8 +442,13 @@ export interface SchoolConfig {
     /** Course-id suffixes belonging to this school, e.g. ["-UA"] */
     courseSuffix: string[];
     // Step 8e — overallGpaMin removed: the GPA floor is per-student and comes
-    // from the DPR (`dpr.cumulative.cumulativeGpaRequired`). doubleCounting
-    // removed: double-counting is answered from the DPR + RAG (no authored rule).
+    // from the DPR (`dpr.cumulative.cumulativeGpaRequired`).
+    /**
+     * Re-introduced 2026-06-07 (data + advisory only, NO enforcement): per-school
+     * double-counting limit, cited to the bulletin. Present only for schools whose
+     * bulletin states a clear rule (CAS, SPS, NYUAD, Shanghai); absent elsewhere.
+     */
+    doubleCounting?: DoubleCountingConfig;
     residency: ResidencyConfig;
     creditCaps?: CreditCap[];
     // Step 8e — gradeThresholds removed: "a C is required in major courses" is a

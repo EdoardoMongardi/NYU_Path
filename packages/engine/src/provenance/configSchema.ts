@@ -91,24 +91,21 @@ const spsPolicySchema = z.object({
 }).passthrough();
 
 const doubleCountingConfigSchema = z.object({
-    defaultMajorToMajor: z.number().nullable(),
-    defaultMajorToMinor: z.number().nullable(),
-    defaultMinorToMinor: z.number().nullable().optional(),
-    defaultConcentrationToConcentration: z.number().nullable().optional(),
-    defaultMajorToConcentration: z.number().nullable().optional(),
-    defaultMinorToConcentration: z.number().nullable().optional(),
+    cap: z.object({
+        majorToMajor: z.number().optional(),
+        majorToMinor: z.number().optional(),
+        minorToMinor: z.number().optional(),
+    }).optional(),
+    floor: z.object({
+        minDistinctCreditsPerMajor: z.number().optional(),
+        minUniqueCoursesPerMinor: z.number().optional(),
+        minUniqueCreditsPerMinor: z.number().optional(),
+    }).optional(),
     noTripleCounting: z.boolean(),
-    requiresDepartmentApproval: z.boolean(),
-    overrideByProgram: z.union([
-        z.boolean(),
-        z.record(z.string(), z.object({
-            majorToMajor: z.number().optional(),
-            majorToMinor: z.number().optional(),
-        }).passthrough()),
-    ]).optional(),
-    exceptions: z.array(z.string()).optional(),
+    requiresApproval: z.boolean(),
     note: z.string().optional(),
-}).passthrough();
+    sourceRef: z.string(),
+}).strict();
 
 const transferCreditLimitsSchema = z.object({
     firstYearMaxTotal: z.number().optional(),
@@ -146,7 +143,9 @@ export const schoolConfigBodySchema = z.object({
     // Step 8e — degreeType removed (zero readers; lossy school-level scalar;
     // the student's degree type lives in their DPR header).
     courseSuffix: z.array(z.string()),
-    // Step 8e — overallGpaMin + doubleCounting removed (GPA floor → DPR; double-counting → DPR+RAG).
+    // Step 8e — overallGpaMin removed (GPA floor → DPR).
+    // 2026-06-07 — doubleCounting re-introduced (cited data + advisory only).
+    doubleCounting: doubleCountingConfigSchema.optional(),
     residency: residencyConfigSchema,
     creditCaps: z.array(creditCapSchema).optional(),
     passFail: passFailConfigSchema.optional(),
