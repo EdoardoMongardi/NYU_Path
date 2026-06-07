@@ -61,6 +61,7 @@ import {
     checkRequirementCoverage,
     checkMajorCreditFloor,
     checkResidencyFloor,
+    poolTermLegal,
     type ConstraintContext,
     type PartialPlan,
     type PlacedCourse,
@@ -193,11 +194,47 @@ function buildValue(v: RequirementVariable, courseId: string, term: string, ctx:
     };
 }
 
-/** All (courseId, term) values for a variable that are legal by offering season.
- *  Empty/absent offerings ⇒ any season. (Same legality rule as the domain pre-built
- *  in buildRequirementVariables, recomputed here to keep search self-contained.) */
+/** Build a synthetic `POOL-<rId>` placement value for a pool variable in `term` (T4a).
+ *  Credits = the requirement's credits. The workload tier/weight is classified using a
+ *  REPRESENTATIVE real member (poolMembers[0]) — NOT the synthetic POOL id, which would
+ *  classify as free/light (no number, no rule-bearing id) and understate the load. The
+ *  member + satisfiesRules:[rId] yield the real pool tier (e.g. major-elective ⇒ ≥1.0). */
+function buildPoolValue(v: RequirementVariable, term: string, ctx: ConstraintContext): PlacedCourse {
+    const representative = v.poolMembers[0]!; // pool variables always have ≥1 member
+    const wt = classifyWorkloadTier({
+        courseId: representative,
+        satisfiesRules: [v.rId],
+        majorRuleKinds: ctx.input.programRules.majorRuleKinds,
+        schoolCoreRuleIds: ctx.input.programRules.schoolCoreRuleIds,
+        generalCategoryRuleIds: ctx.input.programRules.generalCategoryRuleIds,
+        bulletinTitle: ctx.input.courseTitles?.get(representative),
+        bulletinKeywords: ctx.input.courseBulletinKeywords?.get(representative),
+    });
+    return {
+        courseId: `POOL-${v.rId}`,
+        term,
+        credits: v.credits,
+        workloadTier: wt.tier,
+        workloadWeight: wt.weight,
+        satisfiesRId: v.rId,
+        source: "requirement",
+    };
+}
+
+/** All values for a variable that are legal in the planning window.
+ *  - kind "pool": ONE synthetic `POOL-<rId>` value per term where a REAL member fits
+ *    (poolTermLegal: ≥1 member offered + prereq-satisfiable-by-taken/IP). NOT N branches.
+ *  - kind "specific": per-(candidate × offering-legal term), as before. Empty/absent
+ *    offerings ⇒ any season. (Same legality rule as the domain pre-built in
+ *    buildRequirementVariables, recomputed here to keep search self-contained.) */
 function rawValues(v: RequirementVariable, ctx: ConstraintContext): PlacedCourse[] {
     const out: PlacedCourse[] = [];
+    if (v.kind === "pool") {
+        for (const term of ctx.futureTerms) {
+            if (poolTermLegal(v.poolMembers, term, ctx)) out.push(buildPoolValue(v, term, ctx));
+        }
+        return out;
+    }
     for (const cid of v.candidates) {
         const offered = ctx.input.offerings.get(cid);
         for (const term of ctx.futureTerms) {
