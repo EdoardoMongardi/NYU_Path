@@ -770,8 +770,9 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
 
     for (const term of futureTerms) {
         if (isOptionalTerm(term)) continue; // do not pad summer/january
+        const isFinalTerm = term === lastTerm;
         const cur = perTermCredits.get(term) ?? 0;
-        const target = effectiveTermTarget(
+        const baseTarget = effectiveTermTarget(
             term,
             input.creditTargetPerSemester,
             input.preferences,
@@ -779,6 +780,29 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
             input.domesticPartTimeFloor,
             input.creditCeiling,
         );
+        let target: number;
+        if (isFinalTerm && input.visaStatus === "f1") {
+            // (b) F-1 FINAL graduating term — takes the REMAINDER: fill only enough to
+            // reach the degree credit minimum, NOT the 16-credit target. It may
+            // legitimately end BELOW the F-1 full-time floor (→ RCL, handled in the visa
+            // block). Never pad it with junk to 16. Non-F-1 final terms are unaffected and
+            // continue to use baseTarget (their enrollment floor semantics differ).
+            const totalAllTerms =
+                input.creditsEarned +
+                [...perTermCredits.values()].reduce((s, c) => s + c, 0);
+            const remainingToMin = Math.max(
+                0,
+                input.graduationCreditMinimum - totalAllTerms,
+            );
+            target = Math.min(cur + remainingToMin, input.creditCeiling);
+        } else if (!isFinalTerm && input.visaStatus === "f1" && input.f1Floor != null) {
+            // (a) A NON-final F-1 term must be kept at/above the F-1 full-time floor —
+            // make the guarantee explicit so a "light"/explicit per-term override can
+            // never drop an F-1 non-final term below the floor.
+            target = Math.max(baseTarget, input.f1Floor);
+        } else {
+            target = baseTarget;
+        }
         let credits = cur;
 
         while (credits < target) {
@@ -864,19 +888,37 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
         // part-time floor — mirror checkPerTermFloor's exemption so materialize does
         // not flag a lightly-loaded summer/January term below the floor.
         const termIsOptional = isOptionalTerm(term);
-        if (!termIsOptional && vResult.fullTimeSatisfied.status === "fail") {
-            violations.push({
-                kind: "credit_floor",
-                term,
-                detail: `Below F-1 full-time floor (${termCredits} credits). ${vResult.fullTimeSatisfied.reason}`,
-            });
-        }
-        if (!termIsOptional && vResult.creditMinimumSatisfied.status === "fail") {
-            violations.push({
-                kind: "credit_floor",
-                term,
-                detail: `Below minimum enrollment floor (${termCredits} credits). ${vResult.creditMinimumSatisfied.reason}`,
-            });
+        const isFinalF1 = isLastTerm && input.visaStatus === "f1";
+        if (!termIsOptional) {
+            const fullTimeFail = vResult.fullTimeSatisfied.status === "fail";
+            const minEnrollFail = vResult.creditMinimumSatisfied.status === "fail";
+            if ((fullTimeFail || minEnrollFail) && isFinalF1) {
+                // (b) FINAL-term RCL exemption: a near-graduate's last term may fall below the
+                // F-1 full-time / minimum-enrollment floor. This is NOT a hard violation —
+                // it is typically allowed via a Reduced Course Load. Emit an OGS/RCL NOTE
+                // so validator axis 5 returns requires-approval (valid-with-trade-offs), NOT
+                // fail. Do NOT push a credit_floor violation, and (per Change 1) the term
+                // was NOT padded to 16.
+                notes.push(
+                    `Final graduating term carries ${termCredits} credit(s), below the F-1 full-time floor — ` +
+                        `this is typically permitted via a Reduced Course Load (RCL); verify with OGS.`,
+                );
+            } else {
+                if (vResult.fullTimeSatisfied.status === "fail") {
+                    violations.push({
+                        kind: "credit_floor",
+                        term,
+                        detail: `Below F-1 full-time floor (${termCredits} credits). ${vResult.fullTimeSatisfied.reason}`,
+                    });
+                }
+                if (vResult.creditMinimumSatisfied.status === "fail") {
+                    violations.push({
+                        kind: "credit_floor",
+                        term,
+                        detail: `Below minimum enrollment floor (${termCredits} credits). ${vResult.creditMinimumSatisfied.reason}`,
+                    });
+                }
+            }
         }
 
         if (termCredits > input.creditCeiling) {

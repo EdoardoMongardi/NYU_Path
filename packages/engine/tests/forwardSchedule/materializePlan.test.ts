@@ -393,9 +393,21 @@ describe("materializePlan — free-elective fill meets target", () => {
         const ctx = buildConstraintContext(input);
         const out = materializePlan(searchBestPlan(ctx).plan!, ctx);
 
-        // Each term hits the 16-credit target.
+        // T6: For F-1 students, the FINAL graduating term takes the degree-minimum remainder
+        // (not the full 16-credit target) — padding the last term with junk electives was
+        // the bug T6 fixes. Non-final terms still hit the 16-credit target.
+        // solvableInput: creditsEarned=100, graduationMin=128, 2 terms (fall, spring).
+        // After fall fills to 16: remaining = 128 - (100 + 16) = 12 → spring gets 12.
+        const lastTerm = out.semesters[out.semesters.length - 1]!.term;
         for (const sem of out.semesters) {
-            expect(sem.plannedCredits).toBe(input.creditTargetPerSemester);
+            if (sem.term === lastTerm && input.visaStatus === "f1") {
+                // Final F-1 term takes the degree-minimum REMAINDER, NOT the 16 target:
+                // 128 − (100 earned + 16 in fall) = 12. Pinned so a regression that re-pads
+                // the final term back to 16 is caught here (not only in f1FloorEdges).
+                expect(sem.plannedCredits).toBe(12);
+            } else {
+                expect(sem.plannedCredits).toBe(input.creditTargetPerSemester);
+            }
         }
 
         // Total earned + planned clears the graduation minimum.

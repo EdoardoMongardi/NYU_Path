@@ -171,7 +171,11 @@ function poolInputWithDprLeaf(overrides: Partial<SolverInput> = {}): SolverInput
         catalog.set(id, { title: id, credits: 4 });
         offerings.set(id, ["fall", "spring"]);
     }
-    const dpr = makeMinimalDpr({
+    // creditsUsed must match creditsEarned:120 below — the validator axis-3 uses DPR.creditsUsed.
+    const baseDpr = makeMinimalDpr();
+    const dpr: DegreeProgressReport = {
+        ...baseDpr,
+        cumulative: { ...baseDpr.cumulative, creditsUsed: 120 },
         requirementGroups: [
             {
                 rgId: "RGCS",
@@ -189,7 +193,7 @@ function poolInputWithDprLeaf(overrides: Partial<SolverInput> = {}): SolverInput
                 ],
             },
         ],
-    });
+    };
     return makeInput({
         currentTerm: "2026-fall",
         graduationTerm: "2027-spring",
