@@ -16,8 +16,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { simulateAlternatives } from "../../src/agent/forwardSchedule/alternatives.js";
+import { simulateAlternatives, validatorRulesFromInput } from "../../src/agent/forwardSchedule/alternatives.js";
 import type { SolverInput } from "../../src/agent/forwardSchedule/types.js";
+import {
+    runGraduationPathValidator,
+    derivePlanStateFromValidator,
+} from "../../src/agent/forwardSchedule/graduationPathValidator.js";
 
 // ---------------------------------------------------------------------------
 // Minimal DPR fixture (mirrors solverPreferences.test.ts factory pattern)
@@ -211,5 +215,52 @@ describe("simulateAlternatives", () => {
         const extendCand = candidates.find(c => c.relaxation === "extend_grad_one_term");
         expect(extendCand?.schedule).not.toBeNull();
         expect(extendCand?.schedule?.feasibility.feasible).toBe(true);
+    });
+
+    // T8 / M3 — validator-derived state hardening
+    it("displayed alternative schedules carry the validator-derived state (not the coarse solver state)", () => {
+        // Build an input that triggers simulateAlternatives to return ≥1 candidate
+        // with a non-null schedule (extend_grad_one_term gives feasible alt).
+        const input = infeasibleInput();
+        const cands = simulateAlternatives(input);
+
+        // At least one candidate should have a schedule for this test to be meaningful.
+        const scheduledCands = cands.filter(c => c.schedule !== null);
+        expect(scheduledCands.length).toBeGreaterThan(0);
+
+        for (const c of scheduledCands) {
+            // Type narrowed: c.schedule is non-null here
+            const schedule = c.schedule!;
+            // Reconstruct the validator rules the same way buildCandidate does:
+            // validatorRulesFromInput is called with the RELAXED input whose
+            // graduationTerm matches the schedule (e.g. "2027-spring" for
+            // extend_grad_one_term). We derive this from the schedule itself.
+            const scheduleVRules = validatorRulesFromInput({
+                ...input,
+                graduationTerm: schedule.graduationTerm,
+            });
+            const v = runGraduationPathValidator({
+                plan: schedule,
+                dpr: input.dpr,
+                programRules: scheduleVRules,
+            });
+            // The displayed state must equal the validator's authoritative verdict.
+            expect(schedule.state).toBe(derivePlanStateFromValidator(v, schedule));
+            // And the validator must agree it is feasible (no false-valid alternatives).
+            expect(v.feasible).toBe(true);
+        }
+    });
+
+    it("validatorRulesFromInput mirrors the buildProgramRules validatorRules shape", () => {
+        const input = infeasibleInput();
+        const rules = validatorRulesFromInput(input);
+        // Verify the mapped fields match the SolverInput fields they came from.
+        expect(rules.degreeCreditMinimum).toBe(input.graduationCreditMinimum);
+        expect(rules.residencyMinCredits).toBe(input.programRules.residencyMinCredits);
+        expect(rules.majorCreditMinimum).toBe(input.programRules.majorCreditMinimum);
+        expect(rules.minorCreditMinimum).toBeNull();
+        expect(rules.upperLevelMinCredits).toBeNull();
+        expect(rules.schoolCoreMinCredits).toBeNull();
+        expect(rules.graduationTargetTerm).toBe(input.graduationTerm);
     });
 });
