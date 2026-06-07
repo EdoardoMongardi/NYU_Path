@@ -270,15 +270,31 @@ export function isExcludedByNotClause(
 }
 
 // ---------------------------------------------------------------------------
+// Shared course-id parsing
+// ---------------------------------------------------------------------------
+
+/** Parse a course id into its department prefix + catalog number.
+ *  "CORE-UA 412" → { dept: "CORE-UA", num: 412 }; "MATH-UA 9 101" → { dept: "MATH-UA 9", num: 101 }.
+ *  Single source of the trailing-number regex shared by isStudyAbroadCourse,
+ *  constraintModel's pool expansion, and workloadTier's parseCourseNumber.
+ *  Returns null when no numeric suffix is present. */
+export function parseCourseComponents(courseId: string): { dept: string; num: number } | null {
+    const m = courseId.match(/[- ](\d+)[A-Za-z]*\s*$/);
+    if (!m) return null;
+    const num = parseInt(m[1]!, 10);
+    if (isNaN(num)) return null;
+    // dept = everything before the matched number token (trimmed of the separator).
+    const dept = courseId.slice(0, m.index! + 1).trimEnd();
+    return { dept, num };
+}
+
+// ---------------------------------------------------------------------------
 // Decision #21 — study-abroad-9000-skip
 // ---------------------------------------------------------------------------
 
 export function isStudyAbroadCourse(courseId: string): boolean {
-    // Study-abroad courses have catalog numbers ≥ 9000
-    const m = courseId.match(/[- ](\d+)[A-Za-z]*\s*$/);
-    if (!m) return false;
-    const n = parseInt(m[1]!, 10);
-    return !isNaN(n) && n >= 9000;
+    // Study-abroad courses have catalog numbers ≥ 9000.
+    return (parseCourseComponents(courseId)?.num ?? -1) >= 9000;
 }
 
 // ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@
  */
 
 import type { WorkloadTier, Prerequisite } from "@nyupath/shared";
+import { parseCourseComponents } from "./solverHelpers.js";
 
 export interface WorkloadTierClassifyArgs {
     courseId: string;
@@ -118,11 +119,7 @@ function resolveTier(args: WorkloadTierClassifyArgs): WorkloadTier {
  *  E.g. "CSCI-UA 4700" → 4700; "CSCI-UA 4900W" → 4900; "CSCI-UY 3200" → 3200.
  *  Returns null if no numeric suffix found. */
 function parseCourseNumber(courseId: string): number | null {
-    // Matches optional space + digits immediately before an optional alphabetic tail
-    const m = courseId.match(/[- ](\d+)[A-Za-z]*\s*$/);
-    if (!m) return null;
-    const n = parseInt(m[1], 10);
-    return isNaN(n) ? null : n;
+    return parseCourseComponents(courseId)?.num ?? null;
 }
 
 function isTandonCourse(courseId: string): boolean {
