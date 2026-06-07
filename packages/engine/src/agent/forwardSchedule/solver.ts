@@ -6,17 +6,19 @@
  *
  *   1. buildConstraintContext (constraintModel.ts) — precompute the immutable
  *      problem context (future-term window, prereq depths, dependents index).
- *   2. searchTopKPlans (search.ts) — a backtracking + forward-check search with
- *      incumbent tracking but NO admissible objective bound (so NOT cost-bounded
- *      branch-and-bound; a sound bound is impossible while the objective is
- *      non-monotonic). It assigns each unmet requirement a (course, term) on top
- *      of caller-supplied FIXED placements (in-progress + pins), minimising the
- *      soft objective among VALID assignments. It is COMPLETE + OPTIMAL only
- *      WITHIN its `maxNodes` budget and TRUNCATES beyond it. Where the old greedy
- *      was first-fit (and could falsely report infeasible), an EXHAUSTIVE search
- *      finds a valid plan iff one exists; a TRUNCATED one is surfaced honestly via
- *      `exhaustive` (see C1 below) so we never present a truncated search as
- *      proven-optimal or proven-infeasible.
+ *   2. findFirstValidPlan (search.ts) — T1b: the PRIMARY search path is now
+ *      FEASIBILITY-FIRST. It assigns each unmet requirement a (course, term) on
+ *      top of caller-supplied FIXED placements (in-progress + pins) and returns
+ *      the FIRST valid leaf, then STOPS — it does NOT enumerate the whole space to
+ *      prove an optimum (the per-variable value ordering makes that first leaf a
+ *      good plan; a later localImprove step refines it). This avoids the
+ *      full-space enumeration that truncated at realistic scale. Honesty is
+ *      preserved: when it FINDS a plan it returns `exhaustive:true` (budget not
+ *      hit) so no truncation warning fires; when it returns no plan, `exhaustive`
+ *      distinguishes proven-infeasible (true) from truncated-without-finding
+ *      (false), gating the capacity diagnostic so we never report false-infeasible.
+ *      A found plan is best-effort, not proven-optimal — that status is surfaced
+ *      structurally by the T7 `optimality` field (NOT by the truncation string).
  *   3. materializePlan (materializePlan.ts) — turn the search's PartialPlan into
  *      the full SolverOutput (rich specific_planned slots, placeholders for
  *      uncovered requirements, free-elective fill, per-term visa invariants,
@@ -34,10 +36,10 @@
  * solver ↔ materializePlan import cycle; this file imports them from there and
  * uses derivePlanState in its body.
  *
- * `alternativeCandidates` is the REAL top-K distinct plans (P2.3): the search
- * returns up to 5 best valid leaves; the winner (plans[0]) is the main plan, and
- * each remaining leaf is materialised + summarised into an AlternativePlanSummary
- * (the fake distribution probe is gone).
+ * `alternativeCandidates` (real top-K distinct plans) is DEFERRED in T1b: the
+ * feasibility-first primary path returns a single winner, so this field is left
+ * `undefined` for now. T3 restores it via `findDiverseValidPlans` (cheap distinct
+ * valid plans found by forbid-signature restart, NOT by space exhaustion).
  *
  * The `solveForwardSchedule(input: SolverInput): SolverOutput` signature is
  * FROZEN for production callers — build.ts and alternatives.ts call it with a
@@ -48,11 +50,12 @@
  * search default; the public single-arg contract is unaffected.
  */
 
-import type { FeasibilityReport } from "@nyupath/shared";
+import type { FeasibilityReport, AlternativePlanSummary } from "@nyupath/shared";
 import type { SolverInput, SolverOutput } from "./types.js";
 import { buildConstraintContext, type ConstraintContext, type PlacedCourse } from "./constraintModel.js";
-import { searchTopKPlans } from "./search.js";
+import { findFirstValidPlan, findDiverseValidPlans } from "./search.js";
 import { materializePlan, buildAlternativeSummaries } from "./materializePlan.js";
+import { localImprove } from "./localImprove.js";
 import { classifyWorkloadTier } from "./workloadTier.js";
 import { parseTerm, isOptionalTerm, derivePlanState } from "./solverHelpers.js";
 
@@ -161,6 +164,26 @@ function computeCapacityDiagnostic(
 // violations) using the imported helper.
 
 // ---------------------------------------------------------------------------
+// T7 — Structured optimality status
+//
+// Map the feasibility-first search result to a structured optimality status.
+// A FOUND plan is best-effort (feasibility-first does not prove the global
+// optimum); an empty result is feasibility-unconfirmed (truncated → a valid
+// plan may exist beyond budget; proven-infeasible → feasible:false already
+// dominates, and "unconfirmed" never misleads a consumer into treating it as
+// optimal). "optimal" is reserved for a future exhaustive-proof mode.
+// ---------------------------------------------------------------------------
+
+/** Map the feasibility-first search result to a structured optimality status. A FOUND plan
+ *  is best-effort (feasibility-first does not prove the global optimum); an empty result is
+ *  feasibility-unconfirmed (truncated → a valid plan may exist beyond budget; proven-infeasible
+ *  → feasible:false already dominates, and "unconfirmed" never misleads a consumer into
+ *  treating it as optimal). "optimal" is reserved for a future exhaustive-proof mode. */
+function deriveOptimality(hasValidPlan: boolean): "optimal" | "best-effort" | "feasibility-unconfirmed" {
+    return hasValidPlan ? "best-effort" : "feasibility-unconfirmed";
+}
+
+// ---------------------------------------------------------------------------
 // Main export — constraint search + materialize
 // ---------------------------------------------------------------------------
 
@@ -176,9 +199,15 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
     // Empty horizon (graduation == current term): nothing to plan. materializePlan
     // returns the same empty valid bundle the old greedy did. (No search runs, so
     // no truncation is possible — only build-time advisories apply here.)
+    // T7: an empty plan is trivially optimal — it is the ONLY possible plan, so
+    // nothing can be preferred over it. Set optimality "optimal" here.
     if (ctx.futureTerms.length === 0) {
         const out = materializePlan({ placed: [] }, ctx);
-        return warningsList.length > 0 ? { ...out, warnings: warningsList } : out;
+        return {
+            ...out,
+            optimality: "optimal" as const,
+            ...(warningsList.length > 0 ? { warnings: warningsList } : {}),
+        };
     }
 
     // Violations the SEARCH/materialize path cannot surface on its own (pins it
@@ -291,34 +320,36 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
     }
 
     // -----------------------------------------------------------------------
-    // Run the search (requirement placements on top of fixed). The WINNER —
-    // top.plans[0] — is the optimal valid plan (=== the old searchBestPlan plan);
-    // top.plans[1..] are the next-best DISTINCT valid plans (≤4 alternatives).
-    // When NO valid plan exists (top.plans empty), materialise the fixed-only
-    // plan (so IP + pins + placeholders still render) and surface each
-    // unsatisfiable requirement as a violation — the exact old infeasible path.
+    // Run the search (requirement placements on top of fixed). T1b: PRIMARY path
+    // is feasibility-first (findFirstValidPlan) — finds the FIRST valid leaf and
+    // stops, avoiding full-space enumeration that causes truncation at scale.
+    // When NO valid plan exists, materialise the fixed-only plan (so IP + pins +
+    // placeholders still render) and surface each unsatisfiable requirement as a
+    // violation — the exact old infeasible path.
     //
-    // C1: the search is complete + optimal ONLY within its node budget. We consume
-    // `top.exhaustive` (and `top.nodesExplored`) so a TRUNCATED search never reads
-    // as proven-optimal or proven-infeasible (see gating below). `maxNodes` is the
-    // test-supporting seam (undefined in production → search default).
+    // C1: the search is complete for feasibility ONLY within its node budget.
+    // `findFirstValidPlan` returns exhaustive:true when it FINDS a plan (budget not
+    // hit) → truncationWarning returns null (correct, no warning needed). When no
+    // plan is found, exhaustive:true = proven-infeasible, exhaustive:false =
+    // truncated-without-finding. `maxNodes` is the test-supporting seam.
+    //
     // -----------------------------------------------------------------------
-    const top = searchTopKPlans(ctx, { fixed, k: 5, ...(maxNodes !== undefined ? { maxNodes } : {}) });
-    const winnerPlan = top.plans[0] ?? { placed: fixed };
+    const winner = findFirstValidPlan(ctx, { fixed, ...(maxNodes !== undefined ? { maxNodes } : {}) });
+    const winnerPlan = winner.plan ?? { placed: fixed };
 
     // C1 — honest truncation advisory (null when exhaustive; today's verdicts then
     // hold unchanged). Appended to the warnings carried onto SolverOutput.
-    const truncMsg = truncationWarning(top.exhaustive, top.plans.length > 0, top.nodesExplored);
+    const truncMsg = truncationWarning(winner.exhaustive, winner.plan !== null, winner.nodesExplored);
     if (truncMsg !== null) warningsList.push(truncMsg);
 
-    if (top.plans.length === 0) {
+    if (winner.plan === null) {
         // Per-requirement binding constraints — the SPECIFIC reason each unplaceable
         // requirement is blocked (offering / ceiling / coreq / NOT / prereq-depth),
         // replacing the old uncomputable generic "could not be placed" prereq push.
         // These hold REGARDLESS of truncation (each is an individual-impossibility
         // proof against just `fixed`), so they are surfaced whether or not the
         // search was exhaustive.
-        for (const b of top.blockers) {
+        for (const b of winner.blockers) {
             extraViolations.push({ kind: b.kind, detail: b.detail });
         }
 
@@ -327,32 +358,52 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
         // fail to FIT: their total credits exceed the credit capacity left in the
         // non-optional terms. This is a JOINT-infeasibility verdict, which is only
         // PROVEN when the search fully explored the space. C1: gate it on
-        // `top.exhaustive` — when the search was TRUNCATED (no valid plan found
+        // `winner.exhaustive` — when the search was TRUNCATED (no valid plan found
         // within the budget) feasibility is UNCONFIRMED, not disproven, so we do
         // NOT emit this "would need N credits"-style infeasibility framing; the
         // truncation advisory above is the honest signal (any real per-requirement
         // blockers still stand).
-        if (top.exhaustive) {
+        if (winner.exhaustive) {
             const cap = computeCapacityDiagnostic(input, ctx, fixed);
             if (cap !== null) extraViolations.push(cap);
         }
     }
 
-    const out = materializePlan(winnerPlan, ctx);
+    // T3a: apply validity-preserving local preference descent on the FOUND plan
+    // (pre-fill). Only improve when a real plan was found — the fixed-only fallback
+    // {placed:fixed} (emitted on infeasible) is not a valid search leaf and is not
+    // improved. localImprove uses the eight search-leaf predicates (NOT
+    // checkHardConstraints, whose fill-dependent axes fail on pre-fill plans).
+    const improvedPlan = winner.plan !== null ? localImprove(winnerPlan, ctx) : winnerPlan;
+    const out = materializePlan(improvedPlan, ctx);
 
-    // Materialise each alternative leaf the SAME way as the winner, then summarise
-    // them against the winner. The alternatives are NOT subjected to the pin/
-    // unsatisfiable extra-violation fold (those describe the whole problem, not a
-    // per-alternative defect) — and buildAlternativeSummaries reads only the
-    // winner's balanceScore + last term, both unaffected by that fold. Left
-    // undefined when there are no alternatives.
-    const altOuts = top.plans.slice(1).map(p => materializePlan(p, ctx));
-    const alternativeCandidates =
-        altOuts.length > 0 ? buildAlternativeSummaries(out, altOuts) : undefined;
+    // T7: derive the structured optimality status. A found plan is best-effort
+    // (feasibility-first does not prove the global optimum); no found plan is
+    // feasibility-unconfirmed (truncated) or proven-infeasible (feasible:false
+    // already dominates — "unconfirmed" never misleads a consumer). "optimal" is
+    // reserved for a future exhaustive-proof mode.
+    const optimality = deriveOptimality(winner.plan !== null);
+
+    // T3b: real diverse top-K via findDiverseValidPlans — populate
+    // alternativeCandidates with distinct valid plans ranked by balance score.
+    // diverse[0] === winner.plan (same first leaf, no forbidden sig); diverse[1..] are
+    // the next DISTINCT valid plans. localImprove each (same refinement the winner gets),
+    // materialise, summarise against the winner's materialised output `out`.
+    let alternativeCandidates: AlternativePlanSummary[] | undefined = undefined;
+    if (winner.plan !== null) {
+        const diverse = findDiverseValidPlans(ctx, {
+            fixed,
+            k: 5,
+            ...(maxNodes !== undefined ? { maxNodes } : {}),
+        });
+        const altOuts = diverse.slice(1).map(p => materializePlan(localImprove(p, ctx), ctx));
+        if (altOuts.length > 0) alternativeCandidates = buildAlternativeSummaries(out, altOuts);
+    }
 
     if (extraViolations.length === 0) {
         return {
             ...out,
+            optimality,
             ...(alternativeCandidates !== undefined ? { alternativeCandidates } : {}),
             ...(warningsList.length > 0 ? { warnings: warningsList } : {}),
         };
@@ -373,6 +424,7 @@ export function solveForwardSchedule(input: SolverInput, maxNodes?: number): Sol
         ...out,
         feasibility,
         state,
+        optimality,
         ...(alternativeCandidates !== undefined ? { alternativeCandidates } : {}),
         ...(warningsList.length > 0 ? { warnings: warningsList } : {}),
     };

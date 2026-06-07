@@ -48,6 +48,7 @@ import {
     checkNotClauseClear,
     checkCoreqsSameTerm,
     checkPerTermCeiling,
+    poolMembersFor,
 } from "./constraintModel.js";
 import { visaValidator } from "../../dpr/visaValidator.js";
 import { visaNotesForCredits } from "./visaPolicy.js";
@@ -470,6 +471,58 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
             continue;
         }
 
+        // ---- Pool placeholder slot (T4b/Option B) ----
+        // A synthetic `POOL-<rId>` placement (T4a) is NOT a real course — rendering
+        // it as a specific_planned with courseId "POOL-r1" would surface a phantom id.
+        // Instead emit a RESOLVABLE pool placeholder: a kind:"placeholder" slot whose
+        // `poolBinding.candidates` are the REAL catalog members of the pool, so the
+        // existing bindPoolSlot tool can promote a chosen member to a concrete slot,
+        // and the narrowed validator axis-1 re-allow credits it as a "choose one of
+        // these real courses" satisfier (axis 2 separately validates resolvability).
+        if (p.courseId.startsWith("POOL-")) {
+            const poolReq = p.satisfiesRId != null ? reqByRId.get(p.satisfiesRId) : undefined;
+            const members = poolReq !== undefined ? poolMembersFor(poolReq, ctx) : [];
+            const poolSlot: ScheduleSlotPlaceholder = {
+                kind: "placeholder",
+                category: poolReq?.title ?? "Elective pool",
+                credits: p.credits,
+                satisfiesRules: p.satisfiesRId != null ? [p.satisfiesRId] : [],
+                optional: false,
+                reason: `Choose one course from the ${poolReq?.title ?? "elective"} pool (placed in ${p.term}; bind a specific course to confirm).`,
+                rationale: {
+                    satisfiesRequirements: p.satisfiesRId != null ? [p.satisfiesRId] : [],
+                    termConstraints: [
+                        { kind: "offering", detail: `A pool member is offered in ${p.term}.` },
+                    ],
+                    consideredAlternatives: [],
+                    decisionsApplied: ["D28-PoolLateBinding"],
+                },
+                flexibility: {
+                    earliestPossibleTerm: p.term,
+                    latestPossibleTerm: lastTerm,
+                    alternativeCourses: members,
+                },
+                downstreamImpact: { courseIds: [], graduationDelay: 0 },
+                workloadTier: p.workloadTier, // HEAVY (from T4a's representative-member classification)
+                workloadWeight: p.workloadWeight, // HEAVY (≥1.0)
+                bindingState: p.term === futureTerms[0] ? "placeholder-pending" : "placeholder-deferred",
+                placeholderId: `POOL-${p.satisfiesRId}`,
+                confidence: "historically_partial",
+                isCriticalPath: false,
+                poolBinding: {
+                    poolId: `POOL-${p.satisfiesRId}`,
+                    candidates: members,
+                    satisfiesRule: p.satisfiesRId ?? "",
+                },
+            };
+            perTermSlots.get(p.term)!.push(poolSlot);
+            perTermCredits.set(p.term, (perTermCredits.get(p.term) ?? 0) + p.credits);
+            // NOTE: do NOT add POOL-<rId> to placedCourseSet (it's not a real course);
+            // the pool credits ARE counted above.
+            placementRationale[p.courseId] = poolSlot.reason;
+            continue; // skip the normal specific_planned build
+        }
+
         // ---- Requirement slot (mirror solver.ts requirement branch) ----
         const req = p.satisfiesRId != null ? reqByRId.get(p.satisfiesRId) : undefined;
         const category = req?.category ?? "requirement";
@@ -717,8 +770,9 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
 
     for (const term of futureTerms) {
         if (isOptionalTerm(term)) continue; // do not pad summer/january
+        const isFinalTerm = term === lastTerm;
         const cur = perTermCredits.get(term) ?? 0;
-        const target = effectiveTermTarget(
+        const baseTarget = effectiveTermTarget(
             term,
             input.creditTargetPerSemester,
             input.preferences,
@@ -726,6 +780,29 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
             input.domesticPartTimeFloor,
             input.creditCeiling,
         );
+        let target: number;
+        if (isFinalTerm && input.visaStatus === "f1") {
+            // (b) F-1 FINAL graduating term — takes the REMAINDER: fill only enough to
+            // reach the degree credit minimum, NOT the 16-credit target. It may
+            // legitimately end BELOW the F-1 full-time floor (→ RCL, handled in the visa
+            // block). Never pad it with junk to 16. Non-F-1 final terms are unaffected and
+            // continue to use baseTarget (their enrollment floor semantics differ).
+            const totalAllTerms =
+                input.creditsEarned +
+                [...perTermCredits.values()].reduce((s, c) => s + c, 0);
+            const remainingToMin = Math.max(
+                0,
+                input.graduationCreditMinimum - totalAllTerms,
+            );
+            target = Math.min(cur + remainingToMin, input.creditCeiling);
+        } else if (!isFinalTerm && input.visaStatus === "f1" && input.f1Floor != null) {
+            // (a) A NON-final F-1 term must be kept at/above the F-1 full-time floor —
+            // make the guarantee explicit so a "light"/explicit per-term override can
+            // never drop an F-1 non-final term below the floor.
+            target = Math.max(baseTarget, input.f1Floor);
+        } else {
+            target = baseTarget;
+        }
         let credits = cur;
 
         while (credits < target) {
@@ -811,19 +888,37 @@ export function materializePlan(plan: PartialPlan, ctx: ConstraintContext): Solv
         // part-time floor — mirror checkPerTermFloor's exemption so materialize does
         // not flag a lightly-loaded summer/January term below the floor.
         const termIsOptional = isOptionalTerm(term);
-        if (!termIsOptional && vResult.fullTimeSatisfied.status === "fail") {
-            violations.push({
-                kind: "credit_floor",
-                term,
-                detail: `Below F-1 full-time floor (${termCredits} credits). ${vResult.fullTimeSatisfied.reason}`,
-            });
-        }
-        if (!termIsOptional && vResult.creditMinimumSatisfied.status === "fail") {
-            violations.push({
-                kind: "credit_floor",
-                term,
-                detail: `Below minimum enrollment floor (${termCredits} credits). ${vResult.creditMinimumSatisfied.reason}`,
-            });
+        const isFinalF1 = isLastTerm && input.visaStatus === "f1";
+        if (!termIsOptional) {
+            const fullTimeFail = vResult.fullTimeSatisfied.status === "fail";
+            const minEnrollFail = vResult.creditMinimumSatisfied.status === "fail";
+            if ((fullTimeFail || minEnrollFail) && isFinalF1) {
+                // (b) FINAL-term RCL exemption: a near-graduate's last term may fall below the
+                // F-1 full-time / minimum-enrollment floor. This is NOT a hard violation —
+                // it is typically allowed via a Reduced Course Load. Emit an OGS/RCL NOTE
+                // so validator axis 5 returns requires-approval (valid-with-trade-offs), NOT
+                // fail. Do NOT push a credit_floor violation, and (per Change 1) the term
+                // was NOT padded to 16.
+                notes.push(
+                    `Final graduating term carries ${termCredits} credit(s), below the F-1 full-time floor — ` +
+                        `this is typically permitted via a Reduced Course Load (RCL); verify with OGS.`,
+                );
+            } else {
+                if (vResult.fullTimeSatisfied.status === "fail") {
+                    violations.push({
+                        kind: "credit_floor",
+                        term,
+                        detail: `Below F-1 full-time floor (${termCredits} credits). ${vResult.fullTimeSatisfied.reason}`,
+                    });
+                }
+                if (vResult.creditMinimumSatisfied.status === "fail") {
+                    violations.push({
+                        kind: "credit_floor",
+                        term,
+                        detail: `Below minimum enrollment floor (${termCredits} credits). ${vResult.creditMinimumSatisfied.reason}`,
+                    });
+                }
+            }
         }
 
         if (termCredits > input.creditCeiling) {
