@@ -88,19 +88,122 @@ export function buildConstraintContext(input: SolverInput): ConstraintContext {
 // Requirement variables (CSP variable model)
 // ---------------------------------------------------------------------------
 
-/** A requirement that needs a specific bound course (validator axis 1). */
+/**
+ * A requirement that needs a bound course (validator axis 1).
+ *
+ * `kind` distinguishes the two representations (T4a):
+ *   - "specific": the requirement is satisfied by one of an ENUMERATED candidate
+ *     list (`candidates`) — the historical default. Value generation in the search
+ *     is per-(candidate × term). Covers: plain course-list requirements, AND a
+ *     CHAIN-LINKED pool whose members are enumerated so a member can be placed
+ *     concretely as another course's prereq.
+ *   - "pool": a "choose-N from a pool" requirement (e.g. CSCI-UA 400-499) with
+ *     many real members. The search places ONE synthetic `POOL-<rId>` placeholder
+ *     (NOT N branches), legal only in terms where a REAL member fits. `poolMembers`
+ *     holds the expanded real catalog members; `candidates` mirrors them for
+ *     downstream binding/resolvability + coverage bookkeeping.
+ *
+ * `poolMembers` is the expanded real-member list for a pool requirement, or [] for
+ * a non-pool one (always present so callers need not branch on undefined).
+ */
 export interface RequirementVariable {
     rId: string;
     title: string;
     category: string;
     credits: number;
+    kind: "specific" | "pool";
     candidates: string[]; // catalog-present, not excluded, not study-abroad
+    /** Real catalog members of a pool requirement (sorted by id); [] when not a pool. */
+    poolMembers: string[];
     domain: Array<{ courseId: string; term: string }>; // legal by offering-season + catalog
+}
+
+/** Parse a course id into its department prefix + catalog number.
+ *  "CORE-UA 412" → { dept: "CORE-UA", num: 412 }; "MATH-UA 9 101" → { dept: "MATH-UA 9", num: 101 }.
+ *  Uses the same trailing-number regex as isStudyAbroadCourse / workloadTier's parseCourseNumber.
+ *  Returns null when no numeric suffix is present. */
+function parseCourseId(courseId: string): { dept: string; num: number } | null {
+    const m = courseId.match(/[- ](\d+)[A-Za-z]*\s*$/);
+    if (!m) return null;
+    const num = parseInt(m[1]!, 10);
+    if (isNaN(num)) return null;
+    // dept = everything before the matched number token (trimmed of the separator).
+    const dept = courseId.slice(0, m.index! + 1).trimEnd();
+    return { dept, num };
+}
+
+/**
+ * Expand a "choose-N from a pool" requirement to its REAL catalog members (T4a).
+ *
+ * Members = catalog courses whose dept === `req.pool.dept` AND whose catalog number
+ * ∈ [levelMin, levelMax], UNION any explicit `req.candidateCourses` that are
+ * catalog-present (the mixed case). Study-abroad (isStudyAbroadCourse) and
+ * student-excluded courses are removed. Deterministic order (sorted by id). Returns
+ * [] when the requirement has no `pool` descriptor (it is not a pool) — so callers
+ * use a non-empty result as the "this is a pool" signal.
+ *
+ * NO invention: every member is a real catalog entry; the range only FILTERS the
+ * catalog, never synthesizes a course id.
+ */
+export function poolMembersFor(
+    req: SolverInput["unmetRequirements"][number],
+    ctx: ConstraintContext,
+): string[] {
+    const pool = req.pool;
+    if (pool === undefined) return [];
+    const { input } = ctx;
+    const excludedCourseIds = new Set<string>(
+        (input.preferences?.exclusions ?? []).map(e => e.courseId),
+    );
+
+    const members = new Set<string>();
+    // Range members: catalog ids matching dept + [levelMin, levelMax].
+    for (const cid of input.courseCatalog.keys()) {
+        const parsed = parseCourseId(cid);
+        if (parsed === null) continue;
+        if (parsed.dept !== pool.dept) continue;
+        if (parsed.num < pool.levelMin || parsed.num > pool.levelMax) continue;
+        members.add(cid);
+    }
+    // Mixed case: explicit candidates that are catalog-present also count.
+    for (const cid of req.candidateCourses) {
+        if (input.courseCatalog.has(cid)) members.add(cid);
+    }
+
+    return [...members]
+        .filter(cid => !excludedCourseIds.has(cid) && !isStudyAbroadCourse(cid))
+        .sort();
+}
+
+/** Does any of `members` appear as a prereq-provider of SOME OTHER course referenced
+ *  in the plan? (chain-linked test, T4a). Scans input.prereqs directly — ctx.dependentsIndex
+ *  is built ONLY over enumerated candidateCourses, so it would miss a pool member that is a
+ *  prereq of another required course. A member is chain-linked if it appears in any non-NOT
+ *  prereq group of any course in input.prereqs (excluding a self-reference). */
+function anyMemberIsChainLinked(members: string[], input: SolverInput): boolean {
+    if (members.length === 0) return false;
+    const memberSet = new Set(members);
+    for (const [dependent, groups] of input.prereqs) {
+        for (const g of groups) {
+            if (g.type === "NOT") continue;
+            for (const prereq of g.courses) {
+                if (prereq && prereq !== dependent && memberSet.has(prereq)) return true;
+            }
+        }
+    }
+    return false;
 }
 
 /** Build the CSP variables from unmet requirements + preferences (exclusions applied).
  *  Requirements whose candidateCourses are all missing-from-catalog / excluded / study-abroad
- *  yield an EMPTY candidates+domain (they become placeholders downstream — not handled here). */
+ *  yield an EMPTY candidates+domain (they become placeholders downstream — not handled here).
+ *
+ *  Pool requirements (T4a): a requirement carrying a `pool` descriptor is expanded to its
+ *  real members (poolMembersFor). If ANY member is chain-linked (a prereq-provider of another
+ *  course) the pool is ENUMERATED — kind "specific", candidates = members — so the member can
+ *  be placed concretely. Otherwise, with ≥1 member, it becomes ONE pool variable (kind "pool",
+ *  poolMembers set, candidates mirrored). With no members it falls back to the existing
+ *  empty/specific placeholder behavior (no regression). */
 export function buildRequirementVariables(ctx: ConstraintContext): RequirementVariable[] {
     const { input, futureTerms } = ctx;
     const excludedCourseIds = new Set<string>(
@@ -109,26 +212,60 @@ export function buildRequirementVariables(ctx: ConstraintContext): RequirementVa
 
     const out: RequirementVariable[] = [];
     for (const req of input.unmetRequirements) {
-        const candidates = req.candidateCourses.filter(
-            cid =>
-                input.courseCatalog.has(cid) &&
-                !excludedCourseIds.has(cid) &&
-                !isStudyAbroadCourse(cid),
-        );
+        // Pool expansion (T4a). A requirement with a `pool` descriptor and ≥1 real
+        // member is either pooled (terminal) or enumerated (chain-linked); without
+        // members it falls through to the plain candidate path below.
+        const poolMembers = poolMembersFor(req, ctx);
+        let kind: "specific" | "pool" = "specific";
+        let candidates: string[];
+
+        if (poolMembers.length > 0) {
+            if (anyMemberIsChainLinked(poolMembers, input)) {
+                // Chain-linked → ENUMERATE the members (feasibility-first keeps this
+                // tractable) so a member that is another course's prereq can be placed
+                // concretely. Pool only TERMINAL requirements.
+                kind = "specific";
+                candidates = poolMembers;
+            } else {
+                // Terminal pool → ONE heavy pool variable (no N-branch enumeration).
+                kind = "pool";
+                candidates = poolMembers; // kept for downstream binding/resolvability + coverage.
+            }
+        } else {
+            // No pool (or a pool with no catalog members) → existing behavior: filter
+            // the enumerated candidateCourses to catalog-present, non-excluded, non-SA.
+            candidates = req.candidateCourses.filter(
+                cid =>
+                    input.courseCatalog.has(cid) &&
+                    !excludedCourseIds.has(cid) &&
+                    !isStudyAbroadCourse(cid),
+            );
+        }
 
         // Pre-computed (courseId, term) domain for the SEARCH's variable-ordering /
-        // forward-checking. Not consumed by any predicate in this module.
+        // forward-checking. For a pool variable the domain is over the synthetic
+        // POOL-<rId> id in each legal term (poolTermLegal); for a specific variable
+        // it is per-(candidate × offering-legal term), as before. Not consumed by any
+        // predicate in this module.
         const domain: Array<{ courseId: string; term: string }> = [];
-        for (const cid of candidates) {
-            const offered = input.offerings.get(cid);
+        if (kind === "pool") {
             for (const term of futureTerms) {
-                const parsed = parseTerm(term);
-                if (!parsed) continue;
-                // Legal by offering season (empty/absent offerings ⇒ any season).
-                if (offered && offered.length > 0 && !offered.includes(parsed.season as Season)) {
-                    continue;
+                if (poolTermLegal(poolMembers, term, ctx)) {
+                    domain.push({ courseId: `POOL-${req.rId}`, term });
                 }
-                domain.push({ courseId: cid, term });
+            }
+        } else {
+            for (const cid of candidates) {
+                const offered = input.offerings.get(cid);
+                for (const term of futureTerms) {
+                    const parsed = parseTerm(term);
+                    if (!parsed) continue;
+                    // Legal by offering season (empty/absent offerings ⇒ any season).
+                    if (offered && offered.length > 0 && !offered.includes(parsed.season as Season)) {
+                        continue;
+                    }
+                    domain.push({ courseId: cid, term });
+                }
             }
         }
 
@@ -137,11 +274,54 @@ export function buildRequirementVariables(ctx: ConstraintContext): RequirementVa
             title: req.title,
             category: req.category,
             credits: req.credits,
+            kind,
             candidates,
+            poolMembers: kind === "pool" ? poolMembers : [],
             domain,
         });
     }
     return out;
+}
+
+/**
+ * Sound term-legality for a pool placeholder (T4a). `(POOL-<rId>, term)` is legal in
+ * `term` iff ∃ member m ∈ poolMembers such that:
+ *   - m is offered in `term` (per ctx.input.offerings; empty/absent ⇒ any season), AND
+ *   - m's prerequisites are satisfiable by `term` given ONLY the already-FIXED context
+ *     (taken + in-progress) — checkAllPrereqs(m, term, input, takenAndIp) returns
+ *     `satisfied || requiresPetition`.
+ *
+ * SOUND + STABLE: the prereq check uses ONLY taken/IP placements (a fresh Map per call),
+ * NOT other future placements — so if this says legal, a real member genuinely fits the
+ * term, and the verdict is a stable per-(pool, term) property that does not depend on the
+ * rest of the assignment. A pool elective whose members have no prereqs trivially passes.
+ *
+ * `checkAllPrereqs` resolves the student's COMPLETED courses through the DPR (the engine's
+ * single source of truth — input.coursesTaken mirrors it). To make a taken course count
+ * for fixtures/inputs whose DPR history is sparse, AND to model "completed in the past"
+ * exactly, each taken course is also fed into the placements map at a sentinel term that
+ * sorts strictly before every planning term ("0000-spring") — a completed prereq genuinely
+ * precedes any future term. In-progress courses use their real IP term.
+ */
+const COMPLETED_SENTINEL_TERM = "0000-spring"; // sorts before all real planning terms
+
+export function poolTermLegal(poolMembers: string[], term: string, ctx: ConstraintContext): boolean {
+    const { input } = ctx;
+    const parsed = parseTerm(term);
+    if (parsed === null) return false;
+
+    // Fixed context only: taken (completed-in-the-past sentinel) + in-progress (real IP term).
+    const takenAndIp = new Map<string, string>();
+    for (const cid of input.coursesTaken) takenAndIp.set(cid, COMPLETED_SENTINEL_TERM);
+    for (const [cid, { term: ipTerm }] of input.coursesInProgress) takenAndIp.set(cid, ipTerm);
+
+    for (const m of poolMembers) {
+        const offered = input.offerings.get(m);
+        if (offered && offered.length > 0 && !offered.includes(parsed.season as Season)) continue;
+        const res = checkAllPrereqs(m, term, input, takenAndIp);
+        if (res.satisfied || res.requiresPetition) return true;
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
