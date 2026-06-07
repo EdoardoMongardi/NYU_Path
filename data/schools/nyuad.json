@@ -22,6 +22,13 @@
     "finalCreditsInResidence": null,
     "note": "Time-based residency: final semester in residence at Abu Dhabi (in-absentia considered only within 8 credits of graduation). No fixed credit-residency floor; double-majors need >=30 distinct credits each."
   },
+  "doubleCounting": {
+    "floor": { "minDistinctCreditsPerMajor": 30, "minUniqueCoursesPerMinor": 2 },
+    "noTripleCounting": true,
+    "requiresApproval": true,
+    "note": "Uniqueness-floor model: each of two majors must include at least 30 credits not counted toward the other; each minor must include at least 2 courses unique to it. No single course may count for more than one Core category, and certain Core categories cannot also count toward a major or minor.",
+    "sourceRef": "data/bulletin-raw/undergraduate/abu-dhabi/academic-policies/_index.md:146"
+  },
   "creditCaps": [
     {
       "type": "transfer",

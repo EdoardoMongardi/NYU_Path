@@ -24,6 +24,7 @@ import {
     PlanMutationSchema,
 } from "../forwardSchedule/planChangeHelpers.js";
 import { computeDprFingerprint } from "../../dpr/fingerprint.js";
+import { buildDoubleCountAdvisory } from "../forwardSchedule/doubleCountAdvisory.js";
 import type {
     PlanChangeOutcome,
     PlanDiff,
@@ -188,6 +189,8 @@ export const confirmPlanChangeTool = buildTool({
         // Step 4: Build outcome.
         const diff = computeSlotDiff(currentPlan, newSchedule);
         const consequences = deriveConsequences(diff, newSchedule, noOpConsequences);
+        const dcAdvisory = buildDoubleCountAdvisory(dpr, session.schoolConfig);
+        if (dcAdvisory) consequences.push(dcAdvisory.text);
         const planDiff = buildPlanDiff(currentPlan, newSchedule, {
             before: beforeAxes,
             after: validatorResult.axisResults,
