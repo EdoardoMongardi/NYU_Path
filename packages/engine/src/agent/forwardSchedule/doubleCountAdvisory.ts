@@ -14,12 +14,13 @@ import type { SchoolConfig } from "@nyupath/shared";
 import type { Disclaimer } from "../toolEnvelope.js";
 import { walkRequirements } from "../../dpr/schema.js";
 
+const PROGRAM_KINDS = new Set(["major", "minor", "concentration"]);
+
 /** Count major/minor/concentration programs in the DPR (the multi-program
  *  signal that makes cross-program double-counting relevant). Career/Program
  *  rollup rows are ignored. */
 export function countDeclaredPrograms(dpr: DegreeProgressReport): number {
-    const kinds = new Set(["major", "minor", "concentration"]);
-    return dpr.programs.filter((p) => kinds.has(p.programType.trim().toLowerCase())).length;
+    return dpr.programs.filter((p) => PROGRAM_KINDS.has(p.programType.trim().toLowerCase())).length;
 }
 
 /** Courses that appear in ≥2 requirement leaves' `coursesUsed` — a coarse,
@@ -49,7 +50,10 @@ export function detectSharedCourses(dpr: DegreeProgressReport): {
 
 /** Build the double-count advisory `Disclaimer` for a multi-program student,
  *  or null when it does not apply (fewer than 2 programs). Quantified + cited
- *  when the school has a `doubleCounting` config; generic + uncited otherwise. */
+ *  when the school has a `doubleCounting` config with at least one numeric
+ *  limit; generic + (optionally cited) otherwise. Sentences are filtered and
+ *  joined so spacing/punctuation stay well-formed regardless of which optional
+ *  parts are present. */
 export function buildDoubleCountAdvisory(
     dpr: DegreeProgressReport,
     schoolConfig: SchoolConfig | null | undefined,
@@ -64,42 +68,51 @@ export function buildDoubleCountAdvisory(
         ? ` (your DPR already applies ${sharedCourseCount} course${sharedCourseCount === 1 ? "" : "s"} to more than one requirement)`
         : "";
 
-    // Generic (no cited config): honest, number-free.
-    if (!dc) {
-        return {
-            id: "double_count_advisory",
-            text:
-                `You're pursuing ${programCount} programs${sharedNote}. Double-counting some courses across them ` +
-                `may be possible with department approval and could shorten your plan — confirm the specifics with your adviser.`,
-            reason: `Student is pursuing ${programCount} programs; ${schoolName} publishes no clear double-count limit, so this is a generic heads-up.`,
-        };
-    }
-
-    // Quantified (cited config).
+    // Assemble quantified clauses from a cited config (only those that yield a number).
     const clauses: string[] = [];
-    if (dc.cap) {
+    if (dc?.cap) {
         const caps: string[] = [];
         if (dc.cap.majorToMajor != null) caps.push(`up to ${dc.cap.majorToMajor} between two majors`);
         if (dc.cap.majorToMinor != null) caps.push(`up to ${dc.cap.majorToMinor} between a major and a minor`);
         if (dc.cap.minorToMinor != null) caps.push(`up to ${dc.cap.minorToMinor} between two minors`);
         if (caps.length) clauses.push(`you may share (double-count) ${caps.join(", ")} course(s) across programs`);
     }
-    if (dc.floor) {
+    if (dc?.floor) {
         const floors: string[] = [];
         if (dc.floor.minDistinctCreditsPerMajor != null) floors.push(`each major must keep at least ${dc.floor.minDistinctCreditsPerMajor} credits unique to it`);
         if (dc.floor.minUniqueCreditsPerMinor != null) floors.push(`each minor must keep at least ${dc.floor.minUniqueCreditsPerMinor} credits unique to it`);
         if (dc.floor.minUniqueCoursesPerMinor != null) floors.push(`each minor must keep at least ${dc.floor.minUniqueCoursesPerMinor} course(s) unique to it`);
         if (floors.length) clauses.push(floors.join("; "));
     }
-    const approval = dc.requiresApproval ? " Sharing is never automatic — it needs approval from both departments." : "";
-    const triple = dc.noTripleCounting ? " No course may count toward three programs." : "";
 
+    // No quantifiable clause (no config, or a config with no numeric fields):
+    // degrade to a number-free note. cite-or-stop — never assert a number we
+    // cannot cite. Still cite the source / surface the note when a config exists.
+    if (clauses.length === 0) {
+        return {
+            id: "double_count_advisory",
+            text: [
+                `You're pursuing ${programCount} programs${sharedNote}.`,
+                "Double-counting some courses across them may be possible with department approval and could shorten your plan — confirm the specifics with your adviser.",
+                dc?.note ? `Note: ${dc.note}` : "",
+            ].filter(Boolean).join(" "),
+            reason: `Student is pursuing ${programCount} programs; ${schoolName} publishes no clear/quantifiable double-count limit, so this is a generic heads-up.`,
+            ...(dc?.sourceRef ? { bulletinSource: dc.sourceRef } : {}),
+        };
+    }
+
+    // Quantified path (cited). `dc` is non-null here (clauses only fill when dc exists).
     return {
         id: "double_count_advisory",
-        text:
-            `You're pursuing ${programCount} programs${sharedNote}. At ${schoolName}, ${clauses.join("; ")}. ` +
-            `${approval}${triple} This can reduce how many courses you need — confirm which specific courses are eligible with your adviser.`,
+        text: [
+            `You're pursuing ${programCount} programs${sharedNote}.`,
+            `At ${schoolName}, ${clauses.join("; ")}.`,
+            dc!.requiresApproval ? "Sharing is never automatic — it needs approval from both departments." : "",
+            dc!.noTripleCounting ? "No course may count toward three programs." : "",
+            dc!.note ? `Note: ${dc!.note}` : "",
+            "This can reduce how many courses you need — confirm which specific courses are eligible with your adviser.",
+        ].filter(Boolean).join(" "),
         reason: `Student is pursuing ${programCount} programs; ${schoolName}'s bulletin double-count policy applies.`,
-        bulletinSource: dc.sourceRef,
+        bulletinSource: dc!.sourceRef,
     };
 }
