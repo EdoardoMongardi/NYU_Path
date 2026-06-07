@@ -27,7 +27,7 @@
     "floor": { "minUniqueCreditsPerMinor": 12 },
     "noTripleCounting": true,
     "requiresApproval": true,
-    "note": "No more than two courses may be double-counted between two majors unless otherwise specified in the major section; a minor must include at least 12 credits unique to it. Core Curriculum courses are exempt from double-counting limits, but no single course may satisfy more than two requirements.",
+    "note": "No more than two courses may be double-counted between two majors unless otherwise specified in the major section (cap source: this page :122); a minor must include at least 12 credits unique to it (minor-floor source: this page :132). Core Curriculum courses are exempt from double-counting limits, but no single course may satisfy more than two requirements.",
     "sourceRef": "data/bulletin-raw/undergraduate/shanghai/academic-policies/_index.md:122"
   },
   "creditCaps": [
