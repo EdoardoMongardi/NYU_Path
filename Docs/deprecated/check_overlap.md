@@ -1,5 +1,7 @@
 # `check_overlap` — Tool Audit
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 Source files:
 - Tool definition: `packages/engine/src/agent/tools/checkOverlap.ts`
 - Audit engine (referenced): `packages/engine/src/audit/crossProgramAudit.ts` (`crossProgramAudit`)

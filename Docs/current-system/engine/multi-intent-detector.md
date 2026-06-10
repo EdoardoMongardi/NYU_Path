@@ -1,6 +1,12 @@
 # Multi-Intent Detector
 
-> **Source file:** `packages/engine/src/agent/verifiers/multiIntentDetector.ts`
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+> **Source file:** `packages/engine/src/agent/verifiers/multiIntentDetector.ts`. Wired in `apps/web/app/api/chat/v2/route.ts:349-353`.
+
+## Purpose
+
+Sometimes a student crams two or three questions into one message: "What's my GPA AND can I add a math minor AND when's the deadline?" Without a heads-up the model might answer only the first part. This detector runs **before** the agent loop — a deterministic scan using ~4 text-pattern heuristics (no LLM call, ~sub-millisecond). If it finds signs of multiple questions it returns the pieces it split them into, and the route folds a "address each of these sub-questions" briefing into the system prompt.
 
 ## TL;DR
 
@@ -106,13 +112,14 @@ If `detectedSubQuestions` is empty (some signal fired but no natural split was p
 flowchart TD
     MSG[User message] --> MID[detectMultiIntent]
     MID --> ISMI{isMultiIntent?}
-    ISMI -->|no| AS[Proceed with normal route flow]
+    ISMI -->|no| AS[systemPrompt used as-is]
     ISMI -->|yes| BRF[renderMultiIntentBriefing]
-    BRF --> INJ[Inject as additional system msg<br/>BEFORE the agent loop]
-    INJ --> AL[runAgentTurnStreaming]
+    BRF --> APP[finalSystemPrompt =<br/>systemPrompt + briefing]
+    APP --> AL[runAgentTurnStreaming]
+    AS --> AL
 ```
 
-The briefing becomes a `role: "system"` message prepended to `priorMessages` before the agent loop runs. The model sees the briefing first, then the prior history, then the user message.
+The briefing is **appended to the system prompt**, not injected as a separate message: the route computes `finalSystemPrompt = briefing ? \`${systemPrompt}\n\n${briefing}\` : systemPrompt` (`route.ts:351-353`) and passes that as the agent loop's `systemPrompt`. The model therefore sees the enumeration as part of its standing instructions for the turn. (Note: the clarifier gate, §[clarifier.md](./clarifier.md), runs *after* this in the route — but on a different code path; both are pre-loop checks.)
 
 ---
 

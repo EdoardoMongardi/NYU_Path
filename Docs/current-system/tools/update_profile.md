@@ -1,6 +1,8 @@
 # `update_profile`
 
-A deep technical audit of the staging half of the two-step profile-mutation contract.
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+A technical audit of the staging half of the two-step profile-mutation contract. This tool was not touched by the Phase 0-2 solver rebuild — it is a Phase-5 profile tool and remains one of the 20 live tools in `packages/engine/src/agent/registry.ts`.
 
 Source: `packages/engine/src/agent/tools/updateProfile.ts` (lines 89-192).
 
@@ -257,6 +259,16 @@ Key invariants of the contract from the source:
 - **Id format** — `pm_<unix-ms-timestamp>_<process-counter>`. Monotonic within a process, opaque to the agent.
 - **Idempotency on consumption** — `confirm_profile_update` `.delete()`s the entry from the staging map after applying (`updateProfile.ts:247`). A second confirm of the same id hits the `validateInput` "No pending mutation with id" branch and is rejected at the gate (`updateProfile.ts:212-219`). This means the contract is **single-use, not idempotent in the strict sense** — the second call returns a validation error, not a no-op `"applied"`.
 - **Cross-call survival** — entries persist in `session.pendingMutations` until consumed by `confirm_profile_update` or until the session itself is discarded. Nothing in `update_profile` expires them.
+
+### How the chat UI recovers the id (brittle)
+
+The id is not returned to the web client as a structured field on the tool invocation. Instead the web layer **regex-scrapes it out of the free-text `summarizeResult` string**. The summary always contains a line `pendingMutationId: pm_<timestamp>_<counter>` (§9), and `extractPendingMutationId` (`apps/web/lib/chatV2Client.ts:188-192`) pulls it back out with:
+
+```js
+summary.match(/pendingMutationId:\s*(pm_[a-zA-Z0-9_]+)/)
+```
+
+Both the SSE chat route (`apps/web/app/api/chat/v2/route.ts:799-804`, for transcript persistence) and the client restore path call this extractor. The coupling is fragile: if `summarizeResult`'s wording ever changes — e.g. the `pendingMutationId:` label is renamed or the `pm_` id prefix changes — the regex silently returns `null` and the confirm button never renders. There is no shared constant tying the producer (`updateProfile.ts:summarizeResult`) to the consumer regex; they are kept in sync only by the comment at `chatV2Client.ts:182-187`. Treat the summary line's exact shape as a load-bearing contract.
 
 ---
 

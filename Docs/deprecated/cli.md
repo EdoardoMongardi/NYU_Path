@@ -1,5 +1,7 @@
 # `apps/cli` — Command-Line Front-End for the NYUPath Engine
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 ## TL;DR
 
 The CLI is a small debugging tool, not the main product students use. It is a one-file command-line program that lets a developer point at a student record on disk and quickly see either a degree audit or a single-semester course suggestion. It exists so engineers can sanity-check the engine's rule logic without spinning up the web app, the chat agent, or any AI machinery. Everything happens in a single shot: read a file, run the calculation in memory, print a nicely formatted report, exit. There is no conversation, no memory between runs, and no connection to AI models or databases. Think of it as a flashlight for poking at the rule engine during development, not something a student would ever touch. If you need the full conversational planning experience, that lives in the web app instead.

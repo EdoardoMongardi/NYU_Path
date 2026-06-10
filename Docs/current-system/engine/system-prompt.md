@@ -1,5 +1,7 @@
 # System Prompt
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 > **Source file:** `packages/engine/src/agent/systemPrompt.ts`
 
 ## TL;DR
@@ -19,6 +21,8 @@ flowchart LR
 ---
 
 This module builds the **system prompt** — the long instruction block the LLM sees before every turn. It is constructed fresh per request from a `SystemPromptOptions` bag.
+
+> **Heads-up on a stale source comment.** The file's top-of-module banner (`systemPrompt.ts:1-16`) still calls this an "Appendix A (25 rules verbatim)" prompt and warns about tools "Phase 5 doesn't yet ship." That banner is **dead documentation** — Phase 8 (PR-era trim, see the `buildSystemPrompt` JSDoc at `systemPrompt.ts:191-215`) replaced the 25-rule prescriptive routing block with the trimmed build this doc describes: **eight** numbered CORE RULES plus the preference/fallback/DPR sections. There is no 25-rule list in the emitted prompt. Read the function body, not the banner.
 
 > **Fixed (improvement plan, Phase E) — the ROLE line is now school-aware.** The prompt previously opened with a hardcoded `"...an AI academic adviser for NYU College of Arts & Science."` that did not interpolate `homeSchool`, so a Stern or Tandon student was told the adviser was "for CAS." Phase E interpolates the student's school via `schoolDisplayName(opts.student.homeSchool)` (`data/schoolDefaults.ts`): a Stern student now reads "...for NYU Stern School of Business," and with no student loaded it falls back to a generic "...for NYU." (never asserting a school it can't confirm). The prompt also adds an explicit "never assume CAS — advise per THIS student's school/catalog/DPR" instruction.
 
@@ -122,7 +126,7 @@ If `opts.dprLoaded === true`, a block titled `## DEGREE PROGRESS REPORT IS LOADE
 - **Routing rules:**
   - GPA / credits / requirements / graduation / P/F / residency questions → `run_full_audit`.
   - For GPA, cumulative credits, and requirement status, `run_full_audit` is the **single source of truth** (it reads the DPR's authoritative numbers). `get_academic_standing` is for probation / SAP standing detail and **also requires the DPR**. `get_credit_caps` returns the school's caps (per-semester ceiling, F-1 floor) from config — call it for credit-load / overload / full-time questions. (This replaces the earlier rule that told the agent *not* to call `get_academic_standing` / `get_credit_caps` when a DPR was loaded.)
-  - Semester planning (any phrasing) → `plan_forward_degree`. `plan_semester` is deprecated as of May 2026.
+  - Semester planning (any phrasing) → `plan_forward_degree`. The legacy single-term planner `plan_semester` was **removed** (it no longer exists in the registry); `plan_forward_degree` is the only planner. `view_forward_plan` is its read-back companion for follow-ups about a term already planned.
   - After `plan_forward_degree` succeeds and the schedule has any non-locked future semester, **immediately** call `materialize_sections({targetTerm: <first non-locked semester>})` in the same turn (Phase 17 Task E auto-chain). Other future terms stay structural-only because FOSE has no data > ~6 months out.
   - When the user explicitly names a tool, call that tool exactly.
   - Hypothetical plan changes against an existing plan → `propose_plan_change`. Multi-alternative comparisons → `simulate_alternatives` or `compare_plan_alternatives`. `what_if_audit` only for program-level (different major/school) hypotheticals.
@@ -136,13 +140,15 @@ If `opts.dprLoaded === true`, a block titled `## DEGREE PROGRESS REPORT IS LOADE
 
 ## 4b. The no-DPR routing block (conditional — the `else` branch)
 
-`opts.dprLoaded` is a strict `if`/`else`. When it is **falsy**, the prompt appends a block titled `## NO DEGREE PROGRESS REPORT LOADED (mandatory)` instead of the DPR-loaded block above. After the DPR-only pivot the unofficial-transcript upload path is gone, so a session with no DPR has no personal record at all — and every personal tool (`run_full_audit`, `get_academic_standing`, `what_if_audit`, `check_overlap`, `check_transfer_eligibility`) refuses in its own `validateInput`. The block tells the agent:
+`opts.dprLoaded` is a strict `if`/`else`. When it is **falsy**, the prompt appends a block titled `## NO DEGREE PROGRESS REPORT LOADED (mandatory)` instead of the DPR-loaded block above. After the DPR-only pivot the unofficial-transcript upload path is gone, so a session with no DPR has no personal record at all — and every personal tool (`run_full_audit`, `get_academic_standing`, `what_if_audit`, `plan_forward_degree`, `propose_plan_change`, etc.) refuses in its own `validateInput`. The block tells the agent:
 
 - For **any** personal/record question (GPA, credits, requirements, academic standing, transfer eligibility, degree planning, what-if audits), do **not** guess or use general knowledge. Tell the student the DPR is needed and ask them to upload it (Albert → Student Center → Academics → Degree Progress Report), then stop.
-- It **may** still answer impersonal questions that need no personal data: general policy lookups (`search_policy`), course catalog search (`search_courses`), live section availability (`search_availability`), and the school's credit caps (`get_credit_caps`).
+- It **may** still answer impersonal questions that need no personal data: general policy lookups (`search_policy`), a program's full requirement page (`get_program_requirements`), course catalog search (`search_courses`), live section availability (`search_availability`), and the school's credit caps (`get_credit_caps`). The verbatim block also carries an SPS note: the advanced-standing/transfer cap is division-dependent (Schack/Tisch 64, DAUS 80 bachelor's / 30 associate's), so without a DPR the agent may state the general per-division figures but must ask the student to upload their DPR for their specific cap.
 - Never fabricate the student's numbers from training data.
 
 This is the prompt-level mirror of the personal tools' `validateInput` DPR guards — belt-and-suspenders so the agent both explains the upload and the tools enforce it.
+
+> **Correction (2026-06-10):** the earlier version of this doc listed `check_overlap` and `check_transfer_eligibility` among the personal tools that refuse without a DPR. Both tools were **removed** in the pure-RAG decommission (they no longer exist in the registry — see [`registry.ts`](../../../packages/engine/src/agent/registry.ts), 20 live tools). Internal-transfer questions are now routed through `search_policy` over the bulletin's transfer pages.
 
 ---
 
@@ -231,7 +237,7 @@ flowchart TD
 
 ## 9. What the prompt deliberately doesn't include
 
-- No tool-by-tool routing table for the 22 tools. Each tool's `description` carries its own routing hints; the prompt's `TOOL ROUTING` paragraph just says "read them, decide, the validator will reject misroutes" (the DPR-loaded ROUTING block does carry a handful of explicit per-tool bullets, e.g. `run_full_audit` vs `search_policy` vs `get_program_requirements`).
+- No tool-by-tool routing table for the 20 live tools (see [`registry.ts`](../../../packages/engine/src/agent/registry.ts)). Each tool's `description` carries its own routing hints; the prompt's `TOOL ROUTING` paragraph just says "read them, decide, the validator will reject misroutes" (the DPR-loaded ROUTING block does carry a handful of explicit per-tool bullets, e.g. `run_full_audit` vs `search_policy` vs `get_program_requirements`).
 - No few-shot examples.
 - No persona / personality instructions beyond "precise, factual, and helpful".
 - No safety / content-policy text.

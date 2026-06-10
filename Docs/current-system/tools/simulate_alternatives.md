@@ -1,8 +1,10 @@
 # `simulate_alternatives` — Technical Audit
 
-## TL;DR
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
-When your current plan can't fit everything in (the system flagged it as infeasible) and you ask "are there other ways to make this work?" or "can I just take a summer term?" or "what if I extend by a semester?", this tool quietly tries up to three escape hatches and shows you which ones actually rescue the plan. The three options it tries are fixed and always in the same order: turn on summer, turn on January term, or push graduation out by one main term. It re-runs the planner under each relaxation and returns up to three candidate plans you could pick from. It writes nothing — it's purely an explorer. If your current plan is already feasible, it just says so and returns an empty list. You need to have already built a plan and have your DPR loaded before this tool will work.
+## Purpose
+
+When your current plan can't fit everything in (the system flagged it as infeasible) and you ask "are there other ways to make this work?" or "can I just take a summer term?" or "what if I extend by a semester?", this tool quietly tries three escape hatches and shows you which ones actually rescue the plan. The three options it tries are fixed and always in the same order: turn on summer, turn on January term, or push graduation out by one main term. It does a **full re-solve** under each relaxation, runs each result through the authoritative graduation validator, and returns up to three candidate plans you could pick from. It writes nothing — it's purely an explorer. If your current plan is already feasible, it just says so and returns an empty list. You need to have already built a plan and have your DPR loaded before this tool will work.
 
 ```mermaid
 flowchart LR
@@ -18,27 +20,30 @@ flowchart LR
 
 ---
 
-Source files referenced:
+Source files:
 - `packages/engine/src/agent/tools/simulateAlternatives.ts`
 - `packages/engine/src/agent/forwardSchedule/alternatives.ts`
 - `packages/engine/src/agent/forwardSchedule/planChangeHelpers.ts` (for `buildSolverInputFromSession`)
-- `packages/engine/src/agent/forwardSchedule/types.ts`
-- `packages/engine/src/agent/forwardSchedule/forwardFeasibility.ts`
-- `packages/engine/src/agent/tool.ts`
+- `packages/engine/src/agent/forwardSchedule/solverHelpers.ts` (for `nextMainTermOrNull`)
+- `packages/engine/src/agent/forwardSchedule/build.ts` (for `finalizeForwardSchedule`)
+- `packages/engine/src/agent/forwardSchedule/solver.ts` (for `solveForwardSchedule`)
+- `packages/shared/src/types.ts` (for `AlternativeCandidate`)
 
 ---
 
-## 1. Purpose
+## 1. What it does
 
 `simulate_alternatives` is the **read-only fallback explorer** for the case when the current forward plan is infeasible. It runs the solver up to **three** more times, each time with one constraint relaxed, and returns up to three `AlternativeCandidate` records that the agent can surface to the student as options.
 
-The three relaxation strategies are fixed and applied in this order:
+The three relaxation strategies are fixed and applied in this order (`alternatives.ts:46-109`):
 
 1. **`include_summer`** — set `preferences.includeSummer = true` and re-solve.
 2. **`include_jterm`** — set `preferences.includeJTerm = true` and re-solve.
 3. **`extend_grad_one_term`** — advance `graduationTerm` by one main term (spring → fall same year; fall → next-year spring) and re-solve.
 
 When the current plan is already feasible, the tool short-circuits and returns an empty list plus a note. The tool writes nothing to session (`isReadOnly: true`).
+
+> **Note (post-rebuild):** `AlternativeCandidate["relaxation"]` is typed in `@nyupath/shared` (`types.ts:1196-1201`) as a five-value union: `"include_summer" | "include_jterm" | "extend_grad_one_term" | "extend_grad_one_year" | "lower_credit_target"`. **This tool only ever emits the first three** — the other two are declared-but-unused in `simulate_alternatives`.
 
 ---
 
@@ -54,7 +59,7 @@ The tool takes **no** input parameters:
 
 All decision-making is read from session state. The agent cannot pass mutations or hints; the three relaxation strategies are hard-coded inside `alternatives.ts`.
 
-Contrast with `propose_plan_change` / `confirm_plan_change`, which accept a `PlanMutation[]` and let the caller specify what to change.
+Contrast with [`propose_plan_change`](./propose_plan_change.md) / [`confirm_plan_change`](./confirm_plan_change.md), which accept a `PlanMutation[]` and let the caller specify what to change.
 
 ---
 
@@ -67,7 +72,7 @@ Contrast with `propose_plan_change` / `confirm_plan_change`, which accept a `Pla
 2. **No DPR**: `session.degreeProgressReport` is absent →
    `"No Degree Progress Report loaded. Cannot simulate alternatives without DPR data."`
 
-Both reject with `{ ok: false, userMessage }`.
+Both reject with `{ ok: false, userMessage }`. The DPR gate is one half of the DPR-first doctrine — without authoritative DPR data, this personalized tool hard-refuses.
 
 The validator does NOT check whether the existing plan is actually infeasible — that check happens inside `call`. A feasible plan still passes validation; the tool then runs and returns the empty-list note.
 
@@ -79,8 +84,6 @@ The validator does NOT check whether the existing plan is actually infeasible �
 - `session.forwardSchedule` first, else `session.studentDraftPlan` (`simulateAlternatives.ts:73`) — used **only** for the feasibility short-circuit check.
 - `session.schedulePreferences` — passed through to `buildSolverInputFromSession` (line 85).
 - `session.student`, `session.schoolConfig`, `session.prereqs`, `session.courses` — consumed indirectly via `buildSolverInputFromSession`.
-
-Notably, the tool does NOT need `session.forwardSchedule` to be populated to actually run the alternatives generator — only the feasibility check at line 74 reads it. If both `forwardSchedule` and `studentDraftPlan` are absent (which validation already prevented), the short-circuit check is skipped and the tool proceeds to generate alternatives anyway. In practice validation guards this.
 
 ---
 
@@ -110,12 +113,10 @@ flowchart TD
 No solver run, no work. This is the happy path.
 
 **Step 2 — Build the solver input.**
-`simulateAlternatives.ts:82-86`: `buildSolverInputFromSession(session, dpr, session.schedulePreferences)`. Note that the third argument is `session.schedulePreferences` **as-is** — the tool does NOT mutate or clone it for the base input. The mutations happen inside the core helper.
-
-This builds the exact same `SolverInput` that `plan_forward_degree` would have used. All the derived fields (`currentTerm`, `graduationTerm` from `deriveGraduationTermFromCredits`, `coursesTaken`, `coursesInProgress`, `unmetRequirements`, `programRules`, `dprCourseHistoryHash`, etc.) are identical to what the latest plan was solved against.
+`simulateAlternatives.ts:82-86`: `buildSolverInputFromSession(session, dpr, session.schedulePreferences)`. This builds the exact same `SolverInput` that `plan_forward_degree` would have used — all derived fields (`currentTerm`, `graduationTerm`, `coursesTaken`, `coursesInProgress`, `unmetRequirements`, `programRules`, `dprCourseHistoryHash`, etc.) are identical to what the latest plan was solved against.
 
 **Step 3 — Delegate to core generator.**
-`simulateAlternatives.ts:88`: `coreSimulateAlternatives(solverInput)`. This is `simulateAlternatives` from `alternatives.ts:39-102`. Returns `AlternativeCandidate[]`.
+`simulateAlternatives.ts:88`: `coreSimulateAlternatives(solverInput)`. This is `simulateAlternatives` from `alternatives.ts:46-109`. Returns `AlternativeCandidate[]`.
 
 ### Step-by-step inside `alternatives.ts:simulateAlternatives`
 
@@ -136,7 +137,7 @@ flowchart TD
     BC2 --> C3
     SkipJ --> C3
 
-    C3["extendedTerm = computeNextMainTerm(input.graduationTerm)"]
+    C3["extendedTerm = nextMainTermOrNull(input.graduationTerm)"]
     C3 --> C3Q{extendedTerm !== null?}
     C3Q -- yes --> S3["clone input with graduationTerm=extendedTerm<br/>solveForwardSchedule(extended)"]
     C3Q -- no --> SkipExt[skip strategy 3]
@@ -147,68 +148,65 @@ flowchart TD
     End[return candidates.slice(0, 3)]
 ```
 
-**Strategy 1 — `include_summer`** (`alternatives.ts:44-59`).
+**Strategy 1 — `include_summer`** (`alternatives.ts:49-66`).
 Skipped if `input.preferences?.includeSummer` is already truthy. Otherwise:
 - Build `withSummer: SolverInput = { ...input, preferences: { ...input.preferences, includeSummer: true } }`.
-- Call `solveForwardSchedule(withSummer)`.
-- Wrap via `buildCandidate("include_summer", "Adding a summer term may allow remaining requirements to fit.", out, withSummer, "Even with summer added, no feasible plan could be constructed.")`.
+- Call `solveForwardSchedule(withSummer)` — a **full re-solve**.
+- Wrap via `buildCandidate("include_summer", ..., out, withSummer, fallbackReason)`.
 
-**Strategy 2 — `include_jterm`** (`alternatives.ts:62-78`).
+**Strategy 2 — `include_jterm`** (`alternatives.ts:70-85`).
 Same shape, swapping `includeSummer` for `includeJTerm`. Skipped when already truthy.
 
-**Strategy 3 — `extend_grad_one_term`** (`alternatives.ts:81-98`).
-- `extendedTerm = computeNextMainTerm(input.graduationTerm)` (line 116-122). The helper regex-matches `^(\d{4})-(spring|fall)$`; `YYYY-spring` → `YYYY-fall`; `YYYY-fall` → `(YYYY+1)-spring`. Returns `null` for any other shape (e.g. `2026-summer`, `2026-january`, unparseable strings).
+**Strategy 3 — `extend_grad_one_term`** (`alternatives.ts:89-105`).
+- `extendedTerm = nextMainTermOrNull(input.graduationTerm)` — imported from `solverHelpers.ts:61-67` (this is the real function; the helper was moved out of `alternatives.ts` during the rebuild, and there is no longer a local `computeNextMainTerm`). It regex-matches `^(\d{4})-(spring|summer|fall|january)$`; `YYYY-spring` → `YYYY-fall`; `YYYY-fall` → `(YYYY+1)-spring`. Returns `null` for any summer/january term and for unparseable strings.
 - If `extendedTerm` is null, this strategy is skipped entirely.
-- Otherwise: build `extended: SolverInput = { ...input, graduationTerm: extendedTerm }`. Note that for strategy 3 the `preferences` object is NOT touched — only `graduationTerm` changes. Call `solveForwardSchedule(extended)` and wrap.
+- Otherwise: build `extended: SolverInput = { ...input, graduationTerm: extendedTerm }`. For strategy 3 the `preferences` object is NOT touched — only `graduationTerm` changes. Call `solveForwardSchedule(extended)` and wrap.
 
-**Final cap.** `candidates.slice(0, 3)` (`alternatives.ts:101`). In practice the array is already at most 3 (one per strategy), but the slice is defensive.
+**Final cap.** `candidates.slice(0, 3)` (`alternatives.ts:108`). In practice the array is already at most 3 (one per strategy), but the slice is defensive.
 
-### `buildCandidate` (`alternatives.ts:170-191`)
+### `buildCandidate` — the T8 validator-gating fix (`alternatives.ts:157-192`)
+
+This is the most important change since the docs were last written. Each candidate is no longer built by a bare `buildScheduleFromOutput` that trusted the solver's coarse feasibility flag. Instead:
 
 ```
 buildCandidate(relaxation, summary, out, input, fallbackReason):
     if (out.feasibility.feasible) {
-        return {
-            summary,
-            relaxation,
-            schedule: buildScheduleFromOutput(out, input)
+        // Route through the validator to get the AUTHORITATIVE state (T8/M3).
+        { schedule, validatorResult } =
+            finalizeForwardSchedule(out, input, input.dpr, validatorRulesFromInput(input))
+        if (validatorResult.feasible) {
+            return { summary, relaxation, schedule }
         }
+        // Coarse-feasible but validator-INFEASIBLE → surface as stillInfeasibleReason.
+        reason = validatorResult.infeasibilityReport?.conflictDetail ?? fallbackReason
+        return { summary, relaxation, schedule: null, stillInfeasibleReason: reason }
     }
-    return {
-        summary,
-        relaxation,
-        schedule: null,
-        stillInfeasibleReason: out.feasibility.infeasibilityReason ?? fallbackReason
-    }
+    // Solver already knows it's infeasible — compose from concrete constraint violations.
+    details = out.feasibility.constraintViolations.map(v => v.detail).filter(d => d.length > 0)
+    stillInfeasibleReason =
+        details.length > 0 ? details.join(" ")
+                           : (out.feasibility.infeasibilityReason ?? fallbackReason)
+    return { summary, relaxation, schedule: null, stillInfeasibleReason }
 ```
 
+Two key consequences:
+
+1. **Every feasible candidate is validator-checked.** `finalizeForwardSchedule` (`build.ts:64-110`) assembles the `ForwardSchedule` AND runs the authoritative 7-axis `runGraduationPathValidator`, deriving the `state` from the validator (not the solver's coarse state). A coarse-feasible-but-validator-infeasible alternative becomes a `stillInfeasibleReason` entry, NOT a falsely-valid schedule. The `validatorRulesFromInput` helper (`alternatives.ts:126-136`) reconstructs the `ValidatorRules` from the `SolverInput`, mirroring `buildProgramRules` (minor/school-core/upper-level minimums are always `null`).
+2. **Infeasible candidates carry specific, concrete reasons.** When the solver already reports infeasible, the reason joins the per-requirement `constraintViolations[].detail` strings (offering / ceiling / coreq / NOT / prereq-depth / capacity), not a bare "N constraint violation(s)" count. The `fallbackReason` is used only when the solver reported no detail at all.
+
 So each candidate has one of two shapes:
-- **Feasible**: `{ summary, relaxation, schedule: ForwardSchedule }`. The schedule is the full computed plan for that relaxation.
-- **Infeasible**: `{ summary, relaxation, schedule: null, stillInfeasibleReason }`. The student is told the relaxation was tried and still didn't work; the reason is whatever the solver reported, or a fixed fallback string.
-
-### `buildScheduleFromOutput` (`alternatives.ts:132-160`)
-
-Mirrors the schedule construction used by `proposePlanChange` and `confirmPlanChange`:
-
-- `studentId`, `homeSchoolId`, `creditTargetPerSemester`, `f1Floor`, `domesticPartTimeFloor`, `graduationCreditMinimum`, `dprCourseHistoryHash` copied from `input`.
-- `graduationTerm` from `input.graduationTerm` (note: for strategy 3 this is the **extended** graduation term, not the original).
-- `degreeCreditsMet` = `input.creditsEarned + sum(plannedCredits) >= input.graduationCreditMinimum`.
-- `semesters`, `feasibility`, `state`, `balanceScore`, `assumptions` from `out`.
-- `computedAt = Date.now()`.
-- `alternativeCandidates` conditionally spread when `out.alternativeCandidates !== undefined`.
-
-The candidate's `schedule.feasibility.feasible` will always be `true` when `schedule` is non-null (because `buildCandidate` only calls this builder on the feasible branch).
+- **Feasible**: `{ summary, relaxation, schedule: ForwardSchedule }`. The schedule is the full, validator-confirmed plan for that relaxation. Because it was built via `finalizeForwardSchedule`, it carries its own validator-derived `state` and may itself carry nested `alternativeCandidates` (`build.ts:90-92`).
+- **Infeasible**: `{ summary, relaxation, schedule: null, stillInfeasibleReason }`. The student is told the relaxation was tried and still didn't work, with the concrete binding constraint.
 
 ### Ranking
 
-`simulate_alternatives` does **not** rank or reorder its candidates. The order is the strategy order: summer → J-term → extend. The agent or the route layer is responsible for any ranking step (perhaps by calling `compare_plan_alternatives`).
+`simulate_alternatives` does **not** rank or reorder its candidates. The order is the strategy order: summer → J-term → extend. Any ranking is the agent's / route layer's job (perhaps via [`compare_plan_alternatives`](./compare_plan_alternatives.md)).
 
-### Caveats from the source
+### Behavioral note: summer / J-term strategies now actually enumerate the term
 
-Two important behaviors visible in the source:
+The old docs warned that strategies 1 and 2 "may not actually produce different schedules" because the solver didn't read `preferences.includeSummer` / `preferences.includeJTerm`. **That is no longer true.** Per the file header (`alternatives.ts:13-24`) and the rebuilt solver (P2.8 / PLAN-5): `buildConstraintContext` enumerates the opted-in optional terms via `enumerateTerms` (`solverHelpers.ts:113-139`), treating summer and January as OPTIONAL (no F-1 floor, no force-fill, excluded from balance). So strategies 1 and 2 actually enumerate summer / January and **can** return a non-null `schedule` when an opted-in optional term lets remaining requirements fit. When the optional term still cannot fix the plan, the candidate carries `schedule: null` and `stillInfeasibleReason`.
 
-1. **Strategies 1 and 2 may not actually produce different schedules.** The comment block at `alternatives.ts:13-21` (and the code at `solver.ts` not in scope here) notes that `enumerateMainTerms` in the solver may not yet read `preferences.includeSummer` / `preferences.includeJTerm` — meaning these strategies may emit candidates with `schedule: null` and a `stillInfeasibleReason` even when adding the term ought to help. Strategy 3 (`extend_grad_one_term`) is the one that reliably changes the solver's enumeration window.
-2. **No combined relaxations.** The three strategies are independent. There is no candidate like "include_summer + include_jterm + extend_grad_one_term". The agent would need to call `confirm_plan_change` with a manual mutation sequence to combine relaxations.
+**No combined relaxations.** The three strategies are independent. There is no candidate like "include_summer + include_jterm + extend_grad_one_term".
 
 ---
 
@@ -223,23 +221,14 @@ Output type `SimulateAlternativesOutput` (`simulateAlternatives.ts:23-27`):
 }
 ```
 
-Where `AlternativeCandidate` is one of:
+Where `AlternativeCandidate` (`types.ts:1196-1201`) is one of:
 
 ```
 // feasible variant
-{
-  summary: string,
-  relaxation: "include_summer" | "include_jterm" | "extend_grad_one_term",
-  schedule: ForwardSchedule
-}
+{ summary, relaxation, schedule: ForwardSchedule }
 
 // infeasible variant
-{
-  summary: string,
-  relaxation: "include_summer" | "include_jterm" | "extend_grad_one_term",
-  schedule: null,
-  stillInfeasibleReason: string
-}
+{ summary, relaxation, schedule: null, stillInfeasibleReason: string }
 ```
 
 `note` is populated only on the feasibility short-circuit. When the tool actually ran the generator, `note` is omitted and the caller inspects `candidates.length` directly.
@@ -247,15 +236,15 @@ Where `AlternativeCandidate` is one of:
 The maximum candidates length is 3 (one per strategy), and it can be fewer when:
 - `preferences.includeSummer` was already true → strategy 1 skipped.
 - `preferences.includeJTerm` was already true → strategy 2 skipped.
-- `graduationTerm` is not in `YYYY-spring` or `YYYY-fall` shape → strategy 3 skipped (e.g., a current `graduationTerm` of `2027-summer` would cause `computeNextMainTerm` to return null).
+- `graduationTerm` is not in `YYYY-spring` or `YYYY-fall` shape → strategy 3 skipped (e.g., a current `graduationTerm` of `2027-summer` makes `nextMainTermOrNull` return null).
 
-The returned `schedule` field on feasible candidates is a **fully-formed `ForwardSchedule`** — the route layer or agent could in principle use it as a preview. It is NOT persisted; the tool is read-only.
+The returned `schedule` on feasible candidates is a fully-formed, validator-confirmed `ForwardSchedule` — the route layer or agent could in principle use it as a preview. It is NOT persisted; the tool is read-only.
 
 ---
 
-## 7. The `pendingMutationId` contract (and why it does not apply)
+## 7. No `pendingMutationId` contract
 
-`simulate_alternatives` has **no** pending-mutation contract. It does not stage anything in session, it does not produce ids, and it does not have a partner "confirm" tool. The candidates it returns are options the agent surfaces; turning a candidate into a real change requires the agent to:
+`simulate_alternatives` has **no** pending-mutation contract. It stages nothing in session, produces no ids, and has no partner "confirm" tool. The candidates it returns are options the agent surfaces; turning a candidate into a real change requires the agent to:
 
 1. Pick a candidate.
 2. Translate its `relaxation` into a `PlanMutation` (e.g., `include_summer` → `{ kind: "addTerm", term: "summer" }`; `include_jterm` → `{ kind: "addTerm", term: "january" }`).
@@ -263,65 +252,26 @@ The returned `schedule` field on feasible candidates is a **fully-formed `Forwar
 
 The `extend_grad_one_term` relaxation does NOT have a corresponding `PlanMutation` kind. Committing it requires re-invoking `plan_forward_degree` with a `graduationTermOverride` parameter — outside the plan-change mutation vocabulary.
 
-```mermaid
-sequenceDiagram
-    participant Agent
-    participant Sim as simulate_alternatives
-    participant Session
-    participant Confirm as confirm_plan_change
-    participant Plan as plan_forward_degree
-
-    Agent->>Sim: {}
-    Sim->>Session: read forwardSchedule, prefs, DPR
-    alt currentPlan already feasible
-        Sim-->>Agent: { candidates: [], note: 'already feasible' }
-    else infeasible
-        Sim->>Sim: build SolverInput from session
-        loop strategy in [include_summer, include_jterm, extend_grad_one_term]
-            opt strategy applicable
-                Sim->>Sim: clone SolverInput with relaxation
-                Sim->>Sim: solveForwardSchedule(clone)
-                Sim->>Sim: buildCandidate(...)
-            end
-        end
-        Sim-->>Agent: { candidates: [...] }
-    end
-    Note over Session: session UNCHANGED in both branches
-
-    Agent->>Agent: present candidates to student
-    alt student picks include_summer or include_jterm
-        Agent->>Confirm: mutations=[{ kind: 'addTerm', term: 'summer' or 'january' }]
-        Confirm->>Session: write prefs + schedule
-    else student picks extend_grad_one_term
-        Agent->>Plan: graduationTermOverride = extendedTerm
-        Plan->>Session: write forwardSchedule or studentDraftPlan
-    end
-```
-
 ---
 
-## 8. What `simulate_alternatives` writes to session
+## 8. What it writes to session
 
-**Nothing.** `isReadOnly: true` (`simulateAlternatives.ts:45`). The tool reads session state, calls the solver up to three times against clones of the `SolverInput`, and returns the results. `session.forwardSchedule`, `session.studentDraftPlan`, `session.schedulePreferences`, `session.scheduleStore` — all untouched.
-
-The cloned `SolverInput` objects inside `alternatives.ts:simulateAlternatives` use spread syntax (`{ ...input, preferences: { ...input.preferences, includeSummer: true } }`) — they do not mutate the original input's `preferences` object. Same shallow-clone discipline as `applyMutationsToPreferences`.
+**Nothing.** `isReadOnly: true` (`simulateAlternatives.ts:45`). The tool reads session state, calls the solver up to three times against clones of the `SolverInput`, and returns the results. `session.forwardSchedule`, `session.studentDraftPlan`, `session.schedulePreferences`, `session.scheduleStore` — all untouched. The cloned `SolverInput` objects use spread syntax and never mutate the original input's `preferences` object.
 
 ---
 
 ## 9. Envelope behavior
 
-From `buildTool` (`tool.ts:239-271`):
+From `buildTool`:
 
 - `name`: `"simulate_alternatives"`
-- `description`: `"When the current forward plan is infeasible, generate up to 3 alternative schedule candidates by progressively relaxing constraints (add summer term, add J-term, or extend graduation by one term). Returns an empty list when the current plan is already feasible — no alternatives are needed in that case. Use this after plan_forward_degree returns an infeasible-draft plan to show the student what options are available. isReadOnly: true — never writes to session state."` (lines 36-43).
+- `description`: the up-to-3-relaxation summary plus "Returns an empty list when the current plan is already feasible" and "isReadOnly: true" (`simulateAlternatives.ts:35-43`).
 - `inputSchema`: `z.object({})` — empty.
 - `isReadOnly`: `true`.
-- `maxResultChars`: `3000` (smaller than the plan-change tools' 4000).
-- `outputMode`: defaults to `"synthesis"` (no explicit setting).
+- `maxResultChars`: `3000`.
+- `outputMode`: defaults to `"synthesis"` (no explicit setting). No `extractVerbatim`.
 - `validateInput`: as described in §3.
-- `prompt`: `"Generate alternative schedule candidates when the primary plan is infeasible. Returns an empty list if the plan is already feasible. Useful for presenting options to the student when the default graduation term cannot be met."` (lines 66-68).
-
-No `extractVerbatim`. The LLM synthesizes a final reply from the summary string.
+- `prompt`: `simulateAlternatives.ts:65-68`.
 
 ---
 
@@ -330,7 +280,7 @@ No `extractVerbatim`. The LLM synthesizes a final reply from the summary string.
 `summarizeResult` (`simulateAlternatives.ts:92-107`) branches on three cases:
 
 1. **`note` present** → return `note` verbatim (e.g., `"Current plan is feasible; no alternatives needed."`).
-2. **`candidates.length === 0` and no `note`** → return `"No alternative candidates generated."`. This is the case when all three strategies were skipped (`includeSummer` already true, `includeJTerm` already true, `graduationTerm` not in `YYYY-spring|fall` form).
+2. **`candidates.length === 0` and no `note`** → return `"No alternative candidates generated."` (all three strategies were skipped).
 3. **Otherwise** — emit a multi-line block:
    - Header: `ALTERNATIVE CANDIDATES (<n>):`
    - One line per candidate:
@@ -341,31 +291,24 @@ The output is then truncated at 3000 chars by the envelope wrapper.
 
 ---
 
-## 11. Interactions with other tools
+## 11. Known limitations
+
+- **Does NOT surface the double-count advisory.** The double-count advisory (over-counting one course toward two requirements) is assembled and surfaced on `plan_forward_degree`, `propose_plan_change`, and `confirm_plan_change` — the only three tools that call `buildDoubleCountAdvisory` (PR #41) — but **not** on `simulate_alternatives` (nor on `run_full_audit` or `update_profile`). A candidate schedule returned here may contain a double-count that the student is never warned about until they commit it through the plan-change path. This is a deliberate gap, not yet closed.
+- **Only 3 of 5 declared relaxations are emitted.** `extend_grad_one_year` and `lower_credit_target` exist in the `AlternativeCandidate["relaxation"]` union but are never produced by this tool.
+- **Greedy-skip diagnostics caveat (historical).** The pre-rebuild greedy solver is gone; the engine is now feasibility-first backtracking search, so candidates that come back `schedule: null` reflect a genuine search exhaustion (within budget) rather than a greedy skip hiding unmet requirements.
+
+---
+
+## 12. Interactions with other tools
 
 ### With `plan_forward_degree`
-Direct upstream dependency. `plan_forward_degree` is the only tool that creates `session.forwardSchedule` and `session.studentDraftPlan`. `simulate_alternatives` cannot run without one of them. The intended workflow is:
-1. `plan_forward_degree` returns an `infeasible-draft` plan.
-2. The agent calls `simulate_alternatives` to enumerate the three relaxation options.
-3. The agent presents the options to the student.
+Direct upstream dependency. `plan_forward_degree` is the only tool that creates `session.forwardSchedule` and `session.studentDraftPlan`. `simulate_alternatives` cannot run without one of them. Intended workflow: `plan_forward_degree` returns an infeasible-draft plan → agent calls `simulate_alternatives` to enumerate the three relaxation options → agent presents them.
 
 ### With `propose_plan_change` and `confirm_plan_change`
-Indirect partners. The relaxations `include_summer` and `include_jterm` map cleanly onto the `addTerm` mutation kind. After `simulate_alternatives` returns a feasible `include_summer` candidate, the agent can:
-- Show the student the `candidate.schedule` directly (it's a complete `ForwardSchedule`), OR
-- Call `propose_plan_change({ mutations: [{ kind: "addTerm", term: "summer" }] })` to get a `planDiff` + `explanation` for the change.
-
-To commit, the agent calls `confirm_plan_change` with the same `addTerm` mutation. The route layer does NOT need to pass the candidate's schedule into confirm — `confirm_plan_change` re-solves from scratch and may produce a slightly different `ForwardSchedule` than the candidate (e.g., timestamps, alternative-candidates field). Equivalence of the two solver runs is a correctness assumption, not a code guarantee.
-
-The `extend_grad_one_term` relaxation has **no** corresponding `PlanMutation`. Acting on it requires invoking `plan_forward_degree` with a `graduationTermOverride` argument (read from `session.graduationTarget` or supplied by the agent).
+Indirect partners. The relaxations `include_summer` / `include_jterm` map onto the `addTerm` mutation kind. After a feasible candidate, the agent can show the student `candidate.schedule` directly, or route `addTerm` through the propose/confirm two-step to commit. `confirm_plan_change` re-solves from scratch (also through `finalizeForwardSchedule`), so the committed plan may differ slightly from the candidate (timestamps, alternative-candidates field). The `extend_grad_one_term` relaxation has no `PlanMutation`; acting on it requires `plan_forward_degree` with a `graduationTermOverride`.
 
 ### With `compare_plan_alternatives`
-Not referenced in `simulateAlternatives.ts`. Conceptually, `compare_plan_alternatives` would consume the `candidates` array returned by `simulate_alternatives` (or by `solverOutput.alternativeCandidates` embedded inside a schedule) and rank them. `simulate_alternatives` itself does no ranking — the strategies are emitted in fixed order.
+Not referenced in `simulateAlternatives.ts`. [`compare_plan_alternatives`](./compare_plan_alternatives.md) reads a **different** data path — the `alternativeCandidates` array the solver attaches to a *feasible* schedule via `findDiverseValidPlans` → `buildAlternativeSummaries`. That is solver-internal diversity, distinct from this tool's three relaxation strategies for an *infeasible* plan.
 
 ### With `bind_free_elective` / `bind_pool_slot`
-No interaction. The relaxation strategies operate on the solver input's `preferences` (Strategy 1, 2) or `graduationTerm` (Strategy 3), never on individual slots. Slot-level binding decisions are unrelated.
-
-### With the solver's own internal alternatives (`solverOutput.alternativeCandidates`)
-The solver may itself populate `alternativeCandidates` on its `SolverOutput` (Decision #44, see `types.ts:166`). When `buildScheduleFromOutput` runs (`alternatives.ts:132-160`), it conditionally spreads that field onto the candidate's `schedule`. So a feasible alternative candidate can itself carry **nested** alternative-plan summaries — these are the solver's internal top-5 alternatives, distinct from this tool's three relaxation strategies.
-
-### With `forwardFeasibilityScreen`
-Not invoked from this tool directly. The screen is a fast pruning heuristic the solver uses internally during placement (`forwardFeasibility.ts:43-83`). Each of the three `solveForwardSchedule` calls inside `simulate_alternatives` will internally use the screen. The screen does NOT participate in the alternatives generation logic itself.
+No interaction. The relaxation strategies operate on the solver input's `preferences` (strategies 1, 2) or `graduationTerm` (strategy 3), never on individual slots.

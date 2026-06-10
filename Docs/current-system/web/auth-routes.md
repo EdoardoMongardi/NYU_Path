@@ -1,5 +1,7 @@
 # Authentication Routes
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 ## TL;DR
 
 This is the login system — no passwords, just email codes. A student types their NYU email, the server sends a six-digit code to their inbox, the student types the code back in, and they're in. There's no separate signup step: the first successful login also creates the student's account in the database. After verification, the server hands the browser an invisible signed token that proves the student is who they say they are for the next 30 days. The student's NetID becomes their permanent identifier, used everywhere in the system to look up their plan, conversations, and preferences. Logging out simply throws the token away.
@@ -58,6 +60,8 @@ If the body is not valid JSON, returns 400 with `"Body must be JSON with an emai
 ### Rate limit (per IP)
 
 Before any work, the route applies a per-IP daily quota of 5 issuances via `consumeRequest` (`apps/web/app/api/auth/otp/issue/route.ts:21,32`). The bucket key is `otp-ip:<ip>`, where the IP is taken from the first hop of `X-Forwarded-For`, falling back to `X-Real-IP`, falling back to the literal string `anonymous` (`apps/web/app/api/auth/otp/issue/route.ts:23-29`). On block, returns HTTP 429 with body `{ ok: false, error: "Too many login attempts from this IP. Try again after <resetAt>." }` and a `Retry-After` header in seconds.
+
+This limiter is entirely in-process and resets on every server restart, and the IP key is read from the spoofable `X-Forwarded-For` header — see [rate-limit-and-middleware.md, Known limitations](./rate-limit-and-middleware.md#4-known-limitations). Treat it as an abuse speed bump, not a hard control. There is no per-email cap.
 
 ### Email allowlist
 
@@ -234,4 +238,12 @@ stateDiagram-v2
     code --> email: user clicks "Use a different email"
 ```
 
-Note: this `/login` page is the documented entry point. There is a separate Next.js `middleware.ts` in `apps/web/`, but it does NOT gate the `/login`, `/chat`, or `/api/auth/*` routes. Its `matcher` is `["/admin/:path*"]` only (`apps/web/middleware.ts:24`), meaning the only thing that file does is HTTP Basic-Auth gate the `/admin` observability dashboard. The session cookie is checked inside individual route handlers (`/api/session/*`, `/api/onboard/refresh-dpr`, and the chat route) by calling `readSessionFromRequest`, not by a global middleware pass.
+Note: this `/login` page is the documented entry point. There is a separate Next.js `middleware.ts` in `apps/web/`, but it does NOT gate the `/login`, `/chat`, or `/api/auth/*` routes. Its `matcher` is `["/admin/:path*"]` only (`apps/web/middleware.ts:24`), meaning the only thing that file does is HTTP Basic-Auth gate the `/admin` observability dashboard. Session auth is enforced two ways: route handlers (`/api/session/*`, `/api/onboard/refresh-dpr`) call `readSessionFromRequest`, while the `/chat` page is gated by a server-component layout (`apps/web/app/chat/layout.tsx`) that calls `readSessionFromCookies()` and `redirect("/login")` for any request without a valid cookie — see [§8](#8-chat-route-gating). There is no global session middleware.
+
+## 8. /chat route gating
+
+**File:** `apps/web/app/chat/layout.tsx`
+
+The `/chat` surface is protected by a Server Component layout, not by `middleware.ts`. `ChatLayout` (`apps/web/app/chat/layout.tsx:18-22`) awaits `readSessionFromCookies()` and, if the result is `null`, calls `redirect("/login")`. Because this runs on the server before any client JS, a logged-out visitor never sees the chat shell — they are bounced to `/login` during the server render.
+
+The layout's header comment explains why a layout was chosen over middleware: Next.js middleware runs in the Edge runtime, which cannot import `node:crypto` (used by `jose` under the hood for HS256 verification). The layout runs in the same Node runtime as the chat route, keeping the HS256 verify path in one place. The `/admin/*` Basic-Auth middleware (`apps/web/middleware.ts`) sidesteps this by pinning itself to the Node runtime via `config.runtime = "nodejs"`.

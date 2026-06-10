@@ -1,5 +1,7 @@
 # Section Materialization Subsystem
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 ## TL;DR
 
 The multi-term planner says "take Intro to CS next fall" but doesn't tell you which lecture, with which professor, meeting at which time. This subsystem bridges that gap. It hits NYU's live class-search to find every section available for each course on your plan, then figures out which combinations of sections actually fit together without scheduling conflicts. Imagine you've got three classes and each has four time slots; this code is the thing that finds every conflict-free pick of one section per course. It also respects student preferences like "no early morning classes" or "keep Fridays open," and if a strict preference wipes out all the sections of a course, it asks the planner for a backup course. NYU only publishes section data about six months ahead of time, so sometimes the answer is "we don't have data yet" — and this subsystem reports that honestly instead of guessing.
@@ -21,9 +23,9 @@ Section materialization is the engine subsystem that turns a structural plan (a 
 
 The structural plan tells you *what* to take; section materialization tells you *which specific sections* you can actually register for, and which combinations of sections fit together without time conflicts.
 
-The subsystem lives under `/Users/edoardomongardi/Desktop/Ideas/NYU Path/packages/engine/src/agent/sectionMaterialization/` and is composed of seven internal modules. The orchestrator (`materialize.ts`) is the entry point; the other six are pure helpers it composes in sequence.
+The subsystem lives under `packages/engine/src/agent/sectionMaterialization/` and is composed of seven internal modules. The orchestrator (`materialize.ts`) is the entry point; the other six are pure helpers it composes in sequence. The two agent-facing tools that drive it — `materialize_sections` (read-only staging) and `confirm_section_combination` (the write) — live in `packages/engine/src/agent/tools/materializeSections.ts` (see [tool-registry](tool-registry.md)).
 
-Data source: NYU's FOSE (Full Online Schedule of Events) search API, accessed through `searchCourses` in `packages/engine/src/api/nyuClassSearch.ts`. FOSE only publishes section-level data roughly six months out from the term, so the subsystem has to gracefully report when it has no data, partial data, or full data for the target term.
+Data source: NYU's FOSE (Full Online Schedule of Events) search API, accessed through `searchCourses` in `packages/engine/src/api/nyuClassSearch.ts` (the same client documented in [search-availability](search-availability.md)). FOSE only publishes section-level data roughly six months out from the term, so the subsystem has to gracefully report when it has no data, partial data, or full data for the target term.
 
 ---
 
@@ -304,6 +306,19 @@ Run `rankCombinationsByScore` (`materialize.ts:170-187`). Each combination's sco
 
 **Step 11 — Build the result** (`materialize.ts:420-447`).
 Assemble the `MaterializationResult` with `state: "full"`, the populated `semester` (term, course bundles, ranked combinations, truncation flag), a message that mentions the count of conflict-free combinations and any dropped courses, and the verdict.
+
+---
+
+## 8b. The two-step tool contract
+
+**File:** `packages/engine/src/agent/tools/materializeSections.ts`
+
+The orchestrator above is driven by a `materialize_sections` / `confirm_section_combination` tool pair that mirrors the `update_profile` / `confirm_profile_update` two-step write (Architecture §7.2).
+
+- **`materialize_sections`** (`isReadOnly: true`) takes a single `targetTerm` (solver format, e.g. `"2026-fall"`), validates that the term exists in `session.forwardSchedule` and is not locked, then builds the FOSE keyword list from **`specific_planned` slots only**. Placeholder slots (no concrete course yet) and `in_progress` (IP) slots are skipped — IP courses are pinned to a CRN in Albert that the DPR doesn't carry, so the tool appends an honest caveat that the proposed combinations can't conflict-check against them. It calls the orchestrator, then **stages** each conflict-free combination into `session.pendingMaterializations` under a deterministic `proposalId` (`prop_<term>_<1-indexed>`) and returns the proposal list. It does **not** mutate the schedule.
+- **`confirm_section_combination`** (the write) looks up a `proposalId`, walks the target semester's `specific_planned` slots, and adds the concrete-section fields (`crn`, `meetingPatterns`, `instructor`, `schd`, `sectionNumber`) in-place. The pending entry is consumed on success, so confirming the same id twice is rejected.
+
+> **Known limitation — swap cascade is stubbed at the tool layer.** The orchestrator's Step-7 swap cascade is fully implemented, but the `swapHook` the `materialize_sections` tool passes in always returns `null` (`materializeSections.ts:198-201`). Wiring it into the structural solver's swap path is deferred (marked Phase 16 in-code). In practice this means a wiped course surfaces cleanly in the result's `dropped` list with no alternative offered.
 
 ---
 

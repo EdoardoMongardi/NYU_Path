@@ -1,6 +1,12 @@
 # Loop State, Context Pressure, and Compaction
 
-> **Source file:** `packages/engine/src/agent/loopState.ts`
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+> **Source file:** `packages/engine/src/agent/loopState.ts`. Consumed by both agent-loop entry points in `packages/engine/src/agent/agentLoop.ts`.
+
+## Purpose
+
+This module is the agent loop's "desk manager." AI models have a limited working memory; if a conversation drags on with lots of tool results, the model runs out of room to think. `loopState.ts` keeps a running log of what happened this turn, tracks how many retries the loop has left, and watches how close the conversation is to overflowing. When pressure hits ~80% it asks the cheaper fallback model to summarize older messages (Tier-2); at ~95%+ it gives up gracefully and tells the student to start a fresh chat (Tier-3). It also trims long tool results that pile up over multiple rounds. See [agent-loop.md](./agent-loop.md) for how the loop wires these helpers together.
 
 ## TL;DR
 
@@ -149,7 +155,9 @@ If `tier2` is true AND `!hasFiredTier2Compaction` AND a fallback client is confi
 
 If the summarizer throws, `tryTier2Compact` returns null and the loop proceeds without compacting (the next iteration's pressure check will likely fire Tier-3).
 
-### Reactive compact (mid-turn)
+### Reactive compact (mid-turn) — block path only
+
+> **Known limitation.** This path lives only in `runAgentTurn` (the block entry point). The streaming entry point `runAgentTurnStreaming` — which production uses — has **no** reactive-compact handling; a 413 from the primary routes straight to the fallback client. So `hasAttemptedReactiveCompact` and the `reactive_compact` transition never fire in production. See [agent-loop.md §11](./agent-loop.md#11-block-vs-streaming--feature-asymmetry).
 
 If the primary client throws an error matching `isContextLengthExceededError` (substring match against `context_length_exceeded`, `context length exceeded`, `maximum context length`, `too long for context`, `maximum allowed input`, `413`) AND `!hasAttemptedReactiveCompact` AND a fallback client is configured:
 
@@ -198,11 +206,13 @@ flowchart TD
 
 ---
 
-## 8. Output-truncation recovery (post-model call)
+## 8. Output-truncation recovery (post-model call) — block path only
 
-Defined in the agent loop, but the budget lives in `LoopState`.
+Defined in the agent loop, but the budget (`outputTruncationRecoveriesRemaining`) lives in `LoopState`.
 
-After a successful model call:
+> **Known limitation.** Like reactive compaction, this loop lives only in `runAgentTurn`. `runAgentTurnStreaming` (production) has no output-truncation recovery — a reply that hits `maxTokens` is simply truncated. The route compensates by raising `maxTokens` to 4096. So `outputTruncationRecoveriesRemaining` and the `output_truncation_recovery` transition never fire in production. See [agent-loop.md §11](./agent-loop.md#11-block-vs-streaming--feature-asymmetry).
+
+After a successful model call (block path):
 
 ```
 while (

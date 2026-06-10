@@ -1,6 +1,12 @@
 # Clarifier — Ambiguity Gate + Clarification Sub-Agent
 
-> **Source file:** `packages/engine/src/agent/clarifier.ts`
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+> **Source file:** `packages/engine/src/agent/clarifier.ts`. Wired in `apps/web/app/api/chat/v2/route.ts:380-411`.
+
+## Purpose
+
+When a student types something vague — "math", "what about that?", "is this enough?" — the system shouldn't guess. Before the agent loop runs, a deterministic gate (`detectAmbiguity`, `clarifier.ts:60-140`) scans for ambiguity signals (too short, dangling pronoun, bare noun-phrase, fragment). If any fire, a constrained no-tools completion (`askClarification`) writes **one** clarifying question back to the student — or returns `"CLEAR"` to overrule the gate and let the message through. This is **reactive-only elicitation**: the system asks for clarification only in response to a genuinely ambiguous message; it never proactively quizzes the student about preferences.
 
 ## TL;DR
 
@@ -107,7 +113,11 @@ ambiguous = signals.length > 0
 
 ## 2. The sub-agent (`askClarification`)
 
-When the gate fires, the route calls `askClarification(client, userMessage, history, studentContext)`. This is a real LLM call but constrained:
+When the gate fires, the route calls `askClarification(primary, userMessage, history, studentContext)`. It is a single no-tools chat completion — constrained to ask one question or emit `"CLEAR"`.
+
+> **Runs on the PRIMARY client.** Despite the `clarifier.ts` header comments and the source note that "a haiku-tier model is appropriate," the production route passes the **primary** client (`createPrimaryClient`, default `claude-sonnet-4-6`) as the `client` argument (`route.ts:383-384`). There is no separate haiku client for the clarifier today — the "haiku call" framing in the comments and §4 below is aspirational, not what ships. The cost/latency notes derived from a haiku assumption are therefore optimistic.
+
+> **Known issue — un-de-CAS'ed prompt.** The system prompt still hardcodes "an academic-advising agent at **NYU CAS**" (`clarifier.ts:146`). The rest of the system was generalized away from a CAS-only assumption during the multi-school work, but this sub-agent prompt was missed. It is harmless to correctness (the clarifier only asks a question) but is a leftover that should be de-CAS'ed.
 
 - **System prompt (≤ ~15 lines, verbatim from the source):**
   ```
@@ -173,8 +183,8 @@ The gate fires on at most ~10–15% of incoming traffic (per the source-level no
 ## 4. Cost & latency profile
 
 - **Gate**: 0 ms (regex + token split).
-- **Sub-agent**: one LLM call. Recommended to a small/fast model (the source notes a Haiku-tier model is appropriate); `maxTokens` is capped at 80 to bound latency and cost.
-- The clarifier output is **not persisted** to the agent's tool history. It's a route-level event; the main agent loop has no awareness of it.
+- **Sub-agent**: one LLM call **on the primary client** (`claude-sonnet-4-6` by default — see §2). The source comments and the `< $0.001/month` estimate assume a haiku-tier model, but no haiku client is wired today, so real per-call cost/latency tracks Sonnet, not Haiku. `maxTokens` is capped at 80 and `temperature` at 0.1 to bound the output regardless.
+- The clarifier output is **not persisted** to the agent's tool history. It's a route-level event; the main agent loop has no awareness of it. (The route does, however, stream the question to the user and close the SSE for the turn — `route.ts:396-409`.)
 
 ---
 

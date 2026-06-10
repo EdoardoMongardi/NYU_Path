@@ -1,5 +1,7 @@
 # Chat UI Client — React Page & SSE Consumer
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 ## TL;DR
 
 This is the chat page the student actually sees and clicks on — the React component that runs in the browser. It owns everything visible: the conversation thread, the input box, the sidebar, and the typing animation. When the student sends a message, this page calls the chat endpoint and listens to the live stream of events coming back, painting the AI's reasoning and reply character by character to feel responsive (like ChatGPT). It also takes care of the small details: remembering the last login, restoring old conversations on refresh, showing confirmation bubbles when a plan change needs approval, and handling drag-and-drop file uploads for the degree progress report. Think of it as the storefront, while the chat endpoint is the kitchen.
@@ -63,8 +65,7 @@ If the `AbortSignal` fires mid-stream, the generator returns silently (no synthe
 
 ### Event union
 
-`ChatV2Event` (`chatV2Client.ts:47-57`) is the mirror of the route's `SseEvent` union — same kinds, same payload shape:
-- `template_match` — `templateId`, `body`, `source`
+`ChatV2Event` (`chatV2Client.ts:47-56`) is the mirror of the route's `SseEvent` union — same kinds, same payload shape:
 - `tool_invocation_start` — `toolName`, `args`
 - `tool_invocation_done` — `toolName`, `summary?`, `error?`
 - `token` — `text`
@@ -126,7 +127,7 @@ The page (`apps/web/app/chat/page.tsx:148-174`) holds:
 
 ### The send path
 
-`handleSend()` (`page.tsx:572-596`) is the entry point for both the Enter key and the send button. It:
+`handleSend()` (`page.tsx:565-589`) is the entry point for both the Enter key and the send button. It:
 1. Adds a user `Message` immediately.
 2. Sets `isLoading = true`.
 3. Branches on `useV2 = onboardingStep === "complete" && parsedData`:
@@ -143,22 +144,21 @@ The page (`apps/web/app/chat/page.tsx:148-174`) holds:
 
 `getOrCreateClientId()` (`page.tsx:48-61`) reads/creates a UUID from `localStorage` under the key `nyupath:client-id`. Falls back to a `cohortA-<timestamp>-<random>` if `crypto.randomUUID` is unavailable; falls back to `"anonymous"` when `localStorage` itself throws.
 
-`handleSendV1(userText)` (`page.tsx:548-570`) is the legacy onboarding path. It POSTs to `/api/chat` (JSON, not SSE), receives a single response, and adds the assistant message plus any returned `onboardingStep`, `visaStatus`, or `graduationTarget` updates.
+`handleSendV1(userText)` (`page.tsx:541-563`) is the legacy onboarding path. It POSTs to `/api/chat` (JSON, not SSE), receives a single response, and adds the assistant message plus any returned `onboardingStep`, `visaStatus`, or `graduationTarget` updates.
 
 ### The `applyEvent` reducer
 
-`applyEvent` (`page.tsx:414-545`) is a per-event mutator that updates the active assistant `Message`:
+`applyEvent` (`page.tsx:414-538`) is a per-event mutator that updates the active assistant `Message`. Note: there is **no** `template_match` case in the live reducer — the `ChatV2Event` union (`chatV2Client.ts:47-56`) has no `template_match` member, so the page never receives one. The handled kinds are:
 
-- `template_match` → set `content = body` and append a `template:<id>` tool status with `source` as the summary (`page.tsx:417-421`).
-- `tool_invocation_start` → push the tool onto `toolStatuses` with state `"running"`. Look up the tool's "thought sentence" via `getThoughtSentence(toolName)` from `lib/agentStatusVerbs.ts` and append it to `thinkingText` (with single-space joiner, deduped against the last sentence) — UNLESS `hasRealThinking` is set, in which case the canned sentences would conflict with the model's actual chain-of-thought (`page.tsx:423-451`).
-- `tool_invocation_done` → patch the matching running status with `state: "done"` or `"error"`, plus `summary` and `error` fields. If the tool was `update_profile`, run `extractPendingMutationId(summary)` and set the message's `pendingMutationId` (`page.tsx:452-468`).
-- `token` → APPEND the text to `content`. The handler comment notes the route emits a single block-streamed token today; the append-rather-than-overwrite pattern is forward-compatible with a future intra-token streaming upgrade (`page.tsx:469-478`).
-- `thinking` → first event sets `hasRealThinking = true` and REPLACES any synthesized sentence narration (resets `thinkingRevealed = 0` so the typewriter restarts on the new text). Subsequent events append (`page.tsx:479-500`).
-- `forward_schedule_update` → call `setForwardSchedule(ev.schedule)` (`page.tsx:501-503`).
-- `forward_materialization_update` → call `setForwardMaterialization(ev.result)` (`page.tsx:504-511`).
-- `validator_block` → set `validatorViolations` on the message (`page.tsx:512-520`).
-- `done` → server's `finalText` is authoritative; set `content = ev.finalText` and `completedAt = Date.now()`. Guards against any future partial-chunk artifact in the accumulated tokens (`page.tsx:521-527`).
-- `error` → don't leak the raw exception to the student. Log `ev.message` to console (for operator correlation via `/admin/observability`), then either keep any partial content that arrived or fall back to a generic "something went wrong, email the operator" copy. Set `failedAt = Date.now()` (`page.tsx:528-543`).
+- `tool_invocation_start` → push the tool onto `toolStatuses` with state `"running"`. Look up the tool's "thought sentence" via `getThoughtSentence(toolName)` from `lib/agentStatusVerbs.ts` and append it to `thinkingText` (with single-space joiner, deduped against the last sentence) — UNLESS `hasRealThinking` is set, in which case the canned sentences would conflict with the model's actual chain-of-thought (`page.tsx:416-444`).
+- `tool_invocation_done` → patch the matching running status with `state: "done"` or `"error"`, plus `summary` and `error` fields. If the tool was `update_profile`, run `extractPendingMutationId(summary)` and set the message's `pendingMutationId` (`page.tsx:445-461`).
+- `token` → APPEND the text to `content`. The handler comment notes the route emits a single block-streamed token today; the append-rather-than-overwrite pattern is forward-compatible with a future intra-token streaming upgrade (`page.tsx:462-471`).
+- `thinking` → first event sets `hasRealThinking = true` and REPLACES any synthesized sentence narration (resets `thinkingRevealed = 0` so the typewriter restarts on the new text). Subsequent events append (`page.tsx:472-493`).
+- `forward_schedule_update` → call `setForwardSchedule(ev.schedule)` (`page.tsx:494-496`).
+- `forward_materialization_update` → call `setForwardMaterialization(ev.result)` (`page.tsx:497-504`).
+- `validator_block` → set `validatorViolations` on the message (`page.tsx:505-513`).
+- `done` → server's `finalText` is authoritative; set `content = ev.finalText` and `completedAt = Date.now()`. Guards against any future partial-chunk artifact in the accumulated tokens (`page.tsx:514-520`).
+- `error` → don't leak the raw exception to the student. Log `ev.message` to console (for operator correlation), then either keep any partial content that arrived or fall back to a generic "something went wrong, email the operator" copy. Set `failedAt = Date.now()` (`page.tsx:521-536`).
 
 ### The typewriter ticker
 
@@ -185,17 +185,17 @@ All restore failures are caught and logged; the page falls back to the existing 
 
 ### Message bubble rendering
 
-The render loop (`page.tsx:1183-1420`) walks `messages` and branches early when `msg.kind === "plan_action_bubble" && msg.bubble`. For regular messages:
+The render loop (`page.tsx:1161-1399`) walks `messages` and branches early when `msg.kind === "plan_action_bubble" && msg.bubble`. For regular messages:
 
 1. **Avatar** — assistant rows render the 🎓 avatar; user rows do not.
-2. **Reasoning block** (`page.tsx:1304-1374`) — only rendered when `msg.role === "assistant" && msg.startedAt`. The header text is derived from settlement state:
+2. **Reasoning block** (`page.tsx:1283-1353`) — only rendered when `msg.role === "assistant" && msg.startedAt`. The header text is derived from settlement state:
    - In-flight: `"Thinking"` (shimmering style, `role="status" aria-live="polite"`).
    - Settled: `"Reasoned for <duration>"` via `formatDuration(completedAt - startedAt)`.
    - Failed: `"Failed after <duration>"`.
    Settled reasoning is collapsible (button toggles `traceExpanded`). In-flight is always expanded. Body shows the `thinkingText` sliced to `thinkingRevealed`, split on `\n\n` into paragraphs, with a blinking caret on the last paragraph during in-flight. Below the paragraphs, the per-tool list renders via `getPastVerb(toolName)` plus the tool state icon (`•` running, `✓` done, `⚠` error).
-3. **Final answer** (`page.tsx:1377-1392`) — the content sliced to `contentRevealed` rendered through the lightweight `renderMarkdown` function (`page.tsx:1108-1114`: handles `**bold**`, `*italic*`, `` `code` ``, and `\n` → `<br />`). Hidden while text is empty so an empty white card isn't shown during early thinking.
-4. **Validator warning chip** (`page.tsx:1394-1406`) — yellow background card listing each violation's `kind`, optional `caveatId`, and `detail`.
-5. **Confirm profile update button** (`page.tsx:1408-1416`) — rendered when `pendingMutationId` is set. Calls `handleConfirmPending(pendingMutationId)`, which injects a "Yes, please apply…" user message and runs the v2 path so the agent picks up the confirmation.
+3. **Final answer** (`page.tsx:1354-1371`) — the content sliced to `contentRevealed` rendered through the lightweight `renderMarkdown` function (`page.tsx:1087-1093`: handles `**bold**`, `*italic*`, `` `code` ``, and `\n` → `<br />`) and injected via `dangerouslySetInnerHTML`. Hidden while text is empty so an empty white card isn't shown during early thinking. **See "Known limitations" — `renderMarkdown` does no HTML sanitization.**
+4. **Validator warning chip** (`page.tsx:1372-1385`) — yellow background card listing each violation's `kind`, optional `caveatId`, and `detail`.
+5. **Confirm profile update button** (`page.tsx:1386-1395`) — rendered when `pendingMutationId` is set. Calls `handleConfirmPending(pendingMutationId)`, which injects a "Yes, please apply…" user message and runs the v2 path so the agent picks up the confirmation.
 
 ### Loading indicator (v1 only)
 
@@ -212,7 +212,7 @@ sequenceDiagram
     participant Apply as applyEvent reducer
     participant Ticker as rAF typewriter
     participant Sidebar as ScheduleSidebar
-    participant Restore as /api/session/restore
+    participant Restore as session restore
 
     Note over Page,Restore: Mount
     Page->>Restore: GET /api/session/restore
@@ -391,31 +391,31 @@ The helper performs no LLM synthesis and no fabrication — when upstream data i
 
 The page is **mostly NOT optimistic on the chat side** — the regular chat flow only renders state the server has confirmed. The pre-created assistant `Message` is empty until `token` / `thinking` / `done` events arrive; content is set on `done` (server-authoritative), not optimistically.
 
-There is one explicit optimistic UI affordance: **plan-action bubble button locking**. When the user clicks Confirm / Override-anyway, `handleBubbleConfirm` and `handleBubbleOverrideAnyway` immediately call `patchMessage(messageId, { bubbleResolved: true })` BEFORE awaiting the `/api/plan/confirm` round-trip (`page.tsx:882`, `927`). This locks the buttons so a double-click can't double-submit. If the route fails, the buttons re-enable (`bubbleResolved: false`) and the failure copy lands in `content`.
+There is one explicit optimistic UI affordance: **plan-action bubble button locking**. When the user clicks Confirm / Override-anyway, `handleBubbleConfirm` and `handleBubbleOverrideAnyway` immediately call `patchMessage(messageId, { bubbleResolved: true })` BEFORE awaiting the `/api/plan/confirm` round-trip (`page.tsx:875`, `920`). This locks the buttons so a double-click can't double-submit. If the route fails, the buttons re-enable (`bubbleResolved: false`) and the failure copy lands in `content`.
 
-The schedule sidebar IS optimistic-on-the-server-side: when `/api/plan/confirm` returns a fresh `forwardSchedule`, the page calls `setForwardSchedule(result.data.forwardSchedule)` directly (`page.tsx:901-903`, `938-940`) — no waiting for the next chat-turn `forward_schedule_update` event. This bridges the gap between the route's HTTP-JSON response and the chat-side SSE channel.
+The schedule sidebar IS optimistic-on-the-server-side: when `/api/plan/confirm` returns a fresh `forwardSchedule`, the page calls `setForwardSchedule(result.data.forwardSchedule)` directly (`page.tsx:894-896`, `931-933`) — no waiting for the next chat-turn `forward_schedule_update` event. This bridges the gap between the route's HTTP-JSON response and the chat-side SSE channel.
 
 ## 7. Sidebar Interactions
 
-The `<ScheduleSidebar>` is rendered at the bottom of the page (`page.tsx:1497-1511`) with these props:
+The `<ScheduleSidebar>` is rendered at the bottom of the page (`page.tsx:1465-1479`) with these props:
 - `schedule` ← `forwardSchedule` state (updated by `forward_schedule_update` SSE events AND by `/api/plan/confirm` HTTP responses).
-- `student` ← memoized `sidebarStudent` (rebuilt from `sidebarDpr` and `visaStatus` via `buildStudentProfileFromDpr` whenever either changes; null when no DPR is loaded — `page.tsx:1085-1099`).
-- `dpr` ← memoized `sidebarDpr` (extracted from `parsedData` when `parsedData.kind === "dpr"`; null otherwise — `page.tsx:1085-1088`).
+- `student` ← memoized `sidebarStudent` (rebuilt from `sidebarDpr` and `visaStatus` via `buildStudentProfileFromDpr` whenever either changes; null when no DPR is loaded — `page.tsx:1068-1078`). NOTE: this profile is derived **entirely client-side from the raw DPR** with `visaStatus` defaulting to `"domestic"` whenever the page has not captured `"f1"`; it has no access to the server's authenticated `studentId` / home-school overrides, so the sidebar's identity fields can disagree with the server-side profile. See "Known limitations".
+- `dpr` ← memoized `sidebarDpr` (extracted from `parsedData` when `parsedData.kind === "dpr"`; null otherwise — `page.tsx:1064-1067`).
 - `materialization` ← `forwardMaterialization` state (updated by `forward_materialization_update` SSE events).
 - `schedulePreferences` ← `schedulePreferences` state (hydrated from `/api/session/restore`; updated by plan-action route responses).
 - `open` / `onClose` — visibility.
 
 The sidebar drives back into the page via four callbacks:
-- `onProposeLoadStyle(style)` (`page.tsx:604-616`) — injects a chat-visible user message like `"Please propose a balanced load style for my schedule — call propose_plan_change with loadStyle="balanced"."` and runs it through `handleSendV2`. The agent's tool-use behavior handles the round-trip.
-- `onProposeSlotChange(slot, action)` (`page.tsx:624-649`) — similar pattern for `lock` / `replace` / `drop` / `pin` on a specific slot. Constructs a slotId from `courseId` (for specific/in-progress/completed) or `placeholder(<category>)` (for pool/free-elective slots).
-- `onPlanActionResult(verb, result)` (`page.tsx:832-877`) — the sidebar's verb routes return responses through this callback; the page classifies the outcome and injects a `plan_action_bubble` (Section 4) or stays silent (clean apply).
-- `onConfirmCombination(proposalId)` (`page.tsx:680-694`) — for the materialization picker. Injects `"Yes, please apply section combination <id> — call confirm_section_combination with proposalId="<id>"."` and runs v2.
+- `onProposeLoadStyle(style)` (`page.tsx:597-609`) — injects a chat-visible user message like `"Please propose a balanced load style for my schedule — call propose_plan_change with loadStyle="balanced"."` and runs it through `handleSendV2`. The agent's tool-use behavior handles the round-trip.
+- `onProposeSlotChange(slot, action)` (`page.tsx:617-642`) — similar pattern for `lock` / `replace` / `drop` / `pin` on a specific slot. Constructs a slotId from `courseId` (for specific/in-progress/completed) or `placeholder(<category>)` (for pool/free-elective slots). In practice the sidebar passes this only as a legacy no-op shim; the live verb result flows through `onPlanActionResult`.
+- `onPlanActionResult(verb, result)` (`page.tsx:825-870`) — the sidebar's verb routes return responses through this callback; the page classifies the outcome and injects a `plan_action_bubble` (Section 4) or stays silent (clean apply).
+- `onConfirmCombination(proposalId)` (`page.tsx:673-687`) — for the materialization picker. Injects `"Yes, please apply section combination <id> — call confirm_section_combination with proposalId="<id>"."` and runs v2.
 
-The sidebar toggle button (`page.tsx:1136-1144`) is always visible in the header (no longer gated on `forwardSchedule !== null`), so students can inspect their DPR-derived term cards even before computing a forward plan.
+The sidebar toggle button (`page.tsx:1115-1123`) is always visible in the header (no longer gated on `forwardSchedule !== null`), so students can inspect their DPR-derived term cards even before computing a forward plan.
 
 Two sidebar utility paths talk to non-chat routes:
-- `handleRefreshDpr(file)` (`page.tsx:962-996`) — POSTs the new PDF to `/api/onboard/refresh-dpr` as multipart form-data. The route fingerprint-compares with the stored DPR. On match → `window.alert("No changes detected …")`. On mismatch → updates `forwardSchedule` directly and alerts the user. Failures surface via `window.alert`.
-- `handleClearAll()` (`page.tsx:1004-1023`) — test-only wipe gated server-side on `NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`. Confirms via `window.confirm`, DELETEs `/api/session/clear`, then `window.location.reload()` to re-run onboarding from a clean slate.
+- `handleRefreshDpr(file)` (`page.tsx:955-989`) — POSTs the new PDF to `/api/onboard/refresh-dpr` as multipart form-data. The route fingerprint-compares with the stored DPR. On match → `window.alert("No changes detected …")`. On mismatch → updates `forwardSchedule` directly and alerts the user. Failures surface via `window.alert`.
+- `handleClearAll()` (`page.tsx:997-1016`) — test-only wipe gated server-side on `NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`. Confirms via `window.confirm`, DELETEs `/api/session/clear`, then `window.location.reload()` to re-run onboarding from a clean slate.
 
 ## 8. Loading + Error States
 
@@ -426,7 +426,7 @@ The agent-status reasoning block IS the per-message loading indicator for v2 tur
 - Settled: `"Reasoned for Xs"` (collapsible button).
 - Failed: `"Failed after Xs"` (also collapsible, only if `hasAnyThought`).
 
-The legacy bouncing-dots indicator (`page.tsx:1426-1435`) only renders for v1 turns (`isLoading && !(onboardingStep === "complete" && parsedData)`).
+The legacy bouncing-dots indicator (`page.tsx:1405-1414`) only renders for v1 turns (`isLoading && !(onboardingStep === "complete" && parsedData)`).
 
 ### Page-level loading
 
@@ -437,11 +437,11 @@ The legacy bouncing-dots indicator (`page.tsx:1426-1435`) only renders for v1 tu
 
 ### Send-path errors
 
-If `handleSendV2` or `handleSendV1` throws (rare — the v2 generator yields synthetic error events instead of throwing), `handleSend` catches and adds a fallback assistant `Message` with `err.message` (`page.tsx:589-592`).
+If `handleSendV2` or `handleSendV1` throws (rare — the v2 generator yields synthetic error events instead of throwing), `handleSend` catches and adds a fallback assistant `Message` with `err.message` (`page.tsx:582-585`).
 
 ### SSE error events
 
-The `error` SSE event is handled by `applyEvent` (`page.tsx:528-543`). The raw `ev.message` is logged to `console.error` for operator correlation but never shown verbatim to the student. Instead, the message's content is set to:
+The `error` SSE event is handled by `applyEvent` (`page.tsx:521-536`). The raw `ev.message` is logged to `console.error` for operator correlation but never shown verbatim to the student. Instead, the message's content is set to:
 - Any partial content that already arrived (when available), OR
 - The friendly copy: `"Something went wrong on our side handling that turn. Try resending — if it keeps happening, email the operator at edoardo.mongardi18@gmail.com."`
 
@@ -449,15 +449,21 @@ The `error` SSE event is handled by `applyEvent` (`page.tsx:528-543`). The raw `
 
 ### Validator block warnings
 
-When a `validator_block` event arrives, the violations render as a yellow-background card under the bubble (`page.tsx:1394-1406`) with the header `"⚠ Could not fully ground this reply."` followed by a `<ul>` listing each violation's `kind` (as `<code>`), optional `caveatId` (in parentheses), and `detail`. The reply text itself is still rendered (validator violations are advisory).
+When a `validator_block` event arrives, the violations render as a yellow-background card under the bubble (`page.tsx:1372-1385`) with the header `"⚠ Could not fully ground this reply."` followed by a `<ul>` listing each violation's `kind` (as `<code>`), optional `caveatId` (in parentheses), and `detail`. The reply text itself is still rendered (validator violations are advisory).
 
 ### File-upload errors
 
-`handleFileUpload(file)` (`page.tsx:1025-1058`) rejects non-PDF files with `addMessage("assistant", "Please upload a PDF file (your Degree Progress Report).")`. Network or parse failures surface as `addMessage("assistant", "I had trouble processing that file. Please try uploading again.")`.
+`handleFileUpload(file)` (`page.tsx:1018-1049`) rejects non-PDF files with `addMessage("assistant", "Please upload a PDF file (your Degree Progress Report).")`. Network or parse failures surface as `addMessage("assistant", "I had trouble processing that file. Please try uploading again.")`.
 
 ### DPR refresh + clear failures
 
 Both `handleRefreshDpr` and `handleClearAll` use `window.alert()` for failure surfaces — operator-level affordances, not student-facing chat copy.
+
+## Known limitations
+
+- **No HTML sanitization (XSS).** `renderMarkdown` (`page.tsx:1087-1093`) is a four-`String.replace` regex transform that handles `**bold**`, `*italic*`, `` `code` ``, and `\n` → `<br />`, and the result is injected with `dangerouslySetInnerHTML` in both the regular final-answer bubble and the plan-action bubble. There is **no escaping or sanitization step**, so any raw HTML in the string is rendered as live markup. The string can come from LLM output (final-answer text), the plan-action template / Haiku polish output, and — via the session-restore replay (`page.tsx:303-353`) — stored chat transcripts and the student's own past messages. This is a stored/reflected XSS exposure that should be treated as a real bug, not a styling shortcut.
+- **Sidebar profile is client-derived and can disagree with the server.** `sidebarStudent` (`page.tsx:1068-1078`) is built purely from the raw DPR via `buildStudentProfileFromDpr`, with `visaStatus` forced to `"domestic"` whenever the page state is not `"f1"`. It never consults the authenticated `studentId` or any server-side home-school / program overrides, so the sidebar's `SummaryCard` identity fields are a best-effort client reconstruction, not the authoritative server profile.
+- **State flows one way.** The agent never observes sidebar edits mid-conversation: server SSE events and HTTP confirm responses flow `route → page → sidebar`, and sidebar verbs round-trip through their own deterministic `/api/plan/*` routes. A schedule the student edited via the sidebar is only visible to the agent on the next chat turn once the persisted `forwardSchedule` is reloaded into the request body.
 
 ## Related Files
 

@@ -1,8 +1,10 @@
 # Session and Onboarding Routes
 
-## TL;DR
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
-These four endpoints handle the "before and around" of the chat experience — getting a student set up, picking up where they left off, and updating their data when something changes. When a brand-new student lands on the chat page, they upload their degree progress report PDF, and the onboarding endpoint reads it, extracts the courses and programs, and hands back a structured summary. When a returning student reopens the page, the restore endpoint quietly fetches their saved profile, plan, preferences, and recent messages so the page can rehydrate the entire conversation. When the student gets a new degree report mid-semester (say, after registering for next term), they hit refresh and the system rebuilds their plan from scratch. There's also a test-only "wipe everything" endpoint, hidden behind an environment flag, used during development.
+## Purpose
+
+These endpoints handle the "before and around" of the chat experience — getting a student set up, picking up where they left off, and updating their data when something changes. When a brand-new student lands on the chat page, they upload their degree progress report PDF, and the onboarding endpoint reads it, extracts the courses and programs, and hands back a structured summary. When a returning student reopens the page, the restore endpoint quietly fetches their saved profile, plan, preferences, and recent messages so the page can rehydrate the entire conversation — **this is the route that genuinely hydrates from Postgres** (unlike the live chat turn; see [chat-route-sse.md §5.1](chat-route-sse.md#51-the-hydration-gap)). When the student gets a new degree report mid-semester (say, after registering for next term), they hit refresh and the system rebuilds their plan from scratch. There's also a test-only "wipe everything" endpoint, hidden behind an environment flag, used during development. A separate legacy `/api/chat` route still handles the pre-DPR onboarding chitchat state machine; it is covered in [§5](#5-legacy-apichat-onboarding-state-machine).
 
 ```mermaid
 flowchart LR
@@ -295,3 +297,17 @@ If the fingerprint differs (or there's no prior schedule), the route does six op
 | Persist failure        | 500    | `{ error: "Failed to persist new DPR: ..." }`                           |
 | Re-plan failure        | 500    | `{ error: "Re-plan failed: ..." }`                                      |
 | Success                | 200    | `{ changed: true, schedule, state }`                                    |
+
+## 5. Legacy `/api/chat` — onboarding state machine
+
+**File:** `apps/web/app/api/chat/route.ts`
+
+This is the legacy v1 chat route. Post-DPR turns no longer touch it — they go to [`/api/chat/v2`](chat-route-sse.md). What remains here is narrow:
+
+1. **Onboarding state-machine steps** — the keyword-driven flow after the DPR is parsed: `confirming_data` → (`correcting_data`) → `asking_visa` → `asking_graduation` → `complete` (`route.ts:83-174`). These transitions are deterministic string matching on the user's reply (no LLM), returning the next `onboardingStep` and canned prompt text. The `asking_visa` step infers `visaStatus` (`"f1"` / `"domestic"`); `asking_graduation` parses a `graduationTarget` like `"2027-spring"`.
+2. **Pre-onboarding chitchat** — when there's no `parsedData` yet, `handleBasicChat` (`route.ts:180-230`) answers warmly. If `OPENAI_API_KEY` is set it runs a single tool-less completion through `new OpenAIEngineClient({ modelId: DEFAULT_PRIMARY_MODEL, ... })`; otherwise it falls back to hardcoded greeting/help strings. (Note: this is the one place in the chat surface that still instantiates an OpenAI client directly, using the engine's `DEFAULT_PRIMARY_MODEL` constant — currently `claude-sonnet-4-6` — as the model id, even though the client class is `OpenAIEngineClient`.)
+3. **Deprecation guard** — any POST with `onboardingStep === "complete"` AND `parsedData` present returns HTTP 410 Gone with `{ error: "…Use POST /api/chat/v2 (SSE).", redirect: "/api/chat/v2" }` (`route.ts:58-66`).
+
+### Known limitation — the `correcting_data` step stores nothing
+
+When the student replies "no" at `confirming_data`, the route advances to `correcting_data` and, for any free-form correction that isn't a re-upload or a "done" signal, replies `"Got it, I've noted that correction! ✅"` (`route.ts:127-130`). **This is cosmetic — the route persists nothing.** There is no profile mutation, no store write, no record of the stated correction. The acknowledgement is a canned string. A student who corrects "my GPA is 3.7" here is told it was noted, but nothing downstream sees the change unless they re-upload a corrected DPR. This is a known bug, documented here so the friendly copy isn't mistaken for real behavior.

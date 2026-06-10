@@ -1,15 +1,17 @@
-# `view_forward_plan` — Tool Audit
+# view_forward_plan — Tool Audit
 
-## TL;DR
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
-When you ask "show me my degree plan," "what am I taking in Spring 2027?", or "when do I graduate according to my plan?", this tool just opens the file cabinet and shows you what's already there. It does not re-plan, does not call the solver, and does not change anything — it's purely a read of the most recent plan saved in your session. If you haven't asked for a plan yet, it'll politely report that there's nothing stored. If your last planning attempt produced something infeasible, it'll show you that draft (clearly marked) instead of pretending a valid plan exists. To regenerate or refresh the plan, you'd need the planning tool — this one is just the viewer.
+## Purpose
+
+When a student asks "show me my degree plan," "what am I taking in Spring 2027?", or "when do I graduate according to my plan?", this tool just opens the file cabinet and shows what's already there. It does not re-plan, does not call the solver, and does not change anything — it is a pure read of the most recent plan saved in the session. If no plan has been generated yet, it reports that nothing is stored. If the last planning attempt produced an infeasible draft, it shows that draft (clearly marked) instead of pretending a valid plan exists. To regenerate or refresh the plan, the LLM must call [`plan_forward_degree`](plan_forward_degree.md) — this tool is only the viewer.
 
 ```mermaid
 flowchart LR
     Q[Student: show me my plan] --> T[view_forward_plan]
     T --> R{Plan stored?}
     R -->|valid plan| MAIN[Read forwardSchedule slot]
-    R -->|infeasible draft| DRAFT[Read draft slot]
+    R -->|infeasible draft| DRAFT[Read studentDraftPlan slot]
     R -->|nothing| NONE[Report: no plan yet]
     MAIN --> A[Semester-by-semester display]
     DRAFT --> A
@@ -21,135 +23,109 @@ flowchart LR
 Source files:
 - Tool definition: `packages/engine/src/agent/tools/viewForwardPlan.ts`
 - Tool contract: `packages/engine/src/agent/tool.ts`
-- Forward schedule shape: imported from `@nyupath/shared` as `ForwardSchedule`
+- Forward-schedule shape: `ForwardSchedule` from `@nyupath/shared`
 
 ---
 
-## 1. Purpose
+## 1. What it does
 
-`view_forward_plan` returns the student's **currently stored** forward degree plan without recalculating it. It's a pure session-slot reader. Used for:
+`view_forward_plan` returns the student's **currently stored** forward degree plan without recalculating it. It is a strict session-slot reader. Used for:
 
 - "Show me my degree plan."
 - "What courses do I have planned for Spring 2027?"
 - "When will I graduate according to my plan?"
 
-It never recomputes the plan, never calls the solver, never mutates session state. To generate or refresh a plan, the LLM must call `plan_forward_degree` — this tool only displays what's already there.
+It never recomputes the plan, never calls the solver, never mutates session state. To generate or refresh a plan, the LLM must call [`plan_forward_degree`](plan_forward_degree.md).
 
 ---
 
 ## 2. Input schema
 
-The input is empty:
+Empty (`viewForwardPlan.ts:42`):
 
 ```
 { /* no fields */ }
 ```
 
-Defined at `viewForwardPlan.ts:42`.
-
 - `isReadOnly` = `true` (line 43).
 - `maxResultChars` = 4000 (line 44).
 - `outputMode` is the default `"synthesis"`.
 
----
-
-## 3. Session prerequisites + `validateInput`
-
-There is **no `validateInput` hook**. The tool always runs. The result encodes "no plan stored" explicitly via `source: "none"` rather than as a rejection.
+There is **no `validateInput` hook** — the tool always runs. Unlike the planner, it does **not** hard-refuse without a DPR; "no plan stored" is encoded explicitly as `source: "none"` rather than as a rejection.
 
 ---
 
-## 4. What it reads
+## 3. What it reads
 
 From `ToolSession`:
-- `session.forwardSchedule` — the canonical valid plan slot. Set only when the solver state is `"valid-clean"` or `"valid-with-trade-offs"`.
-- `session.studentDraftPlan` — the draft-only slot. Holds plans whose state is `"infeasible-draft"` or `"student-preferred-invalid-draft"`. By design these never write to `forwardSchedule` so the agent does not endorse an illegal plan.
+- `session.forwardSchedule` — the canonical valid-plan slot. Set only when the schedule's state is `valid-clean` or `valid-with-trade-offs`.
+- `session.studentDraftPlan` — the draft-only slot. Holds plans whose state is `infeasible-draft` (or, in principle, `student-preferred-invalid-draft`). By design these never write to `forwardSchedule`, so the agent does not endorse an illegal plan.
 
-Each slot, if present, is a `ForwardSchedule` carrying:
-- `state` — one of `"valid-clean"`, `"valid-with-trade-offs"`, `"infeasible-draft"`, or (per session-shape comments) `"student-preferred-invalid-draft"`.
-- `graduationTerm` — the target term.
-- `balanceScore` — numeric score from the solver.
-- `degreeCreditsMet` — boolean.
-- `semesters` — array of `{ term, plannedCredits, slots[] }`.
-- `assumptions` — array of items including `IP_COURSE_COMPLETION` (`{ type, courseId }`).
-- `computedAt` — timestamp (milliseconds).
-
-It does NOT read the DPR, the student profile, or any catalog.
+Each slot, when present, is a `ForwardSchedule`. The tool reads `state`, `graduationTerm`, `balanceScore`, `degreeCreditsMet`, `semesters[]`, `assumptions[]`, and `computedAt`. It does NOT read the DPR, the student profile, or any catalog.
 
 ---
 
-## 5. Algorithm
+## 4. Algorithm
 
 `call()` (`viewForwardPlan.ts:48-70`) runs a three-way precedence check:
 
 ```mermaid
 flowchart TD
     A[call] --> B{session.forwardSchedule set?}
-    B -- yes --> C[Return forwardSchedule with source = forwardSchedule]
+    B -- yes --> C[Return forwardSchedule, source = forwardSchedule]
     B -- no --> D{session.studentDraftPlan set?}
-    D -- yes --> E[Return studentDraftPlan with source = studentDraftPlan]
-    D -- no --> F[Return schedule = null, source = none, summary = no plan stored]
+    D -- yes --> E[Return studentDraftPlan, source = studentDraftPlan]
+    D -- no --> F[Return schedule = null, source = none]
 ```
 
 Precedence is hard-coded:
-1. **`forwardSchedule` wins** when set. The agent treats this as the validated plan.
-2. **`studentDraftPlan` is the fallback** — returned only when there is no valid schedule. The summary line is annotated with `" [DRAFT — infeasible plan, not endorsed by the agent]"`.
-3. **Otherwise** the output carries `schedule: null` with a fixed message: `"No forward degree plan is stored in this session. Call plan_forward_degree to generate one."`
+1. **`forwardSchedule` wins** when set — treated as the validated plan.
+2. **`studentDraftPlan` is the fallback** — returned only when there is no valid schedule. The summary's first line is annotated with `" [DRAFT — infeasible plan, not endorsed by the agent]"`.
+3. **Otherwise** the output carries `schedule: null` with the fixed message `"No forward degree plan is stored in this session. Call plan_forward_degree to generate one."`
 
-The tool does NOT pick the "newest" plan by timestamp — `forwardSchedule` always wins over `studentDraftPlan` regardless of `computedAt`.
+The tool does NOT pick the newest plan by `computedAt` — `forwardSchedule` always wins over `studentDraftPlan` regardless of timestamp.
 
 ### Summary builder (`buildSummary`, lines 80-129)
 
-For a present `ForwardSchedule`, the summary is composed as follows:
+For a present `ForwardSchedule`:
 
-1. **State label** — one of:
-   - `"VALID (no caveats)"` when `state === "valid-clean"`.
-   - `"VALID with trade-offs (see assumptions)"` when `state === "valid-with-trade-offs"`.
-   - `"INFEASIBLE DRAFT"` when `state === "infeasible-draft"`.
-   - `"STUDENT-PREFERRED DRAFT"` for any other state (falls through to the default branch).
-2. **Source suffix** — when called for `studentDraftPlan`, appends `" [DRAFT — infeasible plan, not endorsed by the agent]"` to the first line. Empty otherwise.
-3. **Header lines** include: graduation target, balance score (2 decimals), `degreeCreditsMet` (yes/no), number of semesters, ISO-formatted `computedAt`.
-4. **Per-semester rendering** — one line per semester, in the order they appear in `schedule.semesters`. Each line shows the term, planned credits, and a comma-separated slot list. Each slot is rendered by `kind`:
+1. **State label** — `valid-clean` → `"VALID (no caveats)"`; `valid-with-trade-offs` → `"VALID with trade-offs (see assumptions)"`; `infeasible-draft` → `"INFEASIBLE DRAFT"`; anything else → `"STUDENT-PREFERRED DRAFT"` (default branch).
+2. **Source suffix** — when reading `studentDraftPlan`, appends `" [DRAFT — infeasible plan, not endorsed by the agent]"` to the first line.
+3. **Header lines** — graduation target, balance score (2 decimals), `degreeCreditsMet` (yes/no), semester count, ISO-formatted `computedAt`.
+4. **Per-semester rendering** — one line per semester in `schedule.semesters` order: term, planned credits, comma-separated slot list. Each slot rendered by `kind`:
    - `specific_planned` → `"<courseId> (<credits>cr)"`
    - `placeholder`      → `"[placeholder: <category>] (<credits>cr)"`
    - `completed`        → `"<courseId> ✓"`
    - `in_progress`      → `"<courseId> (IP)"`
    - any other kind     → `"(unknown)"`
-   - Empty slot list renders as `"(empty)"`.
-5. **Assumptions tail** — when `schedule.assumptions.length > 0`, prints the count then the first three only. For each `IP_COURSE_COMPLETION` assumption, prints `"  [IP] <courseId>"`. Assumptions of other types fall through silently (no line printed). If more than three exist, appends `"  ... and <N> more"` at the end.
+   - Empty slot list    → `"(empty)"`
+5. **Assumptions tail** — when `assumptions.length > 0`, prints the count then the **first three only**. Each `IP_COURSE_COMPLETION` assumption prints `"  [IP] <courseId>"`; other types render nothing. More than three → appends `"  ... and <N - 3> more"`.
 
 ---
 
-## 6. What it returns
+## 5. What it returns
 
 ```
 {
   schedule:  ForwardSchedule | null,
   source:    "forwardSchedule" | "studentDraftPlan" | "none",
-  summary:   string                                            // human-readable, see §8
+  summary:   string
 }
 ```
 
-Where `ForwardSchedule` (from `@nyupath/shared`) carries the fields described in §4.
-
-When `source === "none"`, the structured `schedule` is literally `null` and the `summary` is the single-line `"No forward degree plan is stored in this session. Call plan_forward_degree to generate one."`
+When `source === "none"`, `schedule` is literally `null` and `summary` is the single-line "no plan" message.
 
 ---
 
-## 7. Envelope behavior
+## 6. Envelope behavior
 
-- **`outputMode: "synthesis"`** (default — no `extractVerbatim`). Validator does not pin any specific text.
-- **`isReadOnly: true`** (line 43). The tool deliberately documents this and is a strict reader of two session slots.
-- **`maxResultChars` = 4000**; summary truncated above that by `buildTool`.
-- The tool never writes to `session.forwardSchedule`, `session.studentDraftPlan`, or any other field.
+- `outputMode: "synthesis"` (default — no `extractVerbatim`). The validator pins no specific text.
+- `isReadOnly: true`. The tool is a strict reader of two session slots and never writes.
+- `maxResultChars` = 4000; the summary is truncated above that by `buildTool`.
 
 ---
 
-## 8. Summary text format
-
-`summarizeResult` (lines 71-73) simply returns `output.summary` — the string `buildSummary` already composed.
-
-### Layout (when a schedule is present):
+## 7. Layout (when a schedule is present)
 
 ```
 FORWARD DEGREE PLAN[ [DRAFT — infeasible plan, not endorsed by the agent]] — <stateLabel>
@@ -161,18 +137,15 @@ Computed at: <ISO timestamp>
 
   <term1>: <credits>cr — <slot, slot, ...>
   <term2>: ...
-  ...
 
 Assumptions (<count>):
-  [IP] <courseId>
-  [IP] <courseId>
   [IP] <courseId>
   ... and <N> more
 ```
 
-The empty line between the "Computed at:" block and the per-semester block is intentional (`buildSummary` line 102 pushes an empty string). The empty line before "Assumptions" is also intentional (line 116).
+The blank line after "Computed at:" (line 102) and the blank line before "Assumptions" (line 116) are intentional.
 
-### Layout (when no schedule is stored):
+When no schedule is stored:
 
 ```
 No forward degree plan is stored in this session. Call plan_forward_degree to generate one.
@@ -180,39 +153,36 @@ No forward degree plan is stored in this session. Call plan_forward_degree to ge
 
 ---
 
-## 9. Interactions with other tools
+## 8. Interactions
 
-- **`plan_forward_degree`** — The writer counterpart. The tool description directs the LLM to call `plan_forward_degree` to generate or refresh the plan, and (when no plan exists) the "none" summary explicitly says so.
-- **`confirm_plan_change`** — Lives on the same session slots; mutates `schedulePreferences` and triggers a re-solve that writes `forwardSchedule` or `studentDraftPlan`. `view_forward_plan` reads whatever those steps last wrote.
-- **`compare_plan_alternatives`** — Reads `forwardSchedule.alternativeCandidates`. So when `view_forward_plan` shows a plan, `compare_plan_alternatives` can list the alternative variants attached to it.
-- **`materialize_sections`** — Operates against the current `forwardSchedule` (specifically its semesters). The plan this tool surfaces is the plan that downstream materialization will use.
-- **SSE / sidebar** — Per the session-shape comments in `tool.ts`, the SSE route and the chat sidebar both read `forwardSchedule`. `view_forward_plan` is the LLM-facing surface for the same data the UI shows.
+- **`plan_forward_degree`** — the writer counterpart. The description directs the LLM to call it to generate/refresh; the "none" summary says so explicitly.
+- **`confirm_plan_change`** — writes `forwardSchedule` or `studentDraftPlan` after a re-solve; `view_forward_plan` reads whatever it last wrote.
+- **`compare_plan_alternatives`** — reads `forwardSchedule.alternativeCandidates`, the alternative variants attached to the plan this tool surfaces.
+- **`materialize_sections`** — operates against the current `forwardSchedule` semesters; the plan this tool shows is the one downstream materialization uses.
+- **SSE / sidebar** — both read `forwardSchedule`; this tool is the LLM-facing surface for the same data.
 
-This tool does NOT chain to anything itself; no `suggestedFollowUps`.
-
----
-
-## 10. Edge cases
-
-- **Both slots set** — `forwardSchedule` wins; `studentDraftPlan` is ignored. (By design: per the session-shape comments, `studentDraftPlan` exists precisely so a draft does not overwrite the valid plan.)
-- **Only `studentDraftPlan` set** — Returned with `source: "studentDraftPlan"`. The summary's first line carries the `[DRAFT — infeasible plan, not endorsed by the agent]` annotation so the LLM cannot accidentally endorse it.
-- **Neither slot set** — Output is `{ schedule: null, source: "none", summary: "No forward degree plan is stored in this session. Call plan_forward_degree to generate one." }`. The LLM is supposed to call `plan_forward_degree` next.
-- **`state` is `"valid-clean"`** — Label is `"VALID (no caveats)"`.
-- **`state` is `"valid-with-trade-offs"`** — Label is `"VALID with trade-offs (see assumptions)"`.
-- **`state` is `"infeasible-draft"`** — Label is `"INFEASIBLE DRAFT"`. Realistically only happens via the `studentDraftPlan` slot.
-- **`state` is anything else** (e.g. `"student-preferred-invalid-draft"`) — Falls through to `"STUDENT-PREFERRED DRAFT"`.
-- **A semester with empty `slots[]`** — Renders as `<term>: <credits>cr — (empty)`.
-- **A slot with an unrecognized `kind`** — Renders as `(unknown)`.
-- **`assumptions.length === 0`** — The Assumptions block is omitted (including the leading empty line).
-- **Assumptions but none are `IP_COURSE_COMPLETION`** — The "Assumptions (N):" header is printed but the inner loop renders nothing for assumptions of other types. The result is a header followed by no detail lines (and possibly a `"... and N more"` tail if more than 3 exist).
-- **More than three assumptions** — Only the first three are inspected; the rest are summarized as `"... and <N - 3> more"`. So even if assumption #4 is the most important one, this tool doesn't surface it.
-- **`computedAt` not a valid millisecond timestamp** — `new Date(schedule.computedAt).toISOString()` would throw on an invalid value. The tool does not guard against this.
-- **`balanceScore` not a number** — `(score).toFixed(2)` would throw. The tool does not guard against this.
-- **`schedule.semesters` undefined** — Would throw on `.length` access. The tool assumes a well-formed `ForwardSchedule`.
-- **`maxResultChars` (4000) exceeded** — `buildTool` truncates with a trailing `…`. The structured output is unaffected.
+This tool chains to nothing and emits no `suggestedFollowUps`.
 
 ---
 
-## Summary
+## 9. Edge cases
 
-`view_forward_plan` is a strict, read-only session-slot reader. It checks `forwardSchedule` first, then `studentDraftPlan`, then returns a fixed "no plan" message. The summary surfaces graduation term, balance score, `degreeCreditsMet`, semester-by-semester slot listings (with per-`kind` rendering for `specific_planned` / `placeholder` / `completed` / `in_progress`), and up to three `IP_COURSE_COMPLETION` assumptions. When the source is the draft slot, the summary header carries an explicit "not endorsed by the agent" annotation. The tool itself never recomputes anything; `plan_forward_degree` is the writer.
+- **Both slots set** — `forwardSchedule` wins; `studentDraftPlan` is ignored. (By design: a draft never overwrites a valid plan.)
+- **Only `studentDraftPlan` set** — returned with `source: "studentDraftPlan"` and the `[DRAFT …]` annotation.
+- **Neither slot set** — `{ schedule: null, source: "none", summary: "No forward degree plan …" }`.
+- **A semester with empty `slots[]`** — renders `<term>: <credits>cr — (empty)`.
+- **A slot with an unrecognized `kind`** — renders `(unknown)`.
+- **`assumptions.length === 0`** — the Assumptions block (including its leading blank line) is omitted.
+- **Assumptions present but none `IP_COURSE_COMPLETION`** — the `Assumptions (N):` header prints but the loop renders no detail lines (and a `... and N more` tail when more than 3 exist).
+- **More than three assumptions** — only the first three are inspected; the rest are summarized as `... and <N - 3> more`, so a more-important fourth assumption is not surfaced.
+- **`computedAt` not a valid ms timestamp** — `new Date(...).toISOString()` would throw; the tool does not guard.
+- **`balanceScore` not a number** — `.toFixed(2)` would throw; the tool does not guard.
+- **`schedule.semesters` undefined** — `.length` would throw; the tool assumes a well-formed `ForwardSchedule`.
+
+---
+
+## Known limitations
+
+- **The rich per-slot plan data is NOT surfaced — a Phase-3 gap.** Every `specific_planned` / `placeholder` slot on the stored `ForwardSchedule` carries `rationale`, `flexibility`, `downstreamImpact`, and `isCriticalPath` (`packages/shared/src/types.ts:931`). `buildSummary` (`viewForwardPlan.ts:104-113`) prints only `kind`, `courseId`, `credits`, and the placeholder `category`. The "why this course here / what moves if it slips / how flexible this slot is" reasoning exists on the plan but never reaches the LLM-visible summary. Surfacing it is deferred to a later phase.
+- **Only the first three assumptions reach the summary**, and only `IP_COURSE_COMPLETION` types render a line (see edge cases above).
+- **No defensive guards** on malformed `computedAt` / `balanceScore` / `semesters` — the tool trusts the stored shape.

@@ -1,6 +1,8 @@
 # Tool: `get_program_requirements`
 
-A technical audit of the `get_program_requirements` agent tool, derived strictly from the implementation. Added by the improvement plan's **Phase B** (section-complete retrieval).
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+A technical audit of the `get_program_requirements` agent tool, derived strictly from the implementation. This is the section-complete / whole-page retrieval tool that complements `search_policy`.
 
 Primary source files:
 - `packages/engine/src/agent/tools/getProgramRequirements.ts`
@@ -11,7 +13,7 @@ Primary source files:
 
 ---
 
-## TL;DR
+## Purpose
 
 When a student asks for a program's **whole** requirement set — "what are *all* the requirements for the Economics major?", "lay out the entire CS minor", "show me the full College Core Curriculum" — the assistant fires this tool. Where `search_policy` returns the handful of best-matching *fragments*, this tool behaves like a human adviser pulling up the **entire bulletin page**: it finds the program's page, then reassembles every requirement section of that page, in order, and hands the agent the complete document. It tags the result with a **confidence band** (how sure it is that it located the right page) and, when the match is weak, attaches a disclaimer telling the agent to treat it as a lead rather than gospel. It is a Tier-2 (bulletin-cited estimate) source — not the authoritative DPR audit — so the agent quotes it "per the bulletin" and pairs it with `run_full_audit` when the student asks how far along *they personally* are.
 
@@ -32,16 +34,16 @@ flowchart TD
 
 ---
 
-## 1. Purpose
+## 1. When it fires vs `search_policy`
 
 `get_program_requirements` answers "what does program X require, *as a whole*?" by returning the complete reassembled bulletin page rather than ranked fragments. It complements `search_policy`:
 
 | Question shape | Tool |
 |---|---|
 | A program's COMPLETE requirement set (whole major/minor/Core page) | `get_program_requirements` |
-| A single narrow rule, deadline, cap, or one requirement's course list | `search_policy` |
+| A single narrow rule, deadline, cap, or one requirement's course list | [`search_policy`](search_policy.md) |
 
-The tool is registered through `buildTool(...)` (`getProgramRequirements.ts`), giving it the standard read-only, schema-validated, `summarizeResult`-rendered shape from `tool.ts:204-232`. It is wired into `ALL_NYUPATH_TOOLS` (`registry.ts`).
+The tool is registered through `buildTool(...)` (`getProgramRequirements.ts:59-63`), giving it the standard read-only, schema-validated, `summarizeResult`-rendered shape from `tool.ts`. It is wired into `ALL_NYUPATH_TOOLS` (`registry.ts:71`).
 
 ---
 
@@ -61,9 +63,9 @@ One free-text program reference. No flags; all behavior derives from the query p
 
 ## 3. Session prerequisites
 
-Checked in `validateInput`. The tool refuses unless **both** hold:
+Checked in `validateInput` (`getProgramRequirements.ts:102-111`). The tool refuses unless **both** hold:
 
-1. `session.rag` is populated (vector store, embedder, reranker, templates) — message `"RAG corpus not loaded."`
+1. `session.rag` is populated (vector store, query embedder, reranker, optional confidence bands — there is no longer a `templates` field on the bundle) — message `"RAG corpus not loaded."`
 2. `session.student` is set — the home school scopes the lookup — message `"I need your home school before I can scope a program lookup."`
 
 It does **not** require a DPR: a program's requirement page is impersonal bulletin content, so the tool answers even before a student uploads their Degree Progress Report (the system prompt lists it among the impersonal tools available in the no-DPR branch). Catalog year is forwarded to scope but, like `search_policy`, the scope predicate ignores year (`ragScopeFilter.ts:88-91`).
@@ -77,8 +79,8 @@ The `session.rag` bundle (same object `search_policy` consumes):
 | Field | Use |
 |---|---|
 | `rag.store` (`VectorStore`) | Vector top-K during locate, and `store.listAll()` during reassembly |
-| `rag.embedder` (`Embedder`) | Query embedding for the locate step |
-| `rag.reranker` (`Reranker`) | Reranks the located candidates |
+| `rag.embedder` (`Embedder`) | Query embedding for the locate step. Production is `OpenAIEmbedder` (`text-embedding-3-small`); chunk vectors are precomputed |
+| `rag.reranker` (`Reranker`) | Reranks the located candidates (`CohereReranker` when `COHERE_API_KEY` is set, else `LocalLexicalReranker`) |
 | `rag.confidenceBands` (optional) | Overrides the high/medium thresholds for the band |
 
 The corpus chunks already carry `meta.sourcePath`, `meta.section`, `meta.sourceLine`, `meta.chunkId`, and `meta.category` — the metadata that makes whole-page reassembly possible (see [engine/rag.md](../engine/rag.md)).
@@ -179,7 +181,7 @@ Recommend: verify the program name or contact your academic adviser.
 - **Routing** — the system prompt (DPR-loaded ROUTING block and the no-DPR impersonal-tools list) routes "all the requirements for major X / the full Core Curriculum" to this tool, and narrow single-rule lookups to `search_policy`.
 - **Pair with `run_full_audit`** — when the student asks how far along *they* are (not just what the program requires), the agent pairs the page with the authoritative DPR audit. The prompt states this explicitly.
 - **Scope** — default-hard to home school + NYU-wide; naming another school (e.g. "Stern", "Tandon") admits that school's program pages via the same explicit-override mechanism `search_policy` uses.
-- **UI** — the chat status line shows "Pulling the full program page…" while the tool runs (`apps/web/lib/agentStatusVerbs.ts`).
+- **UI** — the chat status line shows "Pulling the full program page" while the tool runs (`apps/web/lib/agentStatusVerbs.ts:20`).
 
 ---
 

@@ -1,5 +1,7 @@
 # Template Matcher (pre-loop dispatch)
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 > **Source files:** `packages/engine/src/agent/templateMatcher.ts`, `rag/policyTemplate.ts`
 
 ## TL;DR

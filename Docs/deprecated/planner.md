@@ -1,5 +1,7 @@
 # Planner Subsystem — Technical Audit
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 ## TL;DR
 
 This is the original "what should I take next semester" recommender. Given a student's progress and major, it picks a handful of courses for the upcoming term, balancing required-for-major classes against electives and trying to keep the credit load reasonable. It scores each candidate course based on how many other classes it unlocks, how many requirements it satisfies, how urgent it is given how few semesters are left, and whether the student preferred it. It also flags risks like "you're carrying too many credits" or "this class is only offered once a year and you're cutting it close." Variations of the same picker handle students with no declared major, students preparing to transfer between NYU schools, and students juggling two or more programs. This planner has largely been replaced by the newer multi-term forward-schedule solver, but it still powers some single-semester recommendation flows.

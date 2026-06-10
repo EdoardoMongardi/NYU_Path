@@ -1,5 +1,7 @@
 # `plan_semester` — REMOVED (historical)
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 > **REMOVED (improvement plan, Phase F).** `plan_semester` and its `planFeasibility` verifier have been **deleted** from the source tree (`tools/planSemester.ts` + `verifiers/planFeasibility.ts` are gone, along with the barrel exports and dedicated tests). It had been unregistered since May 2026 and is fully superseded by `plan_forward_degree`, which solves the full remaining-degree horizon (every term to graduation), writes `session.forwardSchedule` for the sidebar, and cooperates with `propose_plan_change` for what-if exploration. `plan_semester` only planned the immediate next term and wrote no schedule.
 >
 > This document is retained as a **historical record** of the tool's mechanics; the code it describes no longer exists.

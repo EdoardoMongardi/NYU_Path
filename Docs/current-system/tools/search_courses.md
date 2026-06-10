@@ -1,18 +1,23 @@
 # Tool: `search_courses`
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 A deep technical audit of the `search_courses` agent tool, derived strictly from the implementation. All claims are anchored to file paths and line numbers in the engine source.
 
 Primary source files:
 - `packages/engine/src/agent/tools/searchCourses.ts`
-- `packages/engine/src/agent/tools/semanticCourseSearch.ts` (semantic adapter wired in at session bootstrap)
-- `packages/engine/src/data/courseSuffixMap.ts` (accessibility classifier — imported as `classifyCourseAccessibility`)
+- `packages/engine/src/agent/tools/semanticCourseSearch.ts` (semantic adapter — `createSemanticCourseSearchFn`)
+- `packages/engine/src/data/courseSuffixMap.ts` (accessibility classifier — `classifyCourseAccessibility`)
+- `apps/web/lib/courseCatalogSearch.ts` (production wiring — `getCourseSearchFn`, injects the adapter into the session)
 - `packages/engine/src/agent/tool.ts` (tool framework contract)
+
+> **Heads-up on the file header comment.** `searchCourses.ts:1-14` still calls semantic search a "Phase 7-B follow-up" that is "deleted / gated." That comment is **stale** — in production the tool runs the OpenAI-embedding semantic adapter (`semanticCourseSearch.ts`), wired in at `apps/web/lib/courseCatalogSearch.ts`. The keyword scan over `session.courseCatalog` is only the fallback when no `searchCoursesFn` is injected (tests / degraded deploys).
 
 ---
 
-## TL;DR
+## Purpose
 
-When a student says something like "find me courses about machine learning", "what philosophy electives are open to me?", or "are there any creative writing classes I haven't taken?", this is the tool that searches the catalog. It uses semantic similarity — i.e. it understands meaning, not just keywords — so a query like "courses about AI" will surface CSCI-UA 472 even though the title says "Machine Learning." Critically, it filters results by the student's home school so it doesn't suggest Stern courses to a CAS student without flagging them as cross-school. If the student's transcript is loaded, it also drops courses they've already completed or are currently taking. Results are bucketed into tiers: "open to you", "cross-school (needs approval)", "global site (study abroad only)", "graduate (petition only)". It's a discovery tool — for actual semester planning, the assistant uses a different tool. There's also an exact-code fast path so a query like "CSCI-UA 421" returns just that course.
+When a student says something like "find me courses about machine learning", "what philosophy electives are open to me?", or "are there any creative writing classes I haven't taken?", this is the tool that searches the catalog. It runs semantic similarity over the full 17,122-course description catalog (OpenAI `text-embedding-3-small` vectors), so a query like "courses about AI" surfaces relevant courses even when the title doesn't contain the keyword. Critically, it filters results by the student's home school so it doesn't suggest Stern courses to a CAS student without flagging them as cross-school. If the student's transcript (DPR) is loaded, it also drops courses they've already completed or are currently taking. Results are bucketed into tiers: "open to you", "cross-school (needs approval)", "global site (study abroad only)", "graduate (petition only)". It's a discovery tool — for actual semester planning the assistant uses `plan_forward_degree`. There's also an exact-code fast path so a query like "CSCI-UA 421" returns just that course.
 
 ```mermaid
 flowchart TD
@@ -27,7 +32,7 @@ flowchart TD
 
 ---
 
-## 1. Purpose
+## 1. What it answers
 
 `search_courses` is the agent's catalog-discovery tool. It answers questions of the form:
 

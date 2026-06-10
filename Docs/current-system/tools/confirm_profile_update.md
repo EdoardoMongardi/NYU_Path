@@ -1,6 +1,8 @@
 # `confirm_profile_update`
 
-A deep technical audit of the apply half of the two-step profile-mutation contract.
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+A technical audit of the apply half of the two-step profile-mutation contract. This tool was not touched by the Phase 0-2 solver rebuild — it is a Phase-5 profile tool and remains one of the 20 live tools in `packages/engine/src/agent/registry.ts`. It is the ONLY tool in the system that mutates the student profile through the agent loop.
 
 Source: `packages/engine/src/agent/tools/updateProfile.ts` (lines 198-292) and `packages/engine/src/persistence/profileStore.ts`.
 
@@ -163,7 +165,7 @@ The returned `mutation` is the same object that was in `session.pendingMutations
 
 ### Persistence writes (when `session.profileStore` is configured)
 
-Inside `profileStore.persistMutation` (see `profileStore.ts:75-85` for `InMemoryProfileStore`'s implementation; the Postgres-backed adapter is referenced in the source comments but lives outside the files in scope):
+Inside `profileStore.persistMutation` (see `profileStore.ts:75-85` for `InMemoryProfileStore`'s implementation). In the live web app the wired store is the real `PostgresProfileStore` (`apps/web/lib/db/profileStorePostgres.ts`, implementing the same `ProfileStore` interface and constructed at `apps/web/lib/db/store.ts:49`); `InMemoryProfileStore` is the tests/dev fallback. Both perform the same logical writes:
 
 - The post-mutation `StudentProfile` is written under `profile.id` (overwrites any prior value).
 - A `ProfileMutationAuditEntry` is appended to an audit log (chronological, append-only by convention).
@@ -204,7 +206,9 @@ The shipped in-memory implementation maintains three structures:
 - `parsedDprs: Map<studentId, DegreeProgressReport>`
 - `auditLog: ProfileMutationAuditEntry[]` (chronological)
 
-`persistMutation` writes all three in one synchronous operation. `clear()` is provided for tests. The implementation is purely in-process and lost on exit. The interface contract anticipates a transactional Postgres adapter in production, but that adapter is not in the files under audit.
+`persistMutation` writes all three in one synchronous operation. `clear()` is provided for tests. The implementation is purely in-process and lost on exit. The production transactional adapter is `PostgresProfileStore` (`apps/web/lib/db/profileStorePostgres.ts`); it is the store actually wired into the live web app via `apps/web/lib/db/store.ts:49`, not under audit in this doc but shipped and real (not merely "anticipated").
+
+Note on the `getParsedDpr` interface method: it is declared **optional** on the `ProfileStore` interface (`profileStore.ts:61`), but `InMemoryProfileStore` implements it as a concrete method (`profileStore.ts:87-89`). `confirm_profile_update` itself never calls `getParsedDpr` — that read path belongs to the Phase-16 login-restore route.
 
 ---
 
