@@ -6,7 +6,7 @@
  * Quantified from the school's bulletin-cited `doubleCounting` config when one
  * exists; otherwise a generic (uncited) note. Never asserts a number we cannot
  * cite, never flips feasibility. See
- * docs/superpowers/plans/2026-06-07-double-count-data-advisory.md.
+ * Docs/plans/31-2026-06-07-double-count-data-advisory.md.
  */
 
 import type { DegreeProgressReport } from "../../dpr/schema.js";
