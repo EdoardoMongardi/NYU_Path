@@ -1,15 +1,17 @@
 # bind_free_elective — Technical Audit
 
-## TL;DR
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
-When the planner builds your roadmap, it doesn't always know which specific course should fill every blank — for any-course-counts-toward-credits requirements, it leaves a "free credit, 4 units" placeholder in a future semester. Later, when you say "I want to use Intro to Linguistics for that free elective slot in Spring 2027" or "fill that empty 4-credit spot with this course," this tool previews that decision. It checks the course is real, that you haven't already taken it, that prerequisites are fine, that it's actually offered in that term, and then builds a hypothetical version of the schedule with the binding applied. It reruns the graduation validator and tells you: is the plan still on track, how does the workload tier shift, and is this a smooth swap (none) or potentially heavier (mild / strong warning)? Like the propose tool, it writes nothing — the actual commit goes through the confirm-plan-change pathway. Requires a forward plan and a DPR loaded.
+## Purpose
+
+When the planner builds your roadmap, it doesn't always know which specific course should fill every blank — for any-course-counts-toward-credits requirements, it leaves a "free credit" placeholder in a future semester. Later, when you say "I want to use Intro to Linguistics for that free elective slot in Spring 2027" or "fill that empty 4-credit spot with this course," this tool previews that decision. It checks the course is real, that you haven't already taken it, that prerequisites are fine, that it's actually offered in that term, and then builds a hypothetical version of the schedule with the binding applied. It reruns the graduation validator and tells you: is the plan still on track, how does the workload tier shift, and is this a smooth swap (none) or potentially heavier (mild / strong warning)? Like the propose tool, it writes nothing — the actual commit goes through `confirm_plan_change`. Requires a forward plan and a DPR loaded.
 
 ```mermaid
 flowchart LR
     Q[Student: use Course X for free-credit slot Y] --> T[bind_free_elective]
     T --> V[Validate: prereqs, offering, not already taken]
     V --> H[Build hypothetical schedule]
-    H --> R[Re-run graduation validator]
+    H --> R[Re-run 7-axis graduation validator]
     R --> S[Score workload + balance shift]
     S --> P[Preview: feasible? + diff + warning level]
     P --> C[Student confirms via confirm_plan_change]
@@ -23,9 +25,9 @@ Source: `packages/engine/src/agent/tools/bindFreeElective.ts` (lines 1-491).
 
 ---
 
-## 1. Purpose
+## 1. What it does
 
-When the planner runs (`plan_forward_degree`), it doesn't always know which specific course should fill every remaining credit. For requirements that the school treats as "any course that counts as credit toward your degree" (free electives), it parks a generic "free-credit" placeholder in a semester — a slot that reserves *N* credits and a workload tier but carries no `courseId`. The student later picks a real course to drop into that slot.
+When the planner runs (`plan_forward_degree`), it doesn't always know which specific course should fill every remaining credit. For requirements the school treats as "any course that counts as credit toward your degree" (free electives), it parks a generic "free-credit" placeholder in a semester — a slot that reserves *N* credits and a workload tier but carries no `courseId`. The student later picks a real course to drop into that slot.
 
 `bind_free_elective` is the preview-before-commit step of that pick. It validates that the chosen course is legal in that term, recomputes the workload tier the slot will now carry, builds a *hypothetical* schedule with the binding applied, re-runs the graduation-path validator on that hypothetical, and surfaces:
 
@@ -34,7 +36,7 @@ When the planner runs (`plan_forward_degree`), it doesn't always know which spec
 - consequences in plain English
 - a `warningLevel` of `none | mild | strong` based on how much extra workload + balance loss this binding creates
 
-A "free elective" is distinguished from a *pool slot* (handled by `bind_pool_slot`) by the absence of a `poolBinding` field on the placeholder — see line 236 (`if (parentSlot.poolBinding) { ... reject ... }`). Pool slots have a fixed candidate list; free-credit slots accept any catalog course that satisfies prereqs and offering rules.
+A "free elective" is distinguished from a *pool slot* (handled by [`bind_pool_slot`](./bind_pool_slot.md)) by the absence of a `poolBinding` field on the placeholder — see line 236 (`if (parentSlot.poolBinding) { ... reject ... }`). Pool slots have a fixed candidate list; free-credit slots accept any catalog course that satisfies prereqs and offering rules.
 
 Decision tags that govern this tool's behavior (per file header, lines 1-24):
 
@@ -69,21 +71,20 @@ The `validateInput` hook (lines 174-191) hard-rejects the call unless both of th
 | `session.forwardSchedule` is set | "No forward plan exists in this session. Call plan_forward_degree first, then bind free-elective slots." |
 | `session.degreeProgressReport` is set | "No Degree Progress Report loaded. Cannot validate free-elective binding without DPR data." |
 
-Both must be present at validation time. If either is missing, the call never reaches `call()` and the LLM gets back a `ValidationResult` with `ok: false` and the message above. Rationale: the forward schedule supplies the slot universe; the DPR supplies the prereq oracle and the credit-completed audit.
+Both must be present at validation time. If either is missing, the call never reaches `call()`. The DPR gate is one half of the DPR-first doctrine — without authoritative DPR data this personalized tool hard-refuses.
 
 ---
 
 ## 4. What It Reads
 
-From `ToolSession` (see `packages/engine/src/agent/tool.ts:39-189`):
+From `ToolSession`:
 
 | Field | Used for |
 |---|---|
 | `session.forwardSchedule` (line 197) | universe of slots; both the original and hypothetical schedules |
-| `session.degreeProgressReport` (line 198) | prereq oracle + validator input |
+| `session.degreeProgressReport` (line 198) | prereq oracle + validator input + residency floor (see §5 step 9) |
 | `session.courses` (line 199, default `[]`) | catalog lookup for the candidate `courseId` |
 | `session.prereqs` (line 200, default `[]`) | prereq groups for the candidate course |
-| `session.schoolConfig?.residency?.minCredits` (line 410) | passed to the graduation-path validator |
 | `session.schedulePreferences?.loadStyle` (line 419, default `"balanced"`) | input to the balance-score function |
 
 From the `ForwardSchedule` itself:
@@ -135,7 +136,7 @@ flowchart TD
 
 If no match → `feasible: false`, conflict `unknown_slot`, warning `strong` (lines 204-212).
 
-If a match is found, the tool checks `parentSlot.poolBinding` (line 236). If that field is present, the placeholder is a *pool* slot, not a free-credit slot. The tool refuses and returns `wrong_slot_kind` with the message "Use bind_pool_slot for requirement-pool slots" (lines 237-244). Free-credit slots are defined here purely by the *absence* of `poolBinding` (see file lines 216-235 — even the in-code comments acknowledge this is "the best signal available on the outer ScheduleSlotPlaceholder").
+If a match is found, the tool checks `parentSlot.poolBinding` (line 236). If that field is present, the placeholder is a *pool* slot, not a free-credit slot. The tool refuses with `wrong_slot_kind` and the message "Use bind_pool_slot for requirement-pool slots" (lines 237-244). Free-credit slots are defined here purely by the *absence* of `poolBinding` (see file lines 216-235 — even the in-code comments acknowledge this is "the best signal available on the outer ScheduleSlotPlaceholder").
 
 ### Step 2 — Course exists in catalog
 
@@ -143,7 +144,7 @@ Linear scan of `session.courses` for `c.id === input.courseId` (line 247). If ab
 
 ### Step 3 — Course is offered in the slot's term
 
-`termSeason(slotTerm)` (lines 76-80) splits `"2026-fall"` on the first dash and returns `"fall"`. If the season parses and `course.termsOffered` does *not* include it → `offering_mismatch` (lines 260-271). The check is skipped if the term string can't be parsed (defensive).
+`termSeason(slotTerm)` (lines 76-80) splits `"2026-fall"` on the first dash and returns `"fall"`. If the season parses and `course.termsOffered` does *not* include it → `offering_mismatch` (lines 260-271). Skipped if the term string can't be parsed (defensive).
 
 ### Step 4 — Prereqs satisfied
 
@@ -155,15 +156,15 @@ If an entry exists, it builds a `plannedPlacements` map from the *current* sched
 - **OR group**: at least one member must satisfy. If none do, abort (lines 310-339).
 - **NOT groups**: explicitly not handled here (line 340: "NOT groups are exclusion constraints handled elsewhere").
 
-`isPrereqSatisfied` is called with `mode: "prereq"` (as opposed to `"coreq"`), the slot's term as the `dependentTerm`, the DPR for completed coursework, and `prereqEntry.minGrades` for grade-floor checks.
+`isPrereqSatisfied` is called with `mode: "prereq"`, the slot's term as the `dependentTerm`, the DPR for completed coursework, and `prereqEntry.minGrades` for grade-floor checks.
 
 ### Step 5 — Course not already bound
 
 `isCourseAlreadyBound(schedule, courseId)` (lines 107-128) sweeps every slot and returns true if any slot of kind `specific_planned`, `in_progress`, or `completed` carries the same `courseId`. This catches:
 
 - already pinned in a future term
-- already enrolled this term (in_progress)
-- already on the transcript (completed — would mean a re-take attempt without explicit retake handling)
+- already enrolled this term (`in_progress`)
+- already on the transcript (`completed`)
 
 Hit → `duplicate_courseId` conflict (lines 345-355).
 
@@ -173,35 +174,35 @@ Calls `classifyWorkloadTier(...)` (lines 364-374) with:
 
 - the candidate's `courseId`
 - `satisfiesRules` from the parent placeholder
-- *empty* `majorRuleKinds`, `schoolCoreRuleIds`, `generalCategoryRuleIds` (line 368: free-credit slots are always classified as "free-elective" tier regardless of major context — the empty maps force that outcome)
+- *empty* `majorRuleKinds`, `schoolCoreRuleIds`, `generalCategoryRuleIds` (line 367-369: free-credit slots are always classified as "free-elective" tier regardless of major context — the empty maps force that outcome)
 - the candidate's `title` as `bulletinTitle`, no keywords
 - the prereq groups (or `undefined`) — used by the tier classifier to detect "has prereqs" as a difficulty signal
-- `isOptional: true` — free-credit slots are optional by definition (line 374)
+- `isOptional: true` — free-credit slots are optional by definition (line 373)
 
 Returns `{ tier, weight }` — both are written onto the concrete slot.
 
 ### Step 7 — Build the concrete slot
 
-A `ScheduleSlotSpecificPlanned` is constructed (lines 377-392). It inherits credits, satisfiesRules, rationale, flexibility, downstreamImpact, confidence, and isCriticalPath from the parent placeholder. It gets a fresh `workloadTier` and `workloadWeight` from Step 6. The `reason` is hard-coded to `"Bound from free-credit placeholder (Decision #37)"`. `bindingState` is set to `"bound"`.
+A `ScheduleSlotSpecificPlanned` is constructed (lines 377-392). It inherits credits, satisfiesRules, rationale, flexibility, downstreamImpact, confidence, and isCriticalPath from the parent placeholder. It gets a fresh `workloadTier` + `workloadWeight` from Step 6. The `reason` is hard-coded to `"Bound from free-credit placeholder (Decision #37)"`. `bindingState` is set to `"bound"`.
 
 ### Step 8 — Hypothetical schedule
 
 `buildHypotheticalSchedule(original, slotId, concreteSlot)` (lines 134-154) is a pure replace-by-id pass: it spreads every semester and every slot, swapping the matching placeholder for `concreteSlot`. No mutation; the original schedule is untouched.
 
-### Step 9 — Re-validation
+### Step 9 — Re-validation (the 7-axis graduation validator)
 
-The hypothetical schedule is fed to `runGraduationPathValidator(...)` (lines 402-416). The `programRules` bundle passed in is intentionally narrow:
+The hypothetical schedule is fed to `runGraduationPathValidator(...)` (lines 402-416) — the **same authoritative 7-axis validator** that gates `plan_forward_degree`, the propose/confirm paths, and `simulate_alternatives`. The `programRules` bundle passed in is intentionally narrow:
 
 - `degreeCreditMinimum`: taken from `schedule.graduationCreditMinimum` (not the raw school config), because the schedule's value already accounts for total planned credits — see lines 406-408.
-- `residencyMinCredits`: from `session.schoolConfig?.residency?.minCredits ?? null`.
+- `residencyMinCredits`: **`session.degreeProgressReport?.cumulative.residencyRequired ?? null`** (line 409). (The pre-rebuild docs cited `session.schoolConfig?.residency?.minCredits`; the current code reads the residency floor off the DPR's cumulative counters, not the school config.)
 - `majorCreditMinimum`, `minorCreditMinimum`, `upperLevelMinCredits`, `schoolCoreMinCredits`: all `null` (not enforced here).
 - `graduationTargetTerm`: `schedule.graduationTerm`.
 
-The validator returns `{ feasible, infeasibilityReport? }`. This is the source of truth for the returned `feasible` field — see line 468. Note: a binding can pass Steps 1-8 yet still come back `feasible: false` here (e.g., if removing the placeholder destabilizes some downstream credit count); in that case the conflict surfaced is `plan_infeasible` with the validator's `conflictDetail`.
+The validator returns `{ feasible, infeasibilityReport? }`. This is the source of truth for the returned `feasible` field — see line 468. A binding can pass Steps 1-8 yet still come back `feasible: false` here; in that case the conflict surfaced is `plan_infeasible` with the validator's `conflictDetail`.
 
 ### Step 10 — Balance score
 
-`computeBalanceScore(semesters, loadStyle)` is called twice — once on the original `schedule.semesters` and once on the hypothetical (lines 420-421). `classifyBalanceDelta(before, after)` (line 422) returns one of `"unchanged"`, `"improved"`, `"degraded-mild"`, `"degraded-significant"` (the exact tags read off lines 428-437).
+`computeBalanceScore(semesters, loadStyle)` is called twice — once on the original `schedule.semesters` and once on the hypothetical (lines 420-421). `classifyBalanceDelta(before, after)` (line 422) returns one of `"unchanged"`, `"improved"`, `"degraded-mild"`, `"degraded-significant"`.
 
 ### Step 11 — Warning level
 
@@ -218,7 +219,7 @@ else
     -> "none"
 ```
 
-The `weightDelta` measures how much heavier the concrete-bound course is compared to the placeholder's default weight (which is 0.3 for free-credit slots, per Decision #37). A binding that lifts the weight by more than 0.7 is "strong" on its own; a balance-degrading binding is "strong" even if the weight barely moves.
+The `weightDelta` measures how much heavier the concrete-bound course is compared to the placeholder's default weight (0.3 for free-credit slots, per Decision #37). A binding that lifts the weight by more than 0.7 is "strong" on its own; a balance-degrading binding is "strong" even if the weight barely moves.
 
 ---
 
@@ -238,7 +239,7 @@ The output is a `BindFreeElectiveOutput` (lines 51-55), which extends `PlanChang
 | `diff.added` | array of `{ term, slot }` | one entry: the new concrete slot in the original term (lines 441-443) |
 | `diff.removed` | array of `{ term, slot }` | one entry: the original placeholder (lines 444-446) |
 | `consequences` | string[] | up to 3 plain-English lines (lines 448-465) |
-| `conflicts` | optional array of `{ kind, detail }` | absent when feasible; set to `[{kind:"plan_infeasible", detail}]` when validator fails (lines 471-473). On hard rejections from Steps 1-5/8, populated with a single specific kind. |
+| `conflicts` | optional array of `{ kind, detail }` | absent when feasible; `[{kind:"plan_infeasible", detail}]` when validator fails (lines 471-473). On hard rejections from Steps 1-5, populated with a single specific kind. |
 | `warningLevel` | `"none" \| "mild" \| "strong"` | from Step 11 |
 | `bindingDetail` | string | always present on success: `<courseId> (<tier>, weight=<n.nn>) → slot <slotId> in <term>` (line 475) |
 
@@ -249,7 +250,7 @@ The output is a `BindFreeElectiveOutput` (lines 51-55), which extends `PlanChang
 3. Always: "Balance impact: \<classification\> (\<before\> → \<after\>)."
 4. (if validator failed) "Warning: hypothetical plan fails validation. \<detail\>"
 
-On hard-failure paths (Steps 1-5, 8 fail-fast), `consequences` carries a single line describing the specific failure (e.g., `Course "CSCI-UA 472" is already placed in the schedule.`) and `diff` is `{ added: [], removed: [] }`.
+On hard-failure paths (Steps 1-5 fail-fast), `consequences` carries a single line describing the specific failure and `diff` is `{ added: [], removed: [] }`.
 
 ---
 
@@ -262,16 +263,16 @@ Set in the `buildTool` call (lines 160-173):
 | `name` | `"bind_free_elective"` |
 | `isReadOnly` | `true` |
 | `maxResultChars` | `3000` |
-| `outputMode` | default `"synthesis"` (no `outputMode` field set, factory default at `tool.ts:260`) |
+| `outputMode` | default `"synthesis"` (no `outputMode` field set) |
 | `validateInput` | session-prerequisite hook (Section 3) |
 
-Because `outputMode` defaults to `"synthesis"`, the LLM is free to paraphrase the result. There is no `extractVerbatim` (line 231 in `tool.ts` defines the optional contract; this tool does not implement it). The `summarizeResult` output (Section 9) is the safe surface the response validator can ground against.
+Because `outputMode` defaults to `"synthesis"`, the LLM is free to paraphrase the result. There is no `extractVerbatim`. The `summarizeResult` output (Section 9) is the safe surface the response validator can ground against.
 
 ---
 
 ## 9. Summary Text Format
 
-`summarizeResult` (lines 478-489) produces the string the agent loop quotes to the LLM. Shape:
+`summarizeResult` (lines 478-489):
 
 ```
 BIND FREE ELECTIVE — feasible: <true|false>, warning: <none|mild|strong>
@@ -283,37 +284,41 @@ BIND FREE ELECTIVE — feasible: <true|false>, warning: <none|mild|strong>
   Conflicts: <kind1>, <kind2>, ...               (omitted if no conflicts)
 ```
 
-The summary is then truncated to 3000 chars by the `buildTool` factory wrapper (`tool.ts:264-268`) before being passed to the LLM.
+The summary is then truncated to 3000 chars by the `buildTool` factory wrapper.
 
 ---
 
 ## 10. Validation / Edge Cases
 
-A consolidated map of failure modes, each with the line range that produces it.
-
 | Case | Conflict `kind` | Lines | Notes |
 |---|---|---|---|
-| `slotId` does not match any placeholder in any semester | `unknown_slot` | 204-212 | warning level forced to `strong` |
-| Slot exists but is a *pool* slot (`poolBinding` present) | `wrong_slot_kind` | 236-244 | detail explicitly points to `bind_pool_slot` |
+| `slotId` does not match any placeholder | `unknown_slot` | 204-212 | warning forced to `strong` |
+| Slot exists but is a *pool* slot (`poolBinding` present) | `wrong_slot_kind` | 236-244 | detail points to `bind_pool_slot` |
 | `courseId` not in `session.courses` | `unknown_course` | 248-256 | |
-| Course not offered in the slot's term (season parse + `termsOffered` miss) | `offering_mismatch` | 258-271 | Skipped if term string lacks a `-` separator |
-| Prereq AND-group member unsatisfied | `prereq_unsatisfied` | 297-308 | First failing member triggers abort |
+| Course not offered in the slot's term | `offering_mismatch` | 258-271 | Skipped if term lacks a `-` separator |
+| Prereq AND-group member unsatisfied | `prereq_unsatisfied` | 297-308 | First failing member aborts |
 | Prereq OR-group has zero satisfied members | `prereq_unsatisfied` | 327-338 | |
-| `courseId` already on the schedule as `specific_planned`, `in_progress`, or `completed` | `duplicate_courseId` | 117-127, 345-355 | This was the post-fix scope (see line 113-119 comment): pre-fix only matched `specific_planned`, allowing IP courses to be re-pinned in future terms |
-| Hypothetical plan fails graduation-path validator | `plan_infeasible` | 462-473 | `feasible: false`, but `warningLevel` is still computed and returned |
-| Course catalog missing for session (`courses ?? []`) | covered by `unknown_course` | 199, 247 | Empty array → next lookup fails |
-| No prereq entry exists for the course | (no failure) | 274-275 | Treated as "no prereqs to satisfy"; skip the block |
+| `courseId` already `specific_planned`, `in_progress`, or `completed` | `duplicate_courseId` | 117-127, 345-355 | catches IP + completed, not just specific_planned |
+| Hypothetical plan fails graduation validator | `plan_infeasible` | 462-473 | `feasible: false`, but `warningLevel` still computed |
+| No prereq entry exists for the course | (no failure) | 274-275 | Treated as "no prereqs to satisfy" |
 | NOT-type prereq group | (no failure) | 340-341 | Source explicitly defers: "handled elsewhere" |
-| Term season cannot be parsed (no dash in term string) | (no failure) | 259-260 | Offering check is conditional on `if (season && ...)` |
+| Term season cannot be parsed (no dash) | (no failure) | 259-260 | Offering check conditional on `if (season && ...)` |
 
 Special notes:
 
 - Steps 1, 1b, 2, 3, 4, 5 are *hard rejections* — they exit with `feasible: false`, `warningLevel: "strong"`, empty diff, and a single conflict entry.
-- Step 9 (graduation-path validator) is *soft*: it still returns the diff and a computed warning level even when `feasible: false`. This lets the LLM/UI present the diff and the failure reason side-by-side.
+- Step 9 (graduation validator) is *soft*: it still returns the diff and a computed warning level even when `feasible: false`. This lets the LLM/UI present the diff and the failure reason side-by-side.
 
 ---
 
-## 11. Interactions
+## 11. Known limitations
+
+- **Does NOT surface the double-count advisory.** The double-count advisory (PR #41) is wired into `plan_forward_degree`, `propose_plan_change`, `confirm_plan_change`, `run_full_audit`, and `update_profile` — but NOT the bind tools. A free-elective binding that introduces a double-count is not flagged here; it only surfaces if/when the student routes the equivalent mutation through `confirm_plan_change`.
+- **Free-credit detection is heuristic.** A slot is treated as free-credit purely by the *absence* of `poolBinding` — there is no positive `FreeCreditSlot` discriminator checked on the outer `ScheduleSlotPlaceholder` (see in-code comment, lines 216-235).
+
+---
+
+## 12. Interactions
 
 ```mermaid
 flowchart LR
@@ -331,13 +336,13 @@ flowchart LR
 
 | Tool | Relationship to `bind_free_elective` |
 |---|---|
-| `plan_forward_degree` | Hard prerequisite. Without `session.forwardSchedule`, validateInput rejects the call (lines 175-182). The planner is what creates the free-credit placeholders this tool binds into. |
-| `confirm_plan_change` | The downstream commit step. `bind_free_elective` produces the diff; `confirm_plan_change` is the only path that splices the new `specific_planned` slot into `session.forwardSchedule`. The tool description (lines 162-170) explicitly tells the LLM: "Use this BEFORE calling confirm_plan_change with a bindFreeElective mutation." |
-| `search_courses` | Typical upstream source of candidate `courseId`s. The agent uses it to find courses that fit a free-credit slot's term, then feeds the chosen id into this tool. |
-| `bind_pool_slot` | Sibling tool. If the LLM passes a *pool* slot's id to `bind_free_elective`, the `wrong_slot_kind` rejection at line 241 explicitly redirects to `bind_pool_slot`. They share the same validation skeleton; the only differences are the absence/presence of `poolBinding` and the choose-n constraint that `bind_pool_slot` adds. |
-| `runGraduationPathValidator` (internal) | Called inline as the re-solve step at line 402. It owns the `feasible` verdict. |
+| `plan_forward_degree` | Hard prerequisite. Without `session.forwardSchedule`, validateInput rejects (lines 175-182). The planner creates the free-credit placeholders this tool binds into. |
+| `confirm_plan_change` | The downstream commit step. `bind_free_elective` produces the diff; [`confirm_plan_change`](./confirm_plan_change.md) is the only path that splices the new `specific_planned` slot into `session.forwardSchedule`. The tool description (lines 162-170) tells the LLM: "Use this BEFORE calling confirm_plan_change with a bindFreeElective mutation." |
+| `search_courses` | Typical upstream source of candidate `courseId`s. |
+| `bind_pool_slot` | Sibling tool. Passing a *pool* slot's id here triggers the `wrong_slot_kind` rejection redirecting to [`bind_pool_slot`](./bind_pool_slot.md). They share the same validation skeleton; the only differences are the absence/presence of `poolBinding` and the choose-n constraint that `bind_pool_slot` adds. |
+| `runGraduationPathValidator` (internal) | Called inline at line 402 as the re-validation step. Owns the `feasible` verdict — the same authoritative 7-axis gate used everywhere else. |
 | `computeBalanceScore` / `classifyBalanceDelta` (internal) | Called inline at lines 420-422; supply the balance side of the warning level. |
 | `classifyWorkloadTier` (internal) | Called inline at lines 364-374; supplies the workload side of the warning level. |
 | `isPrereqSatisfied` (internal) | Called inline in Step 4. Same helper used by the planner itself (Decision #4). |
 
-The full preview-then-commit pattern matches the two-step write contract `tool.ts:59-64` documents for `pendingMutations` — `bind_free_elective` is the preview half, `confirm_plan_change` is the apply half.
+The full preview-then-commit pattern matches the two-step write contract documented for `pendingMutations` — `bind_free_elective` is the preview half, `confirm_plan_change` is the apply half.

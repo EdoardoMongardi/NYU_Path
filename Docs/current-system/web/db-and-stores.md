@@ -1,6 +1,8 @@
 # Database and Stores
 
-## TL;DR
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+## Purpose
 
 This is the long-term memory of the app — the Postgres database where everything that needs to survive a refresh lives. When a student logs in for the first time, a row is created for them; from then on, every plan they generate, every preference they set, every chat message they send, and every confirmed change to their profile gets stored under their NetID. The code is organized into five "store" classes, each owning one slice (profile, schedule, chat history, session summaries, cohort assignment) and each speaking a clean interface so the rest of the app doesn't have to know about SQL. If no database is configured (local dev without setup), everything quietly falls back to in-memory storage that disappears on restart. Migrations are managed separately and applied during deploys.
 
@@ -26,9 +28,11 @@ flowchart LR
 
 The web app persists everything to a Postgres database accessed through Drizzle ORM. Five concrete store classes — ProfileStore, ScheduleStore, ChatHistoryStore, SessionStore, and CohortStore — sit on top of the same Drizzle client. Four of them implement persistence interfaces that the engine package (`@nyupath/engine`) defines; the fifth (CohortStore) is a web-layer addition that overlays the engine's in-memory cohort map.
 
-When no `DATABASE_URL` is configured, every store falls back to an in-memory implementation that the engine package already exports. This means local development without Postgres still works — only durability is lost.
+When no `DATABASE_URL` is configured, every store falls back to an in-memory implementation that the engine package already exports (`SessionStore` may instead be the engine's `FileBackedSessionStore` if `NYUPATH_SESSION_STORE_PATH` is set). This means the data-access layer still works locally without Postgres — only durability is lost.
 
-A single factory (`getStores`) wires the bundle together and caches it at module scope, so warm serverless containers reuse the same Neon connection pool across requests.
+> **The memory fallback is effectively dev/test-only**, not a usable production mode. The email-OTP login flow (`apps/web/lib/auth/otp.ts:77-78` and `118-119`) hard-fails with `db_unavailable` when `getDb` returns null, so a real user cannot authenticate without a configured database. Memory-backed runs only make sense behind a pre-authenticated test harness or a session-store path.
+
+A single factory (`getStores`) wires the bundle together and caches it at module scope, so warm serverless containers reuse the same Neon connection pool across requests. The deterministic plan-action layer is a heavy consumer of `scheduleStore` and `profileStore` — see [plan-action-orchestrator.md](./plan-action-orchestrator.md) and [plan-action-routes.md](./plan-action-routes.md).
 
 ## Drizzle schema
 
@@ -46,10 +50,9 @@ The canonical row per student. One row per `studentId`. Defined at `schema.ts:28
 |---|---|---|
 | student_id | text, primary key | Stable identifier issued at onboarding |
 | email | text, unique | Optional email; used by the email-OTP login flow |
-| parsed_transcript | jsonb | Optional cached transcript parse |
 | declared_programs | jsonb, not null, default `[]` | Array of declared programs the engine plans against |
 | visa_status | text | Optional visa string (e.g. F-1) |
-| catalog_year | text | The student's catalog year (e.g. `2026-fall`) |
+| catalog_year | text | The student's catalog year in `"YYYY-YYYY"` range form (e.g. `2024-2025`), as emitted by `deriveCatalogYear` in `buildSession.ts` |
 | home_school | text | NYU school code (CAS, Tandon, etc.) |
 | flags | jsonb, not null, default `[]` | Free-form profile flags the engine cares about |
 | profile | jsonb | Full `StudentProfile` snapshot, written by every `confirm_profile_update` |
@@ -67,7 +70,7 @@ A rolling window of natural-language summaries per student. Defined at `schema.t
 | id | serial, primary key | Monotonic ordering key |
 | student_id | text, FK to students.student_id, cascade delete | Owner |
 | date | text, not null | ISO date string of the session |
-| summary | text, not null | ~600-token natural-language summary the agent emitted at end of turn |
+| summary | text, not null | A short heuristic session marker (intent + tools called) written by the v2 chat route at end of turn — `Asked: "…". Tools called: ….`. NOT an LLM-generated summary (the `~600-token` wording in the `schema.ts:55` comment is stale). |
 | created_at | timestamptz, not null, default now | Insert time |
 
 Index `session_summaries_student_idx` on `(student_id, id)` lets the loader pull the last N rows for one student cheaply.

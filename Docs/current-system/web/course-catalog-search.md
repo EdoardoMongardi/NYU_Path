@@ -1,8 +1,10 @@
 # Course Catalog Search
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 ## TL;DR
 
-When the AI agent needs to find courses that match a vague description — "intro econ classes that count for my major," "advanced data structures electives," "anything with a coding focus" — it can't just do a keyword match across 13,000+ NYU courses. This piece wires up a smarter search: it embeds the student's query into a vector (a numeric fingerprint of meaning), compares it against precomputed fingerprints of every course description, and returns the closest matches. The whole index lives on disk and is loaded into memory once on first use, then cached for the life of the server (it's about 100 MB, so paying that cost lazily matters). If the OpenAI key or the data files are missing, the search quietly fails closed and the agent simply doesn't get this capability. A small helper alongside it formats class meeting times like "Tu 8a–9:15a" for display.
+When the AI agent needs to find courses that match a vague description — "intro econ classes that count for my major," "advanced data structures electives," "anything with a coding focus" — it can't just do a keyword match across the full NYU course catalog. This piece wires up a smarter search: it embeds the student's query into a vector (a numeric fingerprint of meaning), compares it against precomputed fingerprints of every course description, and returns the closest matches. The whole index lives on disk and is loaded into memory once on first use, then cached for the life of the server (the on-disk artifacts total ~575 MB — the 17,122-line embeddings JSONL alone is ~560 MB — so paying that cost lazily matters). If the OpenAI key or the data files are missing, the search quietly fails closed and the agent simply doesn't get this capability. A small helper alongside it formats class meeting times like "Tu 8a–9:15a" for display.
 
 ```mermaid
 flowchart LR
@@ -54,7 +56,7 @@ In plain steps:
 2. Run a vector-similarity comparison against the preloaded `course_embeddings_openai.jsonl` set.
 3. Return the top-K matches as descriptor records sourced from `course_descriptions.json`.
 
-The "load" step is paid lazily on first call — the descriptions JSON plus the JSONL of vectors is roughly 100 MB and endpoints that never invoke the agent (e.g. onboarding pages) never pay for it.
+The "load" step is paid lazily on first call — the descriptions JSON (~14 MB) plus the JSONL of vectors (~560 MB, one line per course, 17,122 courses) totals roughly 575 MB on disk, and endpoints that never invoke the agent (e.g. onboarding pages) never pay for it. (The module's own header comment and the marketing landing page quote different round numbers — "17,122-course catalog" and "13,000+ NYU courses" respectively; the embeddings file's line count, 17,122, is the ground truth.)
 
 ### Filters supported
 
@@ -62,7 +64,7 @@ The web-layer file itself does not parameterize filters — those are part of th
 
 ### Failure modes and caching
 
-Three caching slots at the top of the file (`courseCatalogSearch.ts:29`):
+Two module-level caching slots at the top of the file (`courseCatalogSearch.ts:29-30`):
 
 - `cached: CourseSearchFn | null` — the live function once constructed.
 - `cachedFailureReason: string | null` — a sticky failure reason if construction failed previously.
@@ -107,6 +109,11 @@ Takes an array of `MeetingPattern` records (from `@nyupath/shared`) and joins th
 Example output: `Tu 8a–9:15a · Th 8a–9:15a` for a Tuesday/Thursday section.
 
 These live outside the `.tsx` sidebar files specifically so they can be exercised by `vitest` from `apps/web/tests/`, which only runs `.test.ts` modules.
+
+## Known limitations
+
+- **Singleton never retries within a process.** Once `cachedFailureReason` is set (missing key, missing data files, or a thrown construction error), every subsequent `getCourseSearchFn()` returns `null` without re-attempting. A fresh process is required to re-construct the search function after fixing the cause.
+- **The sidebar autocomplete is NOT backed by this search.** `gatherAddCourseSuggestions` / `gatherSwapAlternatives` (in [ui-components.md](./ui-components.md)) are still client-side prefix matches over courses already in the loaded schedule. The catalog-backed upgrade described in the Overview is aspirational — no `/api/v2/search-courses` route currently consumes `getCourseSearchFn`; only the chat agent's `search_courses` tool does.
 
 ## Diagram
 

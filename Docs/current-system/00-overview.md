@@ -1,14 +1,16 @@
 # NYU Path — Project Audit
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 > **About this document set.** This is a code-truth audit of the NYU Path codebase. Every claim was derived from reading the actual source files. No code comments, no existing documentation, and no narrative prose were used as evidence. Where code and surrounding writing disagreed, the code won.
 
 ---
 
 ## 1. What NYU Path is, in one paragraph
 
-NYU Path is a **chat-based academic advisor** for **NYU undergraduates**. A student logs in, uploads their official Albert Degree Progress Report (DPR) — the sole accepted onboarding artifact — and starts chatting. The system can answer "how many credits do I still need?", build a term-by-term graduation plan, simulate hypotheticals like "what if I added a math minor?", pull live class sections from NYU's class search, and check internal-transfer eligibility between NYU schools. The DPR is **required** to reach the agent: the chat route returns an "upload your DPR" error if it's missing, and the personal-record tools (`run_full_audit`, `get_academic_standing`) refuse without it (the legacy unofficial-transcript upload path has been removed; there is no authored-rules fallback). Impersonal lookups (policy search, course search) don't need a DPR at the tool level, but the product flow gates the whole conversation on one anyway.
+NYU Path is a **chat-based academic advisor** for **NYU undergraduates**. A student logs in, uploads their official Albert Degree Progress Report (DPR) — the sole accepted onboarding artifact — and starts chatting. The system can answer "how many credits do I still need?", build a term-by-term graduation plan, simulate hypotheticals like "what if I added a math minor?", and pull live class sections from NYU's class search. Questions about internal transfer between NYU schools or about double-counting policy are answered the same way any rule is: by citing the bulletin through policy search (`search_policy`) — there is no longer a dedicated transfer-eligibility or overlap tool. The DPR is **required** to reach the agent: the chat route returns an "upload your DPR" error if it's missing, and the personal-record tools (`run_full_audit`, `get_academic_standing`) refuse without it (the legacy unofficial-transcript upload path has been removed; there is no authored-rules fallback). Impersonal lookups (policy search, course search) don't need a DPR at the tool level, but the product flow gates the whole conversation on one anyway.
 
-> **Scope — all NYU undergrad (Phase E de-CAS largely done).** The scope is *all* NYU undergraduate schools, and the spine supports it: the student's home school is read from their DPR, and the policy RAG corpus covers every undergrad school. **Phase E removed the main CAS pins:** the system prompt now interpolates the student's school (no more hardcoded "College of Arts & Science"); `get_credit_caps` is **DPR-first** so a non-CAS student gets correct caps from their own DPR **without** a per-school config file (the old "only 3 of ~9 configs exist" gap no longer blocks cap answers); the two DPR-absent registration constants (per-semester ceiling, F-1 floor) come from a shared NYU-undergrad default; and `deriveHomeSchool` now **warns** instead of silently asserting CAS. **Remaining:** a few audit/planner rules still carry CAS-flavored defaults, and *claiming* "equally good for school X" is gated on sanitized non-CAS DPR fixtures (PII) — so non-CAS support is **honestly beta** until validated against real non-CAS DPRs. See the implementation plan ([improvement-plan.md](docs/improvement-plan.md)).
+> **Scope — all NYU undergrad (Phase E de-CAS largely done).** The scope is *all* NYU undergraduate schools, and the spine supports it: the student's home school is read from their DPR, and the policy RAG corpus covers every undergrad school. **Phase E removed the main CAS pins:** the system prompt now interpolates the student's school (no more hardcoded "College of Arts & Science"); `get_credit_caps` is **DPR-first** so a non-CAS student gets correct caps from their own DPR **without** a per-school config file (the old "only 3 of ~9 configs exist" gap no longer blocks cap answers); the two DPR-absent registration constants (per-semester ceiling, F-1 floor) come from a shared NYU-undergrad default; and `deriveHomeSchool` now **warns** instead of silently asserting CAS. **Remaining:** a few audit/planner rules still carry CAS-flavored defaults, and *claiming* "equally good for school X" is gated on sanitized non-CAS DPR fixtures (PII) — so non-CAS support is **honestly beta** until validated against real non-CAS DPRs. See the implementation plan ([../plans/20-improvement-plan.md](../plans/20-improvement-plan.md)).
 
 ---
 
@@ -18,7 +20,7 @@ NYU Path is a **chat-based academic advisor** for **NYU undergraduates**. A stud
 graph LR
     STUDENT([🧑‍🎓 Student]) -->|asks a question| CHAT[💬 Chat UI]
     CHAT --> BRAIN{🧠 Smart Advisor}
-    BRAIN -->|when it needs facts| TOOLS[🛠️ Toolbox<br/>21 specialists]
+    BRAIN -->|when it needs facts| TOOLS[🛠️ Toolbox<br/>20 specialists]
     TOOLS -->|fetches from| MEMORY[(📚 Knowledge:<br/>your DPR,<br/>NYU bulletin,<br/>live class data)]
     MEMORY -->|facts| TOOLS
     TOOLS -->|results| BRAIN
@@ -27,7 +29,7 @@ graph LR
     GUARD -.fails: redo it.-> BRAIN
 ```
 
-That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 22 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy/curriculum lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
+That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 20 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy/curriculum lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
 
 ---
 
@@ -64,19 +66,27 @@ flowchart TD
 
 ## 4. The three pieces of the runtime
 
-Almost everything in the codebase serves one of these three pieces. Knowing which is which is enough to navigate.
+Almost everything in the codebase serves one of these three pieces. Knowing which is which is enough to navigate. (One subsystem inside the toolbox — the constraint-search planner — is important enough to get its own callout below.)
 
 ### The advisor (the language model)
 
-This is the "brain" — an LLM (Anthropic's Claude Haiku by default, OpenAI's GPT-4.1-mini as fallback). It receives a long instructions document (the system prompt), the chat history, and a list of tools it's allowed to call. It either replies with text or asks the system to run a tool. It cannot do math on the student's transcript itself, cannot look up policy, and cannot save anything — every action requires a tool.
+This is the "brain" — an LLM (Anthropic's Claude Sonnet 4.6 by default, OpenAI's GPT-4.1-mini as fallback; the primary model is overridable via the `NYUPATH_PRIMARY_MODEL` env var). It receives a long instructions document (the system prompt), the chat history, and a list of tools it's allowed to call. It either replies with text or asks the system to run a tool. It cannot do math on the student's transcript itself, cannot look up policy, and cannot save anything — every action requires a tool.
 
 ### The tools (deterministic functions)
 
-There are **21 of them**. Each one knows how to do one thing — for example, "run a full degree audit", "plan every term until graduation", or "search the policy bulletin for the rule on pass/fail courses". Tools are written in TypeScript. They read data files and the student's session, they run their algorithm, and they return a result. They never call the language model. The advisor uses tools the way a doctor uses a calculator and a reference book — to get numbers and facts the doctor shouldn't be guessing.
+There are **20 of them** (the live registry is `packages/engine/src/agent/registry.ts`). Each one knows how to do one thing — for example, "run a full degree audit", "plan every term until graduation", or "search the policy bulletin for the rule on pass/fail courses". Tools are written in TypeScript. They read data files and the student's session, they run their algorithm, and they return a result. They never call the language model. The advisor uses tools the way a doctor uses a calculator and a reference book — to get numbers and facts the doctor shouldn't be guessing.
+
+### The planner (a constraint-search engine)
+
+The term-by-term planner is not a greedy "fill each term until it's full" loop — that old greedy solver was deleted in the Phase 0-2 rebuild. The planner is now a **feasibility-first constraint search**. Given the student's remaining requirements, in-progress courses, and pinned choices, it searches for the **first complete plan that satisfies every constraint** (backtracking with forward-checking over a node budget), then polishes that plan with a local-improvement pass. The single entry point `solveForwardSchedule` runs the pipeline: `buildConstraintContext` (precompute the problem) → `findFirstValidPlan` (the backtracking search) → `localImprove` (refine) → `materializePlan` (assemble the full schedule). Alternatives ("what if I add a summer term?") come from `findDiverseValidPlans`, which finds distinct valid plans rather than re-ranking one. Code lives under `packages/engine/src/agent/forwardSchedule/` (`solver.ts`, `search.ts`, `localImprove.ts`, `materializePlan.ts`, `alternatives.ts`).
+
+What makes a plan "valid" is defined in exactly one place: the **7-axis graduation-path validator** (`runGraduationPathValidator` in `forwardSchedule/graduationPathValidator.ts`). Its seven axes are: requirement groups satisfied, pool slots resolvable, total credits meet the minimum, thresholds met, visa axes pass, assumptions explicit, and graduation target met. This validator is the **contract**: every path that produces or mutates a plan — building (`plan_forward_degree`), proposing a change (`propose_plan_change`), confirming a change (`confirm_plan_change`), and simulating alternatives (`simulate_alternatives`) — routes its output back through `finalizeForwardSchedule`, which runs the validator and attaches the per-axis verdict. A plan the validator marks infeasible carries an honest infeasibility report rather than being silently shipped.
 
 ### The safety check (response validator)
 
-Before the advisor's draft answer reaches the student, seven rules inspect it. The most important rule: **every number in the answer must come from a tool result that ran this turn.** If the advisor wrote "your GPA is 3.4", and no tool returned 3.4 this turn, the safety check rejects the draft. The advisor gets one chance to fix it before the answer ships anyway (the system never blocks the student with a blank screen).
+Before the advisor's draft answer reaches the student, **seven deterministic rules** inspect it (`packages/engine/src/agent/responseValidator.ts`: `checkGrounding`, `checkInvocations`, `checkCompleteness`, `checkVerbatim`, `checkAttribution`, `checkIdentityDrift`, `checkQuantitativeShortfall`). The most important rule: **every number in the answer must come from a tool result that ran this turn.** If the advisor wrote "your GPA is 3.4", and no tool returned 3.4 this turn, the safety check rejects the draft. The advisor gets one chance to fix it before the answer ships anyway (the system never blocks the student with a blank screen).
+
+> Note: this response validator (which guards the *chat reply*) is a different mechanism from the 7-axis graduation-path validator (which guards the *plan*). Both happen to have seven checks; they are unrelated.
 
 ---
 
@@ -131,15 +141,15 @@ graph TB
     subgraph Engine["The brain + tools (packages/engine)"]
         AGENT[Agent loop<br/>orchestrates LLM + tools]
         VALIDATOR[Response validator<br/>7 safety checks]
-        TOOLS[22 tools]
-        ALGOS[Audit, planner,<br/>section materializer,<br/>RAG retriever,<br/>DPR parser]
+        TOOLS[20 tools]
+        ALGOS[Audit, constraint-search planner,<br/>7-axis graduation-path validator,<br/>section materializer,<br/>RAG retriever, DPR parser]
         SESSION[Session state<br/>the shared bag every<br/>tool reads from]
     end
 
     subgraph Data["Static data (data/)"]
         BULLETIN[Bulletin pages<br/>scraped]
         PROGRAMS[Program rules<br/>for CAS degrees]
-        SCHOOLS[Per-school configs:<br/>CAS, Stern, Tandon]
+        SCHOOLS[Per-school configs:<br/>all 11 undergrad schools]
         POLICY[Policy text<br/>embedded for RAG]
         CATALOG[Course catalog<br/>with embeddings]
     end
@@ -176,16 +186,16 @@ graph TB
 - **`apps/cli/`** — a tiny command-line front end (mostly for debugging/scripting, not the main product).
 - **`packages/engine/`** — the brain and the toolbox. Everything that thinks, retrieves, calculates, or validates lives here.
 - **`packages/shared/`** — type definitions and grade utilities shared between engine and web.
-- **`data/`** — the static knowledge: bulletin scrapes, parsed program rules, school configs, policy text for the AI to retrieve, course catalog with embeddings.
+- **`data/`** — the static knowledge: bulletin scrapes, parsed program rules, per-school configs (all 11 NYU undergrad schools, under `data/schools/`), policy text for the AI to retrieve, course catalog with embeddings.
 - **`tools/`** — build-time scripts that produce the contents of `data/` (scrapers, parsers, embedders). The runtime never runs them.
 
 ---
 
 ## 7. What this audit covers
 
-The audit is split into four folders:
+The live docs live under `Docs/current-system/`, split into four folders; superseded/dead-code docs are segregated under `Docs/deprecated/`.
 
-### `engine/` — 28 documents
+### `current-system/engine/` — 24 documents
 Every subsystem of the AI brain. The most important ones:
 - **`agent-loop.md`** — the central orchestrator that runs the AI in a loop with the tools
 - **`system-prompt.md`** — the instructions the AI is given before every turn
@@ -194,29 +204,25 @@ Every subsystem of the AI brain. The most important ones:
 - **`session-state.md`** — the shared data bag every tool reads from
 - **`dpr.md`** — how the official transcript (Albert DPR) is parsed
 - **`audit.md`** — the degree-audit engine (does it satisfy your major?)
-- **`forward-schedule.md`** — the live multi-term planning solver
+- **`forward-schedule.md`** — the constraint-search multi-term planner and 7-axis validator
 - **`rag.md`** — how policy text is retrieved when the AI needs to cite the bulletin
 - **`section-materialization.md`** — how a structural plan becomes a real schedule with sections
 
 Plus smaller pieces: the clarifier (handles ambiguous questions), the template matcher (curated answers for FAQs), the LLM clients (OpenAI/Anthropic adapters), and various data loaders.
 
-### `tools/` — 21 documents
+### `current-system/tools/` — 20 documents
 One file per **live** tool the AI can call. Each explains: what it does, what it needs, the algorithm, what it returns, and what other tools it works with. See the [tool catalog table](#8-quick-tool-catalog) below.
 
-### `web/` — 12 documents
+### `current-system/web/` — 12 documents
 The Next.js website pieces: the chat endpoint, the chat UI, the plan-edit endpoints, the login flow, the database schema and stores, the sidebar components, the rate limiter.
 
-### `surrounding/` — 4 documents
-- The CLI app
+### `current-system/surrounding/` — 3 documents
 - The shared types package
 - The build-time `tools/` pipeline
 - The `data/` directory layout
 
-### `deprecated/` — docs for superseded / dead code
-Segregated so the live docs stay clean: the legacy single-term planner (`plan_semester` tool + `planner` subsystem + `plan-feasibility-verifier`) and the dead unofficial-transcript parser (`transcript`). These describe code that still exists but has no production role — Phase F decommission candidates. See [`deprecated/README.md`](deprecated/README.md).
-
-### `improvement-plan.md` — the roadmap
-The phased plan to fix the gaps the audit surfaced (section-complete retrieval, embedding the missing bulletin trees, confidence-scored estimates, de-CAS scope, and the gated legacy decommission). See [`improvement-plan.md`](docs/improvement-plan.md).
+### `Docs/deprecated/` — docs for superseded / dead code
+Segregated so the live docs stay clean. These describe tools and subsystems that have been **removed from the live registry** (or never had a production role): the legacy single-term planner (`plan_semester`) and its `planner` / `plan-feasibility-verifier` subsystems, the two retired tools `check_overlap` and `check_transfer_eligibility` (their concerns now route through `search_policy` RAG), the dead unofficial-transcript parser (`transcript`), and the CLI app (`cli`). See [`../deprecated/README.md`](../deprecated/README.md).
 
 ---
 
@@ -239,15 +245,13 @@ The phased plan to fix the gaps the audit surfaced (section-complete retrieval, 
 | `get_program_requirements` | Returns a program/major/minor/Core-Curriculum's **entire** requirement page (every section, reassembled) with a confidence band |
 | `search_courses` | Semantic course search ("courses about quantum computing") |
 | `search_availability` | Are sections of this course actually being offered next term? |
-| `check_transfer_eligibility` | Can I transfer from CAS to Stern/Tandon/etc.? |
 | `what_if_audit` | "What if I changed my major to X?" — runs a hypothetical audit |
 | `get_credit_caps` | Per-semester ceiling, F-1 floor, total credits needed |
 | `get_academic_standing` | Probation / academic-standing detail (good standing, probation, dismissal level) — requires a loaded DPR; refuses without one. For GPA + cumulative credits, `run_full_audit` is preferred. |
-| `check_overlap` | Detects courses that double-count between two of your programs |
 | `update_profile` | Proposes a profile change (school, catalog year, programs, visa) |
 | `confirm_profile_update` | Applies a proposed profile change |
 
-Plus `plan_semester` — a deprecated single-term planner that's been replaced by `plan_forward_degree`. It's still in the source for reference but the AI can never call it (docs in [`deprecated/`](deprecated/README.md)).
+That's all **20** live tools (`packages/engine/src/agent/registry.ts`). Three tools that appeared in earlier versions of this doc are **gone**: `check_transfer_eligibility` and `check_overlap` were removed — internal-transfer eligibility and program double-counting are now answered by citing the bulletin through `search_policy` — and `plan_semester` (the legacy single-term planner) was fully deleted, not retained for reference. Docs for the removed pieces live in [`../deprecated/`](../deprecated/README.md).
 
 ---
 
@@ -265,7 +269,7 @@ sequenceDiagram
     Student->>Web: "What's my GPA and how many credits do I need?"
     Web->>DB: Load profile, saved plan, chat history
     DB-->>Web: Here you go
-    Web->>Brain: System prompt + history + question + 22 tools available
+    Web->>Brain: System prompt + history + question + 20 tools available
     Brain->>Brain: This needs the audit tool
     Brain->>Web: Please run `run_full_audit`
     Web->>Tool: Run it
@@ -283,12 +287,22 @@ sequenceDiagram
 
 ---
 
-## 10. How to read the rest
+## 10. Current gaps (honest)
 
-- If you want to understand **how the AI thinks turn by turn**, read `engine/agent-loop.md`.
-- If you want to understand **why answers are accurate**, read `engine/response-validator.md`.
-- If you want to understand **what the AI is told to do**, read `engine/system-prompt.md`.
+Two limitations are worth knowing before you trust the system end-to-end:
+
+- **Chat does not yet hydrate the persisted plan or preferences between turns.** Each chat turn builds a fresh in-memory session from the student's DPR (`apps/web/lib/buildSession.ts`, called in `apps/web/app/api/chat/v2/route.ts`). That session is wired to the schedule store so a tool can *persist* a plan it builds, but the route does **not** load the previously-saved `forward_schedules` / `schedule_preferences` rows back into `session.forwardSchedule` at the start of a turn. So a plan built in an earlier turn isn't in scope for a later turn unless it's rebuilt — and because the schedule **sidebar** reads the persisted plan from the database directly, the sidebar and the chat can disagree about what the current plan is. This is a known seam, not intended behavior.
+- **The advisor layer is the next phase.** Today the planner can tell you *what* a valid plan is and *whether* a change is feasible, but there are no "explain-why" / counterfactual tools that narrate the planner's reasoning (e.g. "you can't graduate in Spring because requirement X has no offered section"). Surfacing the validator's per-axis verdicts as student-facing explanations is deferred work.
+
+---
+
+## 11. How to read the rest
+
+- If you want to understand **how the AI thinks turn by turn**, read [`engine/agent-loop.md`](engine/agent-loop.md).
+- If you want to understand **why answers are accurate**, read [`engine/response-validator.md`](engine/response-validator.md).
+- If you want to understand **what the AI is told to do**, read [`engine/system-prompt.md`](engine/system-prompt.md).
+- If you want to understand **how the planner builds and validates a plan**, read [`engine/forward-schedule.md`](engine/forward-schedule.md).
 - If you want to understand **how a specific tool works**, open `tools/<tool_name>.md`.
-- If you want to understand **how the website is built**, start with `web/chat-route-sse.md`.
+- If you want to understand **how the website is built**, start with [`web/chat-route-sse.md`](web/chat-route-sse.md).
 
 Each doc starts with a *Purpose* paragraph in plain English, then goes into detail.

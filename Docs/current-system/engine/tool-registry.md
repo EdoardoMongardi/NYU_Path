@@ -1,18 +1,20 @@
 # Tool Registry & Tool Contract
 
-> **Source files:** `packages/engine/src/agent/tool.ts`, `agent/registry.ts`, `tools/index.ts`, `tools/types.ts`
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
-## TL;DR
+> **Source files:** `packages/engine/src/agent/tool.ts`, `packages/engine/src/agent/registry.ts`
 
-The AI doesn't actually look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 21 such tools, each one good at one thing (auditing a degree, finding a course, planning a semester, etc.). To keep them consistent, every tool follows the same recipe: it has a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some are quoted verbatim, some are summarized loosely, and some are paraphrased freely.
+## Purpose
+
+The AI doesn't look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 20 such tools, each good at one thing (auditing a degree, finding a course, planning the remaining degree, etc.). To keep them consistent, every tool follows the same recipe: a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some surface a verbatim string the reply MUST contain, the rest are synthesized freely.
 
 ```mermaid
 flowchart LR
     AI[AI says: use tool X] --> Registry[Registry shelf]
     Registry --> T1[Audit tool]
     Registry --> T2[Course search tool]
-    Registry --> T3[Planner tool]
-    Registry --> T4[... 18 others]
+    Registry --> T3[Forward planner tool]
+    Registry --> T4[... 17 others]
     T1 --> Result[Result back to AI]
     T2 --> Result
     T3 --> Result
@@ -21,37 +23,39 @@ flowchart LR
 
 ---
 
-This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 22 live tools.
+This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 20 live tools.
 
 ---
 
 ## 1. The `Tool` contract
 
-Every tool implements this shape (generic over a Zod input schema and an output type):
+Every tool implements this shape (generic over a Zod input schema and an output type — `tool.ts:202-230`):
 
 | Field | Type | Purpose |
 |---|---|---|
 | `name` | string | Stable identifier the model uses (e.g., `run_full_audit`). |
-| `description` | string | Free-form description shown to the model. Used directly in `toLLMToolDefs`. |
-| `inputSchema` | Zod schema | Validates the model's tool call args before `call` runs. |
-| `isReadOnly` | boolean | Defaults to true. Currently no tool sets it to false at runtime — it's a labeling field. |
+| `description` | string | Free-form description shown to the model. Concatenated with `prompt(session)` in `toLLMToolDefs`. |
+| `inputSchema` | Zod schema | Validates the model's tool call args before `call` runs (`safeParse` in the loop). |
+| `isReadOnly` | boolean | Defaults to true via `buildTool`. Mutating tools set it to false — `plan_forward_degree`, `confirm_plan_change`, `confirm_section_combination`, and `update_profile` all declare `isReadOnly: false`. It is a labeling field (the loop does not gate on it), but it does flag the four tools that write to session. |
 | `maxResultChars` | number | Cap on the stringified result (default 2000). `summarizeResult` output is truncated to this. |
-| `outputMode` | `"template" \| "semi_hardened" \| "synthesis"` | Defaults to `"synthesis"`. See §3. |
-| `validateInput?(input, ctx)` | async fn | Optional pre-call check. Returns `{ ok: true }` or `{ ok: false, userMessage }`. The agent loop wraps a failed result as `validation failed: <userMessage>`. |
-| `prompt(ctx: { session })` | fn → string | Dynamic per-session prompt block appended to the static description in `toLLMToolDefs`. Lets a tool emit context-aware hints (e.g., "DPR loaded, prefer me"). |
+| `outputMode?` | `"template" \| "semi_hardened" \| "synthesis"` | Defaults to `"synthesis"`. See §3. |
+| `validateInput?(input, ctx)` | async fn | Optional pre-call check. Returns `{ ok: true }` or `{ ok: false, userMessage }`. A failed result is wrapped by the loop as `validation failed: <userMessage>`. |
+| `prompt(ctx: { session })` | fn → string | Dynamic per-session prompt block appended to the static `description` in `toLLMToolDefs`. Lets a tool emit context-aware hints (e.g., "DPR loaded, prefer me"). |
 | `call(input, ctx)` | async fn | Runs the tool. Must honor `ctx.signal`. Returns the typed output. |
-| `summarizeResult(output)` | fn → string | Produces the model-facing string surfaced as the `tool_result` content. Capped to `maxResultChars`. |
-| `extractVerbatim?(output)` | fn → string \| null | Only used when `outputMode === "semi_hardened"`. Returns the text that the validator will require to appear in the final reply. |
+| `summarizeResult(output)` | fn → string | Produces the model-facing string surfaced as the `tool_result` content. Capped to `maxResultChars` by the factory. |
+| `extractVerbatim?(output)` | fn → string \| null | Only consulted when `outputMode === "semi_hardened"`. Returns the text the response validator will require to appear in the final reply. |
 
-`ToolUseContext` carries:
+`ToolUseContext` (`tool.ts:22-27`) carries:
 - `signal: AbortSignal` — threaded from the agent loop
 - `session: ToolSession` — the per-request state (see [`session-state.md`](session-state.md))
+
+`ToolSession` (`tool.ts:39-187`) is the wide per-request bag the tools read and write: `student`, `courses`, `prereqs`, `schoolConfig`, the parsed `degreeProgressReport` (DPR), the RAG corpus handle, `forwardSchedule` / `studentDraftPlan` / `schedulePreferences` for the forward planner, the `pendingMutations` and `pendingMaterializations` two-step staging maps, and the optional persistence hooks (`profileStore`, `scheduleStore`, `chatHistoryStore`).
 
 ---
 
 ## 2. `buildTool` — the factory
 
-`buildTool` produces a fully-typed `Tool` from a literal definition. It applies these defaults:
+`buildTool` (`tool.ts:237-269`) produces a fully-typed `Tool` from a literal definition. It applies these defaults:
 
 - `isReadOnly`: `true`
 - `maxResultChars`: `2000`
@@ -61,7 +65,8 @@ It also wraps `summarizeResult` so the final output is automatically truncated:
 
 ```
 const raw = def.summarizeResult(output);
-return raw.length > maxResultChars ? raw.slice(0, maxResultChars) + "…" : raw;
+const cap = def.maxResultChars ?? 2000;
+return raw.length > cap ? raw.slice(0, cap) + "…" : raw;
 ```
 
 No other transformation is applied; the tool author owns input validation, error handling inside `call`, and the structure of `summarizeResult`.
@@ -70,61 +75,71 @@ No other transformation is applied; the tool author owns input validation, error
 
 ## 3. The three output modes
 
+`OutputMode` is declared at `tool.ts:200`.
+
 | Mode | Semantics | Validator behavior |
 |---|---|---|
 | `"synthesis"` (default) | Free LLM synthesis around the tool result. | Only the standard grounding/invocation/caveat rules apply. |
-| `"semi_hardened"` | Tool surfaces a `verbatimText` (via `extractVerbatim`) that the reply MUST contain unchanged. | Validator's `checkVerbatim` runs (case-insensitive substring match with numeric-overlap fallback — see [`response-validator.md`](response-validator.md) §6). |
-| `"template"` | Bypass the LLM entirely; the template matcher returns the template body directly. Currently used by the pre-loop template path, not by any tool's `outputMode`. | The template's body is the reply verbatim. |
+| `"semi_hardened"` | Tool surfaces a `verbatimText` (via `extractVerbatim`) that the reply MUST contain unchanged. | Validator's `checkVerbatim` runs (see [`response-validator.md`](response-validator.md)). The loop only calls `extractVerbatim` when `outputMode === "semi_hardened"` (`agentLoop.ts:576-578`). |
+| `"template"` | Intended to bypass the LLM entirely. **No live tool sets this mode** — it exists only as a declared variant and a comment referencing the pre-loop template fast-path. | n/a |
 
-`run_full_audit` and `get_credit_caps` are the two tools that opt into `"semi_hardened"`.
+Three live tools opt into `"semi_hardened"`: `run_full_audit` (`runFullAudit.ts:172`), `get_credit_caps` (`getCreditCaps.ts:38`), and `what_if_audit` (`whatIfAudit.ts:61`). Each implements `extractVerbatim` to return the disclaimer/cap text the reply must echo.
+
+> **Correction vs. prior doc:** the old doc named only `run_full_audit` and `get_credit_caps` as semi-hardened. `what_if_audit` is the third.
 
 ---
 
 ## 4. `ToolRegistry` — a name-indexed map
 
-The registry is a tiny class around `Map<string, Tool>`:
+The registry (`tool.ts:275-298`) is a tiny class around `Map<string, Tool>`:
 
 - Constructor throws on duplicate names.
 - `get(name)` returns the tool or undefined.
 - `list()` returns an array of values.
 - `has(name)` checks existence.
 
-The agent loop calls `registry.list()` once at the start of each turn to build the LLM's tool list, and `registry.get(toolName)` for each tool call the model issues.
+The agent loop calls `registry.list()` once at the start of each turn (via `toLLMToolDefs`, `agentLoop.ts:727-731`) to build the LLM's tool list, and `registry.get(toolName)` for each tool call the model issues (`agentLoop.ts:412`, `:1045`).
 
 ---
 
 ## 5. `ALL_NYUPATH_TOOLS` — the wired set
 
-`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS`, containing 22 tools in this fixed order:
+`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:67-88`), containing exactly **20** tools in this fixed order:
 
 ```
 1.  run_full_audit
-2.  check_transfer_eligibility
-3.  what_if_audit
-4.  search_policy
-5.  get_program_requirements   (improvement plan, Phase B)
-6.  update_profile
-7.  confirm_profile_update
-8.  get_credit_caps
-9.  search_availability
-10. get_academic_standing
-11. check_overlap
-12. search_courses
-13. plan_forward_degree
-14. view_forward_plan
-15. propose_plan_change
-16. confirm_plan_change
-17. simulate_alternatives
-18. bind_free_elective
-19. bind_pool_slot
-20. compare_plan_alternatives
-21. materialize_sections
-22. confirm_section_combination
+2.  what_if_audit
+3.  search_policy
+4.  get_program_requirements
+5.  update_profile
+6.  confirm_profile_update
+7.  get_credit_caps
+8.  search_availability
+9.  get_academic_standing
+10. search_courses
+11. plan_forward_degree
+12. view_forward_plan
+13. propose_plan_change
+14. confirm_plan_change
+15. simulate_alternatives
+16. bind_free_elective
+17. bind_pool_slot
+18. compare_plan_alternatives
+19. materialize_sections
+20. confirm_section_combination
 ```
 
-`plan_semester` has been **removed entirely** (improvement plan, Phase F decommission). The tool source (`tools/planSemester.ts`) and its `planFeasibility` verifier were deleted, along with the barrel exports and dedicated tests — it had been unregistered since May 2026 and is fully superseded by `plan_forward_degree`. There is now one way to plan. See [`deprecated/plan_semester.md`](../deprecated/plan_semester.md) for the historical record of what it did.
+`buildDefaultRegistry()` (`registry.ts:94-96`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts:556`).
 
-`buildDefaultRegistry()` constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls this once per session.
+### Removed tools (do not document as live)
+
+Three tools the old doc listed are **gone** from the registry:
+
+- **`check_transfer_eligibility`** — the authored CAS→Stern transfer route (`data/transfers/*.json`) was removed during the pure-RAG decommission. Internal-transfer questions now go through `search_policy` over the bulletin's internal-transfer pages (every school, not one hardcoded route).
+- **`check_overlap`** — the authored cross-program double-count audit (`crossProgramAudit` over `programs.json`) was removed in the same decommission. Double-count policy now comes from `search_policy`; per-program requirement satisfaction comes from `run_full_audit` (the DPR).
+- **`plan_semester`** — the Phase 5 single-term planner and its `planFeasibility` verifier were deleted. It had been unregistered since May 2026 and is fully superseded by `plan_forward_degree`, which plans every remaining term, writes `session.forwardSchedule`, and cooperates with `propose_plan_change`. There is now one way to plan.
+
+(The header comment in `registry.ts:1-42` is the authoritative record of these removals.)
 
 ---
 
@@ -139,11 +154,11 @@ sequenceDiagram
     participant Tool as Tool.call
 
     Route->>Reg: buildDefaultRegistry()
-    Reg-->>Route: registry (22 tools)
+    Reg-->>Route: registry (20 tools)
     Route->>Loop: runAgentTurnStreaming(client, registry, session, msg, opts)
-    Loop->>Reg: registry.list()
+    Loop->>Reg: registry.list() (via toLLMToolDefs)
     Reg-->>Loop: [Tool, …]
-    Loop->>Loop: toLLMToolDefs:<br/>name + description + prompt(session) + JSON schema
+    Loop->>Loop: toLLMToolDefs:<br/>name + (description + prompt(session)) + JSON schema
     Loop->>LLM: complete(system, history, tools=[…])
     LLM-->>Loop: toolCalls = [{ id, name, args }]
     loop each toolCall
@@ -160,7 +175,7 @@ sequenceDiagram
                 alt rejected
                     Loop->>Loop: error "validation failed: <userMessage>"
                 else accepted
-                    Loop->>Tool: call(parsed, ctx)
+                    Loop->>Tool: call(parsed, ctx) (retry once if transient)
                     Tool-->>Loop: output
                     Loop->>Tool: summarizeResult(output)
                     Tool-->>Loop: summary
@@ -175,27 +190,29 @@ sequenceDiagram
     end
 ```
 
----
-
-## 7. `tools/index.ts` and `tools/types.ts` (legacy compatibility)
-
-`packages/engine/src/tools/` is the **legacy Phase 0 surface**. `tools/index.ts` only re-exports `buildTool`, `getTool`, `listTools`, `registerTool`, and the type aliases `Tool`, `ToolContext`, `ToolDef`, `ValidationResult` from `tools/types.ts`. It exists so `src/index.ts` can keep a stable public type surface for downstream consumers. The live registry is the one in `agent/`.
-
-`tools/types.ts` is the original tool-shape definition from before the agent-tool refactor. Nothing in the runtime path uses it — it's pure type ergonomics for callers that import from the top-level `@nyupath/engine` barrel.
+`toLLMToolDefs` (`agentLoop.ts:727-731`) builds the model-facing tool list: each entry is `name`, `description + "\n\n" + prompt({ session })`, and the JSON-Schema form of `inputSchema`. The per-call execution (validate → call with a single transient-error retry → summarize → extract verbatim) lives in the `executeTool` helper around `agentLoop.ts:540-625`.
 
 ---
 
-## 8. Why the registry is rebuilt per session
+## 7. No legacy `tools/` surface
 
-The registry is a thin map but it's built per session for a real reason: the tool descriptions (`prompt(ctx: { session })`) are dynamic. They read `session.degreeProgressReport`, `session.student.homeSchool`, `session.forwardSchedule`, etc., to emit context-sensitive hints. A long-lived global registry would baked stale hints in.
+> **Correction vs. prior doc:** the old §7 described a `packages/engine/src/tools/` directory (`tools/index.ts`, `tools/types.ts`) re-exporting `buildTool`, `getTool`, `listTools`, `registerTool`, etc. as a "legacy Phase 0 surface." **That directory no longer exists.** The only `tools` directory under the engine is `packages/engine/src/agent/tools/`, which holds the live tool implementations (`runFullAudit.ts`, `searchCourses.ts`, …).
 
-The Map itself is constructed quickly (O(N) where N=21), so per-session rebuild has no measurable cost.
+The public type and value surface (`buildTool`, `ToolRegistry`, `Tool`, `buildDefaultRegistry`, `LLMToolDef`, etc.) is re-exported from `packages/engine/src/index.ts`, which sources them from `./agent/index.js` — not from a separate `tools/` barrel.
+
+---
+
+## 8. Why the registry is rebuilt per turn
+
+The registry is a thin map but it's built per turn for a real reason: the tool descriptions (`prompt(ctx: { session })`) are dynamic. They read `session.degreeProgressReport`, `session.student?.homeSchool`, `session.forwardSchedule`, etc., to emit context-sensitive hints. A long-lived global registry would bake stale hints in.
+
+The Map itself is constructed in O(N) (N = 20), so per-turn rebuild has no measurable cost.
 
 ---
 
 ## 9. What the registry never does
 
 - It does not **execute** tools. That's the agent loop's `executeTool` helper.
-- It does not **validate** inputs. Tools do that via `inputSchema` + `validateInput`.
-- It does not **persist** anything. Tool side effects on `session` are in-memory; the route layer chooses what to flush to disk after each turn.
+- It does not **validate** inputs. Tools do that via `inputSchema` + optional `validateInput`.
+- It does not **persist** anything. Tool side effects on `session` are in-memory; the route layer chooses what to flush to disk after each turn (through the `profileStore` / `scheduleStore` / `chatHistoryStore` hooks).
 - It does not perform **authorization**. Per-user scoping is the web layer's responsibility.

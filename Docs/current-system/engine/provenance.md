@@ -1,5 +1,9 @@
 # Data Provenance
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+> **Source files:** `packages/engine/src/provenance/schema.ts`, `packages/engine/src/provenance/configSchema.ts`
+
 ## TL;DR
 
 Every piece of authored data the engine relies on (school policies, major requirements, transfer rules, curated policy answers) has to be traceable. Where did this fact come from? What URL did we copy it from? Who verified it? When? Has it gone stale? This subsystem enforces that contract by requiring every data file to carry a small "provenance stamp" at the top with the source URL, the date it was verified, a content hash so we can tell if the underlying NYU page changed, and a note about whether it was extracted by hand, by AI, or by a scraper. It also validates that the body of each file matches the expected shape. If any file is missing a stamp or doesn't match its schema, the loader rejects it instead of letting bad data into the engine. There's a built-in staleness check that flags any data older than 180 days for re-verification.
@@ -62,11 +66,11 @@ Exported constants:
 
 This module defines Zod schemas for the *bodies* of:
 
-- **SchoolConfig** files (`schoolConfigBodySchema`, configSchema.ts:163).
-- **Program** files (`programBodySchema`, configSchema.ts:253).
-- **Transfer requirements** files (`transferRequirementsBodySchema`, configSchema.ts:304).
-- **NYU internal transfer policy** files (`nyuInternalTransferPolicyBodySchema`, configSchema.ts:318).
-- **PolicyTemplate** files (`policyTemplateBodySchema`, configSchema.ts:339).
+- **SchoolConfig** files (`schoolConfigBodySchema`, configSchema.ts:140).
+- **Program** files (`programBodySchema`, configSchema.ts:224).
+- **Transfer requirements** files (`transferRequirementsBodySchema`, configSchema.ts:275).
+- **NYU internal transfer policy** files (`nyuInternalTransferPolicyBodySchema`, configSchema.ts:289).
+- **PolicyTemplate** files (`policyTemplateBodySchema`, configSchema.ts:310).
 
 All body schemas use `.passthrough()` at the top level so that the documentation keys `_meta`, `_provenance`, and `_notes` flow through unvalidated (the `_meta` key is validated separately by `schema.ts`).
 
@@ -80,7 +84,7 @@ Each body schema has a paired validator that returns `ValidateBodyResult<T>` (`{
 | `validateNyuTransferPolicyBody` | NYU-internal transfer policy body |
 | `validatePolicyTemplateBody` | policy template body |
 
-Reusable atoms (configSchema.ts:18-39):
+Reusable atoms (configSchema.ts:18-38):
 
 - `programTypeSchema` — `major` / `minor` / `concentration`.
 - `residencyTypeSchema` — `suffix_based` / `total_nyu_credits`.
@@ -90,7 +94,7 @@ Reusable atoms (configSchema.ts:18-39):
 - `ruleTypeSchema` — `must_take` / `choose_n` / `min_credits` / `min_level`.
 - `doubleCountPolicySchema` — `allow` / `limit_1` / `disallow`.
 
-The program rule schema is a tagged union of four shapes — one per `ruleType` — built from a `baseRuleSchema` containing `ruleId`, `label`, `type`, `doubleCountPolicy`, `catalogYearRange` (a 2-tuple of strings), plus optional exemption fields. Each variant adds its own fields:
+The program rule schema is a union of four shapes — one per `ruleType` — built from a `baseRuleSchema` (configSchema.ts:173-182) containing `ruleId`, `label`, `type`, `doubleCountPolicy`, `catalogYearRange` (a 2-tuple of strings), plus the optional exemption fields `conditionalExemption`, `flagExemption`, `exemptionLabel`. Each variant `.extend()`s the base and pins `type` to a `z.literal(...)`:
 
 | Rule type | Required fields |
 |---|---|
@@ -124,11 +128,11 @@ flowchart TD
 
 ### Body validators
 
-All five body validators follow the same pattern: `safeParse`, then either return `{ ok: true, body }` or convert issues to `path: message` strings (configSchema.ts:269-289, 326-371). They never throw on validation failure.
+All five body validators follow the same pattern: `safeParse`, then either return `{ ok: true, body }` or convert issues to `path: message` strings (configSchema.ts:240-343). They never throw on validation failure.
 
 ### Cross-rule typing
 
-`ruleSchema` is a `z.union` of four extended-base schemas (configSchema.ts:246-251), each tagged by `type: z.literal('...')`. The base schema is `.passthrough()`, so any forward-compatible field added to a rule definition will not break a load.
+`ruleSchema` is a `z.union` of four extended-base schemas (configSchema.ts:217-222), each tagged by `type: z.literal('...')`. The base schema is `.passthrough()`, so any forward-compatible field added to a rule definition will not break a load.
 
 ### Catalog-year refinement
 

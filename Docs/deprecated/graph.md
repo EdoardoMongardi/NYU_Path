@@ -1,5 +1,7 @@
 # Prerequisite Graph
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 ## TL;DR
 
 Courses have prerequisites, and prerequisites have prerequisites, and the whole thing forms a web of "you have to take A before you can take B." This subsystem builds that web as a graph in memory and answers three core questions about it. First: can this student take course X right now, given what they've already finished? Second: if they take course X, how many doors does it open downstream? Third (a build-time check): does the catalog itself have any circular requirements that would be impossible to satisfy? The "doors opened" calculation is smarter than just counting; it specifically counts the courses that this class would newly unlock for this particular student, ignoring courses that were already unlocked through some other path. That's what lets the planner pick the highest-impact courses first.

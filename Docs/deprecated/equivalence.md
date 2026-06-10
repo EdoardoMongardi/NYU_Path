@@ -1,5 +1,7 @@
 # Equivalence Resolver
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 ## TL;DR
 
 At NYU some courses have multiple names. The same exact class can be listed under two different course codes because different departments cross-list it. There are also "exclusive" pairs where two courses overlap so much that NYU only lets one count toward a major. This subsystem handles both of those quirks. If a student took the class under one name, the engine still recognizes it as completed when checking requirements that name it differently. And if a student took two mutually exclusive courses, it raises a warning that only one will count. It picks a single "canonical" name for each cross-listed group so the rest of the engine can treat that group as one thing without juggling aliases.

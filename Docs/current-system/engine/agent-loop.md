@@ -1,6 +1,14 @@
 # Agent Loop
 
-> **Source files:** `packages/engine/src/agent/agentLoop.ts`, `agent/loopState.ts`
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+> **Source files:** `packages/engine/src/agent/agentLoop.ts`, `packages/engine/src/agent/loopState.ts`. Production caller: `apps/web/app/api/chat/v2/route.ts`.
+
+## Purpose
+
+This is the central orchestrator: a pure model → tool → model cycle. It hands the user's message to the language model, runs whatever tools the model asks for, feeds the results back, and repeats until the model produces a final text-only reply, until 10 round-trips have happened, or until something terminal fires (abort, model error with no fallback, context limit, validator rejection with no replay budget). There is **no keyword routing** in front of the loop — the old `preLoopDispatch` template router was removed (Phase 8 A1); every question now enters the loop and the model decides which tools to call.
+
+There are two flavors: a block one (`runAgentTurn`) that returns the whole answer at the end, and a streaming one (`runAgentTurnStreaming`) that pipes tokens to the screen as the model types them. Production (the SSE chat route) uses the **streaming** path. The two paths are NOT feature-identical — output-truncation recovery and reactive-compact-on-413 exist only in the block path (see [§11](#11-block-vs-streaming--feature-asymmetry)).
 
 ## TL;DR
 
@@ -19,14 +27,14 @@ flowchart LR
 
 ---
 
-This is the central orchestrator. It hands the user's message to the language model, runs whatever tools the model asks for, feeds the results back, and repeats until the model produces a final text reply, until 10 round-trips have happened, or until something terminal fires (abort, model error with no fallback, context limit, validator rejection with no replay budget).
-
 There are two public entry points:
 
-- **`runAgentTurn`** — returns a single `ChatTurnResult` after the loop terminates. No streaming.
-- **`runAgentTurnStreaming`** — async generator that yields events as they happen: `tool_invocation_start`, `tool_invocation_done`, `thinking_delta`, `text_delta`, `done`. Used by the SSE chat route.
+- **`runAgentTurn`** (`agentLoop.ts:149-445`) — returns a single `ChatTurnResult` after the loop terminates. No streaming. Has output-truncation recovery and reactive-compact-on-413.
+- **`runAgentTurnStreaming`** (`agentLoop.ts:809-1070`) — async generator that yields events as they happen: `tool_invocation_start`, `tool_invocation_done`, `thinking_delta`, `text_delta`, `done`. Used by the SSE chat route. **Does NOT** have output-truncation recovery or reactive-compact-on-413; it compensates for the former by raising `maxTokens` to 4096 at the call site (see [§11](#11-block-vs-streaming--feature-asymmetry)).
 
-The two are near-identical; the streaming version adds buffering rules around the validator-replay path so the user never sees text from a rejected draft.
+The streaming version also adds buffering rules around the validator-replay path so the user never sees text from a rejected draft.
+
+The §1/§3/§4 mermaid diagrams below describe the **block path** (`runAgentTurn`), the most complete variant; where the streaming path differs, [§11](#11-block-vs-streaming--feature-asymmetry) and [§10](#10-streaming-vs-non-streaming--what-the-stream-adds) call it out.
 
 ---
 
@@ -99,10 +107,10 @@ Every iteration of the `for (turn = 0; turn < maxTurns; turn++)` loop does the f
 5. **If `tier2` AND first time AND a fallback client is configured** — call `tryTier2Compact`. That builds a single summary system message via the fallback client (an "advising conversation segment" summarizer prompt asking for 6–12 bullets) and replaces the older messages with it, keeping the last 6 verbatim. Sets `hasFiredTier2Compaction = true` so it can't loop on the same conversation.
 6. **Enforce the tool-result budget.** `enforceToolResultBudget` totals every `role: "tool"` message's content length; if it exceeds 32,000 chars AND there are more than 2 tool messages, walk from oldest forward truncating each to 200 chars + `"…[older tool result truncated under MAX_TOOL_RESULT_BUDGET; X chars elided]"` until the total is under budget, but never touch the 2 most recent. Returns the count of truncated messages and a `tool_results_compacted` transition fires.
 7. **Record `next_turn` transition.**
-8. **Call the model.** Build a `callArgs` object with `system`, `messages`, `tools`, `maxTokens` (1024 default), `temperature: 0`, `signal`. Try the primary client.
-9. **If the primary throws** — check if the error matches `isContextLengthExceededError` (substring match against "context_length_exceeded", "context length exceeded", "maximum context length", "too long for context", "maximum allowed input", "413"). If yes AND `!hasAttemptedReactiveCompact` AND a fallback client is configured, run `tryTier2Compact` and retry the primary once. If the retry fails too, fall through to the fallback. Sets `hasAttemptedReactiveCompact = true` so this can only fire once per conversation. Records `reactive_compact` transition.
+8. **Call the model.** Build a `callArgs` object with `system`, `messages`, `tools`, `maxTokens` (`options.maxTokens ?? 1024`; the production route passes **4096**), `temperature: 0`, `signal`. Try the primary client.
+9. **If the primary throws (block path only).** Check if the error matches `isContextLengthExceededError` (substring match against "context_length_exceeded", "context length exceeded", "maximum context length", "too long for context", "maximum allowed input", "413"). If yes AND `!hasAttemptedReactiveCompact` AND a fallback client is configured, run `tryTier2Compact` and retry the primary once. If the retry fails too, fall through to the fallback. Sets `hasAttemptedReactiveCompact = true` so this can only fire once per conversation. Records `reactive_compact` transition. **The streaming path has none of this** — a 413 from the primary just routes straight to the fallback client via `runOneTurn` (see [§11](#11-block-vs-streaming--feature-asymmetry)).
 10. **Otherwise** call `callWithFallback` — try fallback if primary failed.
-11. **Output-truncation recovery loop.** If the completion came back with `finishReason = "length"` AND no tool calls AND `outputTruncationRecoveriesRemaining > 0`: double `perCallMaxTokens` (cap 16,384), push the partial assistant text + a "Continue from where you left off. Do not repeat earlier text." user message, call `callWithFallback` again. Repeat. Default budget is 3. Records `output_truncation_recovery` transitions.
+11. **Output-truncation recovery loop (block path only).** If the completion came back with `finishReason = "length"` AND no tool calls AND `outputTruncationRecoveriesRemaining > 0`: double `perCallMaxTokens` (cap 16,384), push the partial assistant text + a "Continue from where you left off. Do not repeat earlier text." user message, call `callWithFallback` again, and stitch the recovered text onto what came before. Repeat. Default budget is 3. Records `output_truncation_recovery` transitions. **The streaming path has no equivalent** — a final reply that exceeds `maxTokens` is simply cut off, which is why the route lifts `maxTokens` to 4096 (see [§11](#11-block-vs-streaming--feature-asymmetry)).
 12. **If still failed** — record `model_error_no_fallback` and return.
 13. **If the fallback was actually used** — emit `model_fallback_triggered` event, record `model_fallback` transition. Update `modelUsedId`.
 14. **Add usage tokens to `totalUsage`.**
@@ -181,6 +189,7 @@ Important details that the code enforces:
 - **Transient retries.** Only network-class errors retry once, with 100ms backoff. Validation errors and tool-unsupported errors surface immediately so the model can adapt.
 - **`callMs` is captured** for every invocation (wall-clock ms inside `tool.call`).
 - **`verbatimText` is extracted** when `tool.outputMode === "semi_hardened"`. The response validator's `checkVerbatim` will reject the final reply if it doesn't include this text.
+- **Tool results reach the model as `summarizeResult` strings capped at `maxResultChars` (default 2000)** — `makeTool` truncates each summary to `def.maxResultChars ?? 2000` with a trailing `…` (`packages/engine/src/agent/tool.ts:257-266`). The 32k tool-result **budget** in §6 is a separate, conversation-wide cap layered on top.
 
 ---
 
@@ -234,8 +243,10 @@ Every transition is **also** mirrored to the `FallbackSink` (the observability b
 
 `AgentTurnOptions` accepts:
 
-- `client` — the primary `LLMClient` (always present).
-- `fallbackClient` — optional. Used when the primary throws.
+- `client` — the primary `LLMClient` (always present). In production this is `createPrimaryClient(process.env)`, which defaults to Anthropic `claude-sonnet-4-6` (`DEFAULT_PRIMARY_MODEL` in `packages/engine/src/agent/clients/index.ts:65-66`; override via `NYUPATH_PRIMARY_MODEL`).
+- `fallbackClient` — optional. Used when the primary throws. In production this is `createFallbackClient(process.env)`, which defaults to OpenAI `gpt-4.1-mini` (`DEFAULT_FALLBACK_MODEL`). `createFallbackClient` may return `null`; the loop tolerates a missing fallback.
+
+> A stale code comment in `clients/index.ts:29` still names `claude-haiku-4-5` as the primary default — the live constant on line 66 is `claude-sonnet-4-6`. Trust the constant.
 
 `callWithFallback`:
 1. Try `primary.complete(args)`. If it works, return its completion and `usedClientId = primary.id`.
@@ -261,9 +272,9 @@ The Zod-to-JSON-schema converter prefers Zod v4's native `toJSONSchema()` on the
 
 ---
 
-## 10. Streaming vs non-streaming — what's different
+## 10. Streaming vs non-streaming — what the stream adds
 
-Both functions implement the same loop. The streaming version adds:
+Both functions implement the same model→tool→model spine and share the same Tier-2/Tier-3 compaction, tool-result budget, validator-replay gate, and fallback logic. The streaming version adds:
 
 - An `AgentStreamEvent` async generator surface: `tool_invocation_start`, `tool_invocation_done`, `text_delta`, `thinking_delta`, `done`.
 - A `runOneTurn` helper that reads from `client.streamComplete` if present, capturing `text_delta` events into a buffer and yielding `thinking_delta` events upstream (unless the turn is a replay turn — see §4). On clients without `streamComplete`, it falls back to `complete()` and yields a single `text_delta` with the full text.
@@ -271,11 +282,26 @@ Both functions implement the same loop. The streaming version adds:
 - **Replay-safe thinking buffering** — same idea for thinking deltas; additionally, the *next* (replay) turn's thinking is silenced via `isReplayTurn`.
 - **Tier-3 produces a `text_delta` first**, then `done`, so the user sees the canned text even on the streaming path.
 
-The two variants are kept hand-aligned. If the loop logic ever drifts between them, it would be observable as the streaming version producing different `transitions` or different terminal outcomes.
+For where the two paths **diverge**, see §11.
 
 ---
 
-## 11. What the loop never does
+## 11. Block vs streaming — feature asymmetry
+
+The two entry points are **not** feature-identical, and production (`apps/web/app/api/chat/v2/route.ts`) runs the streaming path. Two recovery mechanisms exist **only in the block path** (`runAgentTurn`):
+
+| Recovery | Block path (`runAgentTurn`) | Streaming path (`runAgentTurnStreaming`, production) |
+|---|---|---|
+| **Output-truncation recovery** (`finishReason === "length"` → double `maxTokens`, continue, stitch) | Yes — `agentLoop.ts:287-340`, default 3 retries | **No.** A reply that hits `maxTokens` is cut off mid-sentence. |
+| **Reactive-compact-on-413** (primary throws a context-length error → Tier-2 compact + retry primary once) | Yes — `agentLoop.ts:245-282` | **No.** A 413 from the primary just falls through to the fallback client via `runOneTurn`. |
+
+How the streaming path compensates: the route sets `maxTokens: 4096` (vs the loop's 1024 default) specifically because, without output-truncation recovery, a long Sonnet reply would otherwise be truncated. The code comment at `route.ts:571-578` documents this directly. Both paths still share Tier-2 (proactive, at 80%) and Tier-3 (terminate, at 95%) compaction, so context pressure is handled equivalently — it is only the *reactive* (mid-call 413) and *output-length* recovery loops that the stream lacks.
+
+> **Known limitation.** Because production uses the streaming path, neither the output-truncation-recovery budget (`outputTruncationRecoveryLimit`, default 3) nor the reactive-compact path is exercised in production. Those budgets and the `output_truncation_recovery` / `reactive_compact` transitions only ever appear in block-path callers (e.g. tests and scripts). Treat them as block-path-only behavior.
+
+---
+
+## 12. What the loop never does
 
 Worth knowing explicitly:
 
@@ -287,7 +313,7 @@ Worth knowing explicitly:
 
 ---
 
-## 12. Public types (consumer surface)
+## 13. Public types (consumer surface)
 
 ```
 ChatTurnResult

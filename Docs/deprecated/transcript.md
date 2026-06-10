@@ -1,5 +1,7 @@
 # Transcript Parser Subsystem
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 > ## ⚠️ DEPRECATED — NOT USED IN PRODUCTION
 >
 > **This deterministic transcript module is no longer part of the live product.** NYU Path pivoted to **DPR-only onboarding**: a student's record now comes exclusively from the Albert Degree Progress Report (DPR), and the **unofficial-transcript upload path has been removed from the product entirely.**

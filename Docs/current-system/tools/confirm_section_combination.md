@@ -1,5 +1,9 @@
 # `confirm_section_combination` — Apply a Staged Section Proposal
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+This tool was not touched by the Phase 0-2 solver rebuild; it is a Phase-15 tool that enriches an already-built forward schedule. The claims below were re-verified against the current source.
+
 ## TL;DR
 
 After you've seen a list of staged section combinations from the materialize step and said "yes, give me proposal #2" or "let's go with that combo," this tool actually pins those specific sections into your plan. It looks up the staged proposal by its ID, finds each course's matching slot in your forward schedule for that term, and writes the concrete details onto it — CRN, meeting pattern (days and times), instructor name, schedule type, section number. Once a proposal is applied, it's consumed (deleted from the pending stage), so you can't apply the same one twice. Apply a different combination by materializing again — fresh proposals, fresh IDs. This is the only section-related tool that actually mutates your plan; everything before this was staging and preview.
@@ -16,13 +20,15 @@ flowchart LR
 
 ---
 
-## 1. Purpose
+## Purpose
 
-`confirm_section_combination` is the second half of the section-materialization write contract. Where `materialize_sections` STAGES one or more conflict-free section combinations under deterministic `proposalId`s, this tool APPLIES one of them by pinning concrete-section fields (`crn`, `meetingPatterns`, `instructor`, `schd`, `sectionNumber`) onto the matching `specific_planned` slots inside the forward schedule.
+`confirm_section_combination` is the second half of the section-materialization write contract. Where [`materialize_sections`](./materialize_sections.md) STAGES one or more conflict-free section combinations under deterministic `proposalId`s, this tool APPLIES one of them by pinning concrete-section fields (`crn`, `meetingPatterns`, `instructor`, `schd`, `sectionNumber`) onto the matching `specific_planned` slots inside the forward schedule. It is the only section-related tool that actually mutates the plan.
 
 A successful confirm consumes (deletes) the pending entry, so the same `proposalId` cannot be applied twice — confirming an already-consumed id is rejected by `validateInput`.
 
-Defined at `packages/engine/src/agent/tools/materializeSections.ts:358-460`.
+Registered as a live tool in `packages/engine/src/agent/registry.ts`. Defined at `packages/engine/src/agent/tools/materializeSections.ts:358-460`.
+
+> **Known limitations.** Binding never re-runs the 7-axis graduation validator. It only enriches slots that are already structurally bound (`bindingState === "bound"`), writing five optional fields in-place; it does not flip any state flag or re-validate the plan. If the structural plan changed between stage and confirm (a semester or matching `specific_planned` slot disappeared), the affected sections are silently skipped with a per-section note and `sectionsBound` reflects only the successful binds — see §11.
 
 ---
 

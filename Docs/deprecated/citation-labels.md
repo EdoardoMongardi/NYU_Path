@@ -1,5 +1,7 @@
 # Citation Labels
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 > **Source file:** `packages/engine/src/agent/citationLabels.ts`
 
 ## TL;DR

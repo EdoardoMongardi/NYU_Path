@@ -1,5 +1,7 @@
 # LLM Polish
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 ## TL;DR
 
 When the student clicks "Swap this course," the planning engine produces a correct but slightly robotic explanation — something like "Pinned CSCI-UA 480 to Fall 2026; total credits in that term went from 14 to 18." Helpful, but stiff. The polish endpoint takes that explanation and runs it through a small, fast AI model (Haiku) with strict instructions: rewrite this in friendlier language, but don't add facts, drop facts, or change any course code, credit number, or term name. The result streams back to the chat bubble character by character and quietly replaces the dry version once it lands. The whole thing is gated behind an environment flag, so it can be turned off completely if it's not desired, and it uses a separate quota so it doesn't drain the main chat allowance.

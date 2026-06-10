@@ -1,5 +1,7 @@
 # `check_transfer_eligibility` — Tool Audit
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 Source files:
 - Tool definition: `packages/engine/src/agent/tools/checkTransferEligibility.ts`
 - Audit engine: `packages/engine/src/audit/checkTransferEligibility.ts`

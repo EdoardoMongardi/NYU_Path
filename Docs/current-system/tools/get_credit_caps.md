@@ -1,182 +1,167 @@
 # `get_credit_caps` — Tool Audit
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 Source files:
 - Tool definition: `packages/engine/src/agent/tools/getCreditCaps.ts`
-- Cap validator (referenced supporting module): `packages/engine/src/audit/creditCapValidator.ts`
+- Shared NYU-undergrad registration defaults + school display names: `packages/engine/src/data/schoolDefaults.ts`
+- SPS division resolver: `packages/engine/src/dpr/spsDivision.ts`
 - Tool contract: `packages/engine/src/agent/tool.ts`
 - Suggested-follow-up envelope shape: `packages/engine/src/agent/toolEnvelope.ts`
 
 ---
 
-> **Update (improvement plan, Phase E — DPR-first, de-CAS).** This tool is no longer schoolConfig-only. The authoritative caps — **degree total**, **GPA floor**, **residency**, **Pass/Fail career cap**, **outside-home-school cap**, **time limit** — now come from the student's **DPR cumulative block first** (per-student, authoritative, already specialized to their school + catalog year), falling back to `schoolConfig` only when the DPR omits a field. The two DPR-absent registration constants (**per-semester ceiling ~18**, **F-1 floor ~12**) come from `schoolConfig` or a shared NYU-undergrad default (`data/schoolDefaults.ts`). `validateInput` now requires `student` **plus EITHER a `schoolConfig` OR a DPR** — it only refuses when both are missing. Net effect: a non-CAS student with just their DPR gets correct caps **without any per-school config file**. The result carries a `capsSource` tag (`dpr` / `config` / `dpr+config`) and the school name is derived from `homeSchool` (not hardcoded CAS). The sections below describe the original schoolConfig-only behavior; treat the callout as the current contract where they differ.
+## Purpose
 
-## TL;DR
+`get_credit_caps` is a deterministic, zero-side-effect data lookup that returns the credit numbers a student needs before any "how many credits can I take?" / "what's my F-1 minimum?" / "can I take 4 courses at another school?" question. It is **DPR-first**: the per-student authoritative caps come from the student's DPR cumulative block; `schoolConfig` is a fallback for school-wide policy, and two registration constants come from a shared NYU-undergrad default.
 
-When a student asks "how many credits can I take next semester?", "I'm on an F-1 visa — what's my minimum?", "can I take 4 courses at Tandon if I'm in CAS?", or anything about credit limits, this tool returns the deterministic numbers — **DPR-first** (per-student) with a `schoolConfig` / shared-default fallback. It returns the per-semester ceiling (~18, shared NYU default), the F-1 full-time floor (~12) when the student is on an F-1 visa, the cross-school caps, overload requirements, the total degree credit requirement, the minimum GPA, and (from the DPR) residency, Pass/Fail career cap, outside-home cap, and time limit. The numeric ceiling and F-1 floor are pinned verbatim — the assistant literally cannot paraphrase those numbers. It requires a loaded student profile plus **either** a DPR **or** a school config. It's the canonical first call before answering anything about credit load or overload permissions.
+This tool is the **deliberate no-DPR exception** in the codebase. General school caps are still answerable without a DPR (the per-semester ceiling and F-1 floor are near-universal NYU-undergrad constants), so the tool runs with **either** a DPR **or** a school config. When no DPR is present, the *personalized* fields (degree total, GPA floor, residency, P/F cap, outside-home cap, time limit) come back `null` rather than refusing the whole call — unlike `run_full_audit` / `get_academic_standing`, which hard-refuse without a DPR.
+
+The result returns a `capsSource` tag (`"dpr"`, `"config"`, or `"dpr+config"`) and the school name is derived from `student.homeSchool` (not hardcoded CAS).
 
 ```mermaid
 flowchart TD
-    Q["Student: 'how many credits<br/>can I take? what's my<br/>F-1 minimum?'"]
-    PROF["Read student<br/>(visa status)"]
-    CFG["Read school config<br/>(caps + floors)"]
-    NUMS["Numbers:<br/>ceiling, F-1 floor,<br/>cross-school caps"]
-    PIN["Pin ceiling + F-1 floor<br/>verbatim"]
-    OUT["Caps + floors<br/>+ overload rules<br/>+ total degree credits"]
-    Q --> PROF --> NUMS
-    Q --> CFG --> NUMS
-    NUMS --> PIN --> OUT
+    Q["Student: 'how many credits<br/>can I take? F-1 minimum?'"]
+    V{"validateInput:<br/>student AND (config OR DPR)?"}
+    REJ["Refuse — no source<br/>for any cap"]
+    CEIL["Per-semester ceiling + F-1 floor<br/>(config OR shared NYU default)"]
+    DPRF["Personalized caps from DPR cumulative<br/>(degree total, GPA floor, residency,<br/>P/F cap, outside-home cap, time limit)"]
+    SPS["SPS only: resolveSpsDivision<br/>(advanced-standing cap)"]
+    PIN["Pin ceiling + F-1 floor verbatim"]
+    Q --> V
+    V -- no --> REJ
+    V -- yes --> CEIL --> DPRF --> SPS --> PIN
 ```
 
 ---
 
-## 1. Purpose
+## 1. Input schema
 
-`get_credit_caps` is a pure data-lookup helper. It returns:
-
-1. The home school's **per-semester credit ceiling** (the maximum a student can register in one term without an overload petition).
-2. The **F-1 full-time floor** (the per-semester minimum for F-1 visa holders), when applicable.
-3. The home school's **cross-school credit caps** (e.g. non-home-school cap, online cap, transfer cap, advanced-standing cap), drawn from `schoolConfig.creditCaps`.
-4. **Overload requirements** (any school-specific rules about how to exceed the ceiling).
-5. **Transfer credit limits** (`schoolConfig.transferCreditLimits`).
-6. **Total degree credit requirement** and **overall GPA floor**.
-
-The tool has no LLM dependency, no chaining, no profile mutation. It is the canonical first call before answering any question about credit load, overload permissions, or full-time / part-time status.
-
-When the DPR is loaded, the tool additionally attaches a `suggestedFollowUps` array pointing to `search_policy` for the bulletin's narrative coverage of those numbers.
-
-The tool runs in **semi-hardened output mode** — the per-semester ceiling and the F-1 floor must appear verbatim in the LLM's reply.
-
----
-
-## 2. Input schema
-
-The input is empty:
+The input is empty (`getCreditCaps.ts:33`):
 
 ```
 { /* no fields */ }
 ```
 
-Defined at `getCreditCaps.ts:32`. Everything the tool needs comes from `session.student` + `session.schoolConfig`.
+Everything comes from `session.student` + `session.schoolConfig` + `session.degreeProgressReport`.
 
-- `isReadOnly` = `true` (line 33).
-- `maxResultChars` = 1500 (line 34).
-- `outputMode` = `"semi_hardened"` (line 37).
+- `isReadOnly` = `true` (line 34).
+- `maxResultChars` = 1500 (line 35).
+- `outputMode` = `"semi_hardened"` (line 38).
 
 ---
 
-## 3. Session prerequisites + `validateInput`
+## 2. Session prerequisites + `validateInput`
 
-`validateInput` (lines 38-48) rejects the call if:
+`validateInput` (lines 39-53) rejects only if:
 
 1. **No student loaded** (`session.student` missing). Returns: `"No student profile loaded."`
-2. **(Phase E)** **Neither a schoolConfig NOR a DPR loaded** — i.e. there is no source for any cap at all. Returns: `"No school config or DPR loaded — I can't determine your credit caps."` (Before Phase E this rejected whenever `schoolConfig` was missing, even with a DPR present.)
+2. **Neither a schoolConfig NOR a DPR loaded** — no source for any cap at all. Returns: `"No school config or DPR loaded — I can't determine your credit caps."`
 
-Notably, the validator **does NOT reject when the DPR is loaded** — the DPR is now the *preferred* cap source. (An earlier behavior rejected when the DPR was loaded, which produced contradictory reasoning iterations; the current behavior keeps the tool running, reads caps from the DPR, and attaches a `suggestedFollowUps` pointing to `search_policy` for the narrative policy text.)
+The validator **does NOT refuse when only a DPR is loaded, nor when only a config is loaded.** This is the no-DPR exception that makes the tool work for any NYU-undergrad school without a per-school config file: the DPR (already specialized to the student's school + catalog year) supplies the personalized caps, and the shared NYU default supplies the per-semester ceiling and F-1 floor when no config is present.
 
 ---
 
-## 4. What it reads
+## 3. What it reads
 
 From `ToolSession`:
-- `session.student` — used for `visaStatus` only.
-- `session.schoolConfig` (`cfg`) — the source of truth for every cap returned. Specifically reads:
-  - `cfg.schoolId`
-  - `cfg.name`
-  - `cfg.maxCreditsPerSemester` — per-semester ceiling. Nullable.
-  - `cfg.overloadRequirements` — array; defaults to `[]` if missing.
-  - `cfg.creditCaps` — array of `{ type, maxCredits }` rows (e.g. `non_home_school`, `online`, `transfer`, `advanced_standing`). Defaults to `[]`.
-  - `cfg.transferCreditLimits` — defaults to `null`.
-  - `cfg.totalCreditsRequired` — total degree-credit requirement. Nullable.
-  - `cfg.overallGpaMin` — minimum cumulative GPA for good standing.
-  - `cfg.f1FullTimeMinCredits` — the F-1 full-time floor; if missing, the tool falls back to a default.
-- `session.degreeProgressReport` — only checked for presence (to decide whether to attach the `suggestedFollowUps` row).
+- `session.student` — reads `visaStatus` (to decide the F-1 floor) and `homeSchool` (for the school id/name fallback and the SPS division check).
+- `session.schoolConfig` (`cfg`, may be `null`) — fallback source for: `schoolId`, `name`, `maxCreditsPerSemester`, `overloadRequirements`, `creditCaps`, `transferCreditLimits`, `f1FullTimeMinCredits`. Note: `SchoolConfig` no longer carries `overallGpaMin` or `totalCreditsRequired` for personalized use — those come from the DPR (see below).
+- `session.degreeProgressReport` — `call()` reads `degreeProgressReport.cumulative` (`dpr`) for the personalized caps, and uses the full report for the SPS division resolver. The mere presence of a DPR also triggers the `suggestedFollowUps` row.
 
-### F-1 default constant
+### Shared defaults (`schoolDefaults.ts`)
 
-`DEFAULT_F1_FULLTIME_MIN_CREDITS = 12` (`getCreditCaps.ts:22`). Used as the fallback when `cfg.f1FullTimeMinCredits` is undefined.
-
-This default is **only consulted** when `student.visaStatus === "f1"`. For non-F-1 students the `f1FullTimeFloor` field in the output is set to `null` regardless of what's in the config.
+- `DEFAULT_PER_SEMESTER_CEILING = 18` (line 21) — near-universal NYU-undergrad per-semester ceiling.
+- `DEFAULT_F1_FULLTIME_MIN_CREDITS = 12` (line 34) — F-1 full-time minimum (NYU OGS guidance).
+- `PER_SEMESTER_CEILING_OVERRIDES = {}` (line 39) — sparse per-school overrides; **empty today**.
+- `perSemesterCeilingFor(homeSchool)` (lines 43-46) — returns an override if one exists, else the shared 18.
+- `schoolDisplayName(homeSchool)` (lines 67-70) — full display name per home-school id, falling back to a generic `"NYU"` rather than asserting a school it can't confirm.
 
 ---
 
-## 5. Algorithm
+## 4. Algorithm
 
-`call()` (lines 53-103) runs five steps:
+`call()` (lines 58-159):
 
-### Step 1 — Read inputs
+### Step 1 — Read inputs (lines 59-62)
 
 ```
 student = session.student
-cfg = session.schoolConfig
-isF1 = student.visaStatus === "f1"
+cfg     = session.schoolConfig ?? null
+dpr     = session.degreeProgressReport?.cumulative ?? null
+isF1    = student.visaStatus === "f1"
 ```
 
-### Step 2 — Read fields with null/array defaults
+### Step 2 — Per-semester ceiling + overload/cross-school caps (lines 67-69, 93)
+
+The per-semester ceiling and F-1 floor are **not** in the DPR, so they come from config when present, else the shared default:
 
 ```
-perSemesterCeiling   = cfg.maxCreditsPerSemester ?? null
+perSemesterCeiling   = cfg.maxCreditsPerSemester ?? perSemesterCeilingFor(student.homeSchool)   // typically 18
 overloadRequirements = cfg.overloadRequirements  ?? []
 creditCaps           = cfg.creditCaps            ?? []
 transferCreditLimits = cfg.transferCreditLimits  ?? null
 ```
 
-### Step 3 — Resolve F-1 floor
+### Step 3 — SPS division-aware advanced-standing cap (lines 70-92)
+
+SPS spans divisions with different advanced-standing caps (64 / 80 / 30). This runs **only** when `student.homeSchool === "sps"` AND a DPR is loaded:
+
+- Call `resolveSpsDivision(dpr)` (`spsDivision.ts:72-114`). It reads only the `"Major"` programType row(s) and the DPR's `creditsRequired` band:
+  - Real Estate → Schack Institute → cap **64**; Hospitality → Tisch Center → **64**; Sport → Tisch Institute → **64**; all other bachelor's → DAUS → **80**; every associate → DAUS → **30**.
+- **High confidence** (a single division/level resolves): `advancedStandingResolution = { status: "resolved", cap, appliesTo, matchedLabel }`. The matching `advanced_standing` cap row from config supplies `appliesTo`.
+- **Low confidence** (zero or conflicting majors): `advancedStandingResolution = { status: "needs_clarification", options }`, where `options` is the three distinct caps (`SPS_DIVISION_OPTIONS`) so the student is asked which division applies.
+- For non-SPS students, or SPS with no DPR, `advancedStandingResolution = null` and the three scoped caps (if any are in config) are shown as general policy in the summary.
+
+### Step 4 — Personalized caps from the DPR (lines 95-103, 136-140)
+
+These come from the DPR cumulative block **only** — no config fallback for the personalized ones:
 
 ```
-f1FullTimeFloor =
-  isF1
-    ? (cfg.f1FullTimeMinCredits ?? DEFAULT_F1_FULLTIME_MIN_CREDITS)  // typically 12
-    : null
+totalCreditsRequired = dpr.creditsRequired      ?? null   // degree total — DPR ONLY, no config fallback
+overallGpaMin        = dpr.cumulativeGpaRequired ?? null   // GPA floor — DPR ONLY
+residencyRequired    = dpr.residencyRequired     ?? null
+passFailCapUnits     = dpr.passFailCapUnits       ?? null
+outsideHomeCapUnits  = dpr.outsideHomeCapUnits    ?? null
+timeLimitYears       = dpr.timeLimitYears          ?? null
+capsSource           = dpr ? (cfg ? "dpr+config" : "dpr") : "config"
 ```
 
-### Step 4 — Compose the result object
+Without a DPR, all six personalized fields are `null` (the no-DPR exception: the tool still returns, with personalized fields nulled). The degree total is program-dependent, so the tool deliberately does **not** state a personalized degree total from config.
+
+### Step 5 — F-1 floor (line 128)
 
 ```
-{
-  schoolId:              cfg.schoolId,
-  schoolName:            cfg.name,
-  perSemesterCeiling:    number | null,
-  f1FullTimeFloor:       number | null,
-  visaStatus:            student.visaStatus ?? "domestic",
-  overloadRequirements:  [...],
-  crossSchoolCaps:       cfg.creditCaps ?? [],
-  transferCreditLimits:  cfg.transferCreditLimits ?? null,
-  totalCreditsRequired:  cfg.totalCreditsRequired,
-  overallGpaMin:         cfg.overallGpaMin,
-  suggestedFollowUps?:   SuggestedFollowUp[]   // only attached when DPR is loaded
-}
+f1FullTimeFloor = isF1 ? (cfg.f1FullTimeMinCredits ?? DEFAULT_F1_FULLTIME_MIN_CREDITS) : null   // typically 12
 ```
 
-### Step 5 — DPR-loaded follow-up
+For non-F-1 students `f1FullTimeFloor` is `null` regardless of config.
 
-If `session.degreeProgressReport` is truthy, append exactly one suggested follow-up (lines 93-101):
+### Step 6 — Compose the result + DPR follow-up (lines 105-158)
 
-```
-suggestedFollowUps = [{
-  tool: "search_policy",
-  args: { query: "F-1 full-time minimum credit-load policy" },
-  why:  "Bulletin + OGS policy text covers F-1 minimum, RCL, and per-semester ceiling questions in detail. This tool returned the numeric caps; search_policy provides the policy reasoning."
-}]
-```
-
-When the DPR is not loaded, no `suggestedFollowUps` field is set.
+`schoolId` / `schoolName` fall back to `student.homeSchool` / `schoolDisplayName(student.homeSchool)` when no config. If a DPR is loaded, append exactly one `suggestedFollowUps` row pointing at `search_policy` (see §8).
 
 ### Flow diagram
 
 ```mermaid
 flowchart TD
-    A[call] --> B[Read student + cfg]
-    B --> C[perSemesterCeiling = cfg.maxCreditsPerSemester]
+    A[call] --> B[Read student, cfg, dpr cumulative]
+    B --> C[perSemesterCeiling = cfg or shared default 18]
     B --> D{visaStatus == f1?}
     D -- yes --> E[f1Floor = cfg.f1FullTimeMinCredits or default 12]
     D -- no --> F[f1Floor = null]
-    B --> G[Pull creditCaps, overloadRequirements, transferCreditLimits]
+    B --> S{homeSchool == sps AND DPR?}
+    S -- yes --> S1[resolveSpsDivision -> resolved or needs_clarification]
+    S -- no --> S2[advancedStandingResolution = null]
+    B --> G[Personalized caps from DPR cumulative -or- null]
     B --> H{DPR loaded?}
     H -- yes --> I[Append suggestedFollowUps to search_policy]
     H -- no --> J[No suggested follow-ups]
-    C --> K[Compose output]
+    C --> K[Compose output + capsSource tag]
     E --> K
     F --> K
+    S1 --> K
+    S2 --> K
     G --> K
     I --> K
     J --> K
@@ -185,106 +170,114 @@ flowchart TD
 
 ---
 
-## 6. What it returns
+## 5. What it returns
 
 ```
 {
-  schoolId:              string,
-  schoolName:            string,
-  perSemesterCeiling:    number | null,
-  f1FullTimeFloor:       number | null,
-  visaStatus:            string,             // "f1" | "domestic" | ...
-  overloadRequirements:  Array<...>,         // structure mirrors schoolConfig
-  crossSchoolCaps:       Array<{
-                           type: "non_home_school" | "online" | "transfer" | "advanced_standing" | ...,
-                           maxCredits: number
-                         }>,
-  transferCreditLimits:  object | null,
-  totalCreditsRequired:  number | null,
-  overallGpaMin:         number,
-  suggestedFollowUps?:   Array<{ tool, args, why }>
+  schoolId:               string,             // cfg.schoolId ?? student.homeSchool
+  schoolName:             string,             // cfg.name ?? schoolDisplayName(homeSchool)
+  perSemesterCeiling:     number | null,      // config or shared default 18
+  f1FullTimeFloor:        number | null,      // null unless F-1
+  visaStatus:             string,             // "f1" | "domestic" | ...
+  overloadRequirements:   OverloadRequirement[],
+  crossSchoolCaps:        CreditCap[],         // from cfg.creditCaps (may be [])
+  advancedStandingResolution: null | { status: "resolved", cap, appliesTo, matchedLabel }
+                                  | { status: "needs_clarification", options: { label, cap }[] },
+  transferCreditLimits:   object | null,
+  totalCreditsRequired:   number | null,      // DPR ONLY (dpr.creditsRequired)
+  overallGpaMin:          number | null,      // DPR ONLY (dpr.cumulativeGpaRequired)
+  residencyRequired:      number | null,       // DPR (dpr.residencyRequired)
+  passFailCapUnits:       number | null,       // DPR (dpr.passFailCapUnits)
+  outsideHomeCapUnits:    number | null,       // DPR (dpr.outsideHomeCapUnits)
+  timeLimitYears:         number | null,       // DPR (dpr.timeLimitYears)
+  capsSource:             "dpr" | "config" | "dpr+config",
+  suggestedFollowUps?:    SuggestedFollowUp[]  // only when DPR is loaded
 }
 ```
 
-The `crossSchoolCaps` array surfaces every cap defined in `schoolConfig.creditCaps` regardless of type — including the non-home-school cap, online cap, transfer cap, advanced-standing cap. The `creditCapValidator.ts` module (a separate audit-time module) treats these same cap types as upper bounds when checking actual student credit usage (e.g. `nonHomeSchoolMax`, `onlineMax`, `transferMax`, `advancedStandingMax` at `creditCapValidator.ts:121-132`), so the numbers this tool returns are the same numbers the audit pipeline enforces.
+The `crossSchoolCaps` array surfaces every cap defined in `schoolConfig.creditCaps` (non-home-school, online, transfer, advanced-standing, etc.). Each `CreditCap` may carry `maxCredits`, `maxCourses`, and an `appliesTo` scope label (used by schools where one `schoolId` spans sub-units with different caps, e.g. SPS).
+
+> **Note:** the old enforcement counterpart `audit/creditCapValidator.ts` (`validateCreditCaps`, `nonHomeSchoolMax`, etc.) **no longer exists** — it was removed in the rule-engine decommission. This tool is now purely a data surface; there is no separate audit-time module re-enforcing these exact numbers.
 
 ---
 
-## 7. Envelope behavior
+## 6. Envelope behavior
 
-- **`outputMode: "semi_hardened"`** (line 37). The validator pins the strings returned by `extractVerbatim`.
-- **`extractVerbatim`** (lines 137-150) composes one or two fragments:
+- **`outputMode: "semi_hardened"`** (line 38). The validator pins the string returned by `extractVerbatim`.
+- **`extractVerbatim`** (lines 228-241) composes one or two fragments:
   - If `perSemesterCeiling !== null`: `"<schoolName> per-semester ceiling: <N> credits."`
   - If `f1FullTimeFloor !== null`: `"F-1 full-time floor: <N> credits per semester."`
   - Joined with `" "`. Returns `null` if both are absent (no pinned text).
-- **`isReadOnly: true`** (default for `buildTool`, plus explicitly `true` on line 33).
+- **`isReadOnly: true`** (line 34).
 - **`maxResultChars` = 1500**; `summarizeResult` truncated above that by the `buildTool` wrapper.
 - The tool never writes to `session`.
 
-### Verbatim text — exact format
-
-When both numbers are present, the validator pins the concatenated string:
-
-> `"<schoolName> per-semester ceiling: <N> credits. F-1 full-time floor: <M> credits per semester."`
-
-When only the ceiling is present:
-
-> `"<schoolName> per-semester ceiling: <N> credits."`
-
-When only the F-1 floor is present:
-
-> `"F-1 full-time floor: <N> credits per semester."`
-
-The LLM's reply must include this string unchanged. Synthesis around it is allowed; the pinned text itself cannot be reworded.
+The LLM's reply must include the verbatim fragment(s) unchanged. Synthesis around them is allowed.
 
 ---
 
-## 8. Summary text format
+## 7. Summary text format
 
-`summarizeResult` (lines 105-132) emits:
+`summarizeResult` (lines 160-223) emits, in order:
 
 ```
 SCHOOL: <schoolName> (<schoolId>)
 Per-semester ceiling: <N> credits           # OR: "Per-semester ceiling: not published — confirm with adviser"
 F-1 full-time floor: <N> credits/semester (visaStatus=<v>)   # only when f1FullTimeFloor !== null
 Overload requirement: <JSON of each row>    # one line per overloadRequirement
-Credit cap (<type>): max <N> credits        # one line per crossSchoolCap
-Transfer credit limits: <JSON>              # only when transferCreditLimits is set
-Degree total: <N> credits required          # only when totalCreditsRequired !== null
-Overall GPA min: <N>
+Credit cap (<type>): max <N> credits|courses [— <appliesTo>]   # one per crossSchoolCap (advanced_standing skipped if resolved below)
+Advanced-standing cap: <N> credits [— <scope>] (from your DPR program: <matchedLabel>)   # when SPS division resolved
+   OR
+Advanced-standing cap depends on your SPS division — confirm which applies:   # when SPS needs clarification
+  - <option label>: <N> credits
+Transfer credit limits: <JSON>              # only when set
+Degree total: <N> credits required          # only when totalCreditsRequired !== null (i.e. DPR present)
+Overall GPA min: <N>                         # only when overallGpaMin !== null (i.e. DPR present)
+Residency required: <N> credits in residence # only when residencyRequired !== null
+Pass/Fail career cap: <N> units              # only when passFailCapUnits !== null
+Outside-home-school cap: <N> units           # only when outsideHomeCapUnits !== null
+Degree time limit: <N> years                 # only when timeLimitYears !== null
+(caps source: <dpr | config | dpr+config>)
 ```
 
-Overload requirements and transfer limits are rendered with `JSON.stringify` — the model gets the raw structured shape.
+Overload requirements and transfer limits are rendered with `JSON.stringify`. The `(caps source: …)` line always closes the summary so the reader knows whether the personalized numbers came from the DPR.
 
 ---
 
-## 9. Interactions with other tools
+## 8. Interactions with other tools
 
-- **`search_policy`** — Auto-suggested as a follow-up when the DPR is loaded. The argument is the literal string `"F-1 full-time minimum credit-load policy"`. The reasoning hint says the bulletin and OGS text cover the *policy* detail; this tool only returns the numbers.
-- **`get_academic_standing`** — The system-prompt routing pair (per Appendix A rule #5 referenced in the tool's description): "before discussing CREDIT COUNTS, GPA, GRADUATION PROGRESS, or SEMESTER PLANNING, call at minimum: get_academic_standing → get_credit_caps". This tool is the second in that chain.
-- **`creditCapValidator.ts` (audit pipeline)** — Not a tool, but the same cap types this tool returns (`non_home_school`, `online`, `transfer`, `advanced_standing`) are enforced by `validateCreditCaps` against actual student credit usage. So the numbers surfaced here match the numbers the run-full audit will use as upper bounds.
-- **`plan_semester` / `plan_forward_degree`** — Not direct callers, but consume the same per-semester ceiling and F-1 floor when computing valid semester loads.
+- **`search_policy`** — auto-suggested as a follow-up when a DPR is loaded (lines 148-156). The argument is the literal string `"F-1 full-time minimum credit-load policy"`; the `why` notes that the bulletin + OGS text carries the *policy reasoning*, while this tool returns the *numbers*. See [`search_policy`](./search_policy.md).
+- **`get_academic_standing`** — the system-prompt routing pair (Appendix A rule #5): "before discussing CREDIT COUNTS, GPA, GRADUATION PROGRESS, or SEMESTER PLANNING, call at minimum: get_academic_standing → get_credit_caps". This tool is the second in that chain. See [`get_academic_standing`](./get_academic_standing.md). Note both tools now read the same per-student DPR-required GPA floor (`dpr.cumulative.cumulativeGpaRequired`).
+- **`run_full_audit`** — surfaces the same DPR cumulative budgets (residency, P/F, outside-home, time limit) inside its audit summary; this tool exposes them as standalone caps. See [`run_full_audit`](./run_full_audit.md).
+- **`plan_forward_degree`** — not a direct caller, but the forward planner consumes the same per-semester ceiling + F-1 floor when computing valid semester loads. See [`plan_forward_degree`](./plan_forward_degree.md).
 
 The tool does NOT chain to any other tool itself beyond the optional `suggestedFollowUps` row.
 
 ---
 
-## 10. Edge cases
+## 9. Edge cases
 
-- **`cfg.maxCreditsPerSemester` undefined** — `perSemesterCeiling` is `null`. Summary line becomes `"Per-semester ceiling: not published — confirm with adviser"`. Verbatim text omits the ceiling fragment.
-- **Non-F-1 student** — `f1FullTimeFloor` is set to `null` regardless of what `cfg.f1FullTimeMinCredits` is. The F-1 line is omitted from both the summary and the verbatim text.
-- **`student.visaStatus` undefined** — Output `visaStatus` defaults to `"domestic"`. F-1 floor stays `null`.
-- **F-1 student, no `cfg.f1FullTimeMinCredits`** — Falls back to `DEFAULT_F1_FULLTIME_MIN_CREDITS = 12`.
-- **No DPR loaded** — No `suggestedFollowUps` is attached. The tool still returns the full data shape.
-- **Empty `cfg.creditCaps`** — `crossSchoolCaps` is `[]`. No cap lines in the summary.
-- **No `cfg.overloadRequirements`** — Defaults to `[]`. No "Overload requirement:" lines in the summary.
-- **No `cfg.transferCreditLimits`** — Defaults to `null`. The "Transfer credit limits:" line is omitted from the summary.
-- **`cfg.totalCreditsRequired` null** — The "Degree total" line is omitted from the summary; the structured output still carries `null`.
-- **Both `perSemesterCeiling` and `f1FullTimeFloor` are null** — `extractVerbatim` returns `null`, which disables the semi-hardened pin for this call (the validator has no required text). The reply falls back to free synthesis grounded in `summarizeResult`.
-- **No `student` or no `schoolConfig`** — Rejected by `validateInput` with a user-facing message; `call()` never runs.
+- **`cfg.maxCreditsPerSemester` undefined / no config** — `perSemesterCeiling` falls back to `perSemesterCeilingFor(homeSchool)` (18 today, since the override map is empty). The summary always prints a ceiling unless `homeSchool` resolution yields `null` (it does not for known schools).
+- **Non-F-1 student** — `f1FullTimeFloor` is `null` regardless of config. The F-1 line is omitted from both the summary and the verbatim text.
+- **`student.visaStatus` undefined** — output `visaStatus` defaults to `"domestic"`. F-1 floor stays `null`.
+- **F-1 student, no `cfg.f1FullTimeMinCredits`** — falls back to `DEFAULT_F1_FULLTIME_MIN_CREDITS = 12`.
+- **No DPR loaded** — the tool still returns (no-DPR exception). All six personalized fields (`totalCreditsRequired`, `overallGpaMin`, `residencyRequired`, `passFailCapUnits`, `outsideHomeCapUnits`, `timeLimitYears`) are `null`; `capsSource = "config"`; no `suggestedFollowUps`.
+- **SPS student, DPR loaded, single division resolves** — `advancedStandingResolution.status === "resolved"`; the raw `advanced_standing` cap row is skipped in the summary in favor of the resolved line.
+- **SPS student, DPR loaded, no/conflicting major** — `advancedStandingResolution.status === "needs_clarification"`; the summary lists all three division options and asks the student to confirm.
+- **Non-SPS student** — `advancedStandingResolution = null`; any `advanced_standing` cap in config is shown as a plain `Credit cap (advanced_standing)` line.
+- **Both `perSemesterCeiling` and `f1FullTimeFloor` are null** — `extractVerbatim` returns `null`, disabling the semi-hardened pin for this call. (Rare: `perSemesterCeiling` is null only if `homeSchool` resolution fails.)
+- **No `student`** — rejected by `validateInput`. **No config AND no DPR** — rejected.
+
+---
+
+## Known limitations
+
+- **No enforcement module.** The old `creditCapValidator.ts` that re-checked these caps against actual usage is gone. This tool surfaces the numbers; nothing downstream automatically enforces the cross-school caps as upper bounds during an audit.
+- **`PER_SEMESTER_CEILING_OVERRIDES` is empty.** Every school currently gets the shared 18-credit ceiling unless it authors `maxCreditsPerSemester` in a `SchoolConfig`. A school that genuinely differs and has no config file would silently report 18.
+- **Personalized caps require a DPR.** Without one, degree total, GPA floor, residency, P/F cap, outside-home cap, and time limit all come back `null` — by design, but a student with only a config file gets a partial answer.
 
 ---
 
 ## Summary
 
-`get_credit_caps` is a deterministic, zero-side-effect data lookup that surfaces the home school's per-semester ceiling, the F-1 full-time floor (when the student is F-1), all cross-school credit caps in `schoolConfig.creditCaps` (non-home-school, online, transfer, advanced-standing), overload requirements, transfer credit limits, total degree credits, and the overall GPA floor. The per-semester ceiling and F-1 floor are pinned as verbatim text via `extractVerbatim` so the LLM cannot paraphrase or mis-state those numeric facts. When the DPR is loaded, the tool attaches a single suggested follow-up to `search_policy` for the bulletin's narrative coverage.
+`get_credit_caps` is a DPR-first, zero-side-effect data lookup. It surfaces the per-semester ceiling (config or the shared NYU default 18), the F-1 full-time floor (12 by default, only when F-1), all cross-school caps, overload requirements, transfer limits, and — **from the DPR only** — the degree total, GPA floor, residency, Pass/Fail career cap, outside-home cap, and time limit. For SPS students with a DPR it resolves the division-specific advanced-standing cap (64/80/30) or asks which division applies. It is the deliberate no-DPR exception: it runs with either a DPR or a config, nulling personalized fields when the DPR is absent. The per-semester ceiling and F-1 floor are pinned verbatim so the LLM cannot paraphrase those numbers, and a `capsSource` tag tells the reader where each number came from.

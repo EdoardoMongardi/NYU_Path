@@ -1,299 +1,179 @@
 # `what_if_audit` — Tool Audit
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 Source files:
-- Tool definition: `packages/engine/src/agent/tools/whatIfAudit.ts`
-- Audit engine: `packages/engine/src/audit/whatIfAudit.ts`
-- Cross-program audit (used internally): `packages/engine/src/audit/crossProgramAudit.ts`
+- Tool definition (the whole tool): `packages/engine/src/agent/tools/whatIfAudit.ts`
 - Tool contract: `packages/engine/src/agent/tool.ts`
+- Verbatim-disclaimer envelope shape: `packages/engine/src/agent/toolEnvelope.ts`
 
 ---
 
-## TL;DR
+## Purpose
 
-When a student asks "what if I switched my major to econ?", "should I add a math minor?", or "what would it look like if I dropped CS and majored in data science?", this tool runs a hypothetical audit without actually changing anything on their profile. It REQUIRES the student's Albert Degree Progress Report (DPR) to be loaded — the comparison is against the student's real coursework, which comes from the DPR — so if no DPR is loaded it refuses and asks the student to upload one. Otherwise it re-runs the full requirements check as if the student were already in the new program(s), then optionally diffs that against their current declared programs to tell them: how many courses they've already taken would transfer over, how many extra requirements they'd still need, which programs they'd add or drop. If the hypothetical program is in the authored catalog, you get a deterministic apples-to-apples comparison. If it's an unauthored program (no rules in the system), you get a structured estimate envelope with a hard-pinned disclaimer that the assistant MUST quote verbatim — something like "verify with an academic adviser before applying." The student's real profile is never modified.
+`what_if_audit` answers *hypothetical PROGRAM-change* questions — "what if I switched my major to econ?", "should I add a math minor?", "what would it look like if I did a second major in data science?" — **without modifying the student's profile**.
+
+It is now a **pure-RAG estimate**, never a deterministic audit. There is never a real DPR for a hypothetical program, so NYU can only produce an audit-grade verdict by recomputing the student's DPR for the new program. This tool therefore returns one thing: a structured **estimate envelope** that (a) summarizes the student's current state from their real DPR, (b) points them at `search_policy` for the hypothetical program's bulletin requirements + an adviser, and (c) carries a **verbatim disclaimer** the response validator pins into the LLM's reply.
+
+The old authored, deterministic path — a rule engine that cloned the profile and ran `crossProgramAudit` over `programs.json` — was **removed** in the rule-engine decommission (the entire `audit/whatIfAudit.ts` and `crossProgramAudit` engine no longer exist). The 1-program authored stub could only ever audit a single hypothetical, and the DPR-first design relies on the student's real audit plus bulletin RAG instead. See the [Known limitations](#known-limitations) note.
+
+> Course-level "what if I take A instead of B" is a **different** question. It runs the forward-schedule solver via [`propose_plan_change`](./propose_plan_change.md) / [`simulate_alternatives`](./simulate_alternatives.md) against the student's plan — **not** this tool. The tool's own description routes the model there.
 
 ```mermaid
 flowchart TD
     Q["Student: 'what if I<br/>switched to X?'"]
-    AUTH{"Programs in<br/>authored catalog?"}
-    CLONE["Clone profile<br/>(in memory only)"]
-    AUDIT["Run audit on<br/>hypothetical programs"]
-    DIFF["Diff vs current<br/>(courses kept, dropped,<br/>extra work)"]
-    EST["Best-effort estimate<br/>+ verbatim disclaimer"]
-    Q --> AUTH
-    AUTH -- yes --> CLONE --> AUDIT --> DIFF
-    AUTH -- no --> EST
+    V{"validateInput:<br/>DPR + student loaded?"}
+    REJ["Refuse — ask student<br/>to upload their DPR"]
+    EST["Build estimate from DPR:<br/>credits, GPA, transfer rows"]
+    DISC["Attach verbatim disclaimer<br/>(validator pins it)"]
+    Q --> V
+    V -- no --> REJ
+    V -- yes --> EST --> DISC
 ```
 
-> **⚠️ Reality check — in production this tool is an *estimate*, never an *audit*.** The authored (deterministic) path requires both `session.programs` and `session.courses`, but the deployed chat route (`apps/web/app/api/chat/v2/route.ts:245-267`) populates **neither**. So `allInCatalog && session.programs && session.courses` is never true in production and **every** call routes to the **unauthored "best-effort estimate + verbatim disclaimer" path** — the student never gets audit numbers (no courses-transferred count, no remaining-requirements delta), only the DPR-derived guidance string and the pinned adviser disclaimer. On top of that, the authored catalog itself is essentially empty: `data/programs/` has exactly **one** promoted program (`cas/cas_econ_ba.json`), so even if the route *did* load `programs`, only a hypothetical that is exactly `cas_econ_ba` could ever take the authored path. Net: read this tool as "look up the bulletin and talk to an adviser", framed as an estimate — not a structured what-if audit.
-
 ---
 
-## 1. Purpose
+## 1. Input schema
 
-`what_if_audit` lets the agent run a hypothetical audit against a different set of declared programs **without modifying the student's profile**. Used for:
-
-- "What if I switched to economics?"
-- "Compare CS major vs Data Science major."
-- "Should I add a math minor?"
-
-It returns a deterministic comparison whenever every hypothetical program id is in the authored catalog (`session.programs`). When one or more program ids are **not** in the authored catalog, the tool returns a structured "best-effort estimate" envelope with a non-removable disclaimer pointing the student at the bulletin and an adviser.
-
-The disclaimer is enforced via the semi-hardened output mode: the validator string-matches it against the LLM's reply.
-
----
-
-## 2. Input schema
-
-Pseudo-type:
+Defined at `whatIfAudit.ts:53-58`:
 
 ```
 {
-  hypotheticalPrograms: string[]              // program ids, e.g. ["cas_econ_ba", "cas_math_minor"]
-  compareWithCurrent?: boolean = true         // if true, also runs current declarations and produces a diff
+  hypotheticalPrograms: string[]              // program ids, e.g. ["economics_ba", "mathematics_minor"]
+  compareWithCurrent?: boolean = true         // RETAINED FOR COMPATIBILITY ONLY — see note below
 }
 ```
 
-Defined at `whatIfAudit.ts:59-64`.
-
-- `maxResultChars` = 3000 (line 65).
-- `outputMode` = `"semi_hardened"` (line 68).
+- `maxResultChars` = 3000 (line 59).
+- `outputMode` = `"semi_hardened"` (line 61).
 - `isReadOnly` defaults to `true` (from `buildTool`).
 
+`compareWithCurrent` is now inert: the schema still accepts it (line 56-57) so old callers don't break, but `call()` never reads it. The estimate is *always* framed against the student's current DPR — there is no longer a deterministic-diff branch to toggle.
+
 ---
 
-## 3. Session prerequisites + `validateInput`
+## 2. Session prerequisites + `validateInput`
 
-The `validateInput` hook (`whatIfAudit.ts:69-84`) rejects if:
+`validateInput` (`whatIfAudit.ts:62-77`) rejects, in this order:
 
-1. **No DPR loaded (or no student)** (`session.degreeProgressReport` or `session.student` missing). Returns: `"I need your Albert Degree Progress Report (DPR) to run a what-if comparison. Please upload your DPR and try again."` This check runs FIRST — a hypothetical audit compares against the student's real coursework, which comes from the DPR, so the tool refuses without it.
+1. **No DPR loaded, or no student** (`session.degreeProgressReport` or `session.student` missing). Returns: `"I need your Albert Degree Progress Report (DPR) to frame a what-if comparison. Please upload your DPR and try again."` This check runs FIRST — the estimate is framed against the student's real coursework, which comes from the DPR.
 2. **Empty hypothetical list.** Returns: `"hypotheticalPrograms must be non-empty."`
 
-The hook does **not** check whether each program id exists in the catalog. That check is performed inside `call()` to route between the two execution paths.
+The hook does **not** check whether each program id exists in any catalog — there is no catalog path left to route to. This is the DPR-first doctrine: DPR is the authoritative tier-1 record; the hypothetical program's requirements are tier-2 bulletin RAG fetched via `search_policy`, never an authored rule set.
 
 ---
 
-## 4. What it reads
+## 3. What it reads
 
-From `ToolSession`:
-- `session.degreeProgressReport` — **required** (`validateInput` rejects without it). Used in the unauthored path to populate the `guidance` string.
-  - Reads `dpr.cumulative.creditsUsed` and `dpr.cumulative.cumulativeGpa`.
-  - Counts rows in `dpr.courseHistory` whose `type === "TE"` (transfer entries).
-- `session.student` — required, read-only profile.
-- `session.programs` (a `Map<string, Program>`) — authored program catalog.
-- `session.courses` — course catalog.
-- `session.schoolConfig` — drives the cross-program audit semantics.
+From `ToolSession`, `call()` reads only:
+- `session.degreeProgressReport` — **required** (`validateInput` rejects without it). Used to compose the `guidance` string:
+  - `dpr.cumulative.creditsUsed` (`?? 0`)
+  - `dpr.cumulative.cumulativeGpa` (`?? 0`)
+  - the count of `dpr.courseHistory` rows whose `type === "TE"` (transfer entries)
+- `session.student` — required by `validateInput`, but `call()` itself does not read any field off it.
+
+It no longer reads `session.programs`, `session.courses`, or `session.schoolConfig` — those imports and the audit engine they fed are gone.
 
 ---
 
-## 5. Algorithm
+## 4. Algorithm
 
-`call()` (`whatIfAudit.ts:90-139`) routes between two paths.
+`call()` (`whatIfAudit.ts:83-110`) has a single path. There is no longer a branch on whether programs are "in catalog."
 
-### Path selection
-
-```
-allInCatalog = every(hypotheticalPrograms, id => session.programs?.has(id))
-```
-
-- If `allInCatalog` is true AND both `session.programs` and `session.courses` are set → **Authored Path**.
-- Otherwise → **Unauthored Path**.
-
-> **Production note:** because the chat route never sets `session.programs` or `session.courses` (route.ts:245-267), `session.programs?.has(id)` is always `undefined`/falsy in production, so `allInCatalog` is always false and the Authored Path is **dead code on the live agent**. Path 2 (unauthored) is the only path that runs. Path 1 is exercised only by tests and direct engine callers that populate the catalogs themselves.
-
-### Path 1 — Authored program path
-
-Calls the audit engine at `audit/whatIfAudit.ts:66-115`:
-
-```
-whatIfAudit(
-  session.student,
-  input.hypotheticalPrograms,
-  session.programs,
-  session.courses,
-  session.schoolConfig ?? null,
-  input.compareWithCurrent ?? true,
-)
-```
-
-The engine:
-
-1. **Normalizes hypothetical entries** (`audit/whatIfAudit.ts:76-81`). Each string id is wrapped to `{ programId, programType: "major" }`. Callers passing full `ProgramDeclaration` shapes (e.g. a major + minor combo) bypass this default.
-2. **Validates ids exist** (`audit/whatIfAudit.ts:84-90`). Any id missing from `programs` produces a warning `"Program "<id>" not found in catalog; it will be skipped in the audit."`. The audit still runs; the missing programs are simply omitted from the cross-program audit downstream.
-3. **Clones the profile in memory** (`audit/whatIfAudit.ts:92-95`). Creates `hypoStudent = { ...student, declaredPrograms: hypoDeclarations }`. The original `student` object is **never mutated**.
-4. **Runs `crossProgramAudit(hypoStudent, programs, courses, schoolConfig)`**. This is the same audit engine used by `check_overlap` — it produces a per-program audit with rules, credits completed / required, status, and any cross-program double-count warnings.
-5. **If `compareWithCurrent` is false OR the student has no declared programs**, returns `{ hypothetical, warnings }` and stops.
-6. **Otherwise** also runs `crossProgramAudit(student, programs, courses, schoolConfig)` against the **current** declarations, then calls `computeComparison(current, hypothetical)` (`audit/whatIfAudit.ts:119-144`):
-
-   - `currentIds = set of program ids in current.programs`
-   - `hypoIds = set of program ids in hypothetical.programs`
-   - `droppedPrograms = currentIds - hypoIds`
-   - `addedPrograms = hypoIds - currentIds`
-   - `currentSatisfying = union of all rule.coursesSatisfying ids across current's audits`
-   - `hypoSatisfying = same for hypothetical's audits`
-   - `sharedRequirementCourses = hypoSatisfying ∩ currentSatisfying`
-   - `coursesTransferred = hypoSatisfying.size` (how many distinct courses already taken count toward the hypothetical)
-   - `currentRemaining = sum of rule.remaining across all current rules`
-   - `hypoRemaining = sum of rule.remaining across all hypothetical rules`
-   - `additionalRequirementsRemaining = hypoRemaining - currentRemaining` (positive means more work, negative means less)
-
-Returns `{ hypothetical, current, comparison, warnings }`.
-
-### Path 2 — Unauthored program path
-
-When at least one hypothetical id is not in the catalog, `call()` does NOT run the deterministic audit (`whatIfAudit.ts:107-138`). Instead:
-
-1. **Identify missing ids**: `missing = hypotheticalPrograms.filter(id => !session.programs?.has(id))`.
-2. **Build `guidance` string** from the DPR. Because `validateInput` now requires a DPR, the with-DPR branch always runs in practice:
-   - **With DPR** (the live branch): `"Your current state from the DPR: <credits> credits earned, cumulative GPA <gpa, fixed to 3 decimals>, <transferRowCount> transfer-credit row(s) recorded. Run search_policy for the hypothetical program's bulletin requirements; cross-reference your earned credits against those requirements; consult an adviser for the official audit."`
-   - **Without DPR** (now unreachable — `validateInput` rejects before this point): the code still carries a fallback string `"No DPR loaded — use search_policy to look up the hypothetical program's requirements in the bulletin, and consult an adviser for the official audit."`
-3. **Return an `UnauthoredProgramEstimate` envelope** with:
+1. Read `dpr = session.degreeProgressReport`.
+2. Build the `guidance` string. Because `validateInput` guarantees a DPR, the with-DPR branch always runs:
+   - **With DPR** (the live branch, lines 89-97):
+     `"Your current state from the DPR: <credits> credits earned, cumulative GPA <gpa, fixed to 3 decimals>, <transferRowCount> transfer-credit row(s) recorded. Run search_policy for the hypothetical program's bulletin requirements; cross-reference your earned credits against those requirements; consult an adviser for the official audit."`
+   - **Without DPR** (lines 98-102 — *now unreachable*, `validateInput` rejects first): a fallback string `"No DPR loaded — use search_policy to look up the hypothetical program's requirements in the bulletin, and consult an adviser for the official audit."` Kept only for defensive completeness.
+3. Return an `UnauthoredProgramEstimate` (the only output shape):
    - `kind: "unauthored_program_estimate"`
-   - `requestedProgramIds`: the missing ids
-   - `disclaimer`: the verbatim text (see below)
-   - `guidance`: the string above.
+   - `requestedProgramIds`: the input `hypotheticalPrograms` verbatim (all of them, not a filtered subset — there is no catalog to filter against)
+   - `disclaimer`: the verbatim text (see §6)
+   - `guidance`: the string above
 
 ### The verbatim disclaimer
 
-Defined as the `DISCLAIMER` constant at `whatIfAudit.ts:45-47`:
+Defined as the `DISCLAIMER` constant at `whatIfAudit.ts:37-39`:
 
 > **"This estimate is based on AI-extracted requirements from NYU's bulletin. Verify with an academic adviser before applying for an internal transfer or program change."**
 
 This exact string is:
-1. Embedded in the returned `UnauthoredProgramEstimate.disclaimer` field.
-2. Appended to the summary text with the prefix `"REQUIRED DISCLAIMER (must appear verbatim in your reply): "`.
-3. Returned from `extractVerbatim()` (lines 175-184). The validator's verbatim-drift check pins this text — the LLM's reply MUST contain it unchanged.
-
-For the **authored path**, `extractVerbatim` returns `null` (no verbatim requirement — the audit verdict is deterministic).
-
-### Flow diagram
-
-```mermaid
-flowchart TD
-    V{validateInput:<br/>DPR + student loaded?} -- no --> REJ[Refuse: ask student<br/>to upload their DPR]
-    V -- yes --> A[call with hypotheticalPrograms]
-    A --> B{Every id in session.programs?}
-    B -- yes --> C[Build hypoStudent = clone with new declaredPrograms]
-    C --> D[crossProgramAudit on hypoStudent]
-    D --> E{compareWithCurrent and current has programs?}
-    E -- no --> F[Return hypothetical + warnings]
-    E -- yes --> G[crossProgramAudit on current]
-    G --> H[computeComparison: dropped, added, shared, deltas]
-    H --> I[Return hypothetical + current + comparison + warnings]
-    B -- no --> J[Identify missing ids]
-    J --> L[guidance with credits, gpa, transfer count<br/>DPR guaranteed present by validateInput]
-    L --> N[Return unauthored_program_estimate envelope]
-    N --> O[extractVerbatim returns disclaimer; validator pins it]
-```
+1. Embedded in the returned `UnauthoredProgramEstimate.disclaimer` field (line 107).
+2. Appended to the summary text with the prefix `"REQUIRED DISCLAIMER (must appear verbatim in your reply): "` (line 118).
+3. Returned from `extractVerbatim()` (lines 121-123). The validator's verbatim-drift check pins this text — the LLM's reply MUST contain it unchanged.
 
 ---
 
-## 6. What it returns
+## 5. What it returns
 
-Output is a discriminated union (`whatIfAudit.ts:41-43`):
+The output is always one shape — `UnauthoredProgramEstimate` (`whatIfAudit.ts:26-35`):
 
-**Authored path** — `WhatIfResult`:
-```
-{
-  hypothetical: CrossProgramAuditResult,
-  current?: CrossProgramAuditResult,
-  comparison?: {
-    coursesTransferred: number,
-    additionalRequirementsRemaining: number,
-    droppedPrograms: string[],
-    addedPrograms: string[],
-    sharedRequirementCourses: string[]
-  },
-  warnings: string[]
-}
-```
-
-**Unauthored path** — `UnauthoredProgramEstimate`:
 ```
 {
   kind: "unauthored_program_estimate",
-  requestedProgramIds: string[],
-  disclaimer: string,    // the fixed text above
-  guidance: string
+  requestedProgramIds: string[],   // the hypothetical ids, echoed back
+  disclaimer: string,              // the fixed verbatim text above
+  guidance: string                 // DPR-derived next-step guidance
 }
 ```
 
-Each `CrossProgramAuditResult.programs[]` entry carries:
-- `declaration` — `{ programId, programType }`
-- `program` — the resolved Program object
-- `audit` — including `programName`, `overallStatus`, `totalCreditsCompleted`, `totalCreditsRequired`, and a `rules[]` array with `status`, `coursesSatisfying[]`, `remaining`, etc.
+There is no longer a discriminated union; the `WhatIfResult` / `CrossProgramAuditResult` / `comparison` shapes from the old authored path are gone.
 
 ---
 
-## 7. Envelope behavior
+## 6. Envelope behavior
 
-- **Output mode is `semi_hardened`** (line 68).
-- **`extractVerbatim`** returns the disclaimer ONLY on the unauthored-path branch; returns `null` for the authored path. The validator only pins text when `extractVerbatim` returns a non-null string — so the authored path stays under free synthesis.
+- **Output mode is `semi_hardened`** (line 61).
+- **`extractVerbatim`** (lines 121-123) **always** returns the disclaimer — there is no longer a path that returns `null`. Every call pins the disclaimer into the reply.
 - **`isReadOnly: true`** (default).
 - **`maxResultChars` = 3000**; `summarizeResult` is truncated above that.
-- The audit engine intentionally never mutates `student` — the hypothetical declarations are applied to a shallow clone (`audit/whatIfAudit.ts:92-95`).
+- The tool never mutates `session` and never mutates `student` — it only reads the DPR cumulative block.
 
 ---
 
-## 8. Summary text format
+## 7. Summary text format
 
-`summarizeResult` (`whatIfAudit.ts:140-174`) emits one of two shapes:
+`summarizeResult` (`whatIfAudit.ts:111-120`) emits a single shape:
 
-**Unauthored estimate path** (when `result.kind === "unauthored_program_estimate"`):
 ```
-WHAT-IF (estimate, no structured rules available)
-  Requested programs without authored rules: <ids>
+WHAT-IF (estimate — there is no DPR for a hypothetical program)
+  Requested program(s): <ids>
   Guidance: <guidance>
   REQUIRED DISCLAIMER (must appear verbatim in your reply): <disclaimer>
 ```
 
-**Authored path:**
-```
-WHAT-IF: <N> program(s) hypothetically declared
-  <PROGRAMTYPE_UPPER> <programName> — <unmetCount> unmet rules, <completed>/<required> credits
-  ...
-Comparison to current:                          (omitted when no comparison)
-  Courses transferable to hypothetical: <coursesTransferred>
-  Net additional requirements remaining: <delta>
-  Dropped: <ids>                                (omitted when empty)
-  Added: <ids>                                  (omitted when empty)
-Warnings: <up to first 3 warnings>              (omitted when no warnings)
-```
-
-Notes:
-- `unmetCount` = count of rules where `status !== "satisfied"`.
-- `programType` is uppercased from the declaration (e.g. `MAJOR`, `MINOR`).
-- Only the first 3 warnings are joined into the warnings line; rest are dropped from the summary (still in the structured output).
+There is no longer an "authored path" branch in `summarizeResult` (no unmet-rule counts, no comparison block, no warnings line) — those were deleted with the audit engine.
 
 ---
 
-## 9. Interactions with other tools
+## 8. Interactions with other tools
 
-- **Uses `crossProgramAudit` internally** — the same engine `check_overlap` uses. Calling `what_if_audit` with `compareWithCurrent: true` essentially runs the same audit twice (once for current, once for hypothetical) and diffs them.
-- **Routes to `search_policy`** in the unauthored path's `guidance` string — the LLM should chain there to look up the missing program's bulletin requirements.
-- **DPR pipeline** — the tool REQUIRES `session.degreeProgressReport` (`validateInput` rejects without it). In the unauthored path it pulls `creditsUsed`, `cumulativeGpa`, and TE-row count from the DPR to compose the guidance string.
-- **Verbatim contract enforcement** — depends on the response validator that consumes `outputMode: "semi_hardened"` and `extractVerbatim`. The exact `DISCLAIMER` string must appear unchanged in the LLM's reply when the tool produced an unauthored estimate.
+- **`search_policy`** — the `guidance` string explicitly tells the model to fire `search_policy` next for the hypothetical program's bulletin requirements. This is the intended chain. See [`search_policy`](./search_policy.md).
+- **`run_full_audit`** — the authoritative DPR audit for the *current* declared programs. `what_if_audit` reads the same `dpr.cumulative` block to anchor its estimate, but does not call `run_full_audit`. See [`run_full_audit`](./run_full_audit.md).
+- **`propose_plan_change` / `simulate_alternatives`** — the correct destination for *course-level* "what if I take A instead of B" questions; those run the forward-schedule solver. `what_if_audit` is only for *program-level* hypotheticals. See [`propose_plan_change`](./propose_plan_change.md) and [`simulate_alternatives`](./simulate_alternatives.md).
+- **Verbatim contract enforcement** — depends on the response validator that consumes `outputMode: "semi_hardened"` and `extractVerbatim`. The exact `DISCLAIMER` string must appear unchanged in the LLM's reply.
 
 ---
 
-## 10. Edge cases
+## 9. Edge cases
 
-- **No DPR loaded** — rejected by `validateInput` before any other check (the DPR guard runs first). Returns the "upload your DPR" message.
-- **Empty `hypotheticalPrograms` array** — rejected by `validateInput` (after the DPR check passes) before `call()` runs.
-- **Mixed list (some ids in catalog, some not)** — the path selector requires `every()` to be in catalog. If any id is missing, the **entire call** routes to the unauthored path; the authored ids are never audited. `missing` reflects only the missing ids, not all hypothetical ids.
-- **Authored ids passed as strings vs as ProgramDeclaration objects** — the audit engine normalizes strings to `{ programId, programType: "major" }`. To audit a hypothetical minor, callers must pass the full declaration object (the agent doesn't currently do this — the tool's input schema accepts strings only at the Zod layer).
-- **Hypothetical id present in catalog but with no rules** — `crossProgramAudit` handles this; result includes the program with no rules and no satisfying courses.
-- **`student.declaredPrograms` is empty** — when `compareWithCurrent === true`, the engine still skips the comparison branch (`audit/whatIfAudit.ts:99-104`). Only the hypothetical audit + warnings are returned.
-- **`compareWithCurrent === false`** — same: no current audit, no comparison block.
-- **`schoolConfig` is null** — passed through to `crossProgramAudit` which falls back to CAS defaults. No special handling at this layer.
-- **DPR loaded but with `creditsUsed` undefined** — falls back to `?? 0`. Same for `cumulativeGpa`. The guidance still composes; numbers render as `0` / `0.000`.
+- **No DPR loaded (or no student)** — rejected by `validateInput` before `call()` runs. Returns the "upload your DPR" message.
+- **Empty `hypotheticalPrograms` array** — rejected by `validateInput` (after the DPR check passes).
+- **Multiple hypothetical ids** — all are echoed back in `requestedProgramIds`; there is no per-program audit, so the count of ids does not change the output structure.
+- **DPR loaded but `creditsUsed` / `cumulativeGpa` undefined** — fall back to `?? 0`. The guidance still composes; numbers render as `0` / `0.000`.
 - **DPR loaded but `courseHistory` empty** — transfer row count is 0.
-- **Authored path with `warnings.length > 3`** — the summary shows the first 3 only with `" | "` separator; the structured output carries all of them.
-- **`extractVerbatim` for authored path** — returns `null`, so the response validator does not enforce a verbatim contract. The authored-path verdict is deterministic; the LLM can synthesize freely around it.
 - **Disclaimer drift** — if the LLM paraphrases the disclaimer (e.g. "verify with your adviser before applying"), the verbatim-drift check fails because the validator does exact-string matching against `extractVerbatim`'s output.
+
+---
+
+## Known limitations
+
+- **No deterministic program audit exists anymore.** The tool cannot tell a student how many of their courses would transfer to the hypothetical, how many extra requirements they'd face, or which programs they'd add/drop. Those numbers came from the now-removed `crossProgramAudit` engine. The replacement is: read the bulletin via `search_policy` and consult an adviser. This is intentional under the DPR-first doctrine, not a bug — there is no DPR for a program the student isn't in, so any structured number would be a guess.
+- **`compareWithCurrent` is dead input.** It is accepted by the Zod schema for backward compatibility but never read. Passing `false` has no effect.
+- **The "without DPR" guidance branch is unreachable.** `validateInput` rejects before `call()` can hit it; it remains only as defensive code.
 
 ---
 
 ## Summary
 
-`what_if_audit` runs a profile-cloning, deterministic cross-program audit against a hypothetical program set when all ids are in the authored catalog, with an optional diff against the current declarations. When any hypothetical program is unauthored, it returns a structured estimate envelope carrying a fixed, verbatim disclaimer that the response validator pins into the LLM's reply. The student's actual profile is never modified on either path.
+`what_if_audit` is a read-only, DPR-anchored **estimate** tool for hypothetical program changes. It requires a loaded DPR (refuses otherwise), composes a current-state guidance string from `dpr.cumulative` + the transfer-row count, and returns a structured estimate envelope carrying a fixed verbatim disclaimer that the response validator pins into the LLM's reply. It always points the student at `search_policy` and an adviser; it never produces audit numbers and never modifies the profile.

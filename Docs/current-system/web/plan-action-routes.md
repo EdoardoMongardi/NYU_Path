@@ -1,6 +1,8 @@
 # Plan Action Routes — Deterministic Plan Mutation API
 
-## TL;DR
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+## Purpose
 
 These are the endpoints behind the sidebar's clickable buttons — Add, Move, Swap, Drop, Lock, Confirm. When the student drags a course from one term to another, or clicks "Lock this course in place," the request lands here instead of going through the AI. That's intentional: a drag-and-drop should feel instant, and there's nothing for the AI to interpret about an unambiguous gesture. Each action runs in two steps: first the server checks if the change is valid and returns a preview (without saving anything), then the student clicks "Confirm" and a second call actually commits the change. Two extra endpoints sweeten the experience: one rewrites the dry preview into friendly prose using a small AI call, and another fetches available section times for upcoming terms. Skipping the AI keeps things fast, predictable, and free of token cost.
 
@@ -175,12 +177,12 @@ Delegates to `handleProposeRoute`.
 
 1. Runs preflight (auth + rate-limit + JSON parse).
 2. Looks up the staged mutation via `runConfirmStage`.
-3. Applies the mutation through `confirmPlanChangeTool`.
+3. Applies the mutation through `confirmPlanChangeTool` — which routes the post-mutation schedule through the engine's 7-axis `runGraduationPathValidator` via `finalizeForwardSchedule`, the same authoritative gate the build/propose/simulate paths use.
 4. If `force === true` and the engine returns `feasible: false`, reclassifies the persisted schedule's `state` from `infeasible-draft` to `student-preferred-invalid-draft` and re-persists it.
 
 A successful confirm removes the staging entry — confirming the same id twice returns 404.
 
-**Response shape (200):** `PlanConfirmResponse` — see Section 4.
+**Response shape (200):** `PlanConfirmResponse` — see Section 4. Note the response carries the resulting `forwardSchedule` but **no updated preferences** — see the Known limitations note in Section 4.
 
 **Error cases:**
 - 401 — no session
@@ -375,6 +377,8 @@ Returned by `/api/plan/confirm` (source: `apps/web/lib/planActionOrchestrator.ts
 - `forwardSchedule` — the persisted schedule (in either slot).
 - `consumedMutationId` — the UUID just consumed; no longer resolvable in the staging map.
 
+> **Known limitation — stale Lock/Unlock labels.** `PlanConfirmResponse` does **not** carry an updated `SchedulePreferences`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the client's confirm handler (`apps/web/app/chat/page.tsx:894-896`) only calls `setForwardSchedule(...)` — it never refreshes the `schedulePreferences` state that drives the sidebar's Lock/Unlock popover label. The in-code comments at `page.tsx:160-162` and `page.tsx:297-302` claim the confirm round-trip returns updated prefs, but neither the response shape nor the handler does this. The label only re-syncs on a full reload, which re-hydrates prefs from `/api/session/restore`. This is a known UI bug, not intended behavior.
+
 ### 4.3 Per-route concerns shared by the verbs
 
 - **Runtime.** Each route declares `export const runtime = "nodejs"` — required because the engine relies on Node-only APIs (`crypto.randomUUID`, filesystem reads for the bundled catalog).
@@ -392,10 +396,10 @@ The plan-action routes bypass the agent loop entirely. They are the deterministi
 
 - **Latency matters.** A drag-to-move should feel instant. The agent loop adds at minimum one model round-trip; the plan-action routes hit the engine directly in ~180-600ms.
 - **No ambiguity exists.** A drag from term A to term B has a single, unambiguous `PlanMutation[]` encoding. There is nothing for the LLM to interpret.
-- **Token budget is precious.** Every drag should not cost Anthropic credits. The propose stage costs zero tokens. The polish call is optional, env-gated, and uses Haiku with a strict rewrite-only prompt; the engine output is the source of truth.
+- **Token budget is precious.** Every drag should not cost Anthropic credits. The propose stage costs zero tokens. The polish call is optional, env-gated, and uses Anthropic Haiku (`claude-haiku-4-5-20251001`, pinned in `apps/web/lib/llmPolishPrompt.ts:96`) with a strict rewrite-only prompt; the engine output is the source of truth. (This Haiku polish model is independent of the agent loop's default primary model, `claude-sonnet-4-6`.)
 - **Side-by-side bubble UX.** The agent loop emits chat turns. The plan-action routes emit a structured `pendingMutationId` plus a deterministic template that the UI surfaces as a confirm-bubble — clearly distinct from a model reply.
 
-The two paths share the engine's two tools (`proposePlanChangeTool`, `confirmPlanChangeTool`), so the validation semantics, the conflict-kind taxonomy, and the persisted state model are identical. The plan-action routes simply skip the agent shell and call the tools directly, in a fresh `ToolSession` rebuilt from the persistence stores.
+The two paths share the engine's two tools (`proposePlanChangeTool`, `confirmPlanChangeTool` — both still live in the registry at `packages/engine/src/agent/registry.ts`), so the validation semantics, the conflict-kind taxonomy, and the persisted state model are identical. Both tools route the post-mutation schedule through `finalizeForwardSchedule`, which runs the feasibility-first backtracking search (`findFirstValidPlan` → `localImprove` → `materializePlan`) and the authoritative 7-axis `runGraduationPathValidator` — the legacy greedy solver was removed in the Phase 0-2 rebuild (PRs #35-#41). The plan-action routes simply skip the agent shell and call the tools directly, in a fresh `ToolSession` rebuilt from the persistence stores.
 
 ```mermaid
 flowchart TB
@@ -409,6 +413,6 @@ flowchart TB
         PlanRoutes --> Orch[runProposeStage / runConfirmStage]
         Orch --> Tools
     end
-    Tools --> Engine[engine validators + solver]
-    Engine --> Store[(scheduleStore + profileStore)]
+    Tools --> Finalize[finalizeForwardSchedule: search + 7-axis validator]
+    Finalize --> Store[(scheduleStore + profileStore)]
 ```

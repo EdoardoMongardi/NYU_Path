@@ -1,5 +1,7 @@
 # UI Components
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 ## TL;DR
 
 This is everything the student sees on screen — the landing page, the chat thread, and especially the sidebar that lives next to the conversation. The sidebar is the dense, interactive part: it shows a card per academic term, each with the courses planned for it, the credit total, and a row of little pill-shaped buttons for actions like swap, drop, lock, or move. The student can drag a course from one term to another, click a slot to open a verb menu, or type a new course id into a free-form "+ Add course" input. For the very next term, if section times have been loaded, the sidebar swaps the basic course list for a richer "Sections" view showing meeting patterns, instructors, and CRNs. The whole sidebar is a pure reflection of state piped in from the chat page — it never fetches its own data, just renders what's handed to it.
@@ -302,6 +304,8 @@ Top-of-sidebar identity + degree progress widget.
 
 Each field gracefully degrades when its source is unavailable — missing values drop their row entirely instead of showing "null" or "0".
 
+> Known limitation: the `student` prop is reconstructed **client-side from the raw DPR** by the chat page (`buildStudentProfileFromDpr`, with `visaStatus` forced to `"domestic"` unless the page captured `"f1"`). It does not carry the server's authenticated `studentId` or any home-school / program overrides, so these identity fields can disagree with the server-side profile. See [chat-ui-client.md](./chat-ui-client.md) "Known limitations".
+
 ## PriorCreditsCard — `app/chat/sidebar/PriorCreditsCard.tsx`
 
 Renders the AP/IB/transfer (TE) credits as a single card above all term cards.
@@ -357,3 +361,9 @@ flowchart TD
 ```
 
 The sidebar is a pure renderer of its props plus its local interaction state. Every meaningful schedule change comes in via `schedule` and `materialization` props from the chat page, which in turn derives them from the v2 SSE stream and the session-restore call.
+
+## Known limitations
+
+- **State flows one way.** Server SSE events and `/api/plan/*` HTTP responses flow `route → page → sidebar`. The agent never observes sidebar edits mid-conversation — a slot the student dragged, swapped, or locked in the sidebar is only visible to the agent on the next chat turn, once the persisted `forwardSchedule` is reloaded into the request body. There is no back-channel from the sidebar into the live agent loop.
+- **The `plan_action_bubble` text the sidebar's verbs produce is rendered by the chat page via `dangerouslySetInnerHTML` with no sanitization** (the markup transform lives in `page.tsx`, not in the sidebar tree). See [chat-ui-client.md](./chat-ui-client.md) "Known limitations" for the XSS exposure.
+- **`gatherAddCourseSuggestions` / `gatherSwapAlternatives` are V1 client-side stubs.** Both only match against course IDs already present in the loaded `forwardSchedule` — they do NOT hit the catalog. The eventual catalog-backed autocomplete (`/api/v2/search-courses`, see [course-catalog-search.md](./course-catalog-search.md)) is not wired in yet.

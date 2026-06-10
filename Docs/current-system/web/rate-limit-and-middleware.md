@@ -1,5 +1,7 @@
 # Rate Limit and Middleware
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 ## TL;DR
 
 Two pieces of background plumbing protect the app from abuse. The first is a simple daily counter that caps how many questions a student (or an unauthenticated visitor) can fire at the server in a 24-hour window — say, 30 chat messages, 60 sidebar clicks, 5 login attempts from one IP. Each route picks its own cap and key, so a flood of login attempts doesn't burn the chat allowance. The second is a gatekeeper that sits in front of the operator-only admin dashboard, asking for a username and password before letting anyone in. Together they keep the system polite to honest users and unfriendly to bad actors, without getting in the way of normal usage.
@@ -84,10 +86,10 @@ The auth and onboard routes derive the IP themselves — neither uses a shared h
 
 ### Storage
 
-A module-level `Map<string, Bucket>` (`apps/web/lib/rateLimit.ts:28`). Single-process, in-memory. Several consequences:
+A module-level `Map<string, Bucket>` (`apps/web/lib/rateLimit.ts:28`). Single-process, in-memory. This is the ONLY backing store — there is no Postgres or Redis path. Even on a deployment where Postgres is provisioned (it backs the OTP table, sessions, schedules, etc.), the rate limiter still uses this in-process Map and ignores the database entirely. Several consequences:
 
-- **Restart wipes state.** On a server restart, every bucket disappears. The header comment frames this as acceptable for cohort A where the server runs continuously and a restart would lose at most ~30 counts for ~10 active users.
-- **No coordination across instances.** A multi-instance deployment would let a flood land 5 OTP issues per instance per IP, not 5 globally. The header comment explicitly flags this: when W12 + Postgres land, the storage should migrate to Redis or a Postgres counter, keeping the same `consume(userId)` shape.
+- **Restart wipes state.** On a server restart, every bucket disappears, and every quota resets to zero. The header comment frames this as acceptable for cohort A where the server runs continuously and a restart would lose at most ~30 counts for ~10 active users. In practice a restart is a free reset of every limit on this page.
+- **No coordination across instances.** A multi-instance deployment would let a flood land 5 OTP issues per instance per IP, not 5 globally. The header comment flags this as deferred: it says that when "W12 + Postgres land" the storage should migrate to Redis or a Postgres counter, keeping the same `consume(userId)` shape. That migration has NOT happened — see [Known limitations](#known-limitations).
 - **No eviction.** Buckets accumulate indefinitely; stale-day buckets aren't garbage-collected, just overwritten when their key is touched again. With ~10 active users in cohort A this is unbounded but small.
 
 ### Result shapes
@@ -112,7 +114,7 @@ Callers map blocked responses to HTTP 429 with `Retry-After: <retryAfterSeconds>
 
 ### Anonymous users
 
-The comment block at `apps/web/lib/rateLimit.ts:53-62` notes that `userId === "anonymous"` is bucketed globally, so unauthenticated cohort A users share a single soft cap. Once W12 lands and JWT subjects flow through, each student gets their own bucket via their auth-derived studentId.
+The comment block at `apps/web/lib/rateLimit.ts:53-62` notes that `userId === "anonymous"` is bucketed globally, so any caller that passes the literal `"anonymous"` shares a single soft cap. In the live routes today this only happens when no IP header is present: the OTP-issue and onboard keys fall back to `otp-ip:anonymous` / `onboard-ip:anonymous` when both `X-Forwarded-For` and `X-Real-IP` are absent. The `refresh-dpr` route always has a real studentId (it is auth-gated), so it never buckets anonymously. The comment's framing — "once W12 lands and real userIds arrive, each student gets their own bucket" — describes a future state; for authenticated routes the studentId bucketing is already in place via `auth.sub`.
 
 ### What rateLimit.ts does NOT do
 
@@ -161,7 +163,7 @@ Critically for understanding the app's auth posture:
 - It does NOT touch the `nyupath_session` cookie. Session auth for `/login`, `/chat`, `/api/session/*`, `/api/onboard/refresh-dpr`, and the v2 chat route is enforced by each route handler calling `readSessionFromRequest` (from `apps/web/lib/auth/session.ts`), not by the middleware.
 - It does NOT apply CORS headers. Same-origin requests from the Next.js app don't need them; cross-origin requests would simply fail without any middleware intervention.
 - It does NOT call `consumeRequest`. The rate limiter is invoked by individual route handlers (OTP issue, onboard, refresh-dpr, the chat route), not by the middleware.
-- It does NOT redirect unauthenticated visitors of `/chat` to `/login`. The `/chat` page (out of scope here) handles its own redirect, presumably by checking the session cookie in a Server Component.
+- It does NOT redirect unauthenticated visitors of `/chat` to `/login`. That gate lives in the `/chat` Server Component layout (`apps/web/app/chat/layout.tsx`), which calls `readSessionFromCookies()` and `redirect("/login")` when there is no valid session — see the [auth-routes doc, §8](./auth-routes.md#8-chat-route-gating).
 
 ### Why one middleware, two surfaces in this doc
 
@@ -178,4 +180,14 @@ A consolidated view of what wraps what:
 | `consumeRequest` per student | `/api/onboard/refresh-dpr`, chat route       | Post-auth daily quota                    |
 | `readSessionFromRequest` | `/api/session/clear`, `/api/session/restore`, `/api/onboard/refresh-dpr`, chat route | JWT cookie verification |
 
-The rate limiter and the auth check are independent — neither calls the other, and a request can be rejected by either without ever reaching the route's business logic. The order inside each route is consistently rate-limit-first (so an unauthenticated flood can't drain server resources just to be rejected on a missing cookie), followed by auth, followed by body parsing, followed by the route's actual work.
+The rate limiter and the auth check are independent — neither calls the other, and a request can be rejected by either without ever reaching the route's business logic. The order is NOT uniform across routes, because the bucket key dictates it:
+
+- **IP-keyed, pre-auth routes** (`/api/auth/otp/issue`, `/api/onboard`) run rate-limit FIRST, then parse the body. They have no session to read, and the IP-derived key needs no auth, so an unauthenticated flood is rejected before any work (`apps/web/app/api/auth/otp/issue/route.ts:32`).
+- **Student-keyed, post-auth route** (`/api/onboard/refresh-dpr`) runs auth FIRST (`readSessionFromRequest`), then rate-limit, then parses the multipart body. It must derive `studentId = auth.sub` before it can build the `refresh-dpr:<studentId>` bucket key, so auth necessarily precedes the limiter (`apps/web/app/api/onboard/refresh-dpr/route.ts:51,59`). The rate-limit still runs before the body is read, so a flood of 10 MB PDFs can't allocate an `ArrayBuffer`.
+
+## 4. Known limitations
+
+- **Rate limiting is entirely in-process and resets on restart.** `lib/rateLimit.ts` is a single-process `Map` with no Postgres or Redis backing, even on deployments where Postgres is provisioned. Every server restart resets every quota to zero, and a multi-instance deployment would multiply each cap by the instance count (5 OTP issues per IP per instance, not 5 globally). The code's own comments describe migrating to Redis/Postgres "when W12 lands"; that has not happened.
+- **IP-keyed limits are spoofable.** The OTP-issue and onboard buckets key on the first hop of the client-supplied `X-Forwarded-For` header (then `X-Real-IP`). Neither is validated against a trusted proxy, so a caller that sets a fresh `X-Forwarded-For` value per request gets a fresh 5/day (OTP) or 10/day (onboard) bucket each time. This is an abuse-signal speed bump, not a hard control.
+- **Per-route caps are honest but small.** The live caps are: OTP issue 5/day per IP, onboard 10/day per IP, refresh-dpr 10/day per student. The `DEFAULT_LIMIT = 30` constant exists for callers that omit a limit; it is the documented chat-route default but is only applied wherever a caller invokes `consumeRequest` without a second argument.
+- **Stale code comment in the observability page.** The header comment in `apps/web/app/admin/observability/page.tsx:17-19` still claims the dashboard runs with "no auth" and that an IP allow-list is a "TODO once W12 ships." That is stale: `apps/web/middleware.ts` already Basic-Auth gates every `/admin/*` route (constant-time credential compare, fail-closed 503 when `OBSERVABILITY_USER` / `OBSERVABILITY_PASS` are unset). The dashboard is not publicly reachable; only the comment is out of date.

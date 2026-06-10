@@ -1,5 +1,9 @@
 # `materialize_sections` — Section Materialization Tool
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+This tool was not touched by the Phase 0-2 solver rebuild; it is a Phase-15 tool that operates downstream of the forward schedule. The claims below were re-verified against the current source.
+
 ## TL;DR
 
 When you've got a plan with specific courses in a future semester and you ask "what sections are actually offered for these courses?", "give me a schedule for Fall 2026 with real CRNs," or "find me a time-conflict-free combo for these classes," this tool pulls the live class-search data from NYU's FOSE service and figures out a real, registerable schedule. It looks at every specific course in the term you name, fetches the available open and waitlist sections for each, filters out anything that violates your scheduling preferences (no 8 AMs, no Friday classes, whatever you set), tries every combination of one section per course, drops any combos with time conflicts, then ranks the survivors using a re-rank weighting system. The good combinations get staged as "proposals" with deterministic IDs so you (or the agent) can pick one to actually pin into the plan via the companion tool. The tool itself doesn't change your plan — it just stages possibilities. You need an active plan, and the term you're materializing has to be a future, non-locked semester (you can't redo a past term).
@@ -18,14 +22,14 @@ flowchart LR
 
 ---
 
-## 1. Purpose
+## Purpose
 
-`materialize_sections` is the first half of a two-step write contract that turns a structural forward plan into a set of concrete, conflict-free **section-level proposals** for one non-locked future semester.
+`materialize_sections` is the first half of a two-step write contract that turns a structural forward plan into a set of concrete, conflict-free **section-level proposals** for one non-locked future semester. It is the section-level companion to [`confirm_section_combination`](./confirm_section_combination.md), and mirrors the staging/apply shape of [`update_profile`](./update_profile.md) / [`confirm_profile_update`](./confirm_profile_update.md).
 
 It does NOT modify the schedule. It runs an end-to-end pipeline that:
 
 - Looks at every `kind: "specific_planned"` course in the target semester,
-- Fetches the live FOSE class-search data for each of those courses,
+- Fetches the live FOSE class-search data for each of those courses (only the term you name — there is no multi-term sweep),
 - Filters to open / waitlist sections,
 - Applies the student's scheduling preferences (strict drops + soft re-rank weights),
 - Enumerates conflict-free combinations across courses,
@@ -33,7 +37,9 @@ It does NOT modify the schedule. It runs an end-to-end pipeline that:
 - Stages every resulting combination under a deterministic `proposalId`, and
 - Returns the orchestrator output plus the list of proposal IDs so the LLM (or a follow-up tool call) can apply one via `confirm_section_combination`.
 
-Defined at `packages/engine/src/agent/tools/materializeSections.ts:80-306`.
+The tool is registered as a live tool in `packages/engine/src/agent/registry.ts` (one of the 20 live tools). Defined at `packages/engine/src/agent/tools/materializeSections.ts:80-306`; the orchestrator pipeline lives in `packages/engine/src/agent/sectionMaterialization/materialize.ts:228-448`.
+
+> **Known limitations.** The course-swap cascade (Decision #19) is a STUB: the tool's `swapHook` always returns `null` (`materializeSections.ts:198-201`), so a course wiped by "no open sections" or by a strict scheduling preference is simply dropped — no structural-plan alternative is ever substituted. Wiring `swapHook` into the structural solver's swap path is marked as deferred to Phase 16 (file-header comment at `materializeSections.ts:22-24`). A related deferral, "I-1", lives in `materialize.ts:353-377`: re-rank weights for any swapped-in alternative course are dropped, so swapped sections always score at the default weight of 1. Because the swap hook never fires today, I-1 is currently a no-op.
 
 ---
 

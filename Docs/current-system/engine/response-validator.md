@@ -1,5 +1,7 @@
 # Response Validator
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 > **Source files:** `packages/engine/src/agent/responseValidator.ts`, `agent/verifiers/blockquoteAttribution.ts`
 
 ## TL;DR
@@ -73,7 +75,10 @@ verbatim_drift             — semi-hardened tool's required verbatim text not p
 fabricated_attribution     — blockquote attributed to "the bulletin" but not in any search_policy chunk
 identity_drift             — agent told the user to "call me" / "email me" (it isn't a separate entity)
 quantitative_shortfall     — user asked for N units, agent delivered fewer and didn't acknowledge
-incompleteness             — defined but currently unused
+incompleteness             — never emitted by validateResponse itself; the v2 chat route reuses
+                             this kind for completeness-reviewer failures, but the reviewer is
+                             dead in production (always passes), so it never actually fires. See
+                             completeness-reviewer.md.
 ```
 
 ---
@@ -118,7 +123,7 @@ Numbers are extracted with the regex `-?\d+(?:\.\d+)?`, so negatives are include
 ### Tier-2 estimate exemption (improvement plan, Phase D)
 
 A reasoned **integer** count that isn't grounded by the rule above is **exempt** when ALL hold:
-1. a **Tier-2 estimate tool** ran this turn with a non-high-confidence / estimate result — i.e. an invocation of `search_policy`, `get_program_requirements`, `what_if_audit`, or `check_transfer_eligibility` whose summary matches `confidence[:=](low|medium|uncertain)`, `(low|medium) confidence`, `POLICY UNCERTAINTY`, or `(estimate`;
+1. a **Tier-2 estimate tool** ran this turn with a non-high-confidence / estimate result — i.e. an invocation of `search_policy`, `get_program_requirements`, or `what_if_audit` (the exact `TIER2_ESTIMATE_TOOLS` set, `responseValidator.ts:192-196`) whose summary matches `confidence[:=](low|medium|uncertain)`, `(low|medium) confidence`, `POLICY UNCERTAINTY`, or `(estimate` (the `TIER2_LOW_CONF_RE`);
 2. the claim is **explicitly hedged** in the reply — immediately preceded by `about` / `approximately` / `roughly` / `around` / `estimated?` / `ballpark` / `on the order of` / `~`;
 3. the claim is an **integer** — decimals (GPAs, percentages) are **never** exempt.
 
@@ -151,14 +156,14 @@ The rules live in `INVOCATION_RULES`. Each rule has:
 |---|---|---|
 | `your gpa is` / `cumulative gpa is` / `you have a <digit>` | `run_full_audit` | GPA/credit claims need the audit tool. |
 | `remaining requirements?` / `unmet rules?` / `you (still) need to take` | `run_full_audit` | Unmet-requirement language must come from the audit. |
-| `next semester … take|enroll|register` / `plan(ning)? … fall|spring|summer` | `plan_forward_degree`, `view_forward_plan` | Planning recommendations need the forward planner. |
-| `internal[- ]transfer` / `transfer to cas|stern|tandon|tisch|steinhardt` / `switch (my )?school` | `check_transfer_eligibility` | Transfer claims need the eligibility tool. |
+| `next semester … take|enroll|register` / `plan(ning)? … fall|spring|summer` | `plan_forward_degree`, `view_forward_plan` | Planning recommendations need the forward planner. (The legacy `plan_semester` was removed; these two are the only planning tools.) |
+| `internal[- ]transfer` / `transfer to cas|stern|tandon|tisch|steinhardt` / `switch (my )?school` | `search_policy` | Transfer claims must be grounded in a bulletin retrieval. The authored `check_transfer_eligibility` tool was **removed** (pure-RAG decommission); `search_policy` over the internal-transfer pages is now the grounding source. |
 | `what if` / `compar(e\|ing) … vs|to|with` / `if i (added|switched|dropped)` | `what_if_audit`, `propose_plan_change`, `simulate_alternatives` | Hypothetical / what-if claims need the appropriate hypothetical tool. |
 | `policy/catalog/bulletin says|states|requires|notes|specifies` / `nyu (requires|allows|prohibits|mandates)` / `p/f, pass/fail, withdraw(al), residency, overload, repeat …(rule|policy|limit)` / `according to (the )?policy|catalog|bulletin` | `search_policy` | Policy assertions must be sourced via the RAG corpus. |
 
 ### Negation guard
 
-Before a trigger fires, the validator scans the 30 characters before the matched phrase for a negation marker (`not`, `isn't`, `aren't`, `never`, `no longer`, `rather than`, `NOT`). If a negation is present, the trigger is **skipped**. This prevents replies like *"this is NOT an internal transfer"* from being forced to call `check_transfer_eligibility`.
+Before a trigger fires, the validator scans the 30 characters before the matched phrase for a negation marker (`not`, `isn't`, `aren't`, `never`, `no longer`, `rather than`, `NOT`). If a negation is present, the trigger is **skipped**. This prevents replies like *"this is NOT an internal transfer"* from being forced to call `search_policy`.
 
 ### Violation shape
 
@@ -180,7 +185,7 @@ The rules live in `CAVEAT_RULES`.
 |---|---|---|---|---|
 | `f1_visa` | `student.visaStatus === "f1"` | `(credit load\|semester credits\|withdraw(al)?\|part-time\|full-time)` OR `\b\d{1,2}\s+credits\s+(this\|per\|next)\s+(term\|semester)\b` OR `(drop(ping)?\|leave\|leaving\|reduce(d)?\|reducing\|enroll(ing\|ed)?)…\d{1,2}\s+credits` | `\bf-?1\b` | F-1 students need an explicit F-1 mention whenever the agent discusses credit load, withdrawal, or part-time/full-time status. |
 | `internal_transfer_gpa_note` | always | `internal transfer` / `transfer (to\|into) (cas\|stern\|tandon\|tisch\|steinhardt)` | `\bgpa\b` AND `(not published\|aren't published\|isn't published\|do(es)?n't (publish\|disclose)\|not (public\|disclosed))` | Internal-transfer replies must note that GPA thresholds are not published. |
-| `low_confidence_consult_adviser` | any **Tier-2 estimate tool** (`search_policy`, `get_program_requirements`, `what_if_audit`, `check_transfer_eligibility`) returned a non-high-confidence / estimate result this turn — summary matches `confidence[:=](low\|medium\|uncertain)`, `(low\|medium) confidence`, `POLICY UNCERTAINTY`, or `(estimate` (Phase D generalized this from search_policy-only) | any reply | `(adviser\|advisor\|consult)` | When a Tier-2 lookup was low/medium confidence (or an estimate), the reply must direct the student to consult their adviser. Also the interlock for the grounding exemption (§3). |
+| `low_confidence_consult_adviser` | any **Tier-2 estimate tool** (`search_policy`, `get_program_requirements`, `what_if_audit`) returned a non-high-confidence / estimate result this turn — summary matches `confidence[:=](low\|medium\|uncertain)`, `(low\|medium) confidence`, `POLICY UNCERTAINTY`, or `(estimate` (Phase D generalized this from search_policy-only) | any reply | `(adviser\|advisor\|consult)` | When a Tier-2 lookup was low/medium confidence (or an estimate), the reply must direct the student to consult their adviser. Also the interlock for the grounding exemption (§3). |
 
 The same negation guard from §4 applies to the reply pattern.
 
@@ -195,6 +200,8 @@ The same negation guard from §4 applies to the reply pattern.
 ## 6. Validator 4 — Verbatim drift
 
 > **Rule:** when a tool result this turn carries `verbatimText` (i.e. the tool's `outputMode === "semi_hardened"`), the reply must include that text — or, if not, must at minimum quote any number from it *with* a nearby attribution noun.
+
+The **semi_hardened** tools — the ones that emit `verbatimText` — are exactly three: `get_credit_caps` (`getCreditCaps.ts:38`), `run_full_audit` (`runFullAudit.ts:172`), and `what_if_audit` (`whatIfAudit.ts:61`). **The source comment at `responseValidator.ts:530-534` claiming "currently get_credit_caps + run_full_audit" is stale — it omits `what_if_audit`.** `verbatimText` is populated in the agent loop only when `tool.outputMode === "semi_hardened"` and the tool defines `extractVerbatim` (`agentLoop.ts:576-584`); this validator just consumes whatever landed on each invocation.
 
 ### Algorithm
 
@@ -330,3 +337,7 @@ The agent loop wires this in via the `validateResponse` callback passed to `runA
 - It does not call the LLM. Every rule is regex / substring / set lookup.
 - It does not enforce that *every* claim is grounded — only "claim numbers" as defined above. Words like "you're on track" or "this is fine" can be made without grounding, by design.
 - It does not block reply delivery on its own. The agent loop owns the replay budget and final return.
+
+### Known limitation — plan-shaped claims are not checked against the engine plan
+
+The grounding validator (§3) only verifies that **numbers** trace to a tool summary, args, the user question, or an `a±b` derivation. It has **no check that a plan-shaped claim — "you'll take CSCI-UA 310 in Fall 2026", "MATH-UA 121 is in your second semester" — actually matches the term placement the forward planner produced in `session.forwardSchedule`.** Course codes and term labels are strings, not "claim numbers", so the agent can mis-state which course lands in which term (or invent a placement the planner never made) and no validator fires. This is a known **Phase-3 gap**: the post-rebuild planner (`finalizeForwardSchedule` → 7-axis `runGraduationPathValidator`) is the authority on the plan itself, but the *response* validator does not cross-check the agent's prose against that authoritative plan. Closing it would mean a new validator that diffs the reply's stated placements against the stored schedule.

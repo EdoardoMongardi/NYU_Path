@@ -1,5 +1,7 @@
 # Blockquote Attribution Verifier
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 > **Source file:** `packages/engine/src/agent/verifiers/blockquoteAttribution.ts`
 
 ## TL;DR
@@ -151,6 +153,8 @@ flowchart TD
 The agent has access to bulletin chunks via `search_policy`. The failure mode this verifier targets: the model writes a confident-looking blockquote attributed to a bulletin section, but the text doesn't appear in any chunk this turn — meaning the model invented the quote and the attribution.
 
 The verifier is **conservative**: it only fails when both (a) a clear attribution is present AND (b) the quote can't be grounded by any of the three matching paths. Token-window matching tolerates light paraphrasing (e.g., "must" → "shall", dropped parentheticals); it only fires when the load-bearing content is absent.
+
+> **Note on the CAS-centric attribution regex.** `ATTRIBUTION_RE` (`blockquoteAttribution.ts:57`) still hard-codes CAS-flavored phrases (`the CAS bulletin`, `CAS bulletin`, `per the CAS bulletin`). This predates the de-CAS migration (NYU Path now serves all NYU schools — see [`system-prompt.md`](system-prompt.md)). It does **not** weaken the check: the regex only governs *whether a quote is treated as an attributed citation*, not what it grounds against, and the generic `the bulletin` / `the catalog` / `NYU bulletin` / `§ <Section>` alternatives still fire for any school. A Stern or Tandon student's bulletin quote attributed as "the bulletin says: …" is still verified. The only blind spot is a quote attributed with a school name the regex doesn't enumerate and *no* generic phrase nearby — uncommon, and it fails open (skipped, not flagged).
 
 ---
 

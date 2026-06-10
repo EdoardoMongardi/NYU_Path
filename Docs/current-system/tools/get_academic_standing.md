@@ -1,15 +1,22 @@
 # `get_academic_standing` — Tool Audit
 
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
 Source files:
 - Tool definition: `packages/engine/src/agent/tools/getAcademicStanding.ts`
 - Standing engine: `packages/engine/src/audit/academicStanding.ts`
+- `SchoolConfig` / `CompletionRatePolicy` / `GpaTierRow` types: `packages/shared/src/types.ts`
 - Tool contract: `packages/engine/src/agent/tool.ts`
 
 ---
 
-## TL;DR
+## Purpose
 
-When a student asks "am I on academic probation?", "am I in good standing?", or "am I at risk of being dismissed?", this tool computes the answer from their DPR-derived coursework. It walks through every course on the student's record, calculates cumulative GPA (skipping transfer rows, counting F as zero, treating P/W/I as not in GPA), figures out the credit completion rate (earned ÷ attempted), and assigns one of seven standing labels — good standing, academic concern, final probation, dismissed, etc. It uses the school's published GPA floor (which can be tiered — e.g. Tandon's stepped floor by semester count) and the school's dismissal threshold. There's a hard requirement: the student's official NYU Degree Progress Report (DPR) MUST be loaded — if it isn't, the tool refuses and asks the student to upload it (there's no authoritative record to compute standing from otherwise). This tool is scoped to probation / SAP / academic-standing detail; for authoritative GPA, cumulative credits, and requirement status the assistant should prefer `run_full_audit`, which reads the DPR's pre-computed numbers directly.
+When a student asks "am I on academic probation?", "am I in good standing?", or "am I at risk of being dismissed?", this tool computes the answer from their DPR-derived coursework. It walks every course on the student's record, computes cumulative GPA (skipping transfer rows, counting F as zero, treating P/W/I/NR as not in GPA), computes the credit completion rate (earned ÷ attempted), and assigns one of seven standing labels.
+
+It is **DPR-first** in two ways: (1) a DPR **MUST** be loaded or the tool hard-refuses, and (2) the authoritative GPA returned and the GPA floor used both come from the DPR — `dpr.cumulative.cumulativeGpa` is surfaced as the cumulative GPA, and `dpr.cumulative.cumulativeGpaRequired` is the per-student GPA floor. `SchoolConfig` no longer carries `overallGpaMin`; the only school-config inputs that still matter are the per-semester tiered GPA table (`gpaTierTable`), the final-probation floor (`finalProbationGpaFloor`), and the per-school completion-rate policy (`completionRatePolicy`).
+
+This tool is scoped to **probation / SAP / academic-standing detail**. For authoritative GPA, cumulative credits, and requirement status, the assistant should prefer [`run_full_audit`](./run_full_audit.md), which reads the DPR's pre-computed numbers directly.
 
 ```mermaid
 flowchart TD
@@ -18,45 +25,27 @@ flowchart TD
     DPR{"DPR loaded?"}
     REJN["Refuse — no student profile"]
     REJ["Refuse — ask student<br/>to upload their DPR"]
-    WALK["Walk coursesTaken<br/>(GPA + completion rate)"]
-    FLOOR["Resolve GPA floor<br/>(flat or tiered)"]
-    LABEL["Assign label:<br/>good / concern /<br/>probation / dismissed"]
-    OUT["Standing + GPA<br/>+ warnings"]
+    SEM["Count distinct completed semesters<br/>(exclude IP / null / TR / TE)"]
+    WALK["calculateStanding:<br/>GPA + completion rate"]
+    FLOOR["Resolve GPA floor:<br/>tiered table > DPR-required > 2.0"]
+    LABEL["Assign label:<br/>good / concern /<br/>final_probation / dismissed"]
+    OUT["DPR GPA + standing<br/>+ warnings"]
     Q --> STU
     STU -- no --> REJN
     STU -- yes --> DPR
     DPR -- no --> REJ
-    DPR -- yes --> WALK --> FLOOR --> LABEL --> OUT
+    DPR -- yes --> SEM --> WALK --> FLOOR --> LABEL --> OUT
 ```
 
 ---
 
-## 1. Purpose
+## 1. Input schema
 
-`get_academic_standing` returns a deterministic snapshot of a student's current academic standing computed from their `coursesTaken` and the home school's GPA / completion-rate thresholds. The output includes:
-
-- Cumulative GPA.
-- A standing **level** label (one of seven values, see §5).
-- A boolean `inGoodStanding`.
-- The most recent semester GPA (when determinable).
-- Credit completion rate (earned ÷ attempted).
-- A human-readable `message`.
-- A list of warnings (GPA below floor, completion rate below threshold, etc.).
-- The school's `overallGpaMin` floor.
-
-The tool is read-only. It exists to centralize GPA computation, the school-specific GPA floor (including tiered floors), and the dismissal-risk rule, so the LLM cannot hallucinate a GPA or invent a standing label.
-
----
-
-## 2. Input schema
-
-The input is empty:
+The input is empty (`getAcademicStanding.ts:31`):
 
 ```
 { /* no fields */ }
 ```
-
-Defined at `getAcademicStanding.ts:31`.
 
 - `isReadOnly` = `true` (line 32).
 - `maxResultChars` = 1500 (line 33).
@@ -64,46 +53,62 @@ Defined at `getAcademicStanding.ts:31`.
 
 ---
 
-## 3. Session prerequisites + `validateInput`
+## 2. Session prerequisites + `validateInput`
 
-`validateInput` (lines 34-47) rejects the call if:
+`validateInput` (lines 34-48) rejects, in this order:
 
 1. **No student loaded** (`session.student` missing). Returns: `"No student profile loaded."`
 2. **No DPR loaded** (`session.degreeProgressReport` missing). Returns: `"I need your Albert Degree Progress Report (DPR) to report academic standing. Please upload your DPR and try again."`
 
-The DPR requirement is mechanical and is the reverse of the earlier behavior. Standing is computed from the student's DPR-derived coursework; with no DPR there is no authoritative record to read, so the tool refuses and asks the student to upload one (there is no transcript fallback). The no-student check runs first, then the no-DPR check.
-
-Note: GPA, cumulative credits, and requirement status should prefer `run_full_audit` (it reads the DPR's pre-computed numbers directly). This tool exists for probation / SAP / academic-standing detail.
+Standing is computed from the student's DPR-derived coursework; with no DPR there is no authoritative record to read, so the tool refuses (there is no transcript fallback). This is the DPR-first no-personalized-without-DPR policy.
 
 ---
 
-## 4. What it reads
+## 3. What it reads
 
 From `ToolSession`:
-- `session.student.coursesTaken` — list of `CourseTaken` rows `{ courseId, grade, credits?, semester }`.
-- `session.student.declaredPrograms` — used **only** to derive `semestersCompleted = declaredPrograms.length`. (Note: this is a structural proxy for semesters completed, not an actual semester count.)
-- `session.schoolConfig` — passed through to the standing engine. Drives the GPA floor (flat or tiered) and the good-standing return threshold.
-- `session.schoolConfig.overallGpaMin` — surfaced as `schoolFloor` in the result.
+- `session.student.coursesTaken` — list of `CourseTaken` rows `{ courseId, grade, credits?, semester, isInProgress? }`. Drives the GPA + completion-rate math.
+- `session.degreeProgressReport.cumulative` — reads `cumulativeGpa` (the authoritative GPA surfaced) and `cumulativeGpaRequired` (the per-student GPA floor + `schoolFloor`).
+- `session.schoolConfig` — passed through to the standing engine for the tiered GPA table, the final-probation floor, and the completion-rate policy. May be `null`.
 
-From constants (`academicStanding.ts`):
-- `GRADE_POINTS` (lines 81-93) — NYU letter-to-point map: A=4.000, A-=3.667, B+=3.333, B=3.000, B-=2.667, C+=2.333, C=2.000, C-=1.667, D+=1.333, D=1.000, F=0.000.
+### How `semestersCompleted` is derived (lines 61-71)
+
+The tool computes `semestersCompleted` as the count of **distinct** `semester` values among `coursesTaken` rows that are real, completed NYU semesters:
+
+```
+semestersCompleted = unique semesters where
+    NOT isInProgress AND grade !== null AND grade !== "TR" AND grade !== "TE"
+```
+
+This excludes in-progress rows, ungraded rows, transfer (`TR`) and test (`TE`) credits. It is a genuine count of completed semesters — **not** `declaredPrograms.length` (the old proxy, now removed).
+
+### Constants in the standing engine (`academicStanding.ts`)
+
+- `GRADE_POINTS` (lines 81-93) — A=4.000, A-=3.667, B+=3.333, B=3.000, B-=2.667, C+=2.333, C=2.000, C-=1.667, D+=1.333, D=1.000, F=0.000.
 - `PASSING_GRADES` (line 96) — `{ A, A-, B+, B, B-, C+, C, C-, D+, D, P }`. P passes for completion-rate purposes.
-- `GPA_GRADES` (line 100) — the letter-grade keys of `GRADE_POINTS`. P is **not** in this set; F **is** (F is computed in GPA).
-- `CAS_DEFAULTS` (lines 42-49):
-  - `overallGpaMin: 2.0` (fallback when `schoolConfig.overallGpaMin` is missing).
-  - `completionRate.goodStandingThreshold: 0.75`.
-  - `completionRate.dismissalThreshold: 0.50`.
-  - `completionRate.dismissalAfterSemesters: 2`.
+- `GPA_GRADES` (line 100) — the keys of `GRADE_POINTS`. P is **not** in this set; F **is** (F is computed in GPA).
+- `DEFAULT_OVERALL_GPA_MIN = 2.0` (line 49) — the last-resort flat GPA floor when neither the DPR's `cumulativeGpaRequired` nor a tiered table supplies one. The completion-rate ("pace") rule has **no** hard-coded default — it is entirely per-school via `completionRatePolicy`.
 
 ---
 
-## 5. Algorithm
+## 4. Algorithm
 
-`call()` (`getAcademicStanding.ts:53-71`) defers to `calculateStanding(coursesTaken, declaredPrograms.length, schoolConfig)`. The engine is at `academicStanding.ts:113-248`.
+`call()` (`getAcademicStanding.ts:53-93`) computes `semestersCompleted` (§3), then calls:
 
-### Step 1 — Iterate `coursesTaken` and accumulate four counters
+```
+calculateStanding(
+    student.coursesTaken,
+    semestersCompleted,
+    session.schoolConfig ?? null,
+    dpr?.cumulative.cumulativeGpaRequired ?? null,   // DPR-required GPA floor
+)
+```
 
-For each row, `grade = ct.grade.toUpperCase()`, `credits = ct.credits ?? 4`:
+The engine is at `academicStanding.ts:113-286`.
+
+### Step 1 — Iterate `coursesTaken` and accumulate four counters (lines 133-184)
+
+In-progress (`isInProgress`) and `grade === null` rows are skipped entirely. For each remaining row, `grade = ct.grade.toUpperCase()`, `credits = ct.credits ?? 4`:
 
 | Grade               | totalAttempted | totalCompleted | totalGradePoints | totalGPACredits |
 |---------------------|----------------|----------------|------------------|-----------------|
@@ -113,90 +118,74 @@ For each row, `grade = ct.grade.toUpperCase()`, `credits = ct.credits ?? 4`:
 | `F`                 | +credits       | (no)           | +0 × credits     | +credits        |
 | Any other letter in `GPA_GRADES` | +credits | +credits (if in `PASSING_GRADES`) | +pts × credits | +credits |
 
-So:
-- `TR` is fully excluded (per CAS bulletin: transfer-credit grades omitted from cumulative GPA).
-- `W`/`I`/`NR` count as **attempted** but not earned and not in GPA.
-- `P` earns credits but is **not** in the GPA computation.
-- `F` is **in** the GPA computation (0 points) but does **not** count as completed.
-- Letter grades (A through D) are both in the GPA computation and count as completed when in `PASSING_GRADES`.
+So: `TR` is fully excluded; `W`/`I`/`NR` count as attempted but not earned/GPA; `P` earns credits but is not in GPA; `F` is in GPA (0 points) but does not earn credits; letter grades A–D are in GPA and count as completed.
 
-### Step 2 — Compute derived ratios
+### Step 2 — Derived ratios (lines 186-189)
 
 ```
 cumulativeGPA  = totalGPACredits > 0  ? totalGradePoints / totalGPACredits : 0
-completionRate = totalAttempted > 0    ? totalCompleted / totalAttempted   : 1
+completionRate = totalAttempted > 0   ? totalCompleted / totalAttempted    : 1
 ```
 
-A student with no GPA-bearing credits has `cumulativeGPA = 0`. A student with no attempted credits has `completionRate = 1` (vacuously full).
+(Note: the *engine's* `cumulativeGPA` is a local recompute. The tool layer overrides the returned GPA with the DPR's authoritative value — see §6.)
 
-### Step 3 — Resolve the active GPA floor
+### Step 3 — Resolve the active GPA floor (lines 197-198)
 
-Two-stage resolution (lines 189-190):
+```
+flatGpaMin = dprGpaRequired ?? DEFAULT_OVERALL_GPA_MIN (2.0)
+gpaMin     = resolveTieredGpaMin(schoolConfig?.gpaTierTable, semestersCompleted) ?? flatGpaMin
+```
 
-1. **Flat floor**: `flatGpaMin = schoolConfig?.overallGpaMin ?? CAS_DEFAULTS.overallGpaMin (2.0)`.
-2. **Tiered floor**: `resolveTieredGpaMin(schoolConfig?.gpaTierTable, semestersCompleted)` (lines 23-39):
-   - If no `gpaTierTable`, return undefined.
-   - Sort `gpaTierTable` rows where `semestersCompleted` is finite, ascending.
-   - Walk through those rows and keep the **largest** row whose `semestersCompleted <= count`. That row's `minCumGpa` is the active tier.
-   - If the count exceeds every finite row, fall through to the row with `semestersCompleted === null` (the open-ended ">N" tier) if any.
-3. `gpaMin = tieredFloor ?? flatGpaMin`.
+`resolveTieredGpaMin` (lines 25-41): if a `gpaTierTable` exists, keep the **largest** finite row whose `semestersCompleted <= count`; if the count exceeds every finite row, fall through to the open-ended (`semestersCompleted: null`) row. A tiered table (e.g. Tandon's stepped floor) supersedes the flat floor. The flat floor now comes from the **DPR's** `cumulativeGpaRequired` (per-student), falling back to 2.0 — `schoolConfig.overallGpaMin` was removed.
 
-The tiered table is how schools like Tandon publish a stepped floor (e.g. 1.5 after 1 semester, 1.8 after 2, 2.0 thereafter). When the table is present, it supersedes the flat floor.
-
-`semestersCompleted` is the student's `declaredPrograms.length` (the tool-layer proxy) — not an actual count of completed semesters.
-
-### Step 4 — Initial level + good-standing check
+### Step 4 — Initial level + good-standing check (lines 206-214)
 
 ```
 inGoodStanding = cumulativeGPA >= gpaMin
-level = "good_standing"
-message = "In good academic standing."
-
+level = "good_standing"  (message "In good academic standing.")
 if !inGoodStanding:
   level = "academic_concern"
   message = "Academic concern: cumulative GPA is <gpa> (below <gpaMin> minimum)."
-  warning: "Cumulative GPA is below the <gpaMin> minimum required for good academic standing."
+  warning  "Cumulative GPA is below the <gpaMin> minimum required for good academic standing."
 ```
 
-### Step 5 — Dismissal-risk check (independent of GPA)
+### Step 5 — Completion-rate dismissal check (lines 220-231) — per-school, opt-in
 
-This runs **regardless** of GPA status (lines 209-214):
+This is now **fully config-driven**. It fires only when `schoolConfig.completionRatePolicy` is present AND publishes both `dismissalThreshold` and `dismissalAfterSemesters`:
 
 ```
-if semestersCompleted >= 2 AND completionRate < 0.50:
+if completionPolicy.dismissalThreshold and completionPolicy.dismissalAfterSemesters set
+   and semestersCompleted >= completionPolicy.dismissalAfterSemesters
+   and completionRate < completionPolicy.dismissalThreshold:
   level = "dismissed"
-  message = "Academic dismissal risk: only <pct>% of attempted credits completed after <semestersCompleted> semesters."
-  warning: "Completion rate <pct>% is below 50% after <semestersCompleted> semesters — may result in dismissal."
+  message = "Academic dismissal risk: only <pct>% of attempted credits completed after <N> semesters."
+  warning  "Completion rate <pct>% is below <threshold%> after <N> semesters — may result in dismissal."
 ```
 
-The 50% threshold and the 2-semester gating are hard-coded CAS defaults (the comments note this; the structure isn't surfaced through `SchoolConfig` today).
+Schools that publish no completion-rate policy (GPA-only / tiered schools such as Stern, Tandon, Steinhardt, Nursing) can **never** be dismissed on pace grounds. The old hard-coded 50%-after-2-semesters CAS default is gone.
 
-### Step 6 — Final Probation check (only if not dismissed)
+### Step 6 — Final Probation check (lines 238-249) — only if not dismissed
 
-If the school config publishes `finalProbationGpaFloor` (e.g. Tandon's 1.5 floor) AND the cumulative GPA is below it AND level is not already `"dismissed"` (lines 221-232):
+If `schoolConfig.finalProbationGpaFloor` is set AND `cumulativeGPA` is below it AND `level !== "dismissed"`:
 
 ```
 level = "final_probation"
 message = "Final Probation: cumulative GPA <gpa> is below the <floor> floor."
-warning: "Cumulative GPA below <floor> triggers Final Probation regardless of credits completed (<schoolName> policy)."
+warning  "Cumulative GPA below <floor> triggers Final Probation regardless of credits completed (<schoolName> policy)."
 ```
 
-### Step 7 — Completion-rate warning (only if not dismissed)
+(E.g. Tandon's 1.5 floor.)
 
-If `completionRate < goodStandingThreshold` AND level !== "dismissed" (lines 235-238):
+### Step 7 — Completion-rate advisory warning (lines 257-276) — only if not dismissed
 
-```
-warning: "Credit completion rate is <pct>% — below the <pct>% threshold required to return to good standing."
-```
+Fires only when a `completionRatePolicy` is present AND `completionRate < completionPolicy.goodStandingThreshold` AND `level !== "dismissed"`. The warning phrasing depends on `completionPolicy.basis` (`"cumulative"` / `"annual"` / `"term"` / unset) so it states the cumulative figure honestly while attributing the threshold to its real measurement window. Schools with no policy emit no completion-rate warning.
 
-`goodStandingThreshold = schoolConfig?.goodStandingReturnThreshold ?? 0.75`.
-
-### Step 8 — Return result
+### Step 8 — Return result (lines 278-285)
 
 ```
 {
   level,
-  cumulativeGPA: round to 3 decimals,
+  cumulativeGPA:  round to 3 decimals,   // engine's local recompute (tool overrides with DPR value)
   completionRate: round to 3 decimals,
   inGoodStanding,
   message,
@@ -206,25 +195,19 @@ warning: "Credit completion rate is <pct>% — below the <pct>% threshold requir
 
 ### Standing-level enumeration
 
-`StandingLevel` (`academicStanding.ts:51-58`) defines seven possible labels:
+`StandingLevel` (`academicStanding.ts:51-58`) defines seven labels:
 
 | Level                  | When emitted |
 |------------------------|--------------|
 | `good_standing`        | Default; cumulative GPA at/above the active floor, not dismissed, no final-probation override. |
 | `academic_concern`     | Cumulative GPA below the active GPA floor. |
-| `continued_concern`    | Defined in the enum but not emitted by `calculateStanding` (reserved). |
-| `required_leave`       | Defined in the enum but not emitted by `calculateStanding` (reserved). |
-| `pre_dismissal`        | Defined in the enum but not emitted by `calculateStanding` (reserved). |
+| `continued_concern`    | Defined in the enum but **never emitted** by `calculateStanding` (reserved). |
+| `required_leave`       | Defined but **never emitted** (reserved). |
+| `pre_dismissal`        | Defined but **never emitted** (reserved). |
 | `final_probation`      | Cumulative GPA below the school's `finalProbationGpaFloor` (when configured) AND not dismissed. |
-| `dismissed`            | At least 2 semesters completed AND completion rate < 50%. Overrides all other labels. |
+| `dismissed`            | School publishes a pace-dismissal policy AND `semestersCompleted >= dismissalAfterSemesters` AND completion rate < `dismissalThreshold`. Overrides all other labels. |
 
-### Tool-layer result shape
-
-The tool layer (`getAcademicStanding.ts:61-70`) repackages the engine's output, adding:
-- `semesterGPA` — `standing.semesterGPA ?? null` (the engine doesn't populate this in `calculateStanding`; it remains null in practice for this code path).
-- `schoolFloor` — `session.schoolConfig?.overallGpaMin ?? null` (the flat floor, NOT the resolved tiered value).
-
-### GPA bands → standing labels (flowchart)
+### GPA bands → standing labels
 
 ```mermaid
 flowchart TD
@@ -232,97 +215,105 @@ flowchart TD
     B --> C{cumulativeGPA >= gpaMin?}
     C -- yes --> D[level = good_standing]
     C -- no --> E[level = academic_concern]
-    D --> F{semestersCompleted >= 2 AND completionRate < 0.50?}
+    D --> F{completionRatePolicy with dismissal fields AND past threshold?}
     E --> F
     F -- yes --> G[level = dismissed]
     F -- no --> H{finalProbationGpaFloor set AND gpa below it?}
     H -- yes --> I[level = final_probation]
     H -- no --> J[Keep current level]
     G --> K[Skip remaining checks]
-    I --> L{completionRate < goodStandingThreshold and not dismissed?}
+    I --> L{completionRatePolicy AND rate below goodStandingThreshold and not dismissed?}
     J --> L
-    L -- yes --> M[Add completion-rate warning]
+    L -- yes --> M[Add completion-rate advisory warning]
     L -- no --> N[Done]
     M --> N
 ```
 
 ---
 
-## 6. What it returns
+## 5. Tool-layer result shape (`getAcademicStanding.ts:78-92`)
+
+The tool repackages the engine output and overrides two fields with DPR values:
 
 ```
 {
-  cumulativeGPA:   number,                 // rounded to 3 decimals
+  cumulativeGPA:   number,                 // dpr.cumulative.cumulativeGpa (authoritative) ?? engine recompute
   level:           StandingLevel,
   inGoodStanding:  boolean,
-  semesterGPA:     number | null,
+  semesterGPA:     number | null,          // standing.semesterGPA ?? null — engine never sets it (always null)
   completionRate:  number,                 // rounded to 3 decimals
   message:         string,
   warnings:        string[],
-  schoolFloor:     number | null           // session.schoolConfig.overallGpaMin
+  schoolFloor:     number | null           // dpr.cumulative.cumulativeGpaRequired ?? null (NOT schoolConfig)
 }
 ```
 
+- `cumulativeGPA` is the **DPR's** pre-computed cumulative GPA when present (`dpr.cumulative.cumulativeGpa`), falling back to the engine's local recompute only if no DPR — unreachable in practice since `validateInput` requires a DPR.
+- `schoolFloor` is the **DPR-required** floor (`dpr.cumulative.cumulativeGpaRequired`), **not** `session.schoolConfig.overallGpaMin` (which no longer exists). It is `null` when the DPR omits the field.
+
 ---
 
-## 7. Envelope behavior
+## 6. Envelope behavior
 
-- **`outputMode: "synthesis"`** (default — no `extractVerbatim` is defined). The validator does not pin any specific text; the LLM grounds in `summarizeResult`.
-- **`isReadOnly: true`**.
-- **`maxResultChars` = 1500**; summary is truncated above that.
+- **`outputMode: "synthesis"`** (default — no `extractVerbatim`). The validator does not pin any specific text; the LLM grounds in `summarizeResult`.
+- **`isReadOnly: true`**, `maxResultChars` = 1500.
 - The tool never writes to `session`.
 
 ---
 
-## 8. Summary text format
+## 7. Summary text format
 
-`summarizeResult` (lines 72-87) emits:
+`summarizeResult` (lines 94-109) emits:
 
 ```
 STANDING: <level> (cumulative GPA <gpa fixed to 2 decimals>)
 In good standing: <true|false>
-Most recent semester GPA: <gpa fixed to 2 decimals>     # only when semesterGPA !== null
+Most recent semester GPA: <gpa fixed to 2 decimals>     # only when semesterGPA !== null (never, in practice)
 Credit completion rate: <N>%                            # 0 decimals
-School minimum GPA floor: <N>                           # only when schoolFloor !== null
+School minimum GPA floor: <N>                           # only when schoolFloor !== null (DPR-required floor)
 Summary: <message>
 Warnings:                                               # only when warnings.length > 0
   - <warning 1>
-  - <warning 2>
   ...
 ```
 
-The cumulative GPA appears with 2 decimals in the summary even though the structured value carries 3. The completion-rate percentage is rendered with no decimals.
+The cumulative GPA shows 2 decimals in the summary even though the structured value carries 3. The completion-rate percentage is rendered with no decimals.
 
 ---
 
-## 9. Interactions with other tools
+## 8. Interactions with other tools
 
-- **`run_full_audit`** — The authoritative source for GPA, cumulative credits, and requirement status (it reads the DPR's pre-computed `dprCumulative` numbers). This tool's description tells the LLM to prefer `run_full_audit` for those questions and reserve `get_academic_standing` for probation / SAP / academic-standing detail. Both tools now REQUIRE a DPR; `get_academic_standing` no longer defers to `run_full_audit` by refusing when a DPR is present — instead it refuses when a DPR is absent.
-- **`get_credit_caps`** — Per the tool description's reference to Appendix A rule #5, this tool is the first in a recommended pair: `get_academic_standing → get_credit_caps` before discussing GPA, credits, graduation progress, or semester planning.
-- **`creditCapValidator.ts`** — Not a tool, but a sibling audit module that uses CAS_DEFAULTS for cap rules. The standing engine uses its own CAS_DEFAULTS for completion-rate thresholds. The structural defaults are separate.
+- **`run_full_audit`** — the authoritative source for GPA, cumulative credits, and requirement status (it reads the DPR's pre-computed `dprCumulative` numbers). This tool's description tells the LLM to prefer `run_full_audit` for those questions and reserve `get_academic_standing` for probation / SAP / standing detail. Both tools now require a DPR and both read the same per-student floor (`dpr.cumulative.cumulativeGpaRequired`). See [`run_full_audit`](./run_full_audit.md).
+- **`get_credit_caps`** — the recommended pair per Appendix A rule #5: `get_academic_standing → get_credit_caps` before discussing GPA, credits, graduation progress, or semester planning. See [`get_credit_caps`](./get_credit_caps.md).
 
 This tool does NOT chain to anything; it has no `suggestedFollowUps`.
 
 ---
 
-## 10. Edge cases
+## 9. Edge cases
 
-- **No courses taken** — `totalGPACredits = 0` → `cumulativeGPA = 0`; `totalAttempted = 0` → `completionRate = 1`. A student with zero attempts is in good standing per GPA only if `0 >= gpaMin`, which is false for any non-zero floor — so a fresh-start student would actually return `academic_concern` if the floor is `2.0` and they have NO grades. (`validateInput` requires a DPR but does not check that `coursesTaken` is non-empty; the pathology surfaces in the result.)
-- **No DPR loaded** — Hard reject in `validateInput` (after the no-student check) before `call()` runs. The tool requires a DPR.
-- **`student.declaredPrograms` empty** — `semestersCompleted = 0`. Dismissal-risk check is gated by `semestersCompleted >= 2`, so it won't fire. Tiered GPA lookup uses 0 — picks the smallest tier or the open-ended row if applicable.
-- **Tiered GPA table with all rows requiring more semesters than `count`** — `resolveTieredGpaMin` returns the open-ended (`semestersCompleted: null`) row if any; otherwise undefined → falls back to flat `overallGpaMin`.
-- **`schoolConfig` is null** — Uses CAS_DEFAULTS: flat floor 2.0, dismissal threshold 50%, good-standing return threshold 75%, no `finalProbationGpaFloor`.
-- **`grade` field with unrecognized value** — The else branch (final `if (GPA_GRADES.has(grade))` at line 165) silently ignores it. No counter is incremented.
-- **`credits` field missing on a row** — Defaults to 4 (line 128).
-- **`P` grade with non-passing semester context** — Still counted as completed (P is in `PASSING_GRADES`) and not in GPA. A row with grade `P` will always advance completed credits.
-- **Final Probation floor + Dismissal both apply** — Dismissed wins (the final-probation block is gated by `level !== "dismissed"`).
-- **Completion-rate warning + Dismissal** — Suppressed; gated by `level !== "dismissed"`.
-- **`semesterGPA`** — The engine's `StandingResult` declares an optional `semesterGPA?: number`, but `calculateStanding` never sets it. The tool layer reads `standing.semesterGPA ?? null`, so this field is always `null` in practice from this code path. A separate `computeSemesterGPA(coursesTaken, semester)` function exists in the engine (lines 254-272) but is not called by this tool.
-- **`completion_rate` rounding** — The structured value is rounded to 3 decimals; the summary renders to 0 decimals using `(rate * 100).toFixed(0)`.
-- **Reserved levels (`continued_concern`, `required_leave`, `pre_dismissal`)** — Declared in the `StandingLevel` enum but never produced by this engine code path. The tool will never return these.
+- **No courses taken** — `totalGPACredits = 0` → engine `cumulativeGPA = 0`; `totalAttempted = 0` → `completionRate = 1`. The returned `cumulativeGPA` is overridden by the DPR's value, so a real student's GPA is correct even with sparse `coursesTaken`. (`validateInput` requires a DPR but does not require non-empty `coursesTaken`.)
+- **No DPR loaded** — hard reject in `validateInput` (after the no-student check) before `call()` runs.
+- **`coursesTaken` all in-progress** — `semestersCompleted = 0`; the GPA math skips them; `completionRate = 1`. Dismissal check (gated by `semestersCompleted >= dismissalAfterSemesters`) won't fire.
+- **`schoolConfig` is null** — flat floor = DPR-required floor (or 2.0); no tiered table; no `finalProbationGpaFloor`; no `completionRatePolicy`, so **no** completion-rate warning or dismissal ever.
+- **No `completionRatePolicy`** — neither the dismissal nor the advisory completion-rate warning can fire, regardless of how low the rate is. Pace standing is entirely opt-in per school.
+- **Tiered table past every finite row** — `resolveTieredGpaMin` returns the open-ended (`null`) row if any; otherwise undefined → falls back to the flat (DPR-required) floor.
+- **Unrecognized grade value** — silently ignored (no counter incremented).
+- **`credits` missing on a row** — defaults to 4.
+- **Final Probation + Dismissal both apply** — Dismissed wins (final-probation block is gated by `level !== "dismissed"`).
+- **`semesterGPA`** — `calculateStanding` never sets it; the tool reads `standing.semesterGPA ?? null`, so it is always `null` from this path. A separate `computeSemesterGPA(coursesTaken, semester)` exists (`academicStanding.ts:292-312`) but this tool does not call it.
+- **Reserved levels (`continued_concern`, `required_leave`, `pre_dismissal`)** — declared in the enum but never produced by this engine path.
+
+---
+
+## Known limitations
+
+- **Three reserved standing levels are dead.** `continued_concern`, `required_leave`, and `pre_dismissal` exist in `StandingLevel` but no code path emits them.
+- **`semesterGPA` is always null.** The engine's `computeSemesterGPA` helper is never wired into `calculateStanding`, so the tool's `semesterGPA` field never carries a value despite the summary having a line for it.
+- **Completion-rate standing requires a per-school policy.** Schools without a `completionRatePolicy` get no pace-based warning or dismissal at all — there is no universal default anymore.
 
 ---
 
 ## Summary
 
-`get_academic_standing` deterministically computes GPA from a student's `coursesTaken`, resolves the active GPA floor (flat or tiered per `schoolConfig`), and assigns a standing label. The GPA → label mapping is layered: an initial pass marks `good_standing` or `academic_concern` against the resolved floor; a GPA-independent dismissal-risk check fires when ≥2 semesters of work has a <50% completion rate; an optional `final_probation` label applies when the cumulative GPA drops below the school's `finalProbationGpaFloor` and dismissal hasn't already been declared. The tool REQUIRES a DPR (it refuses when none is loaded) and is scoped to probation / SAP / academic-standing detail; for authoritative GPA, cumulative credits, and requirement status the assistant should prefer `run_full_audit`.
+`get_academic_standing` deterministically computes GPA + completion rate from a student's `coursesTaken`, resolves the active GPA floor (tiered table > DPR-required floor > 2.0), and assigns a standing label. The tool overrides the returned GPA and `schoolFloor` with the DPR's authoritative `cumulativeGpa` / `cumulativeGpaRequired`. Dismissal and the completion-rate advisory are now fully per-school via `completionRatePolicy` — no hard-coded CAS defaults. `semestersCompleted` is a genuine count of distinct completed semesters. The tool REQUIRES a DPR and is scoped to probation / SAP / standing detail; for authoritative GPA, cumulative credits, and requirement status, prefer [`run_full_audit`](./run_full_audit.md).

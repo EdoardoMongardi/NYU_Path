@@ -1,6 +1,8 @@
 # Plan Action Orchestrator — Server Coordinator and Browser Client
 
-## TL;DR
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+## Purpose
 
 The orchestrator is the conductor between the sidebar buttons and the planning engine. When the student clicks something like "swap this course," the orchestrator pulls up everything the engine needs to think clearly — the student's profile, their parsed degree report, their current plan, their saved preferences — and packages it into a request the engine can handle. After the engine answers, the orchestrator remembers the proposed change in a short-lived memory bucket so when the student clicks Confirm a moment later, it can apply that exact same change atomically. It also categorizes the outcome into one of four buckets (clean / trade-offs / soft refusal / hard refusal), which is what tells the UI whether to show a confirm button, an override button, or no buttons at all. The browser-side companion to the orchestrator is the small layer that fires the actual HTTP calls and turns errors into friendly results.
 
@@ -22,7 +24,7 @@ flowchart LR
 
 The plan-action orchestrator is the server-side coordinator that the per-verb routes (`/api/plan/add`, `move`, `swap`, `drop`, `lock`, `confirm`) all funnel through. It sits between the thin HTTP route shells and the engine's plan-change tools, owning four responsibilities:
 
-1. **State assembly.** Loading the student's persisted state (profile, parsed DPR, latest schedule, scheduling preferences) and reconstructing a minimal `ToolSession` the engine tools can consume.
+1. **State assembly.** Loading the student's persisted state (profile, parsed DPR, latest schedule, scheduling preferences) via the store bundle (see [db-and-stores.md](./db-and-stores.md)) and reconstructing a minimal `ToolSession` the engine tools can consume.
 2. **Two-stage handshake.** Splitting every mutation into a propose stage (`runProposeStage`) that stages but does not persist, and a confirm stage (`runConfirmStage`) that applies and persists.
 3. **Pending-mutation staging.** Maintaining an in-memory, TTL-bounded map keyed by minted UUID so a propose→confirm round-trip can re-apply the exact same `PlanMutation[]` atomically.
 4. **Stage-2 hint computation.** Deriving the list of `futureTerms` the confirm-bubble UI uses to fan out FOSE section enrichments.
@@ -128,6 +130,8 @@ The optimistic-update affordance lives in three concrete pieces:
 
 The propose stage extracts `proposedSchedule` from the engine's tool output (`apps/web/lib/planActionOrchestrator.ts:469-470`) and ships it back as `forwardSchedule` on the `PlanActionResponse`. This is a non-persisted preview — the actual write does not happen until confirm. The client can render this preview as the "what your plan would look like" overlay while the bubble is open.
 
+`proposePlanChangeTool` produces `proposedSchedule` by running the same `finalizeForwardSchedule` path the build/confirm/simulate flows use — the feasibility-first backtracking search plus the 7-axis `runGraduationPathValidator` (`packages/engine/src/agent/tools/proposePlanChange.ts:153`). So the propose preview is already validated, not a greedy guess.
+
 The Phase 17 follow-up that introduced this single-solver-pass pattern eliminated a second `confirm_plan_change` invocation that was previously needed just to extract the post-mutation schedule, halving Stage 1 latency (`apps/web/lib/planActionOrchestrator.ts:461-468`).
 
 ### 3.2 Per-term Stage 2 enrichment
@@ -158,7 +162,7 @@ Source: `apps/web/lib/planActionOrchestrator.ts:100-104`. Variants:
 - `no_schedule` — `scheduleStore.loadLatestSchedule` returned null/threw, or returned a schedule that wasn't classifiable into either `forwardSchedule` or `studentDraftPlan`.
 - `engine_error` — `proposePlanChangeTool.call` threw.
 
-Mapped by `handleProposeRoute` to 409 / 409 / 409 / 500 respectively (`apps/web/lib/planActionRouteHelpers.ts:101-110`).
+Mapped by `mapProposeError` (invoked from `handleProposeRoute`) to 409 / 409 / 409 / 500 respectively (`apps/web/lib/planActionRouteHelpers.ts:101-110`).
 
 ### 4.2 `RunConfirmError`
 
@@ -330,3 +334,8 @@ sequenceDiagram
 - **Singleton in-process state.** The `pendingMutations` map is a module-scope `Map` (`apps/web/lib/planActionOrchestrator.ts:135`). It does not persist across server restarts and is not shared across server instances. In a multi-instance deployment, a propose served by instance A and a confirm served by instance B would 404 — the design assumes the propose→confirm round-trip lands on the same process within the 10-minute TTL.
 - **Cached bundled data.** `loadCourses` and `loadPrereqs` are cached at module scope (`apps/web/lib/planActionOrchestrator.ts:361-382`) so a flurry of plan-action calls doesn't re-read the JSON catalog repeatedly.
 - **Session reconstruction is per-call.** Every propose and every confirm rebuilds a fresh `ToolSession` from the persistence stores (`apps/web/lib/planActionOrchestrator.ts:388-413`). There is no session caching across requests — the staging map carries only the `studentId` and `PlanMutation[]`, not the heavyweight session state.
+
+### 6.7 Known limitations
+
+- **Single-instance staging only.** The `pendingMutations` map is purely in-process (see 6.6). A server restart between propose and confirm loses every staged mutation; the next confirm returns `unknown_mutation_id` (404). There is no Redis/DB-backed staging — this is by design but means horizontally-scaled deployments need sticky routing for the propose→confirm pair.
+- **Confirm returns no preferences → stale Lock labels.** `PlanConfirmResponse` (`apps/web/lib/planActionOrchestrator.ts:89-98`) has no `preferences`/`schedulePreferences` field, and the confirm stage never reloads or returns one. The client's confirm handlers (`apps/web/app/chat/page.tsx:894-896` and `931-933`) only call `setForwardSchedule(...)`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the sidebar's `schedulePreferences` state — which drives the Lock/Unlock popover label — is never refreshed; it only re-syncs on a full reload via `/api/session/restore`. The in-code comments at `page.tsx:160-162` and `297-302` that claim the confirm round-trip returns updated prefs are **wrong** (stale comments). This is a known UI bug.

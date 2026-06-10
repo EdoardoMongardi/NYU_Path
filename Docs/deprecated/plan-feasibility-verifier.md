@@ -1,5 +1,7 @@
 # Plan-Feasibility Verifier — REMOVED (historical)
 
+> DEPRECATED — documents code REMOVED from the codebase (see [README.md](README.md) in this folder). Kept for history; do not trust as current.
+
 > **REMOVED (improvement plan, Phase F).** `packages/engine/src/agent/verifiers/planFeasibility.ts` has been **deleted**. Its only consumer was the (now also removed) `plan_semester` tool, so it had no live consumer. This document is retained as a historical record of the five hard-constraint checks it performed.
 
 ## TL;DR
