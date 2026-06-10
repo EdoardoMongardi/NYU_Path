@@ -80,7 +80,7 @@ ASK ONE clarifying question before calling propose_plan_change.
 
 // Phase 14 — Decision #42 4-tier fallback hierarchy
 // (system-prompt rule — Layer 1 of 3-layer Tier-D enforcement;
-// see Decision #42 in PHASE_PLANS_README.md for the full rationale).
+// see Decision #42 in Docs/plans/10-PHASE_PLANS_README.md for the full rationale).
 const FOUR_TIER_FALLBACK_RULES = `
 When the student states a preference, classify constraint framing
 FIRST.
