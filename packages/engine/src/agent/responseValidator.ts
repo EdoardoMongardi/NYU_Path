@@ -828,9 +828,22 @@ function isConditionalFrame(clause: string): boolean {
  *  "CSCI-UA 102 … <unrelated sentence> … Fall 2027" doesn't bind. */
 const PLAN_COOCCUR_WINDOW = 60;
 
-/** Lock-asserting language ("locked", "final", "can't change", "fixed",
- *  "set in stone"). */
-const LOCK_ASSERT_RE = /\b(?:locked|final(?:ized)?|can'?t (?:be )?(?:change|move)|cannot (?:be )?(?:change|move)|set in stone|fixed in place|already taken)\b/i;
+/** Lock-asserting language ("locked", "is final", "can't change",
+ *  "fixed", "set in stone").
+ *
+ *  "final"/"finalized" is MUTABILITY-AMBIGUOUS as a bare token: "final
+ *  course", "final exam", "finalized title" describe a NOUN, not the
+ *  slot's lock status, and must NOT read as a lock assertion (false-block
+ *  — fixes C-NEW-2). So "final"/"finalized" only counts in a STATUS sense,
+ *  anchored by a copula/placement context:
+ *    - `(is|are|'s|stays|remains|locked) final`  ("CSCI-UA 102 is final")
+ *    - `placement is final`
+ *    - `finalized in the/your plan`
+ *  We deliberately do NOT match "final" immediately before a noun. The
+ *  unambiguous lock verbs (locked / can't change / fixed / set in stone)
+ *  keep their plain forms. */
+const LOCK_ASSERT_RE =
+    /\b(?:locked|(?:(?:is|are|'?s|stays?|remains?|locked)\s+final\b|placement\s+is\s+final\b|finaliz(?:ed)?\s+in\s+(?:the|your)\s+plan\b)|can'?t (?:be )?(?:change|move)|cannot (?:be )?(?:change|move)|set in stone|fixed in place|already taken)\b/i;
 /** Movable-asserting language ("you can still move", "movable",
  *  "can change it", "not locked", "flexible"). */
 const MOVABLE_ASSERT_RE = /\b(?:can (?:still )?(?:move|change|swap)|movable|moveable|not locked|isn'?t locked|flexible|reschedul)\b/i;
@@ -872,6 +885,15 @@ function courseCodeOffsets(text: string): number[] {
     return [...text.matchAll(PLAN_COURSE_ID_RE)].map((m) => m.index ?? 0);
 }
 
+/** Absolute char offsets of every "graduat…" token in `text`. Used by
+ *  termsBoundToCourse's grad-token guard: a graduation term sitting
+ *  between a course code and a term label is the GRAD term, not the
+ *  course's placement term (mirror of labelAttributableToGrad). */
+function gradTokenOffsets(text: string): number[] {
+    const re = /\bgraduat\w*\b/gi;
+    return [...text.matchAll(re)].map((m) => m.index ?? 0);
+}
+
 /** Absolute [start, end) spans of every course-code match in `text`. */
 function courseCodeSpans(text: string): Array<[number, number]> {
     PLAN_COURSE_ID_RE.lastIndex = 0;
@@ -898,8 +920,15 @@ function termsBoundToCourse(text: string, courseIdx: number, courseLen: number):
     const windowStart = Math.max(clauseStart, courseIdx - PLAN_COOCCUR_WINDOW);
     const windowEnd = Math.min(clauseEnd, courseIdx + courseLen + PLAN_COOCCUR_WINDOW);
     const courseEnd = courseIdx + courseLen;
+    // ALL course codes (incl. this one) — used to gate grad attribution.
+    const allCourses = courseCodeOffsets(text);
     // Other course codes anywhere in the text — used to gate each label.
-    const otherCourses = courseCodeOffsets(text).filter((o) => o !== courseIdx);
+    const otherCourses = allCourses.filter((o) => o !== courseIdx);
+    // "graduat…" tokens anywhere in the text — used to drop GRADUATION
+    // terms that would otherwise be misread as this course's PLACEMENT
+    // term (the exact mirror of labelAttributableToGrad, applied to the
+    // placement path — fixes C-NEW-1).
+    const gradOffsets = gradTokenOffsets(text);
 
     const out: string[] = [];
     PLAN_TERM_LABEL_RE.lastIndex = 0;
@@ -914,6 +943,17 @@ function termsBoundToCourse(text: string, courseIdx: number, courseLen: number):
         const hi = Math.max(courseIdx, labelEnd);
         const intervening = otherCourses.some((o) => o >= lo && o < hi);
         if (intervening) continue;
+        // Grad-token guard (the exact mirror of labelAttributableToGrad):
+        // if this label is attributable to a "graduat…" token (the token
+        // precedes the label with no course code between them), it is the
+        // GRADUATION term, not this course's placement — drop it. Works in
+        // both orderings ("…take CSCI-UA 102, then graduate Spring 2028"
+        // and "You graduate Spring 2028, right after CSCI-UA 102") since
+        // the course code there is never strictly between grad and label.
+        const gradOwnsLabel = gradOffsets.some((g) =>
+            labelAttributableToGrad(text, g, labelStart, labelEnd, allCourses),
+        );
+        if (gradOwnsLabel) continue;
         const solver = psTermToSolverTerm(tm[0]);
         if (solver !== null) out.push(solver);
     }
@@ -1142,6 +1182,13 @@ function checkPlanClaims(ctx: ValidatorContext): Violation[] {
             // course code sits within the co-occurrence window of it — that
             // makes it a placement term ("take CSCI-UA 102 in Fall 2027"),
             // not a graduation claim.
+            // KNOWN LIMIT (M-1, DELIBERATE — false-negative-preferred): this
+            // exclusion also suppresses a genuinely-WRONG grad claim phrased
+            // with a co-occurring course whose stored term equals the stated
+            // term ("CSCI-UA 102 means you graduate Fall 2027" → 102's term
+            // co-occurs, label dropped, no fire — though stored grad is
+            // Spring 2028). Acceptable: a missed grad mismatch is far better
+            // than false-blocking a grounded reply. See test (M-1).
             const coOccursWithCourse = allCourseOffsets.some(
                 (o) => o >= labelStart - PLAN_COOCCUR_WINDOW && o < labelEnd + PLAN_COOCCUR_WINDOW,
             );

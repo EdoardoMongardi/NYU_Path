@@ -230,3 +230,100 @@ describe("checkPlanClaims — grounded replies must NOT false-block", () => {
         expect(v.length).toBe(0);
     });
 });
+
+// ============================================================
+// GUARD (round 2) — two more false-positive classes from adversarial
+// review. Both wrongly BLOCK fully-grounded adviser replies. Every
+// reply below is TRUE against the stored plan (102 @ 2027-fall movable,
+// 101 @ 2025-fall completed/locked, 201 @ 2027-spring, graduationTerm
+// 2028-spring) and MUST emit ZERO ungrounded_plan_claim violations.
+// ============================================================
+describe("checkPlanClaims — grounded replies must NOT false-block (round 2)", () => {
+    // C-NEW-1 — placement path has no grad-token guard (mirror of C4).
+    // A "graduat…" token strictly between a course code and a term label
+    // (no period to clip on) must NOT let the GRADUATION term be read as
+    // that course's PLACEMENT term. 102 is correctly in 2027-fall, grad
+    // is correctly Spring 2028 — these are all grounded.
+    const cNew1 = [
+        "After finishing CSCI-UA 102, you graduate in Spring 2028.",
+        "Take CSCI-UA 102, then graduate Spring 2028.",
+        "CSCI-UA 102 is your last course before you graduate Spring 2028.",
+        "You graduate Spring 2028, right after CSCI-UA 102.",
+        "CSCI-UA 102 keeps you on track to graduate Spring 2028.",
+        "Your final course CSCI-UA 102 leads to graduation in Spring 2028.",
+    ];
+    for (const reply of cNew1) {
+        it(`(C-NEW-1) grad term between course and label does NOT bind as placement: ${reply}`, () => {
+            const v = planViolations(reply, makeSchedule());
+            expect(v.length).toBe(0);
+        });
+    }
+
+    // C-NEW-2 — LOCK_ASSERT_RE over-matches the bare word "final".
+    // "final course" / "final exam" / "finalized title" are NOT lock
+    // assertions; 102 is movable, so reading them as a lock claim
+    // false-blocks. These are all grounded.
+    const cNew2 = [
+        "Your final course is CSCI-UA 102 in Fall 2027.",
+        "CSCI-UA 102 has a final exam in Fall 2027.",
+        "CSCI-UA 102 is the finalized title for your intro course in Fall 2027.",
+    ];
+    for (const reply of cNew2) {
+        it(`(C-NEW-2) bare-noun "final" is NOT a lock assertion: ${reply}`, () => {
+            const v = planViolations(reply, makeSchedule());
+            expect(v.length).toBe(0);
+        });
+    }
+
+    // M-1 — DELIBERATE known limit (false-negative-preferred policy).
+    // The C4/C-NEW-1 grad-exclusion means a genuinely-WRONG grad claim
+    // phrased WITH a co-occurring course whose stored term equals the
+    // STATED grad term slips through (stored grad is Spring 2028, but
+    // "CSCI-UA 102 means you graduate Fall 2027" — 102's stored term —
+    // yields 0 violations). ACCEPTABLE: false-negative > false-block.
+    it("(M-1) documented known limit: wrong grad term that equals a co-occurring course's term slips", () => {
+        const v = planViolations(
+            "CSCI-UA 102 means you graduate Fall 2027.",
+            makeSchedule(),
+        );
+        expect(v.length).toBe(0);
+    });
+});
+
+// ============================================================
+// DETECTION-SURVIVES probes — genuinely-ungrounded claims that MUST
+// still fire after the round-2 tightening, so we know detection wasn't
+// regressed away.
+// ============================================================
+describe("checkPlanClaims — genuine ungrounded claims still fire (round 2)", () => {
+    it("(P1) wrong placement still fires", () => {
+        const v = planViolations("CSCI-UA 102 is in Spring 2026.", makeSchedule());
+        expect(v.length).toBe(1);
+    });
+
+    it("(P2) wrong grad term (no co-occurring course) still fires", () => {
+        const v = planViolations("You graduate Fall 2027.", makeSchedule());
+        expect(v.length).toBe(1);
+    });
+
+    it("(P3) wrong lock (movable claimed locked) still fires", () => {
+        const v = planViolations("CSCI-UA 102 is final.", makeSchedule());
+        expect(v.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("(P4) wrong lock (locked claimed movable) still fires", () => {
+        const v = planViolations("You can still move CSCI-UA 101.", makeSchedule());
+        expect(v.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("(P5) two-course sentence fires only on the genuinely-wrong lock (102)", () => {
+        const v = planViolations(
+            "CSCI-UA 102 is locked, and CSCI-UA 101 is final.",
+            makeSchedule(),
+        );
+        // 102 is movable → "locked" is wrong → fires. 101 is completed/locked
+        // → "final" is correct → no fire. Exactly one violation, on 102.
+        expect(v.length).toBe(1);
+        expect(v[0]!.detail).toContain("CSCI-UA 102");
+    });
+});
