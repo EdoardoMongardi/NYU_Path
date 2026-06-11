@@ -358,6 +358,13 @@ A placement / grad-term claim that is syntactically marked as a probe result or 
 { kind: "ungrounded_plan_claim", detail: "Reply asserts <COURSE> is locked/final, but the stored plan has it as a movable <kind> slot." (and the inverse) }
 ```
 
+### Eval bucket (D5.3 — operationalizes the "agent eval cases pass" exit clause)
+
+`packages/engine/tests/agent/planClaims.eval.ts` is the eval bucket for this gate. It has two layers (mirroring `preferenceExtraction.eval.ts`):
+
+1. **Deterministic exit-criterion fixtures (run in CI).** A typed fixture table `PLAN_CLAIM_EVAL_FIXTURES` of ≥6 **negatives** (ungrounded claims that MUST block: wrong placement term, wrong graduation term, both lock directions, a course the plan doesn't place) and ≥8 **positives** (grounded / natural replies that MUST NOT block — including the D5.1-review false-positive-risk phrasings: prereq-chain, "to graduate on time, take … in Fall 2027", "your final course is … in Fall 2027", two-course opposite-lock, and **negated** lock / placement / grad statements). The fixtures diff against a minimal valid `FIXTURE_SCHEDULE` (102 @ 2027-fall movable, 101 @ 2025-fall completed/locked, 201 @ 2027-spring, grad Spring 2028). Inline unconditional `vitest` tests assert `validateResponse(...).violations.some(v => v.kind === "ungrounded_plan_claim") === fixture.expectBlock` for each, plus a count-invariant. Vitest globs `*.eval.ts`, so these run on **every** `npx vitest run` with **no API key** — they ARE the operationalized exit-criterion gate.
+2. **Real-LLM false-positive safety net (operator-gated on `ANTHROPIC_API_KEY`).** A gated block prompts the **real** model to describe the fixture plan in natural adviser prose grounded in `FIXTURE_PLAN_SUMMARY`, then asserts the validator does NOT false-block the model's phrasing (a false block ⇒ a regression to fix; failures log the offending prompt + reply). Gated so it **never runs in CI** — it skips cleanly when the key is unset.
+
 ---
 
 ## 10. The validator context
