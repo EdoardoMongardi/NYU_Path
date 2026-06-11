@@ -1,6 +1,6 @@
 # System Prompt
 
-> Last verified against code: 2026-06-11 (D4 honesty-rail CORE RULES 9–11 + banner count fix; post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (D6.1 — rung-1 preference table + Tier-A eval reconciled to the live `PlanMutation` union, incl. Phase-17 `move`/`unpin`/`freeze`; D4 honesty-rail CORE RULES 9–11 + banner count fix; post planning-engine rebuild, PRs #35-#41).
 
 > **Source file:** `packages/engine/src/agent/systemPrompt.ts`
 
@@ -29,7 +29,7 @@ This module builds the **system prompt** — the long instruction block the LLM 
 The prompt has three sections, assembled in order:
 
 1. **Core static rules** — eleven numbered rules that are always present
-2. **Preference extraction** — Phase-14 rules about translating natural-language preferences into structured `PlanChangeProposal`s
+2. **Preference extraction** — Phase-14 rules (reconciled in D6.1) about translating natural-language preferences into live `PlanMutation` entries for the `propose_plan_change` `mutations` array
 3. **Decision-#42 4-tier fallback hierarchy** — rules for how to handle hard vs. soft student constraints
 4. **Conditional sections** based on options:
    - DPR routing block — an `if`/`else`: the DPR-loaded routing block when `dprLoaded` is truthy, otherwise the `## NO DEGREE PROGRESS REPORT LOADED` block instructing the agent to ask for the DPR
@@ -77,28 +77,38 @@ This is appended verbatim under `## PREFERENCE EXTRACTION — Tier-A modeled map
 
 It instructs the model that when the student expresses a scheduling preference, the model must NOT directly mutate the plan. Instead it must:
 
-1. Translate to a `PlanChangeProposal`
+1. Translate to one or more entries in the `mutations` array
 2. Call `propose_plan_change`
 3. Surface the feasibility + consequences
 4. Wait for confirmation
 5. Call `confirm_plan_change`
 
-A table of preference → proposal mappings is included:
+> **Reconciled to the live schema (D6.1, 2026-06-11).** This table predated Phase 17 and had drifted. Until D6.1 it taught the kinds `load_style` (payload `{term, value}`), `include_summer`, `include_jterm`, `allow_below_floor`, and `set_scheduling_preference`. **Those kinds are NOT what `propose_plan_change` accepts** — the tool's `inputSchema` is `{ mutations: z.array(PlanMutationSchema).min(1) }`, and `PlanMutationSchema` ([`planChangeHelpers.ts`](../../../packages/engine/src/agent/forwardSchedule/planChangeHelpers.ts)) is a `z.discriminatedUnion("kind", …)` over a fixed kind set. There is **no alias/adapter layer** anywhere in `packages/engine/src` or `apps/web` that rewrites `load_style` → `loadStyleOverride` or `include_summer` → a preference field — grep confirms those names existed only in this prompt block and the matching eval fixtures. So before D6.1 the prompt was teaching the LLM to emit mutations the tool would reject at validation. (The separate `PlanChangeProposal` interface in `types.ts` DOES use the old `kind` strings, but `propose_plan_change` never consumes it.) The table below is now the live union.
 
-| Natural-language pattern | `kind` | `payload` shape |
+A table of preference → mutation mappings is included. Every `kind` is a member of the live `PlanMutation` union:
+
+| Natural-language pattern | `kind` | mutation shape |
 |---|---|---|
-| "I want a free / chill / light `<term>`" | `load_style` | `{ term: "<term-code>", value: "light" }` |
-| "Make `<term>` heavy / busy / packed" | `load_style` | `{ term: "<term-code>", value: "heavy" }` |
-| "Take `<courseId>` in `<term>`" | `pin` | `{ courseId: "<id>", term: "<term-code>" }` |
-| "Don't put `<course>` in `<term>`" | `exclude` | `{ courseId: "<id>", term: "<term-code>" }` |
-| "I'll consider summer" | `include_summer` | `{ value: true }` |
-| "Use J-term" | `include_jterm` | `{ value: true }` |
-| "I want to be part-time / drop below 12 credits" | `allow_below_floor` | `{ value: true }` (and surface the OGS RCL warning for F-1) |
-| "No Tuesday classes" / "I'd prefer afternoon classes" | `set_scheduling_preference` | `{ value: <SchedulingPreferences fragment> }` |
+| "I want a free / chill / light `<term>`" | `loadStyleOverride` | `{ term: "<term-code>", style: "light" }` |
+| "Make `<term>` heavy / busy / packed" | `loadStyleOverride` | `{ term: "<term-code>", style: "heavy" }` |
+| "Frontload / backload / balance my whole plan" | `loadStyleOverride` | `{ style: "frontload" \| "backload" \| "balanced" }` (omit term — plan-level) |
+| "Take `<courseId>` in `<term>`" | `pin` | `{ courseId, term }` (default `freeze: true` — locks the slot) |
+| "Add `<course>` to `<term>` but keep it movable" | `pin` | `{ courseId, term, freeze: false }` (Phase-17 place-without-lock) |
+| "Move `<course>` from `<fromTerm>` to `<toTerm>`" | `move` | `{ courseId, fromTerm, toTerm }` (Phase-17 drag-to-move) |
+| "Unlock / unpin `<course>`" / "let the planner move it again" | `unpin` | `{ courseId, term }` (Phase-17 inverse of a frozen pin) |
+| "Don't put `<course>` in `<term>`" | `exclude` | `{ courseId, term? }` (omit term → exclude from every term) |
+| "Swap `<dropId>` for `<addId>` in `<term>`" | `swap` | `{ drop, add, term }` |
+| "I'll consider summer" / "Use J-term" / "Add a summer term" | `addTerm` | `{ term }` (the ONLY kind that opens optional terms — `applyMutationsToPreferences` flips `includeSummer` / `includeJTerm` from the term's season; there is no `include_summer` kind) |
+| "Use `<courseId>` for that free-elective slot" | `bindFreeElective` | `{ slotId, courseId }` (inverse `unbindFreeElective`; `bindPoolSlot` for requirement-pool slots) |
+| "No Tuesday classes" / "I'd prefer afternoon classes" | `setSchedulingPreference` | `{ value: <SchedulingPreferences fragment> }` (inverse `clearSchedulingPreference`) |
+
+**"I want to be part-time / drop below 12 credits" has no live mutation kind.** `allowBelowF1Floor` IS a real `SchedulePreferences` field (consumed by `visaValidator.ts`), but **no `PlanMutation` kind writes it** — so `propose_plan_change` cannot set it. The reconciled table routes this to a **Tier-C clarification** (surface the OGS RCL requirement for F-1 students and ask them to confirm with OGS / their adviser) rather than instructing the LLM to emit a non-existent `allow_below_floor` kind.
 
 Term-code resolution rule: use temporal context (`nextTerm`, `graduationTerm`). If the student says a season without a year, default to the nearest future instance of that season relative to `nextTerm`.
 
 Ambiguity rule: ask one clarifying question before calling `propose_plan_change`.
+
+The eval suite's Tier-A bucket ([`preferenceExtraction.eval.ts`](../../../packages/engine/tests/agent/preferenceExtraction.eval.ts)) is reconciled to the same union and now carries `move` + `unpin` fixtures. An inline (no-API-key) test derives the live kind set straight from `PlanMutationSchema.options` and asserts every Tier-A fixture's `kind` is a member — so the table and the fixtures cannot silently re-drift.
 
 ---
 
