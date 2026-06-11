@@ -1,12 +1,12 @@
 # Response Validator
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (post planning-engine rebuild + D5.1 plan-claim check).
 
-> **Source files:** `packages/engine/src/agent/responseValidator.ts`, `agent/verifiers/blockquoteAttribution.ts`
+> **Source files:** `packages/engine/src/agent/responseValidator.ts`, `agent/verifiers/blockquoteAttribution.ts`, `agent/forwardSchedule/termLabel.ts`
 
 ## TL;DR
 
-Before any answer reaches the student, it goes through seven safety checks — like a copy editor that catches dangerous mistakes before publication. The first check makes sure every number in the answer actually came from a real lookup this turn (no making things up from training data). The second makes sure the AI didn't claim to have run a tool it never ran. The next checks make sure required warnings weren't dropped, that any quote from a school document matches the real text, that quotes have honest sources (not fabricated bulletins), that the AI didn't invent fake identity facts about the student, and that quantitative answers like "you need X more credits" use real math. If any check fails and the AI has a retry available, the system asks the AI to redo the answer with notes on what to fix. None of these checks involves another AI call — they're all fast, deterministic code.
+Before any answer reaches the student, it goes through eight safety checks — like a copy editor that catches dangerous mistakes before publication. The first check makes sure every number in the answer actually came from a real lookup this turn (no making things up from training data). The second makes sure the AI didn't claim to have run a tool it never ran. The next checks make sure required warnings weren't dropped, that any quote from a school document matches the real text, that quotes have honest sources (not fabricated bulletins), that the AI didn't invent fake identity facts about the student, and that quantitative answers like "you need X more credits" use real math. The eighth check (D5.1) diffs the AI's *plan* claims — "CSCI-UA 102 is in Fall 2027", "you graduate Spring 2028", "this course is locked" — against the stored forward schedule, so the AI can't mis-state where a course lands, when the student graduates, or whether a slot is movable. If any check fails and the AI has a retry available, the system asks the AI to redo the answer with notes on what to fix. None of these checks involves another AI call — they're all fast, deterministic code.
 
 ```mermaid
 flowchart LR
@@ -17,6 +17,7 @@ flowchart LR
     Draft --> C5[Sources honest?]
     Draft --> C6[Identity facts true?]
     Draft --> C7[Math correct?]
+    Draft --> C8[Plan claims match stored plan?]
     C1 --> Verdict{All pass?}
     C2 --> Verdict
     C3 --> Verdict
@@ -24,6 +25,7 @@ flowchart LR
     C5 --> Verdict
     C6 --> Verdict
     C7 --> Verdict
+    C8 --> Verdict
     Verdict -->|yes| Ship[Send to student]
     Verdict -->|no| Retry[Ask AI to redo]
 ```
@@ -34,11 +36,11 @@ This is the structural gate every final reply passes through before the user see
 
 When a violation fires *and* the agent loop has any replay budget left, the loop appends a system message describing the violations and asks the model to redo the reply (see [`agent-loop.md`](agent-loop.md) §4). If the budget is exhausted, the reply goes out *with* the violations and the chat layer can still surface them.
 
-There are **seven** validators. All run on every reply; the final verdict is the union of their violations.
+There are **eight** validators. All run on every reply; the final verdict is the union of their violations.
 
 ---
 
-## 1. The seven validators at a glance
+## 1. The eight validators at a glance
 
 ```mermaid
 graph LR
@@ -49,6 +51,7 @@ graph LR
     DRAFT --> V5[5. Attribution / blockquote]
     DRAFT --> V6[6. Identity drift]
     DRAFT --> V7[7. Quantitative shortfall]
+    DRAFT --> V8[8. Plan claims]
     V1 --> AGG[Aggregate violations]
     V2 --> AGG
     V3 --> AGG
@@ -56,12 +59,13 @@ graph LR
     V5 --> AGG
     V6 --> AGG
     V7 --> AGG
+    V8 --> AGG
     AGG --> VERDICT{any<br/>violations?}
     VERDICT -->|no| OK[ok: true]
     VERDICT -->|yes| BAD[ok: false<br/>+ list]
 ```
 
-The function name on each is internal: `checkGrounding`, `checkInvocations`, `checkCompleteness`, `checkVerbatim`, `checkAttribution` (delegates to `verifyBlockquoteAttribution`), `checkIdentityDrift`, `checkQuantitativeShortfall`. The public entry point is `validateResponse(ctx) → ValidatorVerdict`.
+The function name on each is internal: `checkGrounding`, `checkInvocations`, `checkCompleteness`, `checkVerbatim`, `checkAttribution` (delegates to `verifyBlockquoteAttribution`), `checkIdentityDrift`, `checkQuantitativeShortfall`, `checkPlanClaims`. The public entry point is `validateResponse(ctx) → ValidatorVerdict`.
 
 ---
 
@@ -75,6 +79,7 @@ verbatim_drift             — semi-hardened tool's required verbatim text not p
 fabricated_attribution     — blockquote attributed to "the bulletin" but not in any search_policy chunk
 identity_drift             — agent told the user to "call me" / "email me" (it isn't a separate entity)
 quantitative_shortfall     — user asked for N units, agent delivered fewer and didn't acknowledge
+ungrounded_plan_claim      — a course-placement / graduation-term / lock-status claim disagrees with the stored forward plan
 ```
 
 ---
@@ -159,7 +164,7 @@ The rules live in `INVOCATION_RULES`. Each rule has:
 
 ### Negation guard
 
-Before a trigger fires, the validator scans the 30 characters before the matched phrase for a negation marker (`not`, `isn't`, `aren't`, `never`, `no longer`, `rather than`, `NOT`). If a negation is present, the trigger is **skipped**. This prevents replies like *"this is NOT an internal transfer"* from being forced to call `search_policy`.
+Before a trigger fires, the validator scans the 30 characters before the matched phrase for a negation marker (`NEGATION_RE`: `not`, `isn't`, `aren't`, `never`, `no longer`, `rather than`, `NOT`, plus a generic `\w+n't` contraction branch — `haven't`/`hasn't`/`didn't`/`won't`/… — with the apostrophe required so plain words like "important" never match). If a negation is present, the trigger is **skipped**. This prevents replies like *"this is NOT an internal transfer"* from being forced to call `search_policy`. The same `NEGATION_RE` powers the plan-claim clause-scoped negation guard (§9.5), which scans the *whole* pre-token clause span rather than a fixed window.
 
 ### Violation shape
 
@@ -310,19 +315,72 @@ unable to (fill|reach) the (requested )?(target|amount)
 
 ---
 
+## 9.5. Validator 8 — Plan claims (D5.1, the "ungrounded plan claims blocked" gate)
+
+> **Rule:** when the session has a stored forward plan (`ctx.forwardSchedule`), every **course-placement**, **graduation-term**, and **lock-status** claim in the reply must agree with that plan. Plan claims are **Tier-1** (engine-grounded) — there is **no hedging exemption** (opposite the Tier-2 estimate exemption in §3). "Verify with your adviser" does **not** excuse an ungrounded placement / grad-term claim.
+
+`checkPlanClaims(ctx)` is **pure / deterministic / no-LLM** — it diffs the reply's prose against the stored schedule. It is a **no-op when `ctx.forwardSchedule` is absent** (it never invents a plan to diff against; the route populates the field — task D5.2).
+
+### What it catches
+
+- **course-placement** — "CSCI-UA 102 is in Fall 2027" that disagrees with where the stored plan places the course, **or** a concrete-term placement for a course the plan doesn't place at all.
+- **graduation-term** — "you graduate Spring 2028" that disagrees with `forwardSchedule.graduationTerm`.
+- **lock-status** — "CSCI-UA 102 is locked/final" when the stored slot is movable, **or** "you can still move CSCI-UA 101" when the stored slot is `completed`/`in_progress` (or sits in a `locked: true` semester).
+
+### Lock semantics (source of truth = slot `kind` + the semester's `locked`)
+
+`completed` / `in_progress` → fixed (taken / in-term). `specific_planned` / `placeholder` → movable **unless** the slot's semester carries `locked: true`. `placeholder` slots carry **no `courseId`**, so course-placement claims resolve only against `completed` / `in_progress` / `specific_planned` slots.
+
+### The two deterministic primitives
+
+1. **Term-label normalizer** — `psTermToSolverTerm` lives in the shared module `agent/forwardSchedule/termLabel.ts`, imported by **both** `buildSolverInput.ts` (which formerly held a private copy) **and** `responseValidator.ts`, so the prose-vs-plan term comparison can't drift from the solver's term shape. It maps "Fall 2027" / "2027 Fall" / "2027-fall" → `2027-fall` (and Spring / Summer / January / J-Term). The validator **never raw-string-compares** "Fall 2027" against "2027-fall".
+2. **Course-code + term co-occurrence extractor (nearest-course-scoped)** — a course-code regex (mirrors `buildSolverInput.ts` `COURSE_ID_RE`: `\b([A-Z][A-Z0-9]*-[A-Z]{2,3})\s+(\d{1,4}[A-Z]?)\b`) finds explicit course ids; a term label (`PLAN_TERM_LABEL_RE`) is sought within a **±60-char window** of each code. **Stated known-limit:** only claims with a *deterministically resolvable* term label are checked. Paraphrases like "next fall" / "the following term" produce **no** violation — the check never blocks on a guess (no silent false-negative-block). A course mentioned with no nearby term claim → no violation.
+
+   **Attribution is nearest-course / clause-scoped (anti term-bleed).** To avoid false-blocking a *grounded* reply — the worst outcome for this launch gate — a term label binds to a course only (a) inside that course's own **clause** (`clauseAround` / `clauseBounds`: split on sentence terminators + `;`, **not** commas), AND (b) when **no OTHER course code sits between** the code and the label ("nearest course code wins", `termsBoundToCourse`). So a neighbouring prereq's term ("…CSCI-UA 102 requires CSCI-UA 101 in Fall 2025"), a *second* course's term in the same sentence ("102 builds on 201 in Spring 2027"), and a grad term from a *prior* sentence no longer bleed onto this course. **Lock-status** assertions are likewise attributed to the nearest course code by keyword-match position (`assertionAttributedToCourse`), so "X is final, and Y can still move" resolves X→locked and Y→movable independently rather than testing both regexes against the whole comma-spanning clause. **Graduation** terms must follow the `graduat…` token with no course code between them and must **not** co-occur with a course code (`labelAttributableToGrad`) — a placement term inside a "to graduate on time, take CSCI-UA 102 in Fall 2027" clause is a *placement* claim, not a grad claim, so the grad path no longer mis-fires. This tightening makes attribution **precise**; it does not disable detection — a genuinely ungrounded single-course / grad / lock claim still fires.
+
+   **Grad-token guard on the placement path (mirror of the grad-path exclusion).** The inverse also holds: a term label attributable to a `graduat…` token is **not** a course-placement term either. `termsBoundToCourse` drops any candidate label that `labelAttributableToGrad` claims for the nearest `graduat…` token (token precedes the label, no course code between them) — symmetric in both orderings ("…take CSCI-UA 102, then graduate Spring 2028" and "You graduate Spring 2028, right after CSCI-UA 102"). Without this, a grad term sitting between a course code and a label (with no period to clip on) was wrongly read as that course's placement and false-blocked a grounded reply.
+
+   **Status-anchored `final` matching (lock assertion).** `LOCK_ASSERT_RE` no longer matches the bare token `final`/`finalized`, which is mutability-ambiguous: "final **course**", "final **exam**", "**finalized** title" describe a noun, not a slot's lock status. `final`/`finalized` now counts only in a status sense, anchored by a copula/placement context — `(is|are|'s|stays|remains|locked) final`, `placement is final`, `finalized in the/your plan` — and never immediately before a noun. The unambiguous lock verbs (`locked`, `can't change`, `fixed in place`, `set in stone`, `already taken`) keep their plain forms, so a genuine "CSCI-UA 102 is locked/final" lock claim still fires.
+
+   **Clause-scoped negation guard (D5.1 round-3 — a negated statement is not a claim).** A **negated** lock / placement / graduation sentence *disclaims*, rather than *asserts*, the matched fact — yet pre-guard it was read as its opposite and **false-blocked a TRUE reply** (e.g. "CSCI-UA 102 **isn't** locked yet" parsed as a lock assertion; "you will **not** graduate in Fall 2027" as a grad claim). Before emitting a placement / grad / lock violation, the check now scans the **governing clause** *before* the matched token for a negation marker (`clauseHasGoverningNegation(clause, tokenOffsetWithinClause)`, reusing `NEGATION_RE`) and **suppresses** the violation when one governs it. The matched token is the **term label** for placement/grad and the **lock/movable keyword** for lock status. Two design points distinguish it from the §4/§5 F4a guard (`isMatchNegated`): (a) it scans the *whole pre-token clause span*, not a fixed 30-char window — "you will not graduate in Fall 2027" and "I did not put CSCI-UA 102 in Spring 2026" place the negation marker well beyond 30 chars from the term; (b) it relies on `clauseBounds`' sentence/`;` split so a **corrective consequent** lands in a *separate* clause — "CSCI-UA 102 is **not** in Spring 2026**;** it's in Fall 2027" scopes the negated "Spring 2026" to the clause that still carries its governing "not", while the true "Fall 2027" in the next clause is unaffected. `NEGATION_RE` was widened with a `\w+n't` branch (apostrophe required, so plain words like "important" never match) to catch the generic English contraction (`haven't`, `hasn't`, `didn't`, `won't`, …), e.g. "We **haven't** locked CSCI-UA 102 down." The guard fires symmetrically on a negated lock keyword ("isn't **locked**" → not a lock claim) and a negated movable keyword ("is not **movable**" → not a movable claim). **This slightly raises the (preferred) false-negative bound** — a genuinely-*wrong* negated claim could now slip — which is the policy-preferred direction (a missed mismatch beats false-blocking a grounded reply). A plain wrong claim has **no** governing negation, so it is unaffected: the non-negated probes ("CSCI-UA 102 is in Spring 2026.", "You graduate Fall 2027.", "CSCI-UA 102 is locked.", "You can still move CSCI-UA 101.") still fire.
+
+   **Deliberate known false-negative (C4 / C-NEW-1).** Because a grad term that co-occurs with a course code is excluded from the grad path, a genuinely-*wrong* grad claim phrased with a co-occurring course whose stored term equals the stated term slips through ("CSCI-UA 102 means you graduate Fall 2027" → 0 violations though stored grad is Spring 2028). This is **acceptable** under the false-negative-preferred policy: a missed grad mismatch is far better than false-blocking a grounded reply. The limit is pinned by a test and noted inline in `checkPlanClaims`.
+
+### Counterfactual / hypothetical carve-out (collision with D2 probes)
+
+A placement / grad-term claim that is syntactically marked as a probe result or hypothetical describes a re-solved what-if schedule that **intentionally** differs from the stored plan and is **skipped**. The carve-out fires when the claim's enclosing clause carries a conditional marker (`isConditionalFrame`): `if`, `would`, `hypothetical(ly)`, `what if`, `suppose`, `were you to`. **Known-limit carve-out within the carve-out:** the benign trailing politeness idioms `if you'd like` / `if you want` / `if you prefer` / `if you wish` / `if you choose` are stripped before the conditional test (`BENIGN_CONDITIONAL_IDIOM_RE`) — they offer a real change to the *current* plan, so a lock-status / placement claim in such a clause is still checked.
+
+### Violation shape
+
+```
+{ kind: "ungrounded_plan_claim", detail: "Reply places <COURSE> in <claimedTerm>, but the stored plan places it in <storedTerm> / does not place it at all." }
+{ kind: "ungrounded_plan_claim", detail: "Reply claims graduation in <claimedTerm>, but the stored plan's graduation term is <storedTerm>." }
+{ kind: "ungrounded_plan_claim", detail: "Reply asserts <COURSE> is locked/final, but the stored plan has it as a movable <kind> slot." (and the inverse) }
+```
+
+### Eval bucket (D5.3 — operationalizes the "agent eval cases pass" exit clause)
+
+`packages/engine/tests/agent/planClaims.eval.ts` is the eval bucket for this gate. It has two layers (mirroring `preferenceExtraction.eval.ts`):
+
+1. **Deterministic exit-criterion fixtures (run in CI).** A typed fixture table `PLAN_CLAIM_EVAL_FIXTURES` of ≥6 **negatives** (ungrounded claims that MUST block: wrong placement term, wrong graduation term, both lock directions, a course the plan doesn't place) and ≥8 **positives** (grounded / natural replies that MUST NOT block — including the D5.1-review false-positive-risk phrasings: prereq-chain, "to graduate on time, take … in Fall 2027", "your final course is … in Fall 2027", two-course opposite-lock, and **negated** lock / placement / grad statements). The fixtures diff against a minimal valid `FIXTURE_SCHEDULE` (102 @ 2027-fall movable, 101 @ 2025-fall completed/locked, 201 @ 2027-spring, grad Spring 2028). Inline unconditional `vitest` tests assert `validateResponse(...).violations.some(v => v.kind === "ungrounded_plan_claim") === fixture.expectBlock` for each, plus a count-invariant. Vitest globs `*.eval.ts`, so these run on **every** `npx vitest run` with **no API key** — they ARE the operationalized exit-criterion gate.
+2. **Real-LLM false-positive safety net (operator-gated on `ANTHROPIC_API_KEY`).** A gated block prompts the **real** model to describe the fixture plan in natural adviser prose grounded in `FIXTURE_PLAN_SUMMARY`, then asserts the validator does NOT false-block the model's phrasing (a false block ⇒ a regression to fix; failures log the offending prompt + reply). Gated so it **never runs in CI** — it skips cleanly when the key is unset.
+
+---
+
 ## 10. The validator context
 
 ```
 ValidatorContext = {
-  assistantText: string,        // the model's draft this turn
-  invocations: ToolInvocation[],// every tool the model called this turn
-  student?: StudentProfile,     // gates the F-1 caveat rule
-  transferIntent?: boolean,     // currently unread by any rule; kept for forward use
-  userQuestion?: string,        // last user message, used by verbatim's F4c skip + shortfall check
+  assistantText: string,            // the model's draft this turn
+  invocations: ToolInvocation[],    // every tool the model called this turn
+  student?: StudentProfile,         // gates the F-1 caveat rule
+  transferIntent?: boolean,         // currently unread by any rule; kept for forward use
+  userQuestion?: string,            // last user message, used by verbatim's F4c skip + shortfall check
+  forwardSchedule?: ForwardSchedule,// D5.1 — stored forward plan; gates checkPlanClaims (no-op when absent)
 }
 ```
 
-The agent loop wires this in via the `validateResponse` callback passed to `runAgentTurnStreaming`. The web chat route in `apps/web/app/api/chat/v2/route.ts` constructs the context per turn.
+The agent loop wires this in via the `validateResponse` callback passed to `runAgentTurnStreaming`. The web chat route in `apps/web/app/api/chat/v2/route.ts` constructs the context per turn. The `forwardSchedule` field is populated by the route in task D5.2; until then `checkPlanClaims` no-ops.
 
 ---
 
@@ -334,6 +392,12 @@ The agent loop wires this in via the `validateResponse` callback passed to `runA
 - It does not enforce that *every* claim is grounded — only "claim numbers" as defined above. Words like "you're on track" or "this is fine" can be made without grounding, by design.
 - It does not block reply delivery on its own. The agent loop owns the replay budget and final return.
 
-### Known limitation — plan-shaped claims are not checked against the engine plan
+### Plan-shaped claims ARE now checked (D5.1 — gap closed)
 
-The grounding validator (§3) only verifies that **numbers** trace to a tool summary, args, the user question, or an `a±b` derivation. It has **no check that a plan-shaped claim — "you'll take CSCI-UA 310 in Fall 2026", "MATH-UA 121 is in your second semester" — actually matches the term placement the forward planner produced in `session.forwardSchedule`.** Course codes and term labels are strings, not "claim numbers", so the agent can mis-state which course lands in which term (or invent a placement the planner never made) and no validator fires. This is a known **Phase-3 gap**: the post-rebuild planner (`finalizeForwardSchedule` → 7-axis `runGraduationPathValidator`) is the authority on the plan itself, but the *response* validator does not cross-check the agent's prose against that authoritative plan. Closing it would mean a new validator that diffs the reply's stated placements against the stored schedule.
+> Historical note: this section previously documented a Phase-3 gap — plan-shaped claims ("CSCI-UA 310 in Fall 2026") were *not* cross-checked against the stored schedule, because course codes and term labels are strings, not "claim numbers". **That gap is closed by Validator 8 (`checkPlanClaims`, §9.5)**, which diffs the reply's course-placement / graduation-term / lock-status claims against `ctx.forwardSchedule` deterministically.
+
+Residual bounds of the check (by design, not bugs):
+- It only acts when `ctx.forwardSchedule` is present (no-op otherwise — the route wires the field in D5.2).
+- It only resolves placement claims with a *deterministically parseable* term label co-occurring within ±60 chars of an explicit course code; paraphrased terms ("next fall") are out of scope and never block.
+- Attribution is **nearest-course / clause-scoped** (see §9.5, primitive 2): a neighbour course's term, a second course's term in the same sentence, or a term across a sentence boundary does **not** bind to this course; lock/movable assertions and graduation terms are likewise attributed to their nearest course / to the `graduat…` token, not to a whole comma-spanning clause. This kills the cross-clause / cross-course term-bleed that would otherwise false-block a grounded reply, **without** dropping detection of a genuinely ungrounded claim.
+- It skips claims inside a conditional / hypothetical frame (the counterfactual carve-out), so probe / what-if replies aren't flagged against the current plan.

@@ -26,6 +26,7 @@ import { meetsGradeThreshold } from "../../dpr/gradeComparison.js";
 import { deriveTemporalContext } from "../../dpr/temporalContext.js";
 import { hashDprCourseHistory } from "./reconcile.js";
 import { classifyRequirementKind } from "./requirementKind.js";
+import { psTermToSolverTerm } from "./termLabel.js";
 import type { SolverInput } from "./types.js";
 import { loadOffCatalogCredits, loadOfferings } from "../../dataLoader.js";
 import type { ConfidenceTier } from "@nyupath/shared";
@@ -533,33 +534,9 @@ function inferCurrentTerm(dpr: DegreeProgressReport, now: Date = new Date()): st
     return "2026-fall";
 }
 
-/**
- * Convert a human term label to the solver's "{year}-{season}" shape.
- * Accepts EITHER "2026 Fall" (PeopleSoft / DPR) OR "Fall 2026"
- * (deriveTemporalContext output) OR the already-canonical "2026-fall".
- * Returns null when the input isn't a recognizable term label.
- */
-function psTermToSolverTerm(psTerm: string): string | null {
-    // Already in solver format → pass through.
-    if (/^\d{4}-(?:fall|spring|summer|january)$/i.test(psTerm)) {
-        return psTerm.toLowerCase();
-    }
-    // "YYYY Season" or "Season YYYY".
-    const m = psTerm.match(/^(\d{4})\s+(Fall|Spring|Summer|J Term|J-Term|January|Spr|Sum)$/i)
-        ?? psTerm.match(/^(Fall|Spring|Summer|J Term|J-Term|January|Spr|Sum)\s+(\d{4})$/i);
-    if (!m) return null;
-    const [g1, g2] = [m[1]!, m[2]!];
-    const yearStr = /^\d{4}$/.test(g1) ? g1 : g2;
-    const seasonStr = /^\d{4}$/.test(g1) ? g2 : g1;
-    const seasonRaw = seasonStr.toLowerCase();
-    const season =
-        seasonRaw.startsWith("fa") ? "fall" :
-        seasonRaw.startsWith("sp") ? "spring" :
-        seasonRaw.startsWith("su") ? "summer" :
-        seasonRaw.startsWith("j") ? "january" : null;
-    if (!season) return null;
-    return `${yearStr}-${season}`;
-}
+// `psTermToSolverTerm` now lives in ./termLabel.ts (extracted in D5.1 so
+// the response validator's checkPlanClaims shares ONE normalizer and can't
+// drift). Imported at the top of this file.
 
 /**
  * Convert a display-form graduation target ("Spring 2027", "2027 Spr",
