@@ -75,10 +75,6 @@ verbatim_drift             — semi-hardened tool's required verbatim text not p
 fabricated_attribution     — blockquote attributed to "the bulletin" but not in any search_policy chunk
 identity_drift             — agent told the user to "call me" / "email me" (it isn't a separate entity)
 quantitative_shortfall     — user asked for N units, agent delivered fewer and didn't acknowledge
-incompleteness             — never emitted by validateResponse itself; the v2 chat route reuses
-                             this kind for completeness-reviewer failures, but the reviewer is
-                             dead in production (always passes), so it never actually fires. See
-                             completeness-reviewer.md.
 ```
 
 ---

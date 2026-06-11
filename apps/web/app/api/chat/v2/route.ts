@@ -28,7 +28,6 @@ import {
     // removed from the active path — every question enters the agent
     // loop. runRecoveryMode handles the cohort-gate-failing path.
     validateResponse,
-    reviewCompleteness,
     createPrimaryClient,
     createFallbackClient,
     getCohortConfig,
@@ -52,6 +51,7 @@ import {
     askClarification,
     type DegreeProgressReport,
 } from "@nyupath/engine";
+import type { ForwardSchedule, SchedulePreferences } from "@nyupath/shared";
 import {
     buildStudentProfileFromDpr,
 } from "../../../../lib/buildSession";
@@ -253,6 +253,39 @@ export async function POST(req: NextRequest): Promise<Response> {
             return null;
         }
     })();
+    // P3.1 — hydrate the student's PERSISTED plan + preferences into the
+    // per-turn session so the chat agent sees the plan the student built
+    // (e.g. via the sidebar) and the plan-claim validator has a plan to
+    // verify against. Mirrors planActionOrchestrator + /api/session/restore:
+    // loadLatestSchedule classifies a draft state into studentDraftPlan,
+    // otherwise into forwardSchedule; loadPreferences carries pins/exclusions.
+    // Guarded for userId === "anonymous" (no durable store) just like the
+    // bootstrap persist below. Best-effort: a load failure must NOT break
+    // the live turn — warn and continue with the plan slot unset.
+    let forwardSchedule: ForwardSchedule | undefined;
+    let studentDraftPlan: ForwardSchedule | undefined;
+    let schedulePreferences: SchedulePreferences | undefined;
+    if (userId !== "anonymous") {
+        try {
+            const loaded = await stores.scheduleStore.loadLatestSchedule(userId);
+            if (loaded) {
+                // Keep this draft-state classification in sync with
+                // planActionOrchestrator.ts (the other loadLatestSchedule consumer).
+                const isDraft =
+                    loaded.schedule.state === "infeasible-draft" ||
+                    loaded.schedule.state === "student-preferred-invalid-draft";
+                if (isDraft) studentDraftPlan = loaded.schedule;
+                else         forwardSchedule  = loaded.schedule;
+            }
+            const prefs = await stores.scheduleStore.loadPreferences(userId);
+            if (prefs) schedulePreferences = prefs;
+        } catch (err) {
+            console.warn(
+                `[v2 route] plan/prefs hydration failed for ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
@@ -273,6 +306,10 @@ export async function POST(req: NextRequest): Promise<Response> {
         ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
         ...(parsedDpr ? { degreeProgressReport: parsedDpr } : {}),
+        // P3.1 — persisted plan + prefs hydrated above.
+        ...(forwardSchedule ? { forwardSchedule } : {}),
+        ...(studentDraftPlan ? { studentDraftPlan } : {}),
+        ...(schedulePreferences ? { schedulePreferences } : {}),
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
     };
@@ -285,23 +322,40 @@ export async function POST(req: NextRequest): Promise<Response> {
     // `students.parsed_dpr` stayed null and `/api/session/restore`
     // returned an empty payload on every refresh.
     //
-    // No-throw: persistence failures don't break the live turn.
+    // P3.2 — gate this to INITIAL ONBOARDING ONLY. `student` is rebuilt
+    // from the re-sent body DPR every turn, so running the upsert on
+    // every message would CLOBBER a profile a prior `confirm_profile_update`
+    // wrote (a confirmed edit) and append a synthetic audit row per
+    // message. We therefore only persist when no profile exists yet — a
+    // single PK read (`profileStore.get`) per turn, whose EXISTENCE (not
+    // value) is all we check here. A returning student's confirmed edits
+    // are left intact; DPR updates are owned by the Update-DPR route.
+    // (This is the WRITE-path fix only — reading the persisted profile
+    // back INTO `session.student` each turn is Phase-4 full hydration, so
+    // do NOT thread `hasPersistedProfile` into the session.)
+    //
+    // No-throw: persistence failures don't break the live turn (a read
+    // failure skips the persist — conservative: never risk a clobber).
     if (parsedDpr && userId !== "anonymous") {
         try {
-            await stores.profileStore.persistMutation(
-                student,
-                {
-                    pendingMutationId: `bootstrap-${Date.now()}`,
-                    field: "homeSchool" as const, // discriminator unused at restore — we just need a row
-                    before: null,
-                    after: student.homeSchool,
-                    confirmedAt: new Date().toISOString(),
-                },
-                parsedDpr,
-            );
+            const hasPersistedProfile =
+                (await stores.profileStore.get(userId)) !== null;
+            if (!hasPersistedProfile) {
+                await stores.profileStore.persistMutation(
+                    student,
+                    {
+                        pendingMutationId: `bootstrap-${Date.now()}`,
+                        field: "homeSchool" as const, // discriminator unused at restore — we just need a row
+                        before: null,
+                        after: student.homeSchool,
+                        confirmedAt: new Date().toISOString(),
+                    },
+                    parsedDpr,
+                );
+            }
         } catch (err) {
             console.warn(
-                `[v2 route] bootstrap persistMutation failed: ${err instanceof Error ? err.message : String(err)}`,
+                `[v2 route] bootstrap persistMutation failed for ${userId}: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
     }
@@ -373,13 +427,13 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // Phase 11 S4 — gated clarifier. Detect deterministic
     // ambiguity signals; if any fire, run the clarifier sub-agent
-    // (single haiku call, no tools). When the clarifier returns a
+    // (single primary-model call, no tools). When the clarifier returns a
     // question, stream it as the agent's reply for THIS turn and
     // skip the main agent loop. The student responds with detail,
     // and the next turn flows through the agent normally.
     const ambiguity = detectAmbiguity(body.message, body.history ?? []);
     if (ambiguity.ambiguous) {
-        // Cheap haiku call — no tools, ~80 tokens out.
+        // Single primary-model call (Sonnet by default) — no tools, ~80 tokens out.
         const clarification = await askClarification(
             primary,
             body.message,
@@ -721,24 +775,6 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             userQuestion: userMessage,
         });
 
-        // Phase 12.5 Task 4 — completeness reviewer. Runs after
-        // validateResponse so envelope-metadata drops (missing
-        // disclaimers / bulletin anchors) are surfaced as
-        // `incompleteness` violations alongside the existing validator
-        // violations. Same `validator_block` event, no new event kind.
-        const completenessVerdict = reviewCompleteness(
-            finalResult.finalText,
-            finalResult.invocations,
-        );
-        const completenessViolations = completenessVerdict.pass
-            ? []
-            : [
-                {
-                    kind: "incompleteness" as const,
-                    detail: completenessVerdict.retryGuidance,
-                },
-            ];
-
         const allViolations = [
             ...verdict.violations.map((v) => ({
                 kind: v.kind,
@@ -746,9 +782,8 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 ...(v.caveatId ? { caveatId: v.caveatId } : {}),
                 ...(v.number ? { number: v.number } : {}),
             })),
-            ...completenessViolations,
         ];
-        const allOk = verdict.ok && completenessVerdict.pass;
+        const allOk = verdict.ok;
 
         // Phase 11 follow-up — when the validator catches fabricated
         // bulletin attribution AFTER the replay budget is spent, strip

@@ -24,7 +24,7 @@ A read-only preview tool that takes a specific course and a *requirement-pool* p
 
 Source: `packages/engine/src/agent/tools/bindPoolSlot.ts` (lines 1-567).
 
-> **Important (post-rebuild):** This tool does **not** import or call the `poolBinding.ts` module. It reimplements pool promotion inline (Step 10, lines 453-468). `packages/engine/src/agent/forwardSchedule/poolBinding.ts` (`placePoolSlot`, `promotePoolSlotToConcrete`) is **dead code** — a repo-wide search finds no non-test importer of it. The discussion of that module below is kept only to document the divergence; it is NOT on this tool's execution path.
+> **Important (post-rebuild):** This tool reimplements pool promotion **inline** (Step 10, lines 453-468), building the concrete `specific_planned` slot directly. The former standalone solver-side pool-promotion module under `forwardSchedule/` has been **removed** — the inline constructor at Step 10 is the only pool-promotion path.
 
 ---
 
@@ -201,7 +201,7 @@ This is a *necessary but not sufficient* check — the greedy "take the first av
 
 `ScheduleSlotSpecificPlanned` constructed inline (lines 453-468). Inherits credits, satisfiesRules, rationale, flexibility, downstreamImpact, confidence, isCriticalPath from the parent. Gets fresh `workloadTier` + `workloadWeight` from Step 9. `bindingState: "bound"`. The `reason` is `"Bound from pool: <poolId> / <satisfiesRule>"` (line 459).
 
-> The dead `promotePoolSlotToConcrete` helper (`poolBinding.ts:98-133`) builds a *similar but not identical* shape: its `reason` is `"Bound from pool: <ruleId>"` (single field) and it conditionally carries `optionalReason` / `approvalAuthority`, which the inlined constructor here does NOT propagate. Since the helper is never called, only the inlined constructor matters at runtime.
+> This inlined constructor at Step 10 is the only pool-promotion path at runtime.
 
 ### Step 11 — Hypothetical plan + validator
 
@@ -307,7 +307,7 @@ The choose-n check (Step 8) is *necessary but not sufficient*; the validator at 
 
 - **Does NOT surface the double-count advisory.** The double-count advisory (PR #41) is wired into `plan_forward_degree`, `propose_plan_change`, `confirm_plan_change`, `run_full_audit`, and `update_profile` — but NOT the bind tools.
 - **`in_progress` / `completed` are not caught as duplicates.** A course currently in-progress or already completed can be bound into a pool slot without a `duplicate_courseId` refusal (Step 7 asymmetry above). `bind_free_elective` does catch these; `bind_pool_slot` does not.
-- **`poolBinding.ts` is dead code.** Its `placePoolSlot` / `promotePoolSlotToConcrete` helpers (the "solver-side promotion contract" the old docs described) are no longer imported by any non-test module. `bind_pool_slot` reimplements promotion inline with a slightly different `reason` string and without `optionalReason` / `approvalAuthority` carry-overs.
+- **Pool promotion is inlined.** `bind_pool_slot` builds the concrete `specific_planned` slot inline at Step 10; there is no separate solver-side promotion module. The slot's `reason` is `"Bound from pool: <poolId> / <satisfiesRule>"` and it does not carry `optionalReason` / `approvalAuthority`.
 - **Greedy choose-n screen.** Step 8 is a fast greedy screen, not a complete bipartite-matching oracle; it can reject a binding that a smarter sibling assignment would have allowed.
 
 ---

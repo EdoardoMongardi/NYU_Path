@@ -310,9 +310,33 @@ export function buildSolverInputWithRules(
             const offeringsData = getOfferings();
             const offerings = new Map<string, Season[]>();
             const offeringConfidence = new Map<string, ConfidenceTier>();
+            // The global offerings cache is AUTHORITATIVE — real NYU offering
+            // data populates the maps first.
             for (const [id, v] of offeringsData) {
                 offerings.set(id, v.termsOffered);
                 offeringConfidence.set(id, v.confidence);
+            }
+            // Gap-fill from session.courses for ids the global cache LACKS
+            // (e.g. a session-injected / synthetic non-CAS catalog). Precedence:
+            // the global cache wins byte-for-byte for any id it already has;
+            // session.courses fills ONLY the gaps. A course with empty
+            // termsOffered is intentionally skipped (no known offering → stays
+            // a placeholder). Tier "historically_likely": a catalog's static
+            // termsOffered is a STRUCTURAL "offered in these seasons" signal,
+            // not a live-FOSE confirmation — so NOT "confirmed", and NOT a
+            // low-confidence tier that would needlessly force valid-with-trade-
+            // offs. Course.termsOffered is already Season[] — no conversion.
+            if (session.courses) {
+                for (const c of session.courses) {
+                    // `?? []` guards partial course objects (some test factories
+                    // omit termsOffered) — a missing field behaves exactly like an
+                    // empty one: no known offering, so it is skipped (placeholder).
+                    const terms = c.termsOffered ?? [];
+                    if (!offerings.has(c.id) && terms.length > 0) {
+                        offerings.set(c.id, terms);
+                        offeringConfidence.set(c.id, "historically_likely");
+                    }
+                }
             }
             return { offerings, offeringConfidence };
         })(),

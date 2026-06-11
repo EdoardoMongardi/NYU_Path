@@ -6,7 +6,7 @@
 
 This is the main "ask the AI a question" endpoint — the brain on the server side. Every time a student types a message in the chat and hits send, the message lands here. The endpoint takes the student's degree progress report (which the browser re-sends with every message), rebuilds who the student is, makes sure they haven't asked too many questions today, and hands the question off to the AI agent. As the AI thinks, calls tools, and writes its reply, this endpoint pipes everything back to the browser live so the student sees the reasoning unfold in real time instead of waiting for one big block of text. It also watches the side effects: if a tool updated the student's plan or pulled in section times, it pushes those updates to the sidebar so the page stays in sync. After the turn ends, it quietly saves the conversation so the next visit can pick up where the student left off.
 
-> **Honest caveat — the hydration gap.** Despite the "pick up where you left off" framing, this route does **not** read the student's persisted profile, forward schedule, draft plan, or scheduling preferences from Postgres. Each turn is rebuilt almost entirely from what the browser re-sends (the DPR + the last few messages). See [§5.1 The hydration gap](#51-the-hydration-gap) — it has real consequences (chat-driven confirms can clobber sidebar-set pins). The `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) are the routes that *do* hydrate fully from Postgres.
+> **Honest caveat — profile read-hydration is still Phase 4.** As of **P3.1**, this route hydrates the persisted forward schedule, draft plan, and scheduling preferences from Postgres each turn (`scheduleStore.loadLatestSchedule` + `loadPreferences`), so the agent sees the plan the student built. **P3.2** then closed the profile *write*-clobber: the bootstrap upsert is gated to initial onboarding, so a confirmed profile mutation is no longer overwritten on every message. What remains (Phase 4) is reading the persisted *profile* back into the live session — the route still rebuilds `StudentProfile` from the DPR the browser re-sends each turn rather than from `profileStore.get`, so the session uses the body-derived profile for the turn (the stored profile is intact). See [§5.1 Per-turn plan + prefs hydration](#51-per-turn-plan--prefs-hydration). The `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) hydrate fully from Postgres (profile included).
 
 ```mermaid
 flowchart LR
@@ -62,7 +62,7 @@ Bucketing follows the resolved id:
 
 The route loads the `stores` registry (`route.ts:212`, `getStores()`) and rebuilds the `StudentProfile` from the **client-posted** DPR via `buildStudentProfileFromDpr(parsedDpr, { studentIdOverride: userId, visaStatus?, homeSchoolOverride? })` (`route.ts:215-231`). The `studentIdOverride` is critical: every persistence write must key on the SAME id the restore route reads from. Without it, writes land under a slugified DPR-name id while restore reads from `auth.sub`, splitting rows across `students`, `forward_schedules`, and `chat_messages` (the May 2026 DB-split post-mortem). See [build-session.md](build-session.md) for the builder's internals.
 
-The `ToolSession` is assembled **inline** at `route.ts:256-278` with:
+The `ToolSession` is assembled **inline** at `route.ts:289-315` with:
 - `student` — the freshly built profile.
 - `profileStore`, `scheduleStore`, `chatHistoryStore` — wired durable store handles.
 - `lastUserMessage` — the current message (so tool `validateInput` hooks can apply scope guards).
@@ -71,26 +71,26 @@ The `ToolSession` is assembled **inline** at `route.ts:256-278` with:
 - `rag` — the policy-RAG bundle from `getPolicyRagBundle()` (`route.ts:233`); `null` when the corpus/keys are missing (see [build-session.md §3](build-session.md#3-boot-time-rag-setup-policyragsetup)).
 - `searchCoursesFn` — the semantic course-catalog search function from `getCourseSearchFn()` (`route.ts:232`); spread in only when present.
 - `degreeProgressReport` — the parsed DPR (always present here).
+- `forwardSchedule` / `studentDraftPlan` / `schedulePreferences` — **P3.1**: hydrated from Postgres before the session literal is built (see [§5.1](#51-per-turn-plan--prefs-hydration)). Spread in only when the load returns a value.
 
 Every one of those contributors degrades silently to `null`/omitted on failure, so a missing data file or unset key narrows the agent's abilities for the turn rather than crashing it.
 
 Tools never write to `chatHistoryStore` directly — the route handles that AFTER the agent loop finishes ([§13](#13-persistence-after-the-turn)).
 
-### 5.1 The hydration gap
+### 5.1 Per-turn plan + prefs hydration
 
-This is the most important honest fact about the route. **Each turn hydrates ONLY:**
+**P3.1** — before the `ToolSession` literal is built (`route.ts`, between the catalog load and the session literal), the route now hydrates the student's **persisted plan + preferences** from Postgres so the agent sees the plan the student built (e.g. via the sidebar) and the plan-claim validator has a plan to verify against. For `userId !== "anonymous"`, it calls `scheduleStore.loadLatestSchedule(userId)` — classifying a draft `state` (`infeasible-draft` / `student-preferred-invalid-draft`) into `studentDraftPlan` and any other state into `forwardSchedule` — and `scheduleStore.loadPreferences(userId)` into `schedulePreferences`. The three values are spread into the session only when present. This mirrors the `planActionOrchestrator` and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) load pattern. Hydration is **best-effort**: a load failure is `console.warn`ed and the turn continues with the plan slot unset (`session.*` stays `undefined`, exactly as before any tool writes), and the `userId === "anonymous"` branch (no durable store) is skipped — both mirroring the bootstrap-persist posture below.
+
+**Each turn now hydrates:**
 - the **client-resent** DPR (re-validated, rebuilt into a profile every turn),
 - the **client-supplied** `history` (last ~10 messages),
-- the rolling **session summaries** read from `sessionStore.get(userId)` (`route.ts:364-370`), and
-- the **cohort flag** from `stores.cohortLookup(userId)` (`route.ts:358`).
+- the rolling **session summaries** read from `sessionStore.get(userId)` (`route.ts:364-370`),
+- the **cohort flag** from `stores.cohortLookup(userId)` (`route.ts:358`), and
+- **(P3.1)** the persisted `forwardSchedule` / `studentDraftPlan` / `schedulePreferences` via `scheduleStore.loadLatestSchedule` + `loadPreferences`.
 
-It **never** reads the persisted profile, forward schedule, draft plan, or `schedulePreferences` from Postgres. There is no `scheduleStore.loadLatestSchedule`, no `scheduleStore.loadPreferences`, and no `profileStore.get` anywhere in this route — the store handles on the session are **write-only** here. The `session.forwardSchedule` / `session.studentDraftPlan` / `session.lastMaterializationResult` slots all start `undefined` and are only populated if a tool writes to them during *this* turn.
+**Profile write-clobber — fixed in P3.2.** This is READ-hydration of the plan + prefs only; the route still rebuilds `StudentProfile` from the **client-resent** DPR every turn (it does **not** yet read the persisted profile via `profileStore.get` into the session — that read-hydration is Phase 4). But the *write* side is fixed: the bootstrap upsert below (§5.3) is now **gated to initial onboarding** (`profileStore.get(userId) === null`), so it no longer rewrites `students.profile` on every message and no longer **clobbers confirmed profile mutations** a prior `confirm_profile_update` wrote, nor appends a synthetic audit row per message. The related preferences-from-`{}` wipe is also resolved: a chat-driven `confirm_plan_change` now reads the P3.1-hydrated `session.schedulePreferences` (not `{}`), so existing pins survive.
 
-Consequences (documented honestly, not hypothetical):
-- A chat-driven `confirm_plan_change` rebuilds scheduling preferences from `{}` (nothing loaded) and persists that, **clobbering pins the student set via the sidebar** (`/api/plan/*` path).
-- The bootstrap upsert below rewrites `students.profile` from the freshly rebuilt DPR profile every message, **clobbering confirmed profile mutations** that a prior `confirm_profile_update` wrote, and appends a synthetic audit row per message.
-
-Contrast: the `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) DO hydrate fully from Postgres. The hydration gap is specific to this chat route.
+Contrast: the `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) hydrate fully from Postgres (profile included).
 
 ### 5.2 Home-school derivation and the `unknown` fallback
 
@@ -98,7 +98,7 @@ When the client sends no `homeSchool`, the builder runs `deriveHomeSchool` over 
 
 ### 5.3 Bootstrap profile persistence
 
-The route performs a no-throw bootstrap upsert (`route.ts:289-307`): when `userId !== "anonymous"`, it calls `profileStore.persistMutation(student, audit, parsedDpr)` with a synthetic `bootstrap-<ts>` audit record (`field: "homeSchool"`, used only as a discriminator) so a refresh or new login can restore profile + DPR via `/api/session/restore`. Failures are logged (`console.warn`) but never break the turn. As noted in §5.1, this upsert re-writes `students.profile` from the re-sent DPR on every message.
+The route performs a no-throw bootstrap upsert: when `userId !== "anonymous"` **and no persisted profile exists yet** (`profileStore.get(userId) === null` — the P3.2 gate, so it fires only on **initial onboarding**), it calls `profileStore.persistMutation(student, audit, parsedDpr)` with a synthetic `bootstrap-<ts>` audit record (`field: "homeSchool"`, used only as a discriminator) so a refresh or new login can restore profile + DPR via `/api/session/restore`. Failures are logged (`console.warn`) but never break the turn. On every later turn the gate skips the upsert, so a returning student's confirmed profile edits are never clobbered and the audit log does not grow per message. (DPR *updates* for a returning student are owned by the Update-DPR route, not this bootstrap.)
 
 ### 5.4 Temporal context + system prompt
 
@@ -110,7 +110,7 @@ There is no longer a keyword/template short-circuit at the start of a turn. The 
 
 ## 7. Clarifier Gate
 
-Before the loop, the route calls `detectAmbiguity(body.message, body.history ?? [])` (`route.ts:380`) — a deterministic, regex-style check, no LLM call. If `ambiguity.ambiguous` is true, it invokes `askClarification(primary, message, history, contextHints)` (`route.ts:383-395`), a cheap small-model (Haiku) one-shot with no tools. Context hints carry `homeSchool`, `declaredPrograms`, and `visaStatus` when known. Failures are caught and the route falls through to the main loop.
+Before the loop, the route calls `detectAmbiguity(body.message, body.history ?? [])` (`route.ts:380`) — a deterministic, regex-style check, no LLM call. If `ambiguity.ambiguous` is true, it invokes `askClarification(primary, message, history, contextHints)` (`route.ts:383-395`), a one-shot on the **primary** client (`claude-sonnet-4-6` by default) with no tools. Context hints carry `homeSchool`, `declaredPrograms`, and `visaStatus` when known. Failures are caught and the route falls through to the main loop.
 
 When the clarifier returns `!isClear && output.length > 0`, the route streams the clarifying question as this turn's reply (`route.ts:396-410`):
 1. Chunks the output into 40-char segments, one `token` event per chunk.
@@ -164,8 +164,8 @@ The full event union (`sseStream.ts:13-29`) is:
 | `tool_invocation_done` | `toolName`, `summary?`, `error?` | Each time a tool finishes (`route.ts:618-626`). `summary` is the tool's human-readable string; `error` is set when the tool threw. |
 | `token` | `text` | Each `text_delta` from the loop, plus the chunked clarifier reply and the recovery-mode reply (`route.ts:631-633`, `398-401`, `480-481`). |
 | `thinking` | `text` | Each `thinking_delta` from the loop (`route.ts:627-630`). The route also joins these into a string for chat-history persistence. |
-| `validator_block` | `violations[]` (each `{ kind, detail, caveatId?, number? }`) | When the post-loop validator + completeness reviewer find any violations (`route.ts:766-770`). Advisory, not fatal — `done` still fires. |
-| `forward_schedule_update` | `schedule` (full `ForwardSchedule`) | When `session.forwardSchedule.computedAt` changed, OR (only if the valid slot didn't change) when `session.studentDraftPlan.computedAt` changed. The valid plan wins when both changed (`route.ts:653-671`). |
+| `validator_block` | `violations[]` (each `{ kind, detail, caveatId?, number? }`) | When the post-loop validator finds any violations (`route.ts:802-805`). Advisory, not fatal — `done` still fires. |
+| `forward_schedule_update` | `schedule` (full `ForwardSchedule`) | When `session.forwardSchedule.computedAt` changed, OR (only if the valid slot didn't change) when `session.studentDraftPlan.computedAt` changed. The valid plan wins when both changed (`route.ts:715-725`). |
 | `forward_materialization_update` | `result` (full `ForwardMaterializationPayload`) | When `session.lastMaterializationResult.computedAt` changed during the turn (`route.ts:680-690`). |
 | `done` | `finalText`, `modelUsedId` | The last event of a successful turn (`route.ts:772-776`, plus the clarifier and recovery and context-limit paths). `modelUsedId` may carry suffixes like `:context_limit` or `cohort:<name>:limited`. |
 | `error` | `message` | Emitted when the loop ends in a non-ok kind, throws, or finds the primary client missing (`route.ts:468`, `706-709`, `865-868`). |
@@ -206,10 +206,10 @@ The `/admin/observability` dashboard reads the same file. Without this sink, fal
 
 After the `done` event is written but before the stream closes, the route performs best-effort writes — all gated on `userId !== "anonymous"`:
 
-1. **Chat history append** (`route.ts:785-837`):
+1. **Chat history append** (`route.ts:820-870`):
    - User message first (preserves user → assistant ordering on restore).
-   - Assistant record with the resolved final text, ISO timestamp, and optional fields: `thinkingText` (joined `thinking_delta` chunks, when non-empty), `toolInvocations` (when non-empty), `validatorViolations` (validator + completeness reviewer violations, when any), and `pendingMutationId` extracted via `extractPendingMutationId(updateProfileInvocation.summary)` (the same extractor the client uses in `chatV2Client.ts`).
-2. **Session summary append** (`route.ts:846-863`): a heuristic, NOT an extra LLM call. The route writes `Asked: "<first 140 chars>". Tools called: <names>.` via `sessionStore.appendSummary(userId, { date, summary })`. The next turn picks it up via `summariesAsPriorMessage(record, 3)` (top-3 recency window) as a leading priorMessage (`route.ts:365-366`).
+   - Assistant record with the resolved final text, ISO timestamp, and optional fields: `thinkingText` (joined `thinking_delta` chunks, when non-empty), `toolInvocations` (when non-empty), `validatorViolations` (validator violations, when any), and `pendingMutationId` extracted via `extractPendingMutationId(updateProfileInvocation.summary)` (the same extractor the client uses in `chatV2Client.ts`).
+2. **Session summary append** (`route.ts:885-891`): a heuristic, NOT an extra LLM call. The route writes `Asked: "<first 140 chars>". Tools called: <names>.` via `sessionStore.appendSummary(userId, { date, summary })`. The next turn picks it up via `summariesAsPriorMessage(record, 3)` (top-3 recency window) as a leading priorMessage (`route.ts:365-366`).
 3. **Profile / DPR bootstrap** — happens at session bootstrap ([§5.3](#53-bootstrap-profile-persistence)), not end-of-turn.
 
 All writes are wrapped in try/catch with `console.error` on failure; persistence problems do not break the live turn.
@@ -220,7 +220,7 @@ All writes are wrapped in try/catch with `console.error` on failure; persistence
 2. **Environment errors** — primary client not configured → HTTP 503 (`route.ts:164-174`); rate-limit exceeded → HTTP 429 (`route.ts:191-210`). Both before the stream opens.
 3. **Runtime errors during the turn** — `runV2Turn`'s body is wrapped in try/catch that emits a final `error` SSE event and closes (`route.ts:864-871`). Unconditional — any throw in the loop, validator, or persistence path lands here.
 4. **Non-ok loop termination** — when `finalResult` is null or `finalResult.kind !== "ok"` (and not `context_limit`), the route emits `error` with `Agent loop ended in non-ok state: <kind>` or `Agent loop did not yield a final result.` and closes (`route.ts:705-712`).
-5. **Validator block** — when `validateResponse` (`route.ts:715-722`) plus `reviewCompleteness` (`route.ts:729-732`) produce any violations, the route emits `validator_block` with the combined violations BEFORE `done` (`route.ts:766-770`). The `done` event still fires — violations are advisory.
+5. **Validator block** — when `validateResponse` (`route.ts:714-722`) produces any violations, the route emits `validator_block` with those violations BEFORE `done` (`route.ts:747`). The `done` event still fires — violations are advisory.
 6. **Fabricated-attribution scrubbing** — when the validator catches `fabricated_attribution` violations after the replay budget is exhausted, the route runs `stripFabricatedBlockquotes(finalText)` (`route.ts:760-765`, helper at `route.ts:886-914`). This regex scrubber drops every blockquote (`> …`) and the immediately preceding attribution line, then appends a substitution note advising the student to confirm the policy with an adviser. The scrubbed text flows into the `done` event's `finalText`.
 
 The route always closes the SSE stream in a `finally` block (`route.ts:869-871`) regardless of branch.
@@ -256,9 +256,10 @@ sequenceDiagram
         Route-->>Client: 429 + Retry-After
     end
     Route->>Stores: profileStore, scheduleStore, chatHistoryStore, sessionStore, cohortLookup
-    Route->>Session: buildStudentProfileFromDpr + assemble ToolSession inline
-    Note over Route,Session: NO read of persisted schedule / prefs / profile (hydration gap)
-    Route->>Persist: bootstrap persistMutation (DPR + profile, rewrites students.profile)
+    Route->>Stores: scheduleStore.loadLatestSchedule + loadPreferences (P3.1 hydration)
+    Route->>Session: buildStudentProfileFromDpr + assemble ToolSession inline (schedule/prefs hydrated)
+    Note over Route,Session: P3.1 reads persisted schedule + prefs; P3.2 gates the profile upsert to initial onboarding (live session still uses the body-DPR profile this turn)
+    Route->>Persist: bootstrap persistMutation — gated: only when no persisted profile exists
     Route->>Route: deriveTemporalContext + buildSystemPrompt + detectMultiIntent
     Route->>Stores: cohortLookup(userId) + getCohortConfig + sessionStore.get → summaries
     Route-->>Client: 200 text/event-stream (opened)
@@ -266,7 +267,7 @@ sequenceDiagram
 
     Route->>Clarifier: detectAmbiguity(message, history)
     alt Ambiguous
-        Route->>Clarifier: askClarification (Haiku, no tools)
+        Route->>Clarifier: askClarification (primary model, no tools)
         Clarifier-->>Route: clarifying question
         Route-->>Client: token (chunked) + done; close
     end
@@ -292,7 +293,7 @@ sequenceDiagram
         else non-ok / no result
             Route-->>Client: error
         else ok
-            Route->>Route: validateResponse + reviewCompleteness
+            Route->>Route: validateResponse
             alt violations
                 Route->>Route: stripFabricatedBlockquotes
                 Route-->>Client: validator_block

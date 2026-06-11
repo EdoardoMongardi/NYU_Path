@@ -3,7 +3,8 @@
 // ============================================================
 
 import { describe, expect, it } from "vitest";
-import { detectAmbiguity } from "../../src/agent/clarifier.js";
+import { askClarification, detectAmbiguity } from "../../src/agent/clarifier.js";
+import type { LLMClient } from "../../src/agent/llmClient.js";
 
 describe("detectAmbiguity — clear queries (no fire)", () => {
     it("does not fire on a complete first-person question", () => {
@@ -58,5 +59,51 @@ describe("detectAmbiguity — does NOT fire on long messages", () => {
         );
         // Length cap kicks in.
         expect(r.ambiguous).toBe(false);
+    });
+});
+
+describe("askClarification — persona is school-agnostic + threads homeSchool", () => {
+    // Minimal fake LLMClient: records the request it receives and returns
+    // a fixed "CLEAR" completion shaped like the real Anthropic/OpenAI
+    // wrapper output (text + usage). No real LLM call.
+    type CompleteReq = Parameters<LLMClient["complete"]>[0];
+
+    function makeFakeClient(): { client: LLMClient; captured: { req: CompleteReq | null } } {
+        const captured: { req: CompleteReq | null } = { req: null };
+        const client: LLMClient = {
+            id: "fake-clarifier-client",
+            async complete(req) {
+                captured.req = req;
+                return {
+                    text: "CLEAR",
+                    toolCalls: [],
+                    latencyMs: 0,
+                    usage: { promptTokens: 0, completionTokens: 0 },
+                };
+            },
+        };
+        return { client, captured };
+    }
+
+    it("system prompt is NOT CAS-specific and names NYU; homeSchool reaches the user message", async () => {
+        const { client, captured } = makeFakeClient();
+
+        const result = await askClarification(client, "a minor?", [], {
+            homeSchool: "NYU Shanghai",
+        });
+
+        // The fake echoes "CLEAR", so the sub-agent reports isClear.
+        expect(result.isClear).toBe(true);
+
+        const req = captured.req;
+        expect(req).not.toBeNull();
+        // (a) RED assertion — the persona must not be CAS-scoped.
+        expect(req!.system).not.toMatch(/CAS/);
+        // (b) The persona still anchors to NYU (school-agnostic, not CAS-only).
+        expect(req!.system).toContain("NYU");
+        // (c) Regression guard — homeSchool is threaded into the last user
+        //     message via the contextLine (passes before AND after de-CAS).
+        const lastUserMsg = [...req!.messages].reverse().find((m) => m.role === "user");
+        expect(lastUserMsg?.content).toContain("NYU Shanghai");
     });
 });

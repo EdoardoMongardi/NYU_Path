@@ -26,7 +26,7 @@ Every agent tool **may** return a structured envelope alongside its primary `dat
 
 The envelope is **additive** — tools that don't opt in continue to work. Tools that do opt in declare disclaimers, anchors, follow-ups, and confidence right next to their data.
 
-> **Important scope note (corrected vs. prior doc):** the old doc claimed the response validator and completeness reviewer *read envelope fields structurally* to enforce surfacing. In the code today, the envelope's only live effect is **textual** — `renderEnvelopeMeta` writes the disclaimers/anchors/follow-ups into the tool-result string, and the system prompt instructs the model to surface them. There is no structural consumer that reads `EnvelopeMeta` objects after the fact (see §8 on `mergeEnvelopes`).
+> **Important scope note:** the envelope's only live effect is **textual** — `renderEnvelopeMeta` writes the disclaimers/anchors/follow-ups into the tool-result string, and the system prompt instructs the model to surface them. The response validator inspects only this rendered text; there is no structural consumer that reads `EnvelopeMeta` objects after the fact (see §8).
 
 ---
 
@@ -63,7 +63,7 @@ Disclaimer = {
 }
 ```
 
-The system prompt instructs the model to surface these **verbatim**. Note the dedup contract is **per render call**: `renderEnvelopeMeta` dedups disclaimers inside a single envelope; cross-tool dedup across a turn would require `mergeEnvelopes`, which is currently dead (§8).
+The system prompt instructs the model to surface these **verbatim**. Note the dedup contract is **per render call**: `renderEnvelopeMeta` dedups disclaimers inside a single envelope; cross-tool dedup across a turn is not performed — there is no turn-level envelope union (see §8).
 
 ---
 
@@ -148,15 +148,11 @@ Each opting-in tool's `summarizeResult` calls `renderEnvelopeMeta(...)` after re
 
 ---
 
-## 8. `mergeEnvelopes` — DEAD CODE
-
-`mergeEnvelopes(...metas)` (`toolEnvelope.ts:157-180`) combines multiple envelopes into one (disclaimers deduped by id first-seen-wins; follow-ups and anchors concatenated; confidence reduced to the lowest across all envelopes).
-
-> **Correction vs. prior doc:** its doc comment claims "the response validator + completeness reviewer use it to assess whether the agent surfaced every disclaimer across all envelopes." **This is wrong.** A repo-wide search finds **no non-test caller** of `mergeEnvelopes`. It is exported but unused in the runtime path — dead code. Cross-turn disclaimer dedup/union is not performed anywhere today.
+## 8. Envelope rendering limitations
 
 ### Known limitations
 
-- **No turn-level envelope union.** Because `mergeEnvelopes` is unwired, two tools in the same turn that each attach the same disclaimer id will render it twice (once per tool's `summarizeResult`). Dedup is only within a single `renderEnvelopeMeta` call.
+- **No turn-level envelope union.** Two tools in the same turn that each attach the same disclaimer id will render it twice (once per tool's `summarizeResult`); dedup happens only within a single `renderEnvelopeMeta` call.
 - **`EnvelopeMeta.verbatim` is unused** — the hardened-verbatim path runs entirely through `extractVerbatim` / `outputMode === "semi_hardened"` (§6).
 - **No structural validator consumption.** Surfacing is enforced only by the rendered text + system-prompt instruction, not by post-hoc inspection of envelope objects.
 
@@ -187,4 +183,4 @@ Note: the envelope reaches the model as **text inside the tool_result**, and the
 - **Tool authors own the safety contract.** A tool knows what's load-bearing in its output and surfaces it as disclaimers/anchors; `renderEnvelopeMeta` formats it consistently.
 - **Conservative confidence posture.** Sub-high confidence is always surfaced to the model as an explicit note.
 
-See also [`response-validator.md`](response-validator.md) for the verbatim-enforcement side and [`completeness-reviewer.md`](completeness-reviewer.md) for the (LLM-based, not envelope-structural) completeness pass.
+See also [`response-validator.md`](response-validator.md) for the verbatim-enforcement side.

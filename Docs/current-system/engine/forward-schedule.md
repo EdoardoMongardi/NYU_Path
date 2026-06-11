@@ -63,6 +63,8 @@ The data shapes are in `types.ts`. The two that matter to callers:
 
 A frozen, immutable bundle passed into the solver. It carries student state (`coursesTaken`, `coursesInProgress` with per-row terms, `currentTerm`, `graduationTerm`, a `graduationTermWasDerived` flag), per-term targets/floors/ceilings (`creditTargetPerSemester`, `f1Floor`, `domesticPartTimeFloor`, `creditCeiling`, `graduationCreditMinimum`, `creditsEarned`), header-level caps (pass/fail, online, outside-home, GPAs and GPA floors), the walked `unmetRequirements` (each with `rId`, `title`, `category`, `credits`, `candidateCourses`, and an optional `pool` descriptor), catalog data (`prereqs`, `offerings`, `offeringConfidence`, `courseCatalog`, `offCatalogCredits`, `dprCourseHistoryHash`, the full `dpr`), `programRules`, optional bulletin metadata, optional `preferences` (`SchedulePreferences`), an optional `coreqs` map, and a `warnings` array for build-time advisories.
 
+> **`offerings` / `offeringConfidence` source (with gap-fill).** Both maps are populated first from the global `courses-offerings.json` cache (`loadOfferings`), which is **authoritative**. They are then **gap-filled from `session.courses[i].termsOffered`** for any course id the global cache lacks (e.g. a session-injected / synthetic non-CAS catalog): such ids get an offering row from their static `termsOffered` and a `"historically_likely"` confidence tier (a structural "offered in these seasons" signal, not a live-FOSE confirmation). The global cache always wins for ids it already has; `session.courses` fills only the gaps; a course with empty/absent `termsOffered` is skipped (no known offering → stays a placeholder). `courseCatalog` (title/credits) is built separately from `session.courses`.
+
 ### 2.2 SolverOutput (`types.ts`)
 
 `{ semesters, feasibility, balanceScore, assumptions, state, alternativeCandidates?, warnings?, optimality? }`. `state` is the solver's *coarse* `PlanState` — it is OVERRIDDEN by the validator in `finalizeForwardSchedule`. `optimality` is a structured signal (see §4.4).
@@ -79,10 +81,6 @@ A frozen, immutable bundle passed into the solver. It carries student state (`co
 - **`valid-with-trade-offs`** — no axis fails, but at least one returned `assumed-pass`/`requires-approval`, OR the plan has IP assumptions, petition slots, low-confidence (`irregular`/`permission_only`) slots, or any placeholder.
 - **`infeasible-draft`** — at least one axis returned `fail`.
 - **`student-preferred-invalid-draft`** — set UPSTREAM when a student persists a knowingly invalid plan; the validator never emits it.
-
-### 2.5 SolverNode — DEAD TYPE
-
-`types.ts` still defines a `SolverNode` interface describing "in-flight mutable state during greedy placement." The greedy solver is gone; this type is referenced nowhere outside its own definition. See §10 (Known limitations / dead code).
 
 > The `SchedulePreferences` and `PlanMutation` shapes (pins, exclusions, load styles, summer/J-term opt-in, the 12 mutation kinds) live in `@nyupath/shared` and are consumed by `planChangeHelpers.ts`. They are documented with the plan-change tools rather than here.
 
@@ -239,7 +237,7 @@ A pure detector/builder. `countDeclaredPrograms` and `detectSharedCourses` feed 
 
 ---
 
-## 10. Known limitations and dead code
+## 10. Known limitations and test-only code
 
 ### Known limitations (deliberate, stated plainly)
 
@@ -247,15 +245,12 @@ A pure detector/builder. `countDeclaredPrograms` and `detectSharedCourses` feed 
 - **`localImprove` can collapse a diverse alternative onto the winner.** There is no post-improve dedup, so two alternatives that started distinct may converge after local improvement.
 - **Reported `balanceScore` hard-codes `"balanced"`** in `materializePlan` (and in `buildPlanDiff`'s `balanceImpact`), while the search's `scorePlan` honors `preferences.loadStyle`. A frontload/backload preference is therefore optimized for but not reflected in the reported score.
 - **Course-count (vs credit) major floors are deferred** — the major floor is credit-based only.
-- **Non-CAS DPR validation is absent.** Fixtures are CAS-only; the validator's thresholds and the builder's rule classification are exercised against CAS programs.
+- **Non-CAS DPR validation: the non-CAS plan SCHEDULES END-TO-END; the classifier is still CAS-coupled but that does NOT block scheduling.** `classifyRequirementKind` still keys its school-core / general-elective detection on CAS-specific structural rgId families (`RG5004`, `RG5007`, `RG5393`, `RG33308`, `RG5002`, `RG5005`, `RG31394`, `RG31395`) and the `R1142/*` major rId family; non-CAS hierarchies fall to its fallback paths (declared-program title match for the major group, else `unknown`) — that CAS coupling is real and unchanged. A **synthetic, clearly-labeled** non-CAS DPR (NYU Shanghai / CS, with deliberately non-CAS rgId/rId values) now runs through the full `classify → solve → validate` pipeline as a regression pin — `packages/engine/tests/e2e/nonCasPlan.test.ts` + `packages/engine/tests/fixtures/dpr_nonCas_synthetic.ts`. The pin asserts the forward-planner SCHEDULES THE NON-CAS PLAN END-TO-END: `buildForwardSchedule` reaches a **valid** state (`valid-with-trade-offs`) and the major-required leaf `SR7001/10` is covered by a `specific_planned` slot binding the real course `CSCI-SHU 210` (all four `-SHU` requirement courses bind — `CSCI-SHU 210` → `SR7001/10`, `CSCI-SHU 350` → `SR7001/20`, `CORE-SHU 100` → `SR8001/10`, `HUMN-SHU 101` → `SR9001/10` — even though `SR8001/10` / `SR9001/10` are classified `unknown` by the CAS-coupled classifier). The classifier resolves the major leaves via the non-CAS-safe declared-program path and falls back to `unknown` on the non-CAS core/elective leaves, and scheduling proceeds regardless. `parseDpr` is intentionally skipped — there is no real non-CAS DPR *text* to parse, and the project philosophy (`Docs/core_philosophy.md` #2) forbids fabricating unverifiable "real" data — so the pin starts from a constructed (Zod-validated) DPR object. **REAL non-CAS DPR validation still remains PENDING a real non-CAS fixture**; this test documents (and now exercises end-to-end) the non-CAS path, but it does not de-CAS the classifier.
+  - **The "residual binding gate" framing was WRONG (corrected 2026-06-11).** An earlier version of this bullet claimed the non-CAS pin "still hits its honest `infeasible-draft` branch" because of a "downstream constraint-search / `materializePlan` binding gate" that emitted a placeholder for the major-required leaf. There is no such gate. The earlier `infeasible-draft` was caused entirely by the synthetic **fixture** leaving every requirement leaf's `coursesUsed[]` empty: the deliberate prereq-satisfaction policy (`src/dpr/prereqSatisfaction.ts`, `isPrereqSatisfied`) treats a completed passing course as a prereq satisfier only if the registrar recorded it in some leaf's `coursesUsed[]` (`dpr-satisfiedBy`) or there is an explicit `minGrades` entry — else `fail-no-implicit-acceptance`. With `coursesUsed[]` empty, the completed `CSCI-SHU 101` did not satisfy `CSCI-SHU 210`'s prereq, so `CSCI-SHU 210` could not bind and the plan went infeasible. A **real** DPR records completed courses in `coursesUsed[]`; the fixture now models that (a satisfied leaf `SR7001/05` whose `coursesUsed` carries `CSCI-SHU 101`), and the plan schedules end-to-end. No `src/` solver/prereq code changed — the fix was fixture realism. Offerings for session-only courses are also gap-filled from `session.courses[i].termsOffered` (see §2.1), so the synthetic `-SHU` courses carry offering rows.
 - **Upper-level credit floor is not validated** (no reliable DPR counter); the field is intentionally left null.
 
-### Dead code to flag
+### Test-only code paths (no production caller)
 
-- **`forwardFeasibility.ts` (83 ln)** — the old greedy's pruning screen. Referenced today only by a comment in `search.ts` explaining why it is NOT used. Not wired into the search.
-- **`poolBinding.ts` (133 ln)** — `placePoolSlot` / `promotePoolSlotToConcrete` have zero non-test callers. The `bind_pool_slot` tool reimplements pool-slot promotion inline (building the `specific_planned` slot directly) rather than calling this module.
-- **`SolverNode` type (`types.ts`)** — describes greedy in-flight state; unreferenced outside its definition.
-- **`termsForPlacement` (`solverHelpers.ts`)** — defined but never called.
 - **`searchBestPlan` / `searchTopKPlans` (`search.ts`)** — the exhaustive-mode entry points; TEST-ONLY, no production caller (the solver uses `findFirstValidPlan` / `findDiverseValidPlans`).
 
 ---
@@ -342,4 +337,3 @@ The validator only emits `valid-clean`, `valid-with-trade-offs`, or `infeasible-
 | Balance score | `forwardSchedule/balanceScore.ts` | `computeBalanceScore`, `classifyBalanceDelta` |
 | Requirement kind | `forwardSchedule/requirementKind.ts` | `classifyRequirementKind` |
 | Solver helpers | `forwardSchedule/solverHelpers.ts` | term/prereq primitives, `buildIpAssumptions`, `derivePlanState` |
-| Dead code | `forwardSchedule/forwardFeasibility.ts`, `forwardSchedule/poolBinding.ts` | not wired in (see §10) |

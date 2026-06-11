@@ -108,7 +108,7 @@ Runs realistic policy queries through the live OpenAI vector search, then rerank
 
 ### 2.7 `cohort-eval`
 
-A grab-bag of bake-off, baseline, adversarial, and surrogate-evaluation scripts. Each `run*.ts` runs the engine end-to-end against a frozen cohort. Files include `runBakeoffPhase8.ts`, `runSurrogateW8.ts`, `analyzeW8.ts`, `runF4ValidatorTradeoff.ts`, the Phase-10 bench (`runPhase10Baseline.ts`, `runPhase10MethodB.ts`, `runPhase10Adversarial.ts`, `runPhase10Spot.ts`), `runSmokeW10.ts`, `renderPhase10Comparison.ts`, and a `results/` output directory. These produce per-case JSON, PASS/FAIL grids, and A/B breakdowns read in review meetings.
+A grab-bag of bake-off, baseline, adversarial, and surrogate-evaluation scripts. Each `run*.ts` runs the engine end-to-end against a frozen cohort. Files include `runBakeoffPhase8.ts`, `runSurrogateW8.ts`, `analyzeW8.ts`, `runF4ValidatorTradeoff.ts`, the Phase-10 bench (`runPhase10Baseline.ts`, `runPhase10Adversarial.ts`, `runPhase10Spot.ts`), `runSmokeW10.ts`, `renderPhase10Comparison.ts`, and a `results/` output directory. These produce per-case JSON, PASS/FAIL grids, and A/B breakdowns read in review meetings.
 
 - **Inputs:** cohort case fixtures (`evals/cohorts/`), the engine package, the relevant API keys.
 - **Outputs:** `tools/cohort-eval/results/`.

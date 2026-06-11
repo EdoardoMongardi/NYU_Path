@@ -52,7 +52,6 @@ export {
     buildDefaultRegistry,
     buildSystemPrompt,
     validateResponse,
-    reviewCompleteness,
     detectMultiIntent,
     renderMultiIntentBriefing,
     detectAmbiguity,
@@ -97,7 +96,6 @@ export type {
     ViolationKind,
     ValidatorVerdict,
     ValidatorContext,
-    CompletenessReviewVerdict,
     SystemPromptOptions,
     // Phase 15 Task 8 — section-materialization types surfaced for
     // the apps/web sidebar (forward_materialization_update payload).
