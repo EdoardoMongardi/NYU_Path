@@ -23,51 +23,50 @@
  *
  * WHAT COUNTS AS PASS vs FAIL here:
  *     - PASS: classifier returns a Map (every leaf gets *some* kind via the
- *       fallback) AND buildForwardSchedule returns a ForwardSchedule whose
- *       `.state` is EITHER a valid state with a non-empty schedule, OR an
- *       HONEST infeasible-draft / student-preferred-invalid-draft that carries
- *       a populated infeasibility / failing-axis report.
- *     - FAIL: a thrown error (silent CAS crash) OR an empty/undefined/garbage
- *       result with no explanation.
+ *       fallback) AND buildForwardSchedule SCHEDULES THE NON-CAS PLAN
+ *       END-TO-END — a VALID state (valid-clean or valid-with-trade-offs) with
+ *       a non-empty schedule in which the major-required leaf SR7001/10 is
+ *       covered by a `specific_planned` slot binding CSCI-SHU 210 (i.e. the
+ *       forward-planner actually places the real course, not a placeholder).
+ *     - FAIL: a thrown error (silent CAS crash), an infeasible-draft, OR a
+ *       schedule that covers the major-required leaf only with a placeholder.
  *
- * An honest infeasible-draft is an ACCEPTABLE PASS — the point is "no silent
- *     CAS-coupling crash," not "the synthetic numbers happen to be feasible."
+ * CORRECTED TRUTH (2026-06-11) — the non-CAS plan SCHEDULES END-TO-END.
+ *     Earlier versions of this header recorded an "honest infeasible-draft" as
+ *     the non-CAS outcome and blamed a "residual downstream binding gate in the
+ *     constraint-search / materialize stage." THAT FRAMING WAS WRONG. With a
+ *     REALISTIC fixture the non-CAS plan reaches `valid-with-trade-offs` and
+ *     all four -SHU requirement courses bind as `specific_planned`
+ *     (CSCI-SHU 210 → SR7001/10, CSCI-SHU 350 → SR7001/20,
+ *     CORE-SHU 100 → SR8001/10, HUMN-SHU 101 → SR9001/10), plus a few
+ *     free-elective credit-fill placeholders.
  *
- * OBSERVED BRANCH (recorded honestly, re-verified 2026-06-11 after the
- *     offerings gap-fill fix): this synthetic DPR STILL hits the HONEST
- *     INFEASIBLE-DRAFT branch. The classifier resolves the major leaves via
- *     the non-CAS-safe declared-program path (SR7001/10 → major-required,
- *     SR7001/20 → major-elective) and falls back to "unknown" on the non-CAS
- *     core/elective leaves (SR8001/10, SR9001/10) — the seam. The solver emits
- *     PLACEHOLDER slots and the authoritative validator's
- *     `requirementGroupsSatisfied` axis fails honestly: the major-required
- *     leaf SR7001/10 is covered only by a placeholder, not a specific course.
- *     That is a real, fully-explained binding constraint — exactly the
- *     acceptable honest-infeasible PASS, NOT a silent crash.
+ *     The earlier infeasible-draft had NOTHING to do with a solver bug or any
+ *     CAS coupling. Its real cause: the synthetic fixture left EVERY requirement
+ *     leaf's `coursesUsed[]` empty. The prereq-satisfaction policy
+ *     (src/dpr/prereqSatisfaction.ts, `isPrereqSatisfied` Step 1 / Step 4) is
+ *     DELIBERATE: a completed passing course satisfies a prereq only if the
+ *     registrar recorded it — i.e. it appears in some leaf's `coursesUsed[]`
+ *     (`dpr-satisfiedBy`) OR there is an explicit `minGrades` entry; otherwise
+ *     `fail-no-implicit-acceptance`. With every `coursesUsed[]` empty, the
+ *     completed `CSCI-SHU 101` (grade A, type EN, in courseHistory) did NOT
+ *     satisfy CSCI-SHU 210's prereq (AND[CSCI-SHU 101]), so CSCI-SHU 210 could
+ *     not bind, the search exhausted, materialize emitted all-placeholders, and
+ *     validator axis-1 failed → infeasible-draft. A REAL DPR records completed
+ *     courses in `coursesUsed[]`; the fixture now models that (a SATISFIED leaf
+ *     SR7001/05 whose `coursesUsed` carries CSCI-SHU 101), which flips the plan
+ *     to valid-with-trade-offs. The fix was FIXTURE REALISM, not a solver
+ *     change — no src/ file was touched.
  *
- *     IMPORTANT — what the offerings gap-fill DID and DID NOT change. The
- *     earlier version of this header attributed the placeholder to the solver
- *     having NO offering rows for the -SHU courses (offering data was loaded
- *     only from the global catalog, never from session.courses). That offerings
- *     limitation IS NOW FIXED: buildSolverInput gap-fills offerings /
- *     offeringConfidence from session.courses[i].termsOffered for ids the
- *     global cache lacks (global authoritative; session fills gaps; tier
- *     "historically_likely"). The -SHU courses now carry real offering rows
- *     ("fall","spring"). VERIFIED: solverInput.offerings.has("CSCI-SHU 210")
- *     === true. But the branch is UNCHANGED — infeasible-draft both before and
- *     after the fix — because the offering domain stage already treated an
- *     ABSENT offering as "legal in any season", so missing offerings were never
- *     the gate for these courses. The remaining gate is a DISTINCT
- *     downstream binding limitation in the constraint-search / materialize
- *     stage (the search emits a placeholder for SR7001/10 even though
- *     CSCI-SHU 210 is catalog-present, offering-present, and its prereq
- *     CSCI-SHU 101 is in coursesTaken). That is a SEPARATE issue, NOT the
- *     offerings gap, and is out of scope for the offerings fix. A future fix to
- *     that binding gate (or a real non-CAS fixture) could flip this to the valid
- *     branch; the test accepts both.
- *
- * THIS TEST DOCUMENTS THE SEAM; IT DOES NOT FIX IT. The classifier is still
- *     CAS-coupled. REAL non-CAS DPR validation remains PENDING a real fixture.
+ * THE CLASSIFIER IS STILL CAS-COUPLED — that part is real and UNCHANGED.
+ *     `classifyRequirementKind` resolves the major leaves via the non-CAS-safe
+ *     declared-program path (SR7001/10 → major-required, SR7001/20 →
+ *     major-elective) but falls back to "unknown" on the non-CAS core/elective
+ *     leaves (SR8001/10, SR9001/10). That CAS coupling is genuine and remains
+ *     pinned by test (a) below. The corrected point is that the CAS-coupled
+ *     classifier does NOT block scheduling — the plan schedules end-to-end even
+ *     with those leaves classified "unknown". REAL non-CAS DPR validation still
+ *     remains PENDING a real fixture; this stays synthetic.
  * ============================================================================
  */
 
@@ -86,8 +85,6 @@ import {
 } from "../fixtures/dpr_nonCas_synthetic.js";
 
 const VALID_STATES = ["valid-clean", "valid-with-trade-offs"] as const;
-const INFEASIBLE_STATES = ["infeasible-draft", "student-preferred-invalid-draft"] as const;
-const ALL_STATES = [...VALID_STATES, ...INFEASIBLE_STATES];
 
 describe("non-CAS synthetic DPR — classifier CAS-coupling pin", () => {
     // -----------------------------------------------------------------------
@@ -132,12 +129,15 @@ describe("non-CAS synthetic DPR — classifier CAS-coupling pin", () => {
     });
 
     // -----------------------------------------------------------------------
-    // (b) Full pipeline pin: buildForwardSchedule does NOT throw and returns a
-    //     ForwardSchedule whose .state is a recognized state — EITHER a valid
-    //     state with a non-empty schedule, OR an HONEST infeasible-draft that
-    //     carries an infeasibility / failing-axis report.
+    // (b) Full-pipeline END-TO-END pin: buildForwardSchedule SCHEDULES the
+    //     non-CAS plan to a VALID state, with the major-required leaf SR7001/10
+    //     covered by a `specific_planned` slot binding the real course
+    //     CSCI-SHU 210 — proving the forward-planner works for non-CAS students
+    //     (the CAS-coupled classifier does NOT block scheduling). No escape
+    //     hatch: an infeasible-draft here is a REGRESSION, not an acceptable
+    //     "honest infeasible".
     // -----------------------------------------------------------------------
-    it("buildForwardSchedule produces a recognized state (valid OR honest infeasible-draft) — never a silent crash", () => {
+    it("buildForwardSchedule schedules the non-CAS plan END-TO-END (valid state, CSCI-SHU 210 bound)", () => {
         const dpr = makeNonCasShanghaiDpr();
         const session = makeNonCasShanghaiSession();
 
@@ -146,53 +146,57 @@ describe("non-CAS synthetic DPR — classifier CAS-coupling pin", () => {
         // Not a silent/undefined result.
         expect(schedule).toBeTruthy();
         expect(typeof schedule.state).toBe("string");
-        expect(ALL_STATES).toContain(schedule.state);
         expect(Array.isArray(schedule.semesters)).toBe(true);
         expect(schedule.feasibility).toBeTruthy();
 
-        if ((VALID_STATES as readonly string[]).includes(schedule.state)) {
-            // VALID branch: a real schedule with at least one planned semester.
-            expect(schedule.semesters.length).toBeGreaterThan(0);
-            expect(schedule.feasibility.feasible).toBe(true);
-        } else {
-            // HONEST INFEASIBLE branch: must carry a non-empty explanation.
-            // We re-run the authoritative validator (rebuilding the same inputs
-            // via buildSolverInputWithRules) to read the structured
-            // infeasibilityReport + failing-axis info — the proof that the
-            // plan failed HONESTLY rather than crashing or returning garbage.
-            const { solverInput, validatorRules } = buildSolverInputWithRules(session, dpr);
-            const validatorResult = runGraduationPathValidator({
-                plan: schedule,
-                dpr,
-                programRules: validatorRules,
-            });
+        // END-TO-END: the plan reaches a VALID state — NOT infeasible-draft.
+        // (The old "valid OR honest-infeasible-draft" escape hatch is removed:
+        //  with a realistic fixture this schedules, so an infeasible-draft now
+        //  signals a real regression.)
+        expect(VALID_STATES as readonly string[]).toContain(schedule.state);
+        expect(schedule.semesters.length).toBeGreaterThan(0);
+        expect(schedule.feasibility.feasible).toBe(true);
 
-            // The re-derived state must agree it is infeasible.
-            expect(derivePlanStateFromValidator(validatorResult, schedule)).toBe(schedule.state);
-            expect(validatorResult.feasible).toBe(false);
+        // The authoritative validator agrees the plan is feasible.
+        const { validatorRules } = buildSolverInputWithRules(session, dpr);
+        const validatorResult = runGraduationPathValidator({
+            plan: schedule,
+            dpr,
+            programRules: validatorRules,
+        });
+        expect(validatorResult.feasible).toBe(true);
+        expect(derivePlanStateFromValidator(validatorResult, schedule)).toBe(schedule.state);
 
-            // A populated infeasibility report with a non-empty conflictDetail.
-            expect(validatorResult.infeasibilityReport).toBeTruthy();
-            expect(validatorResult.infeasibilityReport!.conflictDetail.length).toBeGreaterThan(0);
+        // Collect every specific_planned slot across all semesters.
+        const specificPlanned = schedule.semesters
+            .flatMap((s) => s.slots)
+            .filter((slot) => slot.kind === "specific_planned");
 
-            // At least one axis must have FAILED with a non-empty reason — the
-            // honest binding-constraint signal (not a silent empty result).
-            const failingAxes = Object.entries(validatorResult.axisResults).filter(
-                ([, v]) => v.status === "fail",
+        // The major-required leaf SR7001/10 is covered by a specific_planned
+        // slot binding the REAL course CSCI-SHU 210 (NOT a placeholder). This
+        // is the load-bearing proof that the non-CAS forward-planner schedules
+        // the real major course end-to-end.
+        const cs210Slot = specificPlanned.find(
+            (slot) =>
+                slot.courseId === "CSCI-SHU 210" &&
+                slot.satisfiesRules.includes("SR7001/10"),
+        );
+        expect(cs210Slot).toBeTruthy();
+
+        // All four -SHU requirement courses bind as specific_planned, each
+        // covering its non-CAS leaf — including the SR8001/10 and SR9001/10
+        // leaves the CAS-coupled classifier could only classify as "unknown".
+        const boundFor = (courseId: string, rId: string): boolean =>
+            specificPlanned.some(
+                (slot) => slot.courseId === courseId && slot.satisfiesRules.includes(rId),
             );
-            expect(failingAxes.length).toBeGreaterThan(0);
-            for (const [, v] of failingAxes) {
-                expect(v.status).toBe("fail");
-                if (v.status === "fail") {
-                    expect(v.reason.length).toBeGreaterThan(0);
-                }
-            }
-
-            // The solverInput must have actually carried the non-CAS unmet
-            // requirements forward (proves the pipeline didn't drop them on the
-            // floor before failing).
-            expect(solverInput.unmetRequirements.length).toBeGreaterThan(0);
-        }
+        expect(boundFor("CSCI-SHU 210", "SR7001/10")).toBe(true);
+        // SR7001/20 elective: either CSCI-SHU 350 or CSCI-SHU 360 satisfies it.
+        expect(
+            boundFor("CSCI-SHU 350", "SR7001/20") || boundFor("CSCI-SHU 360", "SR7001/20"),
+        ).toBe(true);
+        expect(boundFor("CORE-SHU 100", "SR8001/10")).toBe(true);
+        expect(boundFor("HUMN-SHU 101", "SR9001/10")).toBe(true);
     });
 
     // -----------------------------------------------------------------------

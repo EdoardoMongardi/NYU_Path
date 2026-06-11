@@ -133,6 +133,56 @@ export function makeNonCasShanghaiDpr(
                 status: "not_satisfied",
                 statusText: "Not Satisfied: Complete the Computer Science major.",
                 children: [
+                    // -------------------------------------------------------------
+                    // SATISFIED foundational leaf — models how a REAL DPR records a
+                    // completed foundational course. The registrar applied the
+                    // completed CSCI-SHU 101 (and MATH-SHU 120) here, so they appear
+                    // in this leaf's `coursesUsed[]`. This is the load-bearing
+                    // realism fix: the prereq-satisfaction policy
+                    // (src/dpr/prereqSatisfaction.ts, `isPrereqSatisfied` Step 1)
+                    // treats a course as a registrar-accepted prereq satisfier
+                    // ONLY if it appears in some leaf's `coursesUsed[]`
+                    // (`dpr-satisfiedBy`) — else `fail-no-implicit-acceptance`. With
+                    // CSCI-SHU 101 recorded here, CSCI-SHU 210's prereq
+                    // (AND[CSCI-SHU 101]) is satisfied, so the solver can bind
+                    // CSCI-SHU 210 and the whole non-CAS plan schedules end-to-end.
+                    //
+                    // status "satisfied" → this leaf is NOT added to
+                    // unmetRequirements (it is dropped by notSatisfiedRequirements),
+                    // so it adds no work to the plan; it only carries the
+                    // coursesUsed[] history a real DPR would show. rId "SR7001/05" is
+                    // a non-CAS id (no CAS R1142/* family), keeping the
+                    // structural-guard test passing.
+                    {
+                        rId: "SR7001/05",
+                        title: "Computer Science: Foundational Courses",
+                        status: "satisfied",
+                        statusText:
+                            "Satisfied: Foundational CS/math courses completed.",
+                        description:
+                            "Required: CSCI-SHU 101 Intro to Computer Science; MATH-SHU 120 Calculus.",
+                        counter: { kind: "courses", required: 2, used: 2, needed: 0 },
+                        coursesUsed: [
+                            {
+                                term: "2024 Fall",
+                                subject: "CSCI-SHU",
+                                catalogNbr: "101",
+                                courseTitle: "Intro to Computer Science",
+                                grade: "A",
+                                units: 4,
+                                type: "EN",
+                            },
+                            {
+                                term: "2025 Spring",
+                                subject: "MATH-SHU",
+                                catalogNbr: "120",
+                                courseTitle: "Calculus",
+                                grade: "B+",
+                                units: 4,
+                                type: "EN",
+                            },
+                        ],
+                    },
                     {
                         rId: "SR7001/10",
                         title: "Computer Science: Required Courses",
@@ -246,20 +296,31 @@ export function makeNonCasShanghaiDpr(
 // exist here so the solver can place them. All Shanghai-coded (-SHU), all
 // non-CAS. Offered fall+spring so the small horizon can seat them.
 //
-// OFFERINGS GAP-FILL (2026-06-11): each course's `termsOffered: ["fall",
-// "spring"]` below is now consumed by the solver. buildSolverInput gap-fills
-// SolverInput.offerings / offeringConfidence from session.courses[i].
-// termsOffered for ids the GLOBAL offerings cache lacks (these fabricated -SHU
-// ids are not in the global cache), tagging them "historically_likely". So the
-// earlier note here — "these -SHU courses have no offering rows and cannot
-// bind" — is OUTDATED: they now DO get real offering rows
-// (solverInput.offerings.has("CSCI-SHU 210") === true). The non-CAS e2e pin
-// (tests/e2e/nonCasPlan.test.ts) nonetheless still hits its honest
-// infeasible-draft branch, but for a DIFFERENT reason: a downstream
-// constraint-search / materialize binding gate emits a placeholder for the
-// major-required leaf even though the course is now catalog- AND offering-
-// present with its prereq satisfied. That residual binding gate is a SEPARATE
-// limitation, NOT the offerings gap this fixture used to document.
+// OFFERINGS: each course's `termsOffered: ["fall", "spring"]` below is consumed
+// by the solver. buildSolverInput gap-fills SolverInput.offerings /
+// offeringConfidence from session.courses[i].termsOffered for ids the GLOBAL
+// offerings cache lacks (these fabricated -SHU ids are not in the global
+// cache), tagging them "historically_likely". So the -SHU courses get real
+// offering rows (solverInput.offerings.has("CSCI-SHU 210") === true).
+//
+// SCHEDULES END-TO-END (corrected 2026-06-11): the non-CAS e2e pin
+// (tests/e2e/nonCasPlan.test.ts) now reaches a VALID state
+// (valid-with-trade-offs) with all four -SHU requirement courses bound as
+// `specific_planned`. An earlier version of this note claimed the pin "still
+// hits its honest infeasible-draft branch" because of a "residual downstream
+// constraint-search / materialize binding gate." THAT WAS WRONG. The real
+// cause of the old infeasible-draft was THIS fixture: every requirement leaf's
+// `coursesUsed[]` was empty, so the completed CSCI-SHU 101 (grade A, type EN,
+// in courseHistory) did not count as a registrar-accepted prereq satisfier
+// under the deliberate prereq policy (isPrereqSatisfied Step 1 →
+// `dpr-satisfiedBy` requires the course in some leaf's coursesUsed[]; Step 4 →
+// `fail-no-implicit-acceptance` otherwise). With CSCI-SHU 101's prereq unmet,
+// CSCI-SHU 210 could not bind → materialize emitted all-placeholders →
+// validator axis-1 failed. The SATISFIED leaf SR7001/05 added above records
+// CSCI-SHU 101 in its `coursesUsed[]` exactly as a real DPR would, which
+// satisfies the prereq and lets the plan schedule end-to-end. (The classifier
+// is STILL CAS-coupled — SR8001/10 / SR9001/10 fall to "unknown" — but that
+// does NOT block scheduling.)
 // ---------------------------------------------------------------------------
 
 const SYNTHETIC_COURSES: Course[] = [
