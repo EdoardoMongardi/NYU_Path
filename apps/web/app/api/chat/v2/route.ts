@@ -372,13 +372,13 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // Phase 11 S4 — gated clarifier. Detect deterministic
     // ambiguity signals; if any fire, run the clarifier sub-agent
-    // (single haiku call, no tools). When the clarifier returns a
+    // (single primary-model call, no tools). When the clarifier returns a
     // question, stream it as the agent's reply for THIS turn and
     // skip the main agent loop. The student responds with detail,
     // and the next turn flows through the agent normally.
     const ambiguity = detectAmbiguity(body.message, body.history ?? []);
     if (ambiguity.ambiguous) {
-        // Cheap haiku call — no tools, ~80 tokens out.
+        // Single primary-model call (Sonnet by default) — no tools, ~80 tokens out.
         const clarification = await askClarification(
             primary,
             body.message,

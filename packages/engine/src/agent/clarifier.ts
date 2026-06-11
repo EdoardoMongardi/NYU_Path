@@ -19,8 +19,10 @@
 //     clarifier prompt is similarly minimal: ~15 lines.
 //
 // The gate fires on at most ~10-15% of incoming traffic. The
-// clarifier itself is a single haiku call (~$0.0003); on the 85%
-// of clear queries the gate skips entirely.
+// clarifier itself is a single completion on the caller-supplied
+// client (the production route passes the *primary* client —
+// `claude-sonnet-4-6` by default), with no tools; on the 85% of
+// clear queries the gate skips entirely.
 // ============================================================
 
 import type { LLMClient, LLMMessage } from "./llmClient.js";
@@ -143,7 +145,7 @@ export function detectAmbiguity(
 // Clarifier sub-agent
 // ----------------------------------------------------------------
 
-const CLARIFIER_SYSTEM_PROMPT = `You are a clarification specialist for an academic-advising agent at NYU CAS.
+const CLARIFIER_SYSTEM_PROMPT = `You are a clarification specialist for an academic-advising agent at NYU.
 
 Your ONLY job: when the student's message is ambiguous, ask ONE concise clarifying
 question that would let the main agent answer correctly.
@@ -181,8 +183,9 @@ export interface ClarificationResult {
  *   1. No tools at all (Explore has Grep/Glob/Read; we have none)
  *   2. Stricter output schema (one question OR "CLEAR")
  *
- * Use a haiku-tier model for cost; this fires on at most 10-15% of
- * traffic so total monthly cost is < $0.001 at cohort A scale.
+ * Runs on the caller-supplied client (the production route passes the
+ * primary client — `claude-sonnet-4-6` by default); fires on at most
+ * 10-15% of traffic and is capped at `maxTokens: 80`.
  */
 export async function askClarification(
     client: LLMClient,
