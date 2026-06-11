@@ -147,34 +147,3 @@ export function renderEnvelopeMeta(meta: EnvelopeMeta | undefined): string {
     }
     return lines.join("\n");
 }
-
-/**
- * Merge envelope fields from multiple tool calls in a turn. Used by
- * the response validator + completeness reviewer (Phase 10 Stage 4
- * Methods B/C) to assess whether the agent surfaced every disclaimer
- * across all envelopes.
- */
-export function mergeEnvelopes(...metas: ReadonlyArray<EnvelopeMeta | undefined>): EnvelopeMeta {
-    const disclaimers = new Map<string, Disclaimer>();
-    const followUps: SuggestedFollowUp[] = [];
-    const anchors: BulletinAnchor[] = [];
-    let lowest: EnvelopeConfidence = "high";
-    const order: EnvelopeConfidence[] = ["high", "medium", "low", "uncertain"];
-    for (const m of metas) {
-        if (!m) continue;
-        for (const d of m.disclaimers ?? []) {
-            if (!disclaimers.has(d.id)) disclaimers.set(d.id, d);
-        }
-        for (const f of m.suggestedFollowUps ?? []) followUps.push(f);
-        for (const a of m.anchors ?? []) anchors.push(a);
-        if (m.confidence && order.indexOf(m.confidence) > order.indexOf(lowest)) {
-            lowest = m.confidence;
-        }
-    }
-    return {
-        disclaimers: Array.from(disclaimers.values()),
-        suggestedFollowUps: followUps,
-        anchors,
-        confidence: lowest,
-    };
-}

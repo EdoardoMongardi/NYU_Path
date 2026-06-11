@@ -153,29 +153,6 @@ export function compareSolverTerms(a: string, b: string): number {
 // ---------------------------------------------------------------------------
 
 /**
- * termsForPlacement — returns the ordered list of terms to try when placing
- * a course, respecting the student's global loadStyle preference.
- *
- * - "frontload"  → earliest-first (same as default iteration order)
- * - "backload"   → latest-first (reversed)
- * - undefined / "balanced" → earliest-first (Phase 13 default; Phase 15 will
- *   add a true slack-balancing pass)
- *
- * Decision #9 (frontload / backload); Decision #26 partial (term ordering).
- */
-export function termsForPlacement(
-    futureTerms: string[],
-    _perTermCredits: Map<string, number>,
-    _target: number,
-    preferences: SchedulePreferences | undefined,
-): string[] {
-    if (preferences?.loadStyle === "frontload") return [...futureTerms]; // earliest first
-    if (preferences?.loadStyle === "backload") return [...futureTerms].reverse();
-    // Default (balanced): chronological — Phase 13 greedy fills earliest term first.
-    return [...futureTerms];
-}
-
-/**
  * effectiveTermTarget — returns the credit target for a given term,
  * respecting per-term and global preference overrides.
  *

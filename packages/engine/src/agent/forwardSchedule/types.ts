@@ -3,7 +3,6 @@
  *
  * SolverInput is the canonical bundle the solver receives from build.ts.
  * SolverOutput is what solveForwardSchedule() returns.
- * SolverNode is the in-flight mutable state used during greedy placement.
  *
  * Decisions covered in these types:
  *   #4  prereqSatisfaction helper wiring
@@ -20,7 +19,6 @@
 import type {
     PrereqGroup,
     ForwardSemester,
-    ScheduleSlot,
     FeasibilityReport,
     AlternativePlanSummary,
     Assumption,
@@ -220,23 +218,6 @@ export interface SolverOutput {
      *  "feasibility-unconfirmed" — no valid plan was found within budget (NOT proven infeasible).
      *  Omitted is treated as "optimal" by consumers for back-compat. */
     optimality?: "optimal" | "best-effort" | "feasibility-unconfirmed";
-}
-
-// ---------------------------------------------------------------------------
-// SolverNode (internal mutable state during greedy placement)
-// ---------------------------------------------------------------------------
-
-export interface SolverNode {
-    /** Per-term tentative slot list (mutable during search). */
-    perTerm: Map<string, ScheduleSlot[]>;
-    /** Course IDs already placed (for prereq + NOT checks). */
-    placedCourses: Set<string>;
-    /** Courses we've decided NOT to place (e.g. excluded by NOT clauses). */
-    excludedCourses: Set<string>;
-    /** Per-term running credit count. */
-    perTermCredits: Map<string, number>;
-    /** Backtrack history (for debugging only). */
-    decisions: string[];
 }
 
 // ---------------------------------------------------------------------------

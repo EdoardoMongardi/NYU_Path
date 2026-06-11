@@ -432,12 +432,12 @@ function runSearch(
         // 3. Domain values for this variable. Forward-check each against the trial
         //    using ONLY the sound, later-variable-independent incremental
         //    predicates (incrementalOk = {offering, NOT, coreq, ceiling}); no
-        //    capacity/feasibility screen is applied, because the only available
-        //    screen (forwardFeasibilityScreen) is a documented false-negative-
-        //    prone heuristic (2.0× low-confidence multiplier + candidates[0]-
-        //    derived demand) and a false negative used as a hard prune would
-        //    discard valid branches → incompleteness. checkPerTermCeiling already
-        //    supplies sound per-term capacity pruning. Survivors are then ORDERED
+        //    capacity/feasibility screen is applied, because any bin-packing-style
+        //    feasibility screen (e.g. low-confidence-multiplier + candidates[0]-
+        //    derived demand) is a false-negative-prone heuristic, and a false
+        //    negative used as a hard prune would discard valid branches →
+        //    incompleteness. checkPerTermCeiling already supplies sound per-term
+        //    capacity pruning. Survivors are then ORDERED
         //    best-first by scorePlan ASC (tie-break: term chronological, then
         //    courseId ASC) so good solutions surface early — this is a value-
         //    ORDERING heuristic only; with no admissible bound it does NOT prune,
