@@ -297,11 +297,51 @@ export const probeCounterfactualTool = buildTool({
             lines.push(`PROBE (${output.arm}) — INFEASIBLE — ${binding}`);
         }
         if (output.planDiff) {
-            const bi = output.planDiff.balanceImpact;
+            const pd = output.planDiff;
+            const bi = pd.balanceImpact;
             lines.push(`Balance: ${bi.before.toFixed(2)} → ${bi.after.toFixed(2)} (${bi.classification})`);
-            if (output.planDiff.planStateChange) {
-                const sc = output.planDiff.planStateChange;
+            if (pd.planStateChange) {
+                const sc = pd.planStateChange;
                 lines.push(`Plan state: ${sc.from} → ${sc.to}`);
+            }
+            // D3.1 — surface the (already-computed) trade-off diff from
+            // `diffPlanTradeOffs` so the agent SEES the petitions, re-opened
+            // requirements, cascaded shifts, and new assumptions a
+            // counterfactual introduces. Render only non-empty fields (guarded)
+            // so a benign probe shows no spurious section. The agent cannot
+            // invent a delta — it reads the engine's computed one.
+            const tradeOffLines: string[] = [];
+            if (pd.newUnmetRequirements.length > 0) {
+                tradeOffLines.push(
+                    `  • newly-unmet requirements: ${pd.newUnmetRequirements.join(", ")}`,
+                );
+            }
+            if (pd.newRequiresPetition.length > 0) {
+                tradeOffLines.push(
+                    `  • now requires petition: ${pd.newRequiresPetition.join(", ")}`,
+                );
+            }
+            if (pd.cascadedShifts.length > 0) {
+                tradeOffLines.push(
+                    "  • cascaded shifts: " +
+                        pd.cascadedShifts
+                            .map(
+                                (s) =>
+                                    `${s.courseId} ${s.fromTerm}→${s.toTerm} (because ${s.becauseOf})`,
+                            )
+                            .join("; "),
+                );
+            }
+            if (pd.newAssumptions.length > 0) {
+                tradeOffLines.push(
+                    `  • new assumptions: ${pd.newAssumptions.length}/${pd.newAssumptions
+                        .map((a) => a.type)
+                        .join(", ")}`,
+                );
+            }
+            if (tradeOffLines.length > 0) {
+                lines.push("Trade-offs:");
+                lines.push(...tradeOffLines);
             }
         }
         if (output.consequences.length > 0) {
