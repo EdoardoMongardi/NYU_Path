@@ -168,12 +168,8 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         // schedule + NO prefs persisted. Hydration must leave the
         // forwardSchedule slot undefined and the turn must still complete.
         const userId = "hydration-no-schedule";
-        // Seed profile + DPR only by persisting an empty profile/DPR via
-        // the schedule-less path: persist nothing to the scheduleStore.
-        const stores = getStores({});
-        // We still need the route to run; profile/DPR come from the DPR
-        // payload in the body, not from the store. Persist nothing.
-        void stores;
+        // Persist NOTHING to any store. The profile/DPR are supplied by the
+        // request body, so the schedule + prefs slots must hydrate to undefined.
 
         setCohortAssignment({ overrides: { [userId]: "alpha" }, default: "alpha" });
 

@@ -269,6 +269,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         try {
             const loaded = await stores.scheduleStore.loadLatestSchedule(userId);
             if (loaded) {
+                // Keep this draft-state classification in sync with
+                // planActionOrchestrator.ts (the other loadLatestSchedule consumer).
                 const isDraft =
                     loaded.schedule.state === "infeasible-draft" ||
                     loaded.schedule.state === "student-preferred-invalid-draft";
@@ -279,7 +281,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             if (prefs) schedulePreferences = prefs;
         } catch (err) {
             console.warn(
-                `[v2 route] plan/prefs hydration failed: ${err instanceof Error ? err.message : String(err)}`,
+                `[v2 route] plan/prefs hydration failed for ${userId}: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
     }
