@@ -68,7 +68,7 @@ persistence/
   sessionStore.ts profileStore.ts scheduleStore.ts chatHistoryStore.ts
 agent/
   index.ts agentLoop.ts loopState.ts tool.ts toolEnvelope.ts
-  systemPrompt.ts responseValidator.ts completenessReviewer.ts clarifier.ts
+  systemPrompt.ts responseValidator.ts clarifier.ts
   llmClient.ts recordingClient.ts registry.ts
   clients/        openaiClient.ts anthropicClient.ts index.ts
   verifiers/      multiIntentDetector.ts blockquoteAttribution.ts
@@ -103,7 +103,7 @@ File ranges refer to `packages/engine/src/index.ts`.
 | Persistence | `:227-258` | session store (`InMemorySessionStore`, `FileBackedSessionStore`, `defaultSessionStore`, `summariesAsPriorMessage`, `MAX_SESSION_SUMMARIES`), `InMemoryProfileStore`, `InMemoryScheduleStore` + `pruneCompletedPins`, `InMemoryChatHistoryStore`, plus `*Store` types |
 | DPR fingerprint | `:259` | `computeDprFingerprint` |
 
-The agent group (`index.ts:48-114`) re-exports: the loop (`runAgentTurn`, `runAgentTurnStreaming`), `buildDefaultRegistry`, `buildSystemPrompt`, the validators (`validateResponse`, `reviewCompleteness`, `detectMultiIntent`, `renderMultiIntentBriefing`, `detectAmbiguity`, `askClarification`, `extractClaimNumbers`), `RecordingLLMClient`, the two live clients (`OpenAIEngineClient`, `AnthropicEngineClient`), the factories (`createPrimaryClient`, `createFallbackClient`) + `DEFAULT_PRIMARY_MODEL` / `DEFAULT_FALLBACK_MODEL`, `materializeSections`, and a curated subset of the tool constants (`runFullAuditTool`, `whatIfAuditTool`, `searchPolicyTool`, `getProgramRequirementsTool`, `updateProfileTool`, `confirmProfileUpdateTool`, `getCreditCapsTool`, `searchAvailabilityTool`, `planForwardDegreeTool`, `proposePlanChangeTool`, `confirmPlanChangeTool`) for routes that invoke a tool programmatically without the loop.
+The agent group (`index.ts:48-114`) re-exports: the loop (`runAgentTurn`, `runAgentTurnStreaming`), `buildDefaultRegistry`, `buildSystemPrompt`, the validators (`validateResponse`, `detectMultiIntent`, `renderMultiIntentBriefing`, `detectAmbiguity`, `askClarification`, `extractClaimNumbers`), `RecordingLLMClient`, the two live clients (`OpenAIEngineClient`, `AnthropicEngineClient`), the factories (`createPrimaryClient`, `createFallbackClient`) + `DEFAULT_PRIMARY_MODEL` / `DEFAULT_FALLBACK_MODEL`, `materializeSections`, and a curated subset of the tool constants (`runFullAuditTool`, `whatIfAuditTool`, `searchPolicyTool`, `getProgramRequirementsTool`, `updateProfileTool`, `confirmProfileUpdateTool`, `getCreditCapsTool`, `searchAvailabilityTool`, `planForwardDegreeTool`, `proposePlanChangeTool`, `confirmPlanChangeTool`) for routes that invoke a tool programmatically without the loop.
 
 ---
 
@@ -135,7 +135,6 @@ Highlights of the agent-barrel re-exports (paths relative to `agent/`):
 | `createLoopState`, `recordTransition`, `enforceToolResultBudget`, `measureContextPressure`, `estimateTokens`, the `MAX_TOOL_RESULT_BUDGET` / `TOOL_RESULT_KEEP_RECENT` / `DEFAULT_MODEL_WINDOW_TOKENS` / `TIER2_TRIP_FRACTION` / `TIER3_TRIP_FRACTION` constants, plus `LoopState`/`ContextPressure` types | `./loopState.ts` |
 | `buildSystemPrompt`, `SystemPromptOptions` | `./systemPrompt.ts` |
 | `validateResponse`, `extractClaimNumbers`, `Violation`/`ViolationKind`/`ValidatorVerdict`/`ValidatorContext` | `./responseValidator.ts` |
-| `reviewCompleteness`, `CompletenessReviewVerdict` | `./completenessReviewer.ts` |
 | `detectMultiIntent`, `renderMultiIntentBriefing` | `./verifiers/multiIntentDetector.ts` |
 | `detectAmbiguity`, `askClarification` | `./clarifier.ts` |
 | `RecordingLLMClient` | `./recordingClient.ts` |
@@ -154,7 +153,7 @@ Highlights of the agent-barrel re-exports (paths relative to `agent/`):
 - **The agent loop** — `runAgentTurn`, `runAgentTurnStreaming`, plus `AgentTurnOptions`, `ChatTurnResult`, `ToolInvocation`, `AgentStreamEvent`.
 - **The tool registry** — `buildDefaultRegistry` (per-session registry, optionally injecting a custom `searchCoursesFn`).
 - **LLM client setup** — `createPrimaryClient`, `createFallbackClient`, `DEFAULT_PRIMARY_MODEL`, `DEFAULT_FALLBACK_MODEL`, the concrete `OpenAIEngineClient` / `AnthropicEngineClient`, and `RecordingLLMClient` for test fixtures.
-- **Validators / clarifier / multi-intent** — `validateResponse`, `reviewCompleteness`, `detectMultiIntent`, `renderMultiIntentBriefing`, `detectAmbiguity`, `askClarification`.
+- **Validators / clarifier / multi-intent** — `validateResponse`, `detectMultiIntent`, `renderMultiIntentBriefing`, `detectAmbiguity`, `askClarification`.
 - **System prompt** — `buildSystemPrompt`.
 - **DPR pipeline** — `parseDpr`, `dprToAuditResults`, `dprToPrimaryAuditResult`, `deriveTemporalContext`, `normalizeGraduationTarget`, `computeDprFingerprint`. The Update-DPR route is the heaviest consumer.
 - **Programmatic tool entry points** — `planForwardDegreeTool` (Update-DPR route), `proposePlanChangeTool` / `confirmPlanChangeTool` (sidebar Add/Swap/Drop/Lock/Move/Confirm verbs), `materializeSections` (`/api/plan/stage2`). These let routes run engine logic without the agent loop.

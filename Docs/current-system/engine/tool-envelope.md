@@ -187,4 +187,4 @@ Note: the envelope reaches the model as **text inside the tool_result**, and the
 - **Tool authors own the safety contract.** A tool knows what's load-bearing in its output and surfaces it as disclaimers/anchors; `renderEnvelopeMeta` formats it consistently.
 - **Conservative confidence posture.** Sub-high confidence is always surfaced to the model as an explicit note.
 
-See also [`response-validator.md`](response-validator.md) for the verbatim-enforcement side and [`completeness-reviewer.md`](completeness-reviewer.md) for the (LLM-based, not envelope-structural) completeness pass.
+See also [`response-validator.md`](response-validator.md) for the verbatim-enforcement side.

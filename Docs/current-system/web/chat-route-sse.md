@@ -220,7 +220,7 @@ All writes are wrapped in try/catch with `console.error` on failure; persistence
 2. **Environment errors** — primary client not configured → HTTP 503 (`route.ts:164-174`); rate-limit exceeded → HTTP 429 (`route.ts:191-210`). Both before the stream opens.
 3. **Runtime errors during the turn** — `runV2Turn`'s body is wrapped in try/catch that emits a final `error` SSE event and closes (`route.ts:864-871`). Unconditional — any throw in the loop, validator, or persistence path lands here.
 4. **Non-ok loop termination** — when `finalResult` is null or `finalResult.kind !== "ok"` (and not `context_limit`), the route emits `error` with `Agent loop ended in non-ok state: <kind>` or `Agent loop did not yield a final result.` and closes (`route.ts:705-712`).
-5. **Validator block** — when `validateResponse` (`route.ts:715-722`) plus `reviewCompleteness` (`route.ts:729-732`) produce any violations, the route emits `validator_block` with the combined violations BEFORE `done` (`route.ts:766-770`). The `done` event still fires — violations are advisory.
+5. **Validator block** — when `validateResponse` (`route.ts:714-722`) produces any violations, the route emits `validator_block` with those violations BEFORE `done` (`route.ts:747`). The `done` event still fires — violations are advisory.
 6. **Fabricated-attribution scrubbing** — when the validator catches `fabricated_attribution` violations after the replay budget is exhausted, the route runs `stripFabricatedBlockquotes(finalText)` (`route.ts:760-765`, helper at `route.ts:886-914`). This regex scrubber drops every blockquote (`> …`) and the immediately preceding attribution line, then appends a substitution note advising the student to confirm the policy with an adviser. The scrubbed text flows into the `done` event's `finalText`.
 
 The route always closes the SSE stream in a `finally` block (`route.ts:869-871`) regardless of branch.
@@ -292,7 +292,7 @@ sequenceDiagram
         else non-ok / no result
             Route-->>Client: error
         else ok
-            Route->>Route: validateResponse + reviewCompleteness
+            Route->>Route: validateResponse
             alt violations
                 Route->>Route: stripFabricatedBlockquotes
                 Route-->>Client: validator_block
