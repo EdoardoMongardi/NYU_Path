@@ -39,8 +39,8 @@ const PREFERENCE_EXTRACTION_RULES = `
 When the student expresses a preference about how their schedule
 should be shaped, do NOT directly mutate the plan. Instead:
 
-1. Translate the natural-language preference into a PlanChangeProposal.
-2. Call propose_plan_change with that proposal.
+1. Translate the natural-language preference into one or more plan mutations.
+2. Call propose_plan_change with those mutations.
 3. Surface the resulting feasibility + consequences ("Spring 2027
    would have 12 credits") to the student.
 4. Wait for explicit confirmation ("yes, do that").
