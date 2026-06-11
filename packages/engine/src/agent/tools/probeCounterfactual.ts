@@ -20,9 +20,16 @@
  * synthetic DPR to BOTH the solver-input builder and `finalizeForwardSchedule`;
  * `session.degreeProgressReport` is never mutated (the transform deep-copies).
  *
- * Clean extension points (kept deliberately on the output):
- *   - D2.2 will add a "why-not" framing summary over `conflicts`.
- *   - D3.1 will surface the trade-off diff (already carried via `planDiff`).
+ * Why-not framing (D2.2, DONE) + trade-off diff (D3.1, DONE):
+ *   - D2.2 — `summarizeResult` frames the two outcomes symmetrically:
+ *     VALID (optionally "(with trade-offs)" when the engine's trade-off diff is
+ *     non-empty) vs INFEASIBLE-because-<failing axis + reason>. HONEST SCOPE:
+ *     the infeasible "why" is the validator's `Axes failed: <axis>: <reason>`
+ *     string (conflictSource always "other") — AXIS-level, NOT a course-causal
+ *     sentence. The tool never fabricates a course-causal binding constraint the
+ *     validator doesn't emit (that would be an OPTIONAL future engine task).
+ *   - D3.1 — the trade-off diff (carried via `planDiff`) is rendered as a
+ *     guarded "Trade-offs:" section.
  */
 
 import { z } from "zod";
@@ -218,8 +225,10 @@ export const probeCounterfactualTool = buildTool({
         //
         // When the validator deems the counterfactual infeasible, surface the
         // BINDING constraint: the failing-axis + reason string from the
-        // infeasibilityReport (conflictSource + conflictDetail). D2.2 will frame
-        // this as a "why-not" summary.
+        // infeasibilityReport (conflictSource + conflictDetail). D2.2 frames this
+        // as the "why-not" reason in summarizeResult. HONEST SCOPE: conflictSource
+        // is always "other" and conflictDetail is `Axes failed: <axis>: <reason>`
+        // — axis-level, NOT course-causal (see summarizeResult + the file header).
         const conflicts: Array<{ kind: string; detail: string }> = [];
         if (!validatorResult.feasible && validatorResult.infeasibilityReport) {
             conflicts.push({
@@ -269,48 +278,17 @@ export const probeCounterfactualTool = buildTool({
     },
     summarizeResult(output) {
         const lines: string[] = [];
-        if (output.feasible) {
-            const added = output.diff.added
-                .map(({ term, slot }) =>
-                    `${"courseId" in slot ? slot.courseId : "placeholder"} → ${term}`,
-                )
-                .join(", ");
-            const removed = output.diff.removed
-                .map(({ term, slot }) =>
-                    `${"courseId" in slot ? slot.courseId : "placeholder"} (was in ${term})`,
-                )
-                .join(", ");
-            const changes = [
-                added ? `added ${added}` : "",
-                removed ? `removed ${removed}` : "",
-            ]
-                .filter(Boolean)
-                .join("; ");
-            lines.push(
-                `PROBE (${output.arm}) — VALID — with these changes: ${changes || "no slot changes"}`,
-            );
-        } else {
-            const binding =
-                output.conflicts && output.conflicts.length > 0
-                    ? output.conflicts.map((c) => `[${c.kind}] ${c.detail}`).join("; ")
-                    : "(no binding-constraint detail available)";
-            lines.push(`PROBE (${output.arm}) — INFEASIBLE — ${binding}`);
-        }
+
+        // -- D3.1 trade-off diff (computed FIRST so the D2.2 why-not header can
+        //    announce its presence). Surface the (already-computed) trade-off
+        //    diff from `diffPlanTradeOffs` so the agent SEES the petitions,
+        //    re-opened requirements, cascaded shifts, and new assumptions a
+        //    counterfactual introduces. Render only non-empty fields (guarded)
+        //    so a benign probe shows no spurious section. The agent cannot
+        //    invent a delta — it reads the engine's computed one. --------------
+        const tradeOffLines: string[] = [];
         if (output.planDiff) {
             const pd = output.planDiff;
-            const bi = pd.balanceImpact;
-            lines.push(`Balance: ${bi.before.toFixed(2)} → ${bi.after.toFixed(2)} (${bi.classification})`);
-            if (pd.planStateChange) {
-                const sc = pd.planStateChange;
-                lines.push(`Plan state: ${sc.from} → ${sc.to}`);
-            }
-            // D3.1 — surface the (already-computed) trade-off diff from
-            // `diffPlanTradeOffs` so the agent SEES the petitions, re-opened
-            // requirements, cascaded shifts, and new assumptions a
-            // counterfactual introduces. Render only non-empty fields (guarded)
-            // so a benign probe shows no spurious section. The agent cannot
-            // invent a delta — it reads the engine's computed one.
-            const tradeOffLines: string[] = [];
             if (pd.newUnmetRequirements.length > 0) {
                 tradeOffLines.push(
                     `  • newly-unmet requirements: ${pd.newUnmetRequirements.join(", ")}`,
@@ -339,7 +317,55 @@ export const probeCounterfactualTool = buildTool({
                         .join(", ")}`,
                 );
             }
-            if (tradeOffLines.length > 0) {
+        }
+        const hasTradeOffs = tradeOffLines.length > 0;
+
+        // -- D2.2 why-not framing — the two outcomes are deliberately symmetric:
+        //    VALID (optionally "(with trade-offs)" when the engine's trade-off
+        //    diff is non-empty) vs INFEASIBLE-because-<failing axis + reason>.
+        //    HONEST SCOPE: the INFEASIBLE binding constraint is the validator's
+        //    `Axes failed: <axis>: <reason>` string (conflictSource always
+        //    "other"); it is AXIS-level, NOT a course-causal sentence. We do not
+        //    fabricate a course-causal "why" the validator does not emit. -------
+        if (output.feasible) {
+            const added = output.diff.added
+                .map(({ term, slot }) =>
+                    `${"courseId" in slot ? slot.courseId : "placeholder"} → ${term}`,
+                )
+                .join(", ");
+            const removed = output.diff.removed
+                .map(({ term, slot }) =>
+                    `${"courseId" in slot ? slot.courseId : "placeholder"} (was in ${term})`,
+                )
+                .join(", ");
+            const changes = [
+                added ? `added ${added}` : "",
+                removed ? `removed ${removed}` : "",
+            ]
+                .filter(Boolean)
+                .join("; ");
+            // Announce trade-offs in the header when the engine's trade-off diff
+            // is non-empty — the symmetric counterpart to the INFEASIBLE reason.
+            const verdict = hasTradeOffs ? "VALID (with trade-offs)" : "VALID";
+            lines.push(
+                `PROBE (${output.arm}) — ${verdict} — with these changes: ${changes || "no slot changes"}`,
+            );
+        } else {
+            const binding =
+                output.conflicts && output.conflicts.length > 0
+                    ? output.conflicts.map((c) => `[${c.kind}] ${c.detail}`).join("; ")
+                    : "(no binding-constraint detail available)";
+            lines.push(`PROBE (${output.arm}) — INFEASIBLE — ${binding}`);
+        }
+        if (output.planDiff) {
+            const pd = output.planDiff;
+            const bi = pd.balanceImpact;
+            lines.push(`Balance: ${bi.before.toFixed(2)} → ${bi.after.toFixed(2)} (${bi.classification})`);
+            if (pd.planStateChange) {
+                const sc = pd.planStateChange;
+                lines.push(`Plan state: ${sc.from} → ${sc.to}`);
+            }
+            if (hasTradeOffs) {
                 lines.push("Trade-offs:");
                 lines.push(...tradeOffLines);
             }
