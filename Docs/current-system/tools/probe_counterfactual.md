@@ -1,6 +1,6 @@
 # probe_counterfactual — Technical Audit
 
-> Last verified against code: 2026-06-11 (Phase 3 advisor — D2.1).
+> Last verified against code: 2026-06-11 (Phase 3 advisor — D2.1 + D3.1).
 
 ## Purpose
 
@@ -168,7 +168,7 @@ conflicts = [{ kind: infeasibilityReport.conflictSource, detail: infeasibilityRe
 The output is shaped to be a clean extension surface for the rest of Phase 3:
 
 - **D2.2 — why-not framing.** `conflicts[].detail` already carries the binding constraint verbatim. D2.2 will wrap it in a student-facing "here's why that doesn't work" summary; the structured field is in place so the framing layer doesn't have to re-derive it.
-- **D3.1 — agent-reachable trade-off diff.** `planDiff` already carries `newUnmetRequirements`, `cascadedShifts`, `newRequiresPetition`, `removedRequiresPetition`, `newAssumptions`, and the per-axis `validationResultsChanges` (computed by `buildPlanDiff` + `diffPlanTradeOffs`). D3.1 reads these to surface the trade-offs of a probe directly to the agent.
+- **D3.1 — agent-reachable trade-off diff (DONE).** `planDiff` carries `newUnmetRequirements`, `cascadedShifts`, `newRequiresPetition`, `removedRequiresPetition`, `newAssumptions`, and the per-axis `validationResultsChanges` (computed by `buildPlanDiff` + `diffPlanTradeOffs`). The trade-off diff was already *reachable* on the output as of D2.1; **D3.1 makes it *visible* — `summarizeResult` now renders a guarded "Trade-offs:" section from these fields** (see §9), so the agent SEES the petitions / re-opened requirements / cascaded shifts / new assumptions a counterfactual introduces, beyond the propose/confirm path. No new diff was added — D3.1 reuses `diffPlanTradeOffs` via the existing `planDiff`.
 
 ---
 
@@ -189,7 +189,16 @@ The output is shaped to be a clean extension surface for the rest of Phase 3:
 - **VALID:** `PROBE (<arm>) — VALID — with these changes: <added/removed slots>`
 - **INFEASIBLE:** `PROBE (<arm>) — INFEASIBLE — [<conflictSource>] <conflictDetail>`
 
-…followed by a `Balance: <before> → <after> (<classification>)` line, an optional `Plan state: <from> → <to>` line, and up to 5 `• <consequence>` lines.
+…followed by a `Balance: <before> → <after> (<classification>)` line, an optional `Plan state: <from> → <to>` line, the **trade-off section (D3.1)**, and up to 5 `• <consequence>` lines.
+
+**The "Trade-offs:" section (D3.1)** is rendered from `planDiff`'s trade-off fields (the real delta from `diffPlanTradeOffs` — no new diff is computed). Each line is emitted **only when its field is non-empty** (a benign probe shows no section):
+
+- `newUnmetRequirements` → `• newly-unmet requirements: <rIds>` — the headline when an Arm-B `fail_completed` re-opens a requirement.
+- `newRequiresPetition` → `• now requires petition: <courseIds>`.
+- `cascadedShifts` → `• cascaded shifts: <courseId> <fromTerm>→<toTerm> (because <becauseOf>); …`.
+- `newAssumptions` → `• new assumptions: <count>/<assumption types>`.
+
+This is what makes the trade-off diff **agent-reachable beyond propose/confirm**: the agent reads the engine's computed delta openly and cannot invent one.
 
 ---
 
@@ -205,4 +214,4 @@ The output is shaped to be a clean extension surface for the rest of Phase 3:
 
 - **`bindFreeElective` / `unbindFreeElective` / `bindPoolSlot` are no-ops in Arm A** (inherited from the shared `applyMutationsToPreferences` switch) — sending them changes nothing in the simulated preferences; only a consequence string flags that the binding did not take effect.
 - **No confirm path.** There is intentionally no `confirm_counterfactual`: a student cannot "apply" having failed a completed course. Arm A edits to future placement should be committed via `confirm_plan_change` with the equivalent mutation array, not through this tool.
-- **The "why-not" framing and the surfaced trade-off diff are not yet rendered** (D2.2 / D3.1) — the structured fields are in place but the student-facing prose layer over them lands in later Phase 3 tasks.
+- **The "why-not" framing is not yet rendered** (D2.2) — `conflicts[].detail` carries the binding constraint verbatim, but the student-facing prose wrapper over it lands in a later Phase 3 task. (The trade-off diff is now surfaced as of D3.1 — see §7 / §9.)
