@@ -1,6 +1,6 @@
 # view_forward_plan — Tool Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (Phase 3 Task D1.1 — `detail: "rich"` mode added).
 
 ## Purpose
 
@@ -41,17 +41,20 @@ It never recomputes the plan, never calls the solver, never mutates session stat
 
 ## 2. Input schema
 
-Empty (`viewForwardPlan.ts:42`):
+One optional field — the detail level (D1.1):
 
 ```
-{ /* no fields */ }
+{ detail?: "terse" | "rich" }   // default "terse"
 ```
 
-- `isReadOnly` = `true` (line 43).
-- `maxResultChars` = 4000 (line 44).
+- `detail: "terse"` (default, and what the no-arg call resolves to) → the compact one-line-per-term view (byte-identical to the pre-D1.1 output).
+- `detail: "rich"` → surfaces the per-slot reasoning the stored plan already carries (see §4 / §7-rich): recorded rationale (the "why"), lock-vs-movable status, flexibility (earliest/latest term + alternatives), downstream impact, and critical-path flags. Use it to answer "why is `<course>` in `<term>`?", "which courses are locked vs. movable?", and "how flexible is this slot?".
+
+- `isReadOnly` = `true`.
+- `maxResultChars` = **8000** (raised from 4000 for the larger rich output; the terse path is well under the old cap).
 - `outputMode` is the default `"synthesis"`.
 
-There is **no `validateInput` hook** — the tool always runs. Unlike the planner, it does **not** hard-refuse without a DPR; "no plan stored" is encoded explicitly as `source: "none"` rather than as a rejection.
+There is **no `validateInput` hook** — the tool always runs. Unlike the planner, it does **not** hard-refuse without a DPR; "no plan stored" is encoded explicitly as `source: "none"` rather than as a rejection. The `detail` arg never gates the run — it only selects the summary renderer; an unknown/absent value resolves to `"terse"`.
 
 ---
 
@@ -85,21 +88,30 @@ Precedence is hard-coded:
 
 The tool does NOT pick the newest plan by `computedAt` — `forwardSchedule` always wins over `studentDraftPlan` regardless of timestamp.
 
-### Summary builder (`buildSummary`, lines 80-129)
+### Summary builder (`buildSummary(schedule, source, detail)`)
+
+`call()` reads `input.detail ?? "terse"` and threads it into `buildSummary`. The **header** (state label, source suffix, graduation target, balance, credits-met, semester count, ISO `computedAt`) and the **assumptions tail** are identical across both detail levels; only the per-semester body differs.
 
 For a present `ForwardSchedule`:
 
 1. **State label** — `valid-clean` → `"VALID (no caveats)"`; `valid-with-trade-offs` → `"VALID with trade-offs (see assumptions)"`; `infeasible-draft` → `"INFEASIBLE DRAFT"`; anything else → `"STUDENT-PREFERRED DRAFT"` (default branch).
 2. **Source suffix** — when reading `studentDraftPlan`, appends `" [DRAFT — infeasible plan, not endorsed by the agent]"` to the first line.
 3. **Header lines** — graduation target, balance score (2 decimals), `degreeCreditsMet` (yes/no), semester count, ISO-formatted `computedAt`.
-4. **Per-semester rendering** — one line per semester in `schedule.semesters` order: term, planned credits, comma-separated slot list. Each slot rendered by `kind`:
+4. **Per-semester rendering (terse — the default)** — one line per semester in `schedule.semesters` order: term, planned credits, comma-separated slot list. Each slot rendered by `kind`:
    - `specific_planned` → `"<courseId> (<credits>cr)"`
    - `placeholder`      → `"[placeholder: <category>] (<credits>cr)"`
    - `completed`        → `"<courseId> ✓"`
    - `in_progress`      → `"<courseId> (IP)"`
    - any other kind     → `"(unknown)"`
    - Empty slot list    → `"(empty)"`
-5. **Assumptions tail** — when `assumptions.length > 0`, prints the count then the **first three only**. Each `IP_COURSE_COMPLETION` assumption prints `"  [IP] <courseId>"`; other types render nothing. More than three → appends `"  ... and <N - 3> more"`.
+5. **Per-semester rendering (rich — `detail: "rich"`)** — `appendRichSemester` / `appendRichSlot`. The terse one-liner is replaced by a labeled multi-line block per semester:
+   - **Semester header** — `"  <term>: <plannedCredits>cr"` plus `" 🔒 LOCKED (slots fixed)"` when `sem.locked`, then a `load:` line from `loadRationale` (`strategy · target · slack · weighted · hard / easy`).
+   - **Lock-vs-movable marker per slot** (the headline) — `completed` → `🔒 locked (taken/final)`; `in_progress` → `◐ in progress (fixed in term)`; `specific_planned`/`placeholder` → `○ planned (movable)`, OR `🔒 fixed (locked term)` when the semester is `locked`.
+   - **`specific_planned` slot** — marker + `courseId` + `⚠ critical path` (when `isCriticalPath`); then labeled lines for `why:` (the recorded `reason` — load-bearing), `satisfies:` (`rationale.satisfiesRequirements`, when non-empty), `tier:` (`workloadTier`), `flexibility:` (`earliest → latest` from `flexibility`), `alternatives:` (when present), `downstream:` (dependent-course count + graduation delay, only when non-trivial), and `droppable:` (from `optionalReason`, when present).
+   - **`placeholder` slot** — same fields keyed off `category` / `satisfiesRules`, plus `pool candidates:` from `poolBinding.candidates` when present.
+   - **`completed` / `in_progress`** — marker + `courseId` + credits (+ `grade` for completed).
+   - Only fields actually present are printed (optionals guarded); nothing is invented.
+6. **Assumptions tail** — when `assumptions.length > 0`, prints the count then the **first three only**. Each `IP_COURSE_COMPLETION` assumption prints `"  [IP] <courseId>"`; other types render nothing. More than three → appends `"  ... and <N - 3> more"`.
 
 ---
 
@@ -121,11 +133,13 @@ When `source === "none"`, `schedule` is literally `null` and `summary` is the si
 
 - `outputMode: "synthesis"` (default — no `extractVerbatim`). The validator pins no specific text.
 - `isReadOnly: true`. The tool is a strict reader of two session slots and never writes.
-- `maxResultChars` = 4000; the summary is truncated above that by `buildTool`.
+- `maxResultChars` = **8000**; the summary is truncated above that by `buildTool` (slice + `"…"`). Raised from 4000 for the rich path. A fully-detailed rich slot is ~10 labeled lines (~400 chars), so a very large multi-semester plan in rich mode can still approach/exceed the cap and have its trailing semesters truncated — non-fatal (the header + early semesters always survive); ask for a specific term when a full plan is large. Terse output stays well under the cap.
 
 ---
 
 ## 7. Layout (when a schedule is present)
+
+### Terse (`detail: "terse"`, default)
 
 ```
 FORWARD DEGREE PLAN[ [DRAFT — infeasible plan, not endorsed by the agent]] — <stateLabel>
@@ -143,7 +157,29 @@ Assumptions (<count>):
   ... and <N> more
 ```
 
-The blank line after "Computed at:" (line 102) and the blank line before "Assumptions" (line 116) are intentional.
+The blank line after "Computed at:" and the blank line before "Assumptions" are intentional.
+
+### Rich (`detail: "rich"`)
+
+Same header + assumptions tail; the per-semester body is the labeled block:
+
+```
+  <term>: <credits>cr[ 🔒 LOCKED (slots fixed)]
+    load: <strategy> · target <N>cr · slack <N> · weighted <N> · hard <N> / easy <N>
+    🔒 locked (taken/final) <courseId> (<credits>cr, grade <G>)        # completed
+    ◐ in progress (fixed in term) <courseId> (<credits>cr)            # in_progress
+    ○ planned (movable) <courseId> (<credits>cr)[ ⚠ critical path]    # specific_planned (or 🔒 fixed in a locked term)
+      why: <reason>
+      satisfies: <ruleId, ...>
+      tier: <workloadTier>
+      flexibility: earliest <term> → latest <term>
+      alternatives: <courseId, ...>
+      downstream: <N> dependent course(s)[ · graduation delay <N> term(s) if moved]
+    ○ planned (movable) [<category>] (<credits>cr)                    # placeholder
+      ... (same labeled fields) ...
+      droppable: <yes|no>
+      pool candidates: <courseId, ...>
+```
 
 When no schedule is stored:
 
@@ -183,6 +219,6 @@ This tool chains to nothing and emits no `suggestedFollowUps`.
 
 ## Known limitations
 
-- **The rich per-slot plan data is NOT surfaced — a Phase-3 gap.** Every `specific_planned` / `placeholder` slot on the stored `ForwardSchedule` carries `rationale`, `flexibility`, `downstreamImpact`, and `isCriticalPath` (`packages/shared/src/types.ts:931`). `buildSummary` (`viewForwardPlan.ts:104-113`) prints only `kind`, `courseId`, `credits`, and the placeholder `category`. The "why this course here / what moves if it slips / how flexible this slot is" reasoning exists on the plan but never reaches the LLM-visible summary. Surfacing it is deferred to a later phase.
+- **The rich per-slot plan data IS now surfaced — `detail: "rich"` (D1.1).** Every `specific_planned` / `placeholder` slot on the stored `ForwardSchedule` carries `reason`, `rationale`, `flexibility`, `downstreamImpact`, `workloadTier`, `optionalReason`, and `isCriticalPath` (`packages/shared/src/types.ts:931`), and each `ForwardSemester` carries `locked` + `loadRationale`. `detail: "rich"` renders all of these as labeled text (see §4.5 / §7-rich) so the "why this course here / what's locked vs movable / how flexible this slot is / what slips if it moves" reasoning reaches the LLM. The default `detail: "terse"` stays byte-identical to the pre-D1.1 one-liner. (No new fields invented — only what's present is printed.) **Remaining bound:** rich output for a maximal multi-semester plan can exceed `maxResultChars` (8000) and have trailing semesters truncated — the header + early terms always survive; narrow to a single term for very large plans.
 - **Only the first three assumptions reach the summary**, and only `IP_COURSE_COMPLETION` types render a line (see edge cases above).
 - **No defensive guards** on malformed `computedAt` / `balanceScore` / `semesters` — the tool trusts the stored shape.
