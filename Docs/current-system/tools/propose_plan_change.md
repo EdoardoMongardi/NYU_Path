@@ -113,7 +113,7 @@ flowchart TD
     F --> G["finalizeForwardSchedule -> { proposedSchedule, validatorResult }"]
     G --> H["runGraduationPathValidator on BEFORE plan -> beforeAxes"]
     G --> I["computeSlotDiff(currentPlan, proposedSchedule)"]
-    I --> J["deriveConsequences + double-count advisory text"]
+    I --> J["deriveConsequences (double-count advisory rides the envelope, not consequences)"]
     G --> K["buildPlanDiff(currentPlan, proposedSchedule, {before, after} axes)"]
     G --> L["explainPlanDiff(planDiff, mutations[0])"]
     H --> M[Return outcome + planDiff + explanation + proposedSchedule]
@@ -135,7 +135,7 @@ flowchart TD
 
 **Step 6 — Slot diff.** `computeSlotDiff(currentPlan, proposedSchedule)` emits `{added, removed}` by a stable slot key (`<term>::<kind>::<courseId>` for concrete slots, `<term>::placeholder::<placeholderId>` for placeholders). Matching keys are "unchanged" and ignored.
 
-**Step 7 — Consequences (incl. double-count advisory).** `deriveConsequences(diff, proposedSchedule, noOpConsequences)` concatenates: the no-op messages; a feasibility verdict line (+ up to 3 conflict lines); an `"Added: …"` line; a `"Removed: …"` line. Then `proposePlanChange.ts:171` derives the double-count advisory via `buildDoubleCountAdvisory(dpr, session.schoolConfig)` and **pushes its bare `text` into `consequences`** — the citation (`bulletinSource`) and `reason` are **dropped** on this path (see Known limitations).
+**Step 7 — Consequences + the cited double-count advisory (D3.2).** `deriveConsequences(diff, proposedSchedule, noOpConsequences)` concatenates: the no-op messages; a feasibility verdict line (+ up to 3 conflict lines); an `"Added: …"` line; a `"Removed: …"` line. Separately, `proposePlanChange.ts` derives the double-count advisory via `buildDoubleCountAdvisory(dpr, session.schoolConfig)` and — when non-null — attaches the **whole structured `Disclaimer`** (id + `reason` + `bulletinSource`) to the output's `disclaimers[]` envelope field, mirroring `plan_forward_degree`. The advisory is **no longer** pushed bare into `consequences` (D3.2 fix; previously the citation was dropped). `summarizeResult` renders it via `renderEnvelopeMeta` so the `reason:` / `source:` citation surfaces.
 
 **Step 8 — Rich `PlanDiff`.** `buildPlanDiff(currentPlan, proposedSchedule, { before: beforeAxes, after: validatorResult.axisResults })` (`planChangeHelpers.ts:481`) computes:
 - `creditsByTermDelta` / `weightedCreditsByTermDelta` — non-zero per-term deltas.
@@ -160,7 +160,7 @@ flowchart TD
 {
   feasible: boolean,                         // validatorResult.feasible (7-axis)
   diff: { added: [...], removed: [...] },
-  consequences: string[],                    // includes double-count advisory text
+  consequences: string[],                    // NO double-count text here (rides disclaimers[])
   conflicts?: Array<{ kind, detail }>,       // from the validator's infeasibilityReport
   planDiff?: {
     creditsByTermDelta, weightedCreditsByTermDelta,
@@ -172,7 +172,8 @@ flowchart TD
     planStateChange?
   },
   explanation: string,                       // always populated
-  proposedSchedule?: ForwardSchedule         // pure preview, never persisted
+  proposedSchedule?: ForwardSchedule,        // pure preview, never persisted
+  disclaimers?: Disclaimer[]                 // D3.2 — cited double-count advisory (id + reason + bulletinSource)
 }
 ```
 
@@ -225,8 +226,9 @@ sequenceDiagram
 1. `PROPOSE PLAN CHANGE — feasible: <true|false>`
 2. If conflicts: `Conflicts (<n>):` then up to 3 `  [<kind>] <detail>` lines.
 3. `Added slots: <n>, removed slots: <m>`
-4. If consequences: `Consequences:` then up to 5 `  • <consequence>` lines (the double-count advisory text appears here as a bare line).
+4. If consequences: `Consequences:` then up to 5 `  • <consequence>` lines.
 5. If `planDiff`: `Balance: <before> → <after> (<classification>)`; if `planStateChange`: `Plan state: <from> → <to>`.
+6. If `disclaimers` is non-empty (D3.2): the `renderEnvelopeMeta` block — a "DISCLAIMERS YOU MUST SURFACE" header with the advisory text and its `(reason: …; source: …)` citation line. `renderEnvelopeMeta` adds nothing when there is no advisory.
 
 The rich `planDiff.creditsByTermDelta`, `weightedCreditsByTermDelta`, `workloadTierShifts`, and the `explanation` string are **not** in the model-facing summary — the route layer consumes those structured fields directly.
 
@@ -243,6 +245,6 @@ The rich `planDiff.creditsByTermDelta`, `weightedCreditsByTermDelta`, `workloadT
 
 ## Known limitations
 
-- **The double-count advisory loses its citation on this path.** `plan_forward_degree` surfaces the advisory as a proper `Disclaimer` (with `reason` + `bulletinSource`) under a "DISCLAIMERS YOU MUST SURFACE" header. Here, only the advisory's bare `text` is pushed into `consequences` (`proposePlanChange.ts:171-172`); the citation and reason are dropped. A known inconsistency between the planner and the edit tools.
+- **The double-count advisory is now carried with its citation (D3.2 — fixed).** Previously only the advisory's bare `text` was pushed into `consequences`, dropping `reason` + `bulletinSource`. It is now carried as a structured `Disclaimer` (id + `reason` + `bulletinSource`) on the output's `disclaimers[]` envelope field and rendered by `summarizeResult` via `renderEnvelopeMeta` — exactly matching `plan_forward_degree`. The inconsistency with the planner is closed.
 - **`bindFreeElective` / `unbindFreeElective` / `bindPoolSlot` are no-ops.** Sending them through `propose_plan_change` changes nothing in the simulated preferences; only a consequence string flags that the binding did not take effect.
 - **No staleness guard between propose and confirm** (see §7). The preview and the eventual confirm are independent runs and can diverge if session state changes.

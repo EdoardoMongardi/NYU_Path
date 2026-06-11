@@ -134,7 +134,7 @@ A student who confirms a mutation that makes the plan infeasible **does not lose
 
 Both errors are caught and `console.warn`-logged; they do **not** throw. Both writes happen **regardless of `storedIn`** — even infeasible drafts are persisted, so a returning student lands back in their last draft.
 
-**Step 7 — Build the outcome.** `computeSlotDiff`, `deriveConsequences` (+ double-count advisory text pushed bare into consequences, `confirmPlanChange.ts:192`), `buildPlanDiff(currentPlan, newSchedule, { before: beforeAxes, after: validatorResult.axisResults })`. When `!validatorResult.feasible`, the tool also pushes an explicit consequence: `"Plan fails graduation-path validation (<failing axes>): <conflictDetail>. Stored as a draft; your last valid plan is unchanged."` (`confirmPlanChange.ts:213`), plus a `conflicts` entry from the validator's `infeasibilityReport`.
+**Step 7 — Build the outcome.** `computeSlotDiff`, `deriveConsequences`, `buildPlanDiff(currentPlan, newSchedule, { before: beforeAxes, after: validatorResult.axisResults })`. The double-count advisory is derived via `buildDoubleCountAdvisory(dpr, session.schoolConfig)` and — when non-null — attached as the **whole structured `Disclaimer`** (id + `reason` + `bulletinSource`) to the output's `disclaimers[]` envelope field (D3.2; it is **no longer** pushed bare into `consequences`, which previously dropped the citation), mirroring `plan_forward_degree`. When `!validatorResult.feasible`, the tool also pushes an explicit consequence: `"Plan fails graduation-path validation (<failing axes>): <conflictDetail>. Stored as a draft; your last valid plan is unchanged."` (`confirmPlanChange.ts`), plus a `conflicts` entry from the validator's `infeasibilityReport`.
 
 Like propose, `buildPlanDiff` here populates the five trade-off fields (`newRequiresPetition`, `removedRequiresPetition`, `newUnmetRequirements`, `cascadedShifts`, `newAssumptions`) via `diffPlanTradeOffs`, and fills `validationResultsChanges` from the before/after axes.
 
@@ -148,10 +148,11 @@ Like propose, `buildPlanDiff` here populates the five trade-off fields (`newRequ
 {
   feasible: boolean,                         // validatorResult.feasible (7-axis)
   diff: { added, removed },
-  consequences: string[],                    // includes the validator-failure line + advisory text
+  consequences: string[],                    // validator-failure line; NO double-count text (rides disclaimers[])
   conflicts?: Array<{ kind, detail }>,       // from the validator's infeasibilityReport
   planDiff?: { ...same shape as propose's planDiff... },
-  storedIn: "forwardSchedule" | "studentDraftPlan"
+  storedIn: "forwardSchedule" | "studentDraftPlan",
+  disclaimers?: Disclaimer[]                 // D3.2 — cited double-count advisory (id + reason + bulletinSource)
 }
 ```
 
@@ -161,6 +162,7 @@ Differences from `propose_plan_change`'s output:
 - **No** `explanation` string (propose-only).
 - **No** `proposedSchedule` field — the schedule is read from session after the write.
 - **Adds** `storedIn`.
+- **Same** `disclaimers[]` envelope field — the cited double-count advisory (D3.2).
 
 ---
 
@@ -198,8 +200,9 @@ What is NOT written: `studentDraftPlan` is not explicitly cleared on the draft p
 3. `Added slots: <n>, removed slots: <m>`
 4. If consequences: `Consequences:` then up to 5 `  • <consequence>` lines.
 5. If `planDiff`: `Balance: <before> → <after> (<classification>)`; if `planStateChange`: `Plan state: <from> → <to>`.
+6. If `disclaimers` is non-empty (D3.2): the `renderEnvelopeMeta` block — a "DISCLAIMERS YOU MUST SURFACE" header with the advisory text and its `(reason: …; source: …)` citation line. Adds nothing when there is no advisory.
 
-Compared to propose's summary, only the header line differs (it now reports `storedIn`).
+Compared to propose's summary: the header line differs (it reports `storedIn`); both share the cited-advisory block.
 
 ---
 
@@ -214,7 +217,7 @@ Compared to propose's summary, only the header line differs (it now reports `sto
 
 ## Known limitations
 
-- **The double-count advisory loses its citation.** Same as propose: only the advisory's bare `text` is pushed into `consequences` (`confirmPlanChange.ts:192-193`); the `reason` and `bulletinSource` carried by the planner's `Disclaimer` are dropped. Known inconsistency with `plan_forward_degree`.
+- **The double-count advisory is now carried with its citation (D3.2 — fixed).** Same fix as propose: previously only the advisory's bare `text` was pushed into `consequences`, dropping `reason` + `bulletinSource`. It is now carried as a structured `Disclaimer` on the output's `disclaimers[]` envelope field and rendered by `summarizeResult` via `renderEnvelopeMeta`, matching `plan_forward_degree`. The inconsistency with the planner is closed.
 - **`bindFreeElective` / `unbindFreeElective` / `bindPoolSlot` are wasted work here.** They don't change `schedulePreferences`, the re-solve produces essentially the same schedule, and the tool re-persists anyway. They exist in the schema as a forward-compatibility hook; the real bindings live in the dedicated `bind_*` tools.
 - **Infeasible drafts are still persisted.** Both `persistSchedule` and `persistPreferences` run regardless of `storedIn`, so a returning student can land back in a draft state.
 - **No staleness guard between propose and confirm** (see §7) — the confirm is an independent run from the preview the student saw.
