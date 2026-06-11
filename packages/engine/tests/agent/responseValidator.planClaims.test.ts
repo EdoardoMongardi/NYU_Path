@@ -291,6 +291,58 @@ describe("checkPlanClaims — grounded replies must NOT false-block (round 2)", 
 });
 
 // ============================================================
+// GUARD (round 3) — clause-scoped NEGATION guard. A negated adviser
+// sentence is NOT a lock/placement/grad assertion: "CSCI-UA 102 isn't
+// locked yet" reads (pre-fix) as a lock assertion and false-blocks a
+// TRUE reply. Every reply below is TRUE against the stored plan (102 @
+// 2027-fall movable, 101 @ 2025-fall completed/locked, 201 @ 2027-spring,
+// graduationTerm 2028-spring) and MUST emit ZERO ungrounded_plan_claim
+// violations. The negation marker GOVERNS the matched token, so the
+// statement disclaims — not asserts — the lock/placement/grad.
+// ============================================================
+describe("checkPlanClaims — negated phrasings must NOT false-block", () => {
+    // Lock (negated): a negated lock or a negated movable keyword is not
+    // a claim. 102 is movable; 101 is completed/locked. Each is TRUE.
+    const negatedLock = [
+        "CSCI-UA 102 isn't locked yet, so you can still move it.",
+        "CSCI-UA 102 is not set in stone.",
+        "CSCI-UA 102 is no longer locked.",
+        "We haven't locked CSCI-UA 102 down.",
+        "CSCI-UA 101 is not movable since it's done.",
+    ];
+    for (const reply of negatedLock) {
+        it(`(N-lock) negated lock/movable is not a claim: ${reply}`, () => {
+            const v = planViolations(reply, makeSchedule());
+            expect(v.length).toBe(0);
+        });
+    }
+
+    // Placement (negated): the negated placement is not a claim. Note the
+    // ";"-split corrective: the clause containing "Spring 2026" is
+    // "CSCI-UA 102 is not in Spring 2026", which DOES carry a governing
+    // "not" before the term label → suppress.
+    const negatedPlacement = [
+        "CSCI-UA 102 is not in Spring 2026; it's in Fall 2027.",
+        "I did not put CSCI-UA 102 in Spring 2026.",
+    ];
+    for (const reply of negatedPlacement) {
+        it(`(N-place) negated placement is not a claim: ${reply}`, () => {
+            const v = planViolations(reply, makeSchedule());
+            expect(v.length).toBe(0);
+        });
+    }
+
+    // Graduation (negated): the negated grad term is not a claim.
+    it("(N-grad) negated graduation term is not a claim", () => {
+        const v = planViolations(
+            "You will not graduate in Fall 2027 as you feared.",
+            makeSchedule(),
+        );
+        expect(v.length).toBe(0);
+    });
+});
+
+// ============================================================
 // DETECTION-SURVIVES probes — genuinely-ungrounded claims that MUST
 // still fire after the round-2 tightening, so we know detection wasn't
 // regressed away.

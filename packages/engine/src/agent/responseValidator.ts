@@ -98,7 +98,13 @@ export interface ValidatorContext {
 // "could not fully ground" banner.
 
 const NEGATION_WINDOW_CHARS = 30;
-const NEGATION_RE = /\b(?:not|isn'?t|aren'?t|never|no longer|rather than|NOT)\b/i;
+// Negation markers. Beyond the explicit list, `\w+n't` catches the
+// generic English contraction (haven't / hasn't / didn't / won't / don't
+// / doesn't / can't / wasn't / weren't) so the D5.1 clause-scoped guard
+// recognizes "We haven't locked …" without an ever-growing literal list.
+// The apostrophe is REQUIRED in that branch (`n't`, not `nt`) so plain
+// words like "important" / "count" are never mistaken for a negation.
+const NEGATION_RE = /\b(?:not|isn'?t|aren'?t|never|no longer|rather than|NOT|\w+n't)\b/i;
 
 function isMatchNegated(text: string, regex: RegExp): boolean {
     const m = regex.exec(text);
@@ -823,6 +829,34 @@ function isConditionalFrame(clause: string): boolean {
     return CONDITIONAL_FRAME_RE.test(clause.replace(BENIGN_CONDITIONAL_IDIOM_RE, " "));
 }
 
+/**
+ * D5.1 round-3 — clause-scoped negation guard. True when a NEGATION_RE
+ * marker sits inside `clause` at a position that GOVERNS the matched
+ * token at `tokenOffsetWithinClause` — i.e. the marker appears in the
+ * clause span BEFORE the token. A governed token is being DISCLAIMED,
+ * not asserted: "CSCI-UA 102 isn't locked yet" (negated lock keyword),
+ * "CSCI-UA 102 is not in Spring 2026" (negated term label), "you will
+ * not graduate in Fall 2027" (negated grad term) must NOT be read as
+ * lock / placement / grad claims.
+ *
+ * This is the clean sibling of the isConditionalFrame carve-out, reused
+ * at the three checkPlanClaims push sites (placement, lock, grad). It is
+ * deliberately NOT isMatchNegated: that helper's 30-char window is too
+ * small ("you will not graduate in Fall 2027" — "not" is >12 chars from
+ * "Fall"; "I did not put CSCI-UA 102 in Spring 2026" — the term is far
+ * from "not"), and clauseBounds already does the correct sentence /
+ * semicolon clause split so the corrective consequent of a ";"-split
+ * reply ("…not in Spring 2026; it's in Fall 2027") lands in a SEPARATE
+ * clause and never leaks its non-negated term into this clause's scan.
+ *
+ * Scans the whole pre-token span (not a fixed window) so a negation
+ * marker anywhere earlier in the SAME clause governs the token.
+ */
+function clauseHasGoverningNegation(clause: string, tokenOffsetWithinClause: number): boolean {
+    const pre = clause.slice(0, Math.max(0, tokenOffsetWithinClause));
+    return NEGATION_RE.test(pre);
+}
+
 /** Char window each side of a course code in which we look for a
  *  co-occurring term label (same clause / bounded window). Kept tight so
  *  "CSCI-UA 102 … <unrelated sentence> … Fall 2027" doesn't bind. */
@@ -954,6 +988,15 @@ function termsBoundToCourse(text: string, courseIdx: number, courseLen: number):
             labelAttributableToGrad(text, g, labelStart, labelEnd, allCourses),
         );
         if (gradOwnsLabel) continue;
+        // Clause-scoped negation guard (D5.1 round-3): a negated placement
+        // ("CSCI-UA 102 is not in Spring 2026") DISCLAIMS the term — it is
+        // not a placement claim. Scope to the LABEL's own clause (the ";"
+        // split puts the corrective "…it's in Fall 2027" in a separate
+        // clause, so the negated "Spring 2026" clause still carries its
+        // governing "not"). Skip the label when negation governs it.
+        const [labelClauseStart, labelClauseEnd] = clauseBounds(text, labelStart);
+        const labelClause = text.slice(labelClauseStart, labelClauseEnd);
+        if (clauseHasGoverningNegation(labelClause, labelStart - labelClauseStart)) continue;
         const solver = psTermToSolverTerm(tm[0]);
         if (solver !== null) out.push(solver);
     }
@@ -982,7 +1025,17 @@ function assertionAttributedToCourse(
         pos < s ? s - pos : pos >= e ? pos - e + 1 : 0;
     const scan = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
     for (const am of clause.matchAll(scan)) {
-        const pos = clauseStart + (am.index ?? 0);
+        const offsetInClause = am.index ?? 0;
+        const pos = clauseStart + offsetInClause;
+        // Clause-scoped negation guard (D5.1 round-3): a negated lock /
+        // movable keyword is being DISCLAIMED, not asserted — "isn't
+        // locked" is not a lock claim; "is not movable" is not a movable
+        // claim. Suppress the match when a negation marker earlier in the
+        // SAME clause governs this keyword. (The match's own leading
+        // negation — e.g. MOVABLE_ASSERT_RE matching the phrase "isn't
+        // locked" at its start — is NOT a governing prefix, so a real
+        // movable reading still stands.)
+        if (clauseHasGoverningNegation(clause, offsetInClause)) continue;
         const mine = distTo(pos, courseIdx, courseEnd);
         // Nearest course wins: this match belongs to us only if no OTHER
         // course code is strictly closer to it.
@@ -1193,6 +1246,12 @@ function checkPlanClaims(ctx: ValidatorContext): Violation[] {
                 (o) => o >= labelStart - PLAN_COOCCUR_WINDOW && o < labelEnd + PLAN_COOCCUR_WINDOW,
             );
             if (coOccursWithCourse) continue;
+            // Clause-scoped negation guard (D5.1 round-3): a negated grad
+            // term ("you will not graduate in Fall 2027") DISCLAIMS the
+            // term — it is not a graduation claim. Skip the label when a
+            // negation marker earlier in this grad clause governs it. The
+            // label's offset within `clause` is `tm.index`.
+            if (clauseHasGoverningNegation(clause, tm.index ?? 0)) continue;
             const solver = psTermToSolverTerm(tm[0]);
             if (solver !== null) labels.push(solver);
         }
