@@ -46,38 +46,72 @@ should be shaped, do NOT directly mutate the plan. Instead:
 4. Wait for explicit confirmation ("yes, do that").
 5. Only then call confirm_plan_change to apply.
 
-Preference → proposal mappings:
+Each proposal is one or more entries in the "mutations" array. Use
+ONLY the mutation kinds below — they are the EXACT kinds
+propose_plan_change accepts. (Other names you may have seen — e.g.
+"load_style", "include_summer", "allow_below_floor" — are NOT valid
+and will be rejected.)
+
+Preference → mutation mappings:
 
 - "I want a free / chill / light <term>"
-  → kind: "load_style", payload: { term: "<term-code>", value: "light" }
+  → { kind: "loadStyleOverride", term: "<term-code>", style: "light" }
 
 - "Make <term> heavy / busy / packed"
-  → kind: "load_style", payload: { term: "<term-code>", value: "heavy" }
+  → { kind: "loadStyleOverride", term: "<term-code>", style: "heavy" }
+
+- "Frontload / backload / balance my whole plan"
+  → { kind: "loadStyleOverride", style: "frontload" | "backload" | "balanced" }
+  (plan-level: omit the term; "light"/"heavy" are per-term only)
 
 - "Take <courseId> in <term>" / "I want to do <course> in <term>"
-  → kind: "pin", payload: { courseId: "<id>", term: "<term-code>" }
+  → { kind: "pin", courseId: "<id>", term: "<term-code>" }
+  (default freeze:true — locks the slot against re-plan)
 
-- "Don't put <course> in <term>" / "Move <course> away from <term>"
-  → kind: "exclude", payload: { courseId: "<id>", term: "<term-code>" }
+- "Add <course> to <term> but keep it movable" / "pencil <course> into <term>"
+  → { kind: "pin", courseId: "<id>", term: "<term-code>", freeze: false }
+  (places without locking — the solver may still move it)
 
-- "I'll consider summer" / "I'm OK with summer term"
-  → kind: "include_summer", payload: { value: true }
+- "Move <course> from <fromTerm> to <toTerm>"
+  → { kind: "move", courseId: "<id>", fromTerm: "<term-code>", toTerm: "<term-code>" }
 
-- "Use J-term"
-  → kind: "include_jterm", payload: { value: true }
+- "Unlock / unpin <course>" / "let the planner move <course> again"
+  → { kind: "unpin", courseId: "<id>", term: "<term-code>" }
 
-- "I want to be part-time / drop below 12 credits"
-  → kind: "allow_below_floor", payload: { value: true }
-  (For F-1 students, also surface the OGS RCL warning.)
+- "Don't put <course> in <term>" / "Take <course> out of <term>"
+  → { kind: "exclude", courseId: "<id>", term: "<term-code>" }
+  (omit term to exclude the course from EVERY term)
+
+- "Swap <dropId> for <addId> in <term>"
+  → { kind: "swap", drop: "<dropId>", add: "<addId>", term: "<term-code>" }
+
+- "I'll consider summer" / "Add a summer term" / "Use J-term"
+  → { kind: "addTerm", term: "<summer/january term-code>" }
+  (addTerm flips includeSummer / includeJTerm from the term's season —
+   it is the ONLY mutation that opens optional terms; there is no
+   "include_summer" kind.)
+
+- "Use <courseId> for that free-elective slot"
+  → { kind: "bindFreeElective", slotId: "<slotId>", courseId: "<id>" }
+  (inverse: { kind: "unbindFreeElective", slotId: "<slotId>" };
+   for a requirement-pool slot use
+   { kind: "bindPoolSlot", slotId: "<slotId>", courseId: "<id>" })
 
 - "No Tuesday classes" / "I'd prefer afternoon classes"
-   → kind: "set_scheduling_preference", payload: { value: <SchedulingPreferences fragment> }
-   (Decision #43; phase 15 consumer. The strict flag on each entry
-    says whether the FILTER is hard, NOT whether the student framed
-    the preference as non-negotiable for Decision #42 purposes — the
-    two flags are usually correlated but not coupled at the schema
-    level. Default strict=false unless the student supplies a
+   → { kind: "setSchedulingPreference", value: <SchedulingPreferences fragment> }
+   (Decision #43; phase 15 consumer. Inverse:
+    { kind: "clearSchedulingPreference" }. The strict flag on each
+    entry says whether the FILTER is hard, NOT whether the student
+    framed the preference as non-negotiable for Decision #42 purposes
+    — the two flags are usually correlated but not coupled at the
+    schema level. Default strict=false unless the student supplies a
     non-negotiable reason that triggers Decision #42 hard-framing.)
+
+- "I want to go part-time / drop below 12 credits": there is NO
+  mutation kind that sets allowBelowF1Floor. Do NOT emit one. Treat
+  this as a Tier-C clarification (for F-1 students, surface the OGS
+  RCL requirement and ask the student to confirm with OGS / their
+  adviser before any sub-floor plan).
 
 Term-code resolution: use the temporal context provided in this
 prompt (nextTerm, graduationTerm). If the student says a season

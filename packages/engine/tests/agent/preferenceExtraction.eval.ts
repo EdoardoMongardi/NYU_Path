@@ -22,6 +22,22 @@
 // ============================================================
 
 import { describe, expect, it } from "vitest";
+import { PlanMutationSchema } from "../../src/agent/forwardSchedule/planChangeHelpers.js";
+
+// ============================================================
+// Live PlanMutation union — derived from the SINGLE source of truth.
+// `PlanMutationSchema` (planChangeHelpers.ts) is the ONLY thing
+// `propose_plan_change` / `confirm_plan_change` accept. We read the
+// discriminated-union's `kind` literals directly so this test tracks
+// the schema automatically — a fixture using a kind the schema rejects
+// (e.g. the pre-Phase-17 stale `load_style`) fails here, NOT silently
+// at LLM runtime against a 400 from the tool.
+// ============================================================
+const LIVE_MUTATION_KINDS: ReadonlySet<string> = new Set(
+    PlanMutationSchema.options.map(
+        (opt) => (opt.shape.kind as { value: string }).value,
+    ),
+);
 
 // ============================================================
 // Fixture type
@@ -44,6 +60,13 @@ export interface EvalFixture {
 // Covers the full Tier-A mapping table from PREFERENCE_EXTRACTION_RULES.
 // ============================================================
 
+// NOTE (D6.1): every `mutation.kind` below is a member of the LIVE
+// `PlanMutationSchema` union (planChangeHelpers.ts) — the ONLY thing
+// propose_plan_change accepts. The inline test
+// "every Tier-A fixture maps to a kind in the LIVE PlanMutation union"
+// enforces this so the table + fixtures can never silently re-drift to
+// the pre-Phase-17 stale kinds (`load_style`, `include_summer`,
+// `allow_below_floor`, `set_scheduling_preference`).
 const BUCKET_A: EvalFixture[] = [
     {
         id: "A-01",
@@ -52,7 +75,7 @@ const BUCKET_A: EvalFixture[] = [
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "load_style", term: "2027-spring", value: "light" },
+            mutation: { kind: "loadStyleOverride", term: "2027-spring", style: "light" },
         },
     },
     {
@@ -62,7 +85,7 @@ const BUCKET_A: EvalFixture[] = [
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "load_style", value: "light" },
+            mutation: { kind: "loadStyleOverride", term: "2026-fall", style: "light" },
         },
     },
     {
@@ -72,17 +95,18 @@ const BUCKET_A: EvalFixture[] = [
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "load_style", term: "2026-spring", value: "heavy" },
+            mutation: { kind: "loadStyleOverride", term: "2026-spring", style: "heavy" },
         },
     },
     {
         id: "A-04",
-        userMessage: "Make fall 2026 busy and packed",
+        userMessage: "Frontload my whole plan — heavier early, lighter later",
         framing: "soft",
         expectedTier: "A",
+        fixtureNote: "plan-level loadStyleOverride: omit the term; 'frontload' is a plan-level style",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "load_style", term: "2026-fall", value: "heavy" },
+            mutation: { kind: "loadStyleOverride", style: "frontload" },
         },
     },
     {
@@ -97,16 +121,39 @@ const BUCKET_A: EvalFixture[] = [
     },
     {
         id: "A-06",
-        userMessage: "I want to do MATH-UA 123 in spring 2027",
+        userMessage: "Add MATH-UA 123 to spring 2027 but keep it movable",
         framing: "soft",
         expectedTier: "A",
+        fixtureNote: "Phase-17 place-without-lock: pin with freeze:false",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "pin", courseId: "MATH-UA 123", term: "2027-spring" },
+            mutation: { kind: "pin", courseId: "MATH-UA 123", term: "2027-spring", freeze: false },
         },
     },
     {
         id: "A-07",
+        userMessage: "Move CSCI-UA 421 from fall 2026 to spring 2027",
+        framing: "soft",
+        expectedTier: "A",
+        fixtureNote: "Phase-17 drag-to-move primitive (D6.1 named acceptance)",
+        expectedAction: {
+            tool: "propose_plan_change",
+            mutation: { kind: "move", courseId: "CSCI-UA 421", fromTerm: "2026-fall", toTerm: "2027-spring" },
+        },
+    },
+    {
+        id: "A-08",
+        userMessage: "Unlock PHIL-UA 1 in fall 2026 — let the planner move it again",
+        framing: "soft",
+        expectedTier: "A",
+        fixtureNote: "Phase-17 unpin: inverse of a frozen pin (D6.1 named acceptance)",
+        expectedAction: {
+            tool: "propose_plan_change",
+            mutation: { kind: "unpin", courseId: "PHIL-UA 1", term: "2026-fall" },
+        },
+    },
+    {
+        id: "A-09",
         userMessage: "Don't put ECON-UA 1 in spring 2027",
         framing: "soft",
         expectedTier: "A",
@@ -116,63 +163,54 @@ const BUCKET_A: EvalFixture[] = [
         },
     },
     {
-        id: "A-08",
-        userMessage: "Move PHIL-UA 1 away from fall 2026",
-        framing: "soft",
-        expectedTier: "A",
-        expectedAction: {
-            tool: "propose_plan_change",
-            mutation: { kind: "exclude", courseId: "PHIL-UA 1", term: "2026-fall" },
-        },
-    },
-    {
-        id: "A-09",
-        userMessage: "I'll consider summer — I'm OK with a summer term",
-        framing: "soft",
-        expectedTier: "A",
-        expectedAction: {
-            tool: "propose_plan_change",
-            mutation: { kind: "include_summer", value: true },
-        },
-    },
-    {
         id: "A-10",
-        userMessage: "Use J-term if it helps me graduate on time",
+        userMessage: "Swap ECON-UA 1 for ECON-UA 2 in fall 2026",
         framing: "soft",
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "include_jterm", value: true },
+            mutation: { kind: "swap", drop: "ECON-UA 1", add: "ECON-UA 2", term: "2026-fall" },
         },
     },
     {
         id: "A-11",
-        userMessage: "I want to go part-time and drop below 12 credits",
+        userMessage: "I'll consider a summer 2026 term if it helps me graduate on time",
         framing: "soft",
         expectedTier: "A",
+        fixtureNote: "addTerm is the ONLY kind that opens optional terms; it flips includeSummer from the term season",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "allow_below_floor", value: true },
+            mutation: { kind: "addTerm", term: "2026-summer" },
         },
     },
     {
         id: "A-12",
+        userMessage: "Add a January 2027 J-term to my plan",
+        framing: "soft",
+        expectedTier: "A",
+        expectedAction: {
+            tool: "propose_plan_change",
+            mutation: { kind: "addTerm", term: "2027-january" },
+        },
+    },
+    {
+        id: "A-13",
+        userMessage: "Use CSCI-UA 480 for that free-elective slot",
+        framing: "soft",
+        expectedTier: "A",
+        expectedAction: {
+            tool: "propose_plan_change",
+            mutation: { kind: "bindFreeElective", slotId: "free-elective-1", courseId: "CSCI-UA 480" },
+        },
+    },
+    {
+        id: "A-14",
         userMessage: "No Tuesday classes please",
         framing: "soft",
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "set_scheduling_preference", value: { avoidDays: [{ day: "Tu", strict: false }] } },
-        },
-    },
-    {
-        id: "A-13",
-        userMessage: "I'd prefer afternoon classes — nothing before noon",
-        framing: "soft",
-        expectedTier: "A",
-        expectedAction: {
-            tool: "propose_plan_change",
-            mutation: { kind: "set_scheduling_preference", value: { preferAfternoon: true } },
+            mutation: { kind: "setSchedulingPreference", value: { avoidDays: [{ day: "Tu", strict: false }] } },
         },
     },
 ];
@@ -741,6 +779,41 @@ describe("preferenceExtraction eval suite — fixture invariants", () => {
         }
     });
 
+    // ----------------------------------------------------------------
+    // D6.1 — the rung-1 table + Tier-A fixtures must reflect the LIVE
+    // PlanMutation union. Before D6.1 the table taught stale kinds
+    // (`load_style`, `include_summer`, `allow_below_floor`,
+    // `set_scheduling_preference`) that `PlanMutationSchema` rejects, so
+    // the prompt was teaching the LLM to emit invalid proposals. These
+    // tests pin every Tier-A fixture to a kind the schema actually
+    // accepts AND require coverage for the Phase-17 kinds `move`/`unpin`.
+    // ----------------------------------------------------------------
+    it("every Tier-A fixture maps to a kind in the LIVE PlanMutation union (no stale kinds)", () => {
+        for (const fixture of EVAL_BUCKETS.A) {
+            const mutation = (fixture.expectedAction as { mutation?: { kind?: string } }).mutation;
+            expect(
+                mutation,
+                `Tier-A fixture ${fixture.id} must carry expectedAction.mutation`,
+            ).toBeDefined();
+            const kind = mutation!.kind;
+            expect(
+                kind && LIVE_MUTATION_KINDS.has(kind),
+                `Tier-A fixture ${fixture.id} kind "${kind}" is not in the live PlanMutation union ` +
+                `[${[...LIVE_MUTATION_KINDS].join(", ")}] — propose_plan_change would reject it`,
+            ).toBe(true);
+        }
+    });
+
+    it("Tier-A bucket covers the Phase-17 move + unpin kinds (D6.1 acceptance)", () => {
+        const kinds = new Set(
+            EVAL_BUCKETS.A.map(
+                (f) => (f.expectedAction as { mutation?: { kind?: string } }).mutation?.kind,
+            ),
+        );
+        expect(kinds.has("move"), "Tier-A bucket must contain a `move` fixture").toBe(true);
+        expect(kinds.has("unpin"), "Tier-A bucket must contain an `unpin` fixture").toBe(true);
+    });
+
     it("Dneg bucket fixtures all have framing='hard' AND expectedTier='C' (asymmetric-stakes invariant — Layer 3)", () => {
         for (const fixture of EVAL_BUCKETS.Dneg) {
             expect(
@@ -886,10 +959,13 @@ export async function evalSuite(): Promise<EvalRunResult> {
             input_schema: {
                 type: "object",
                 properties: {
-                    kind: { type: "string", description: "Mutation kind (load_style, pin, exclude, include_summer, include_jterm, allow_below_floor, set_scheduling_preference)" },
-                    payload: { type: "object", description: "Kind-specific payload" },
+                    mutations: {
+                        type: "array",
+                        description: "One or more plan mutations. Each kind is one of the LIVE PlanMutation kinds: pin, exclude, swap, move, unpin, addTerm, loadStyleOverride, bindFreeElective, unbindFreeElective, bindPoolSlot, setSchedulingPreference, clearSchedulingPreference.",
+                        items: { type: "object" },
+                    },
                 },
-                required: ["kind", "payload"],
+                required: ["mutations"],
             },
         },
         {

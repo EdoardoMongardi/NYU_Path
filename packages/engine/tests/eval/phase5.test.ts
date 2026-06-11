@@ -210,11 +210,20 @@ describe("buildSystemPrompt", () => {
         expect(prompt).toContain("PREFERENCE EXTRACTION");
         expect(prompt).toContain("propose_plan_change");
         expect(prompt).toContain("confirm_plan_change");
-        // Spot-check a few of the Tier-A mapping bullet points verbatim
-        expect(prompt).toContain("load_style");
-        expect(prompt).toContain("include_summer");
-        expect(prompt).toContain("allow_below_floor");
-        expect(prompt).toContain("set_scheduling_preference");
+        // Spot-check a few of the Tier-A mapping bullet points verbatim.
+        // D6.1 — these MUST be the LIVE PlanMutation kinds (the only kinds
+        // propose_plan_change accepts), NOT the pre-Phase-17 stale names
+        // (`load_style`, `include_summer`, `allow_below_floor`,
+        // `set_scheduling_preference`) the table used to teach.
+        expect(prompt).toContain("loadStyleOverride");
+        expect(prompt).toContain("addTerm");
+        expect(prompt).toContain("setSchedulingPreference");
+        // The Phase-17 movability kinds the table now teaches.
+        expect(prompt).toContain("move");
+        expect(prompt).toContain("unpin");
+        // And it must NOT re-drift to the stale kinds.
+        expect(prompt).not.toContain("kind: \"load_style\"");
+        expect(prompt).not.toContain("kind: \"include_summer\"");
     });
 
     // Phase 14 Task 8 — 4-tier fallback hierarchy is present (Layer 1)
