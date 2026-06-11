@@ -326,17 +326,21 @@ export async function POST(req: NextRequest): Promise<Response> {
     // from the re-sent body DPR every turn, so running the upsert on
     // every message would CLOBBER a profile a prior `confirm_profile_update`
     // wrote (a confirmed edit) and append a synthetic audit row per
-    // message. We therefore only persist when no profile exists yet
-    // (`profileStore.get` is null). A returning student's confirmed edits
+    // message. We therefore only persist when no profile exists yet — a
+    // single PK read (`profileStore.get`) per turn, whose EXISTENCE (not
+    // value) is all we check here. A returning student's confirmed edits
     // are left intact; DPR updates are owned by the Update-DPR route.
     // (This is the WRITE-path fix only — reading the persisted profile
-    // back INTO `session.student` each turn is Phase-4 full hydration.)
+    // back INTO `session.student` each turn is Phase-4 full hydration, so
+    // do NOT thread `hasPersistedProfile` into the session.)
     //
-    // No-throw: persistence failures don't break the live turn.
+    // No-throw: persistence failures don't break the live turn (a read
+    // failure skips the persist — conservative: never risk a clobber).
     if (parsedDpr && userId !== "anonymous") {
         try {
-            const existingProfile = await stores.profileStore.get(userId);
-            if (!existingProfile) {
+            const hasPersistedProfile =
+                (await stores.profileStore.get(userId)) !== null;
+            if (!hasPersistedProfile) {
                 await stores.profileStore.persistMutation(
                     student,
                     {
