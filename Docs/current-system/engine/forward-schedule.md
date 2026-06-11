@@ -80,10 +80,6 @@ A frozen, immutable bundle passed into the solver. It carries student state (`co
 - **`infeasible-draft`** — at least one axis returned `fail`.
 - **`student-preferred-invalid-draft`** — set UPSTREAM when a student persists a knowingly invalid plan; the validator never emits it.
 
-### 2.5 SolverNode — DEAD TYPE
-
-`types.ts` still defines a `SolverNode` interface describing "in-flight mutable state during greedy placement." The greedy solver is gone; this type is referenced nowhere outside its own definition. See §10 (Known limitations / dead code).
-
 > The `SchedulePreferences` and `PlanMutation` shapes (pins, exclusions, load styles, summer/J-term opt-in, the 12 mutation kinds) live in `@nyupath/shared` and are consumed by `planChangeHelpers.ts`. They are documented with the plan-change tools rather than here.
 
 ---
@@ -239,7 +235,7 @@ A pure detector/builder. `countDeclaredPrograms` and `detectSharedCourses` feed 
 
 ---
 
-## 10. Known limitations and dead code
+## 10. Known limitations and test-only code
 
 ### Known limitations (deliberate, stated plainly)
 
@@ -250,12 +246,8 @@ A pure detector/builder. `countDeclaredPrograms` and `detectSharedCourses` feed 
 - **Non-CAS DPR validation is absent.** Fixtures are CAS-only; the validator's thresholds and the builder's rule classification are exercised against CAS programs.
 - **Upper-level credit floor is not validated** (no reliable DPR counter); the field is intentionally left null.
 
-### Dead code to flag
+### Test-only code paths (no production caller)
 
-- **`forwardFeasibility.ts` (83 ln)** — the old greedy's pruning screen. Referenced today only by a comment in `search.ts` explaining why it is NOT used. Not wired into the search.
-- **`poolBinding.ts` (133 ln)** — `placePoolSlot` / `promotePoolSlotToConcrete` have zero non-test callers. The `bind_pool_slot` tool reimplements pool-slot promotion inline (building the `specific_planned` slot directly) rather than calling this module.
-- **`SolverNode` type (`types.ts`)** — describes greedy in-flight state; unreferenced outside its definition.
-- **`termsForPlacement` (`solverHelpers.ts`)** — defined but never called.
 - **`searchBestPlan` / `searchTopKPlans` (`search.ts`)** — the exhaustive-mode entry points; TEST-ONLY, no production caller (the solver uses `findFirstValidPlan` / `findDiverseValidPlans`).
 
 ---
@@ -342,4 +334,3 @@ The validator only emits `valid-clean`, `valid-with-trade-offs`, or `infeasible-
 | Balance score | `forwardSchedule/balanceScore.ts` | `computeBalanceScore`, `classifyBalanceDelta` |
 | Requirement kind | `forwardSchedule/requirementKind.ts` | `classifyRequirementKind` |
 | Solver helpers | `forwardSchedule/solverHelpers.ts` | term/prereq primitives, `buildIpAssumptions`, `derivePlanState` |
-| Dead code | `forwardSchedule/forwardFeasibility.ts`, `forwardSchedule/poolBinding.ts` | not wired in (see §10) |
