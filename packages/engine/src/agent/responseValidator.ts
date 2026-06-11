@@ -23,9 +23,10 @@
 //   { ok: true } | { ok: false, violations: Violation[] }
 // ============================================================
 
-import type { StudentProfile } from "@nyupath/shared";
+import type { StudentProfile, ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
 import type { ToolInvocation } from "./agentLoop.js";
 import { verifyBlockquoteAttribution } from "./verifiers/blockquoteAttribution.js";
+import { psTermToSolverTerm } from "./forwardSchedule/termLabel.js";
 
 export type ViolationKind =
     | "ungrounded_number"
@@ -34,7 +35,8 @@ export type ViolationKind =
     | "verbatim_drift"
     | "fabricated_attribution"
     | "identity_drift"
-    | "quantitative_shortfall";
+    | "quantitative_shortfall"
+    | "ungrounded_plan_claim";
 
 export interface Violation {
     kind: ViolationKind;
@@ -69,6 +71,13 @@ export interface ValidatorContext {
      * conservative (treats every verbatim as topical).
      */
     userQuestion?: string;
+    /**
+     * D5.1 — the stored forward plan for this session. When present,
+     * `checkPlanClaims` diffs the reply's course-placement / graduation-
+     * term / lock-status claims against it and blocks ungrounded ones.
+     * Populated by the route (task D5.2); the check NO-OPS when absent.
+     */
+    forwardSchedule?: ForwardSchedule;
 }
 
 // ============================================================
@@ -754,6 +763,248 @@ function checkQuantitativeShortfall(userQuestion: string | undefined, assistantT
     return violations;
 }
 
+// ============================================================
+// 8. Plan-claim validator (D5.1 — LAUNCH-BLOCKING)
+// ============================================================
+// Exit criterion: "ungrounded plan claims blocked." A PURE, no-LLM,
+// deterministic diff of the reply's prose against the stored forward
+// plan (`ctx.forwardSchedule`). It blocks three classes of ungrounded
+// Tier-1 (engine-grounded) plan claim:
+//
+//   - course-placement: "CSCI-UA 102 is in Fall 2027" that disagrees
+//     with where the stored plan places the course (or places a course
+//     the plan doesn't place at all);
+//   - graduation-term: "you graduate Spring 2028" that disagrees with
+//     forwardSchedule.graduationTerm;
+//   - lock-status: "CSCI-UA 102 is locked/final" vs "you can still move
+//     it" that disagrees with the stored slot's mutability.
+//
+// Plan claims are Tier-1 — there is NO hedging exemption (opposite the
+// Tier-2 estimate exemption in checkGrounding). "Verify with your
+// adviser" does NOT excuse an ungrounded placement/grad-term claim.
+//
+// PURITY / NO-OP: the check returns [] when ctx.forwardSchedule is
+// absent — it never invents a plan to diff against.
+//
+// COUNTERFACTUAL CARVE-OUT (collision with D2 probes): a placement or
+// grad-term claim syntactically marked as a probe result / hypothetical
+// ("if you failed CSCI-UA 101, you'd graduate Spring 2029", "what if…",
+// "suppose…") describes a RE-SOLVED what-if schedule that intentionally
+// differs from the stored plan and MUST NOT be flagged. See
+// CONDITIONAL_FRAME_RE.
+
+/** Course-id grammar — mirrors buildSolverInput.ts COURSE_ID_RE
+ *  ("CSCI-UA 102", "MATH-UA 121"). Global so we can iterate matches. */
+const PLAN_COURSE_ID_RE = /\b([A-Z][A-Z0-9]*-[A-Z]{2,3})\s+(\d{1,4}[A-Z]?)\b/g;
+
+/** Human term label as it appears in prose ("Fall 2027" / "2027 Fall" /
+ *  the canonical "2027-fall"). Normalized via psTermToSolverTerm before
+ *  any comparison — never raw-string-compared. */
+const PLAN_TERM_LABEL_RE =
+    /\b(?:(?:Fall|Spring|Summer|January|J[- ]?Term)\s+\d{4}|\d{4}\s+(?:Fall|Spring|Summer|January|J[- ]?Term)|\d{4}-(?:fall|spring|summer|january))\b/gi;
+
+/** Conditional / hypothetical frame markers. When a claim's enclosing
+ *  clause carries one of these, the claim describes a counterfactual
+ *  re-solve and is SKIPPED. Documented markers: if / would / hypothetical
+ *  / what if / suppose / were you to.
+ *
+ *  KNOWN-LIMIT carve-out: the benign trailing politeness idioms
+ *  "if you'd like / if you want / if you prefer / if you'd prefer" are
+ *  NOT counterfactual frames — they offer the student a real change to
+ *  the CURRENT plan, so a lock-status/placement claim in such a clause
+ *  must still be checked. We strip those idioms before testing for a
+ *  frame marker so their embedded "if"/"'d" don't suppress the claim. */
+const BENIGN_CONDITIONAL_IDIOM_RE = /\bif\s+you(?:'?d|\s+would)?\s+(?:like|want|prefer|wish|choose)\b/gi;
+const CONDITIONAL_FRAME_RE = /\b(?:if|would|hypothetical(?:ly)?|what\s+if|suppose|were\s+you\s+to)\b/i;
+
+/** True when the clause is framed as a counterfactual / hypothetical
+ *  (after stripping benign politeness idioms). */
+function isConditionalFrame(clause: string): boolean {
+    return CONDITIONAL_FRAME_RE.test(clause.replace(BENIGN_CONDITIONAL_IDIOM_RE, " "));
+}
+
+/** Char window each side of a course code in which we look for a
+ *  co-occurring term label (same clause / bounded window). Kept tight so
+ *  "CSCI-UA 102 … <unrelated sentence> … Fall 2027" doesn't bind. */
+const PLAN_COOCCUR_WINDOW = 60;
+
+/** Lock-asserting language ("locked", "final", "can't change", "fixed",
+ *  "set in stone"). */
+const LOCK_ASSERT_RE = /\b(?:locked|final(?:ized)?|can'?t (?:be )?(?:change|move)|cannot (?:be )?(?:change|move)|set in stone|fixed in place|already taken)\b/i;
+/** Movable-asserting language ("you can still move", "movable",
+ *  "can change it", "not locked", "flexible"). */
+const MOVABLE_ASSERT_RE = /\b(?:can (?:still )?(?:move|change|swap)|movable|moveable|not locked|isn'?t locked|flexible|reschedul)\b/i;
+
+/**
+ * Split `text` into the smallest enclosing clause around char index
+ * `idx` (between sentence/clause delimiters). Used to test whether a
+ * claim sits inside a conditional/hypothetical frame, and to scope the
+ * lock-status assertion search to the course's own clause.
+ */
+function clauseAround(text: string, idx: number): string {
+    // Clause delimiters: sentence terminators + semicolons. Conditional
+    // markers ("if …, …") often span a comma, so we DON'T split on commas
+    // — a leading "If you failed X, you'd graduate Y" must stay one clause
+    // so the carve-out catches the consequent too.
+    const before = text.slice(0, idx);
+    const after = text.slice(idx);
+    const startM = before.search(/[.!?;][^.!?;]*$/);
+    const start = startM === -1 ? 0 : startM + 1;
+    const endRel = after.search(/[.!?;]/);
+    const end = endRel === -1 ? text.length : idx + endRel;
+    return text.slice(start, end);
+}
+
+/** All course → canonical-term placements in the stored plan that carry
+ *  a courseId (completed / in_progress / specific_planned). Placeholder
+ *  slots have no courseId and are unresolvable, so they're excluded. */
+interface StoredPlacement {
+    canonTerm: string;        // "2027-fall"
+    kind: ScheduleSlot["kind"];
+    semesterLocked: boolean;
+}
+function indexPlan(schedule: ForwardSchedule): Map<string, StoredPlacement[]> {
+    const byCourse = new Map<string, StoredPlacement[]>();
+    for (const sem of schedule.semesters) {
+        const canonTerm = psTermToSolverTerm(sem.term) ?? sem.term.toLowerCase();
+        for (const slot of sem.slots) {
+            if (slot.kind === "placeholder") continue; // no courseId
+            const id = slot.courseId.toUpperCase();
+            const list = byCourse.get(id) ?? [];
+            list.push({ canonTerm, kind: slot.kind, semesterLocked: sem.locked });
+            byCourse.set(id, list);
+        }
+    }
+    return byCourse;
+}
+
+/** True when the stored slot is effectively immutable (taken / fixed in
+ *  term / in a locked semester). specific_planned & placeholder are
+ *  movable UNLESS their semester is locked. */
+function isStoredLocked(p: StoredPlacement): boolean {
+    if (p.kind === "completed" || p.kind === "in_progress") return true;
+    return p.semesterLocked;
+}
+
+/**
+ * D5.1 — diff the reply against the stored plan. PURE / deterministic /
+ * no-LLM. Known limits (STATED): we only resolve a course-placement
+ * claim when a recognizable term label (PLAN_TERM_LABEL_RE) co-occurs
+ * within PLAN_COOCCUR_WINDOW chars of an explicit course code. Paraphrases
+ * with no deterministic term label ("next fall", "the following term")
+ * are OUT OF SCOPE and produce NO violation — we never block on a guess.
+ */
+function checkPlanClaims(ctx: ValidatorContext): Violation[] {
+    const schedule = ctx.forwardSchedule;
+    if (!schedule) return []; // no-op when there's no stored plan to diff against
+
+    const violations: Violation[] = [];
+    const text = ctx.assistantText;
+    const planIndex = indexPlan(schedule);
+    const canonGradTerm = psTermToSolverTerm(schedule.graduationTerm) ?? schedule.graduationTerm.toLowerCase();
+
+    // ---- (1) course-placement + lock-status claims -------------------
+    PLAN_COURSE_ID_RE.lastIndex = 0;
+    for (const m of text.matchAll(PLAN_COURSE_ID_RE)) {
+        const courseId = `${m[1]} ${m[2]}`.toUpperCase();
+        const idx = m.index ?? 0;
+        const clause = clauseAround(text, idx);
+
+        // Counterfactual carve-out: skip claims inside a conditional /
+        // hypothetical frame.
+        if (isConditionalFrame(clause)) continue;
+
+        const stored = planIndex.get(courseId);
+
+        // -- placement: find a term label co-occurring with this course --
+        const windowStart = Math.max(0, idx - PLAN_COOCCUR_WINDOW);
+        const windowEnd = Math.min(text.length, idx + (m[0]?.length ?? 0) + PLAN_COOCCUR_WINDOW);
+        const window = text.slice(windowStart, windowEnd);
+        PLAN_TERM_LABEL_RE.lastIndex = 0;
+        const termMatches = [...window.matchAll(PLAN_TERM_LABEL_RE)];
+        // Resolve each nearby label deterministically; ignore the ones we
+        // can't normalize (never a guess-block).
+        const claimedTerms = termMatches
+            .map((tm) => psTermToSolverTerm(tm[0]))
+            .filter((t): t is string => t !== null);
+
+        if (claimedTerms.length > 0) {
+            if (!stored) {
+                // The plan places no such course, yet the reply asserts a
+                // concrete term for it.
+                violations.push({
+                    kind: "ungrounded_plan_claim",
+                    detail:
+                        `Reply places ${courseId} in ${claimedTerms.join("/")}, but the stored plan does ` +
+                        `not place ${courseId} at all. Either correct the course/term or rebuild the plan.`,
+                });
+            } else {
+                const storedTerms = new Set(stored.map((p) => p.canonTerm));
+                // Fire only when NONE of the nearby claimed terms match a
+                // stored placement (a single matching term clears it — the
+                // reply may reference grad-term + placement in one window).
+                const anyMatch = claimedTerms.some((t) => storedTerms.has(t));
+                if (!anyMatch) {
+                    violations.push({
+                        kind: "ungrounded_plan_claim",
+                        detail:
+                            `Reply places ${courseId} in ${claimedTerms.join("/")}, but the stored plan ` +
+                            `places it in ${[...storedTerms].join("/")}. Correct the term or move the course in the plan.`,
+                    });
+                }
+            }
+        }
+
+        // -- lock-status: only when the course IS in the plan -----------
+        if (stored && stored.length > 0) {
+            const locked = isStoredLocked(stored[0]!);
+            const assertsLocked = LOCK_ASSERT_RE.test(clause);
+            const assertsMovable = MOVABLE_ASSERT_RE.test(clause);
+            if (assertsLocked && !locked) {
+                violations.push({
+                    kind: "ungrounded_plan_claim",
+                    detail:
+                        `Reply asserts ${courseId} is locked/final, but the stored plan has it as a ` +
+                        `movable ${stored[0]!.kind} slot (semester not locked). Don't claim it's fixed.`,
+                });
+            } else if (assertsMovable && locked) {
+                violations.push({
+                    kind: "ungrounded_plan_claim",
+                    detail:
+                        `Reply asserts ${courseId} can still be moved, but the stored plan has it as a ` +
+                        `${stored[0]!.kind} slot that is fixed/locked. Don't claim it's movable.`,
+                });
+            }
+        }
+    }
+
+    // ---- (2) graduation-term claims ----------------------------------
+    // Detect "graduate <term>" phrasing and compare the term to the
+    // stored graduationTerm. Skip claims inside a conditional frame.
+    const GRAD_CLAIM_RE = /\bgraduat\w*\b/gi;
+    for (const gm of text.matchAll(GRAD_CLAIM_RE)) {
+        const idx = gm.index ?? 0;
+        const clause = clauseAround(text, idx);
+        if (isConditionalFrame(clause)) continue;
+        PLAN_TERM_LABEL_RE.lastIndex = 0;
+        const labels = [...clause.matchAll(PLAN_TERM_LABEL_RE)]
+            .map((tm) => psTermToSolverTerm(tm[0]))
+            .filter((t): t is string => t !== null);
+        if (labels.length === 0) continue; // no resolvable term → no claim
+        // Fire only when NO nearby grad-term label matches the stored one.
+        if (!labels.includes(canonGradTerm)) {
+            violations.push({
+                kind: "ungrounded_plan_claim",
+                detail:
+                    `Reply claims graduation in ${labels.join("/")}, but the stored plan's graduation ` +
+                    `term is ${canonGradTerm}. Correct the term or rebuild the plan to that target.`,
+            });
+        }
+    }
+
+    return violations;
+}
+
 export function validateResponse(ctx: ValidatorContext): ValidatorVerdict {
     const violations: Violation[] = [
         ...checkGrounding(ctx),
@@ -763,6 +1014,7 @@ export function validateResponse(ctx: ValidatorContext): ValidatorVerdict {
         ...checkAttribution(ctx),
         ...checkIdentityDrift(ctx.assistantText),
         ...checkQuantitativeShortfall(ctx.userQuestion, ctx.assistantText),
+        ...checkPlanClaims(ctx),
     ];
     return { ok: violations.length === 0, violations };
 }
