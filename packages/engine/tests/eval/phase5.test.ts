@@ -72,7 +72,7 @@ describe("buildTool + ToolRegistry", () => {
         expect(() => new ToolRegistry([a as Tool<ZodTypeAny, unknown>, b as Tool<ZodTypeAny, unknown>])).toThrow(/duplicate/);
     });
 
-    it("buildDefaultRegistry exposes the 20 LIVE NYU Path tools (plan_semester deprecated May 2026)", () => {
+    it("buildDefaultRegistry exposes the 21 LIVE NYU Path tools (plan_semester deprecated May 2026)", () => {
         // Phase 13 Task 6 added two new tools alongside the original 12:
         //   - plan_forward_degree  (canonical planner — replaced plan_semester)
         //   - view_forward_plan    (read-only inspection of session.forwardSchedule)
@@ -85,6 +85,9 @@ describe("buildTool + ToolRegistry", () => {
         //   - bind_pool_slot       (read-only preview of requirement-pool slot binding)
         // Phase 14 Task 7 adds one more:
         //   - compare_plan_alternatives (read-only Tier B fallback, Decision #42)
+        // Phase 3 (advisor) D2.1 adds one more:
+        //   - probe_counterfactual (read-only what-if — Arm A future_course mutations,
+        //     Arm B fail_completed synthetic-DPR transform; re-solves + 7-axis validates)
         // Phase 15 Task 7 adds two more (two-step section-materialization pair):
         //   - materialize_sections          (read-only — stages proposalIds)
         //   - confirm_section_combination   (write — pins CRNs onto specific_planned slots)
@@ -107,6 +110,7 @@ describe("buildTool + ToolRegistry", () => {
             "get_program_requirements",
             "materialize_sections",
             "plan_forward_degree",
+            "probe_counterfactual",
             "propose_plan_change",
             "run_full_audit",
             "search_availability",

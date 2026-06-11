@@ -1,5 +1,5 @@
 // ============================================================
-// Default ToolRegistry — wires the 20 LIVE NYU Path tools
+// Default ToolRegistry — wires the 21 LIVE NYU Path tools
 // ============================================================
 // §7.1 tools (Phase 0–11):
 //   run_full_audit, what_if_audit,
@@ -31,6 +31,10 @@
 //   compare_plan_alternatives
 // Phase 15 Task 7 additions:
 //   materialize_sections, confirm_section_combination
+// Phase 3 (advisor) D2.1 addition:
+//   probe_counterfactual — read-only what-if (Arm A future_course mutations /
+//   Arm B fail_completed synthetic-DPR transform). Re-solves + 7-axis-validates
+//   without writing session; the diff (valid) or binding constraint (infeasible).
 //
 // REMOVED (improvement plan, Phase F decommission):
 //   plan_semester — the Phase 5 single-term planner + its `planFeasibility`
@@ -53,6 +57,7 @@ import { searchCoursesTool } from "./tools/searchCourses.js";
 import { planForwardDegreeTool } from "./tools/planForwardDegree.js";
 import { viewForwardPlanTool } from "./tools/viewForwardPlan.js";
 import { proposePlanChangeTool } from "./tools/proposePlanChange.js";
+import { probeCounterfactualTool } from "./tools/probeCounterfactual.js";
 import { confirmPlanChangeTool } from "./tools/confirmPlanChange.js";
 import { simulateAlternativesTool } from "./tools/simulateAlternatives.js";
 import { bindFreeElectiveTool } from "./tools/bindFreeElective.js";
@@ -78,6 +83,7 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     planForwardDegreeTool as unknown as Tool<ZodTypeAny, unknown>,
     viewForwardPlanTool as unknown as Tool<ZodTypeAny, unknown>,
     proposePlanChangeTool as unknown as Tool<ZodTypeAny, unknown>,
+    probeCounterfactualTool as unknown as Tool<ZodTypeAny, unknown>,
     confirmPlanChangeTool as unknown as Tool<ZodTypeAny, unknown>,
     simulateAlternativesTool as unknown as Tool<ZodTypeAny, unknown>,
     bindFreeElectiveTool as unknown as Tool<ZodTypeAny, unknown>,
@@ -109,6 +115,7 @@ export {
     planForwardDegreeTool,
     viewForwardPlanTool,
     proposePlanChangeTool,
+    probeCounterfactualTool,
     confirmPlanChangeTool,
     simulateAlternativesTool,
     bindFreeElectiveTool,
