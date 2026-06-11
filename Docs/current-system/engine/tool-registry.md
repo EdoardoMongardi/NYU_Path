@@ -6,7 +6,7 @@
 
 ## Purpose
 
-The AI doesn't look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 20 such tools, each good at one thing (auditing a degree, finding a course, planning the remaining degree, etc.). To keep them consistent, every tool follows the same recipe: a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some surface a verbatim string the reply MUST contain, the rest are synthesized freely.
+The AI doesn't look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 21 such tools, each good at one thing (auditing a degree, finding a course, planning the remaining degree, etc.). To keep them consistent, every tool follows the same recipe: a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some surface a verbatim string the reply MUST contain, the rest are synthesized freely.
 
 ```mermaid
 flowchart LR
@@ -104,7 +104,7 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 
 ## 5. `ALL_NYUPATH_TOOLS` — the wired set
 
-`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:67-88`), containing exactly **20** tools in this fixed order:
+`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:67-88`), containing exactly **21** tools in this fixed order:
 
 ```
 1.  run_full_audit
@@ -207,7 +207,7 @@ The public type and value surface (`buildTool`, `ToolRegistry`, `Tool`, `buildDe
 
 The registry is a thin map but it's built per turn for a real reason: the tool descriptions (`prompt(ctx: { session })`) are dynamic. They read `session.degreeProgressReport`, `session.student?.homeSchool`, `session.forwardSchedule`, etc., to emit context-sensitive hints. A long-lived global registry would bake stale hints in.
 
-The Map itself is constructed in O(N) (N = 20), so per-turn rebuild has no measurable cost.
+The Map itself is constructed in O(N) (N = 21), so per-turn rebuild has no measurable cost.
 
 ---
 

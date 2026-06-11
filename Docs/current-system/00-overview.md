@@ -74,7 +74,7 @@ This is the "brain" — an LLM (Anthropic's Claude Sonnet 4.6 by default, OpenAI
 
 ### The tools (deterministic functions)
 
-There are **20 of them** (the live registry is `packages/engine/src/agent/registry.ts`). Each one knows how to do one thing — for example, "run a full degree audit", "plan every term until graduation", or "search the policy bulletin for the rule on pass/fail courses". Tools are written in TypeScript. They read data files and the student's session, they run their algorithm, and they return a result. They never call the language model. The advisor uses tools the way a doctor uses a calculator and a reference book — to get numbers and facts the doctor shouldn't be guessing.
+There are **21 of them** (the live registry is `packages/engine/src/agent/registry.ts`). Each one knows how to do one thing — for example, "run a full degree audit", "plan every term until graduation", or "search the policy bulletin for the rule on pass/fail courses". Tools are written in TypeScript. They read data files and the student's session, they run their algorithm, and they return a result. They never call the language model. The advisor uses tools the way a doctor uses a calculator and a reference book — to get numbers and facts the doctor shouldn't be guessing.
 
 ### The planner (a constraint-search engine)
 
@@ -210,7 +210,7 @@ Every subsystem of the AI brain. The most important ones:
 
 Plus smaller pieces: the clarifier (handles ambiguous questions), the template matcher (curated answers for FAQs), the LLM clients (OpenAI/Anthropic adapters), and various data loaders.
 
-### `current-system/tools/` — 20 documents
+### `current-system/tools/` — 21 documents
 One file per **live** tool the AI can call. Each explains: what it does, what it needs, the algorithm, what it returns, and what other tools it works with. See the [tool catalog table](#8-quick-tool-catalog) below.
 
 ### `current-system/web/` — 12 documents
@@ -251,7 +251,7 @@ Segregated so the live docs stay clean. These describe tools and subsystems that
 | `update_profile` | Proposes a profile change (school, catalog year, programs, visa) |
 | `confirm_profile_update` | Applies a proposed profile change |
 
-That's all **20** live tools (`packages/engine/src/agent/registry.ts`). Three tools that appeared in earlier versions of this doc are **gone**: `check_transfer_eligibility` and `check_overlap` were removed — internal-transfer eligibility and program double-counting are now answered by citing the bulletin through `search_policy` — and `plan_semester` (the legacy single-term planner) was fully deleted, not retained for reference. Docs for the removed pieces live in [`../deprecated/`](../deprecated/README.md).
+That's all **21** live tools (`packages/engine/src/agent/registry.ts`). Three tools that appeared in earlier versions of this doc are **gone**: `check_transfer_eligibility` and `check_overlap` were removed — internal-transfer eligibility and program double-counting are now answered by citing the bulletin through `search_policy` — and `plan_semester` (the legacy single-term planner) was fully deleted, not retained for reference. Docs for the removed pieces live in [`../deprecated/`](../deprecated/README.md).
 
 ---
 
