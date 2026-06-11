@@ -650,6 +650,10 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                         // the verbatim-drift check can skip when the
                         // verbatim is topically irrelevant.
                         userQuestion: userMessage,
+                        // D5.2 — thread the hydrated plan so the D5.1
+                        // plan-claim check fires on the in-loop replay
+                        // gate (no-ops when no plan is hydrated).
+                        forwardSchedule: s.forwardSchedule,
                     });
                     return {
                         ok: verdict.ok,
@@ -773,6 +777,10 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             // Phase 10 F4c — thread the user's last message for
             // topical-relevance gating in checkVerbatim.
             userQuestion: userMessage,
+            // D5.2 — thread the hydrated plan so the D5.1 plan-claim
+            // check fires on the post-loop terminal path (no-ops when
+            // no plan is hydrated).
+            forwardSchedule: session.forwardSchedule,
         });
 
         const allViolations = [
