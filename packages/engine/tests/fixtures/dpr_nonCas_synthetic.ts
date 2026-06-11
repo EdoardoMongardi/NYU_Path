@@ -245,6 +245,21 @@ export function makeNonCasShanghaiDpr(
 // Synthetic Shanghai catalog — the courses the unmet leaves point at MUST
 // exist here so the solver can place them. All Shanghai-coded (-SHU), all
 // non-CAS. Offered fall+spring so the small horizon can seat them.
+//
+// OFFERINGS GAP-FILL (2026-06-11): each course's `termsOffered: ["fall",
+// "spring"]` below is now consumed by the solver. buildSolverInput gap-fills
+// SolverInput.offerings / offeringConfidence from session.courses[i].
+// termsOffered for ids the GLOBAL offerings cache lacks (these fabricated -SHU
+// ids are not in the global cache), tagging them "historically_likely". So the
+// earlier note here — "these -SHU courses have no offering rows and cannot
+// bind" — is OUTDATED: they now DO get real offering rows
+// (solverInput.offerings.has("CSCI-SHU 210") === true). The non-CAS e2e pin
+// (tests/e2e/nonCasPlan.test.ts) nonetheless still hits its honest
+// infeasible-draft branch, but for a DIFFERENT reason: a downstream
+// constraint-search / materialize binding gate emits a placeholder for the
+// major-required leaf even though the course is now catalog- AND offering-
+// present with its prereq satisfied. That residual binding gate is a SEPARATE
+// limitation, NOT the offerings gap this fixture used to document.
 // ---------------------------------------------------------------------------
 
 const SYNTHETIC_COURSES: Course[] = [

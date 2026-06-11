@@ -33,21 +33,38 @@
  * An honest infeasible-draft is an ACCEPTABLE PASS — the point is "no silent
  *     CAS-coupling crash," not "the synthetic numbers happen to be feasible."
  *
- * OBSERVED BRANCH (recorded honestly): this synthetic DPR hits the HONEST
+ * OBSERVED BRANCH (recorded honestly, re-verified 2026-06-11 after the
+ *     offerings gap-fill fix): this synthetic DPR STILL hits the HONEST
  *     INFEASIBLE-DRAFT branch. The classifier resolves the major leaves via
  *     the non-CAS-safe declared-program path (SR7001/10 → major-required,
  *     SR7001/20 → major-elective) and falls back to "unknown" on the non-CAS
- *     core/elective leaves (SR8001/10, SR9001/10) — the seam. The solver then
- *     cannot bind the synthetic Shanghai-coded courses to concrete OFFERINGS
- *     (offering data is loaded from the global catalog loader, not from
- *     session.courses, and these fabricated -SHU courses have no offering
- *     rows), so it emits PLACEHOLDER slots. The authoritative validator's
- *     `requirementGroupsSatisfied` axis then fails honestly: a major-required
- *     leaf is covered only by a placeholder, not a specific course. That is a
- *     real, fully-explained binding constraint — exactly the acceptable
- *     honest-infeasible PASS, NOT a silent crash. (A future real non-CAS
- *     fixture with real offering data could instead hit the valid branch; the
- *     test accepts both.)
+ *     core/elective leaves (SR8001/10, SR9001/10) — the seam. The solver emits
+ *     PLACEHOLDER slots and the authoritative validator's
+ *     `requirementGroupsSatisfied` axis fails honestly: the major-required
+ *     leaf SR7001/10 is covered only by a placeholder, not a specific course.
+ *     That is a real, fully-explained binding constraint — exactly the
+ *     acceptable honest-infeasible PASS, NOT a silent crash.
+ *
+ *     IMPORTANT — what the offerings gap-fill DID and DID NOT change. The
+ *     earlier version of this header attributed the placeholder to the solver
+ *     having NO offering rows for the -SHU courses (offering data was loaded
+ *     only from the global catalog, never from session.courses). That offerings
+ *     limitation IS NOW FIXED: buildSolverInput gap-fills offerings /
+ *     offeringConfidence from session.courses[i].termsOffered for ids the
+ *     global cache lacks (global authoritative; session fills gaps; tier
+ *     "historically_likely"). The -SHU courses now carry real offering rows
+ *     ("fall","spring"). VERIFIED: solverInput.offerings.has("CSCI-SHU 210")
+ *     === true. But the branch is UNCHANGED — infeasible-draft both before and
+ *     after the fix — because the offering domain stage already treated an
+ *     ABSENT offering as "legal in any season", so missing offerings were never
+ *     the gate for these courses. The remaining gate is a DISTINCT
+ *     downstream binding limitation in the constraint-search / materialize
+ *     stage (the search emits a placeholder for SR7001/10 even though
+ *     CSCI-SHU 210 is catalog-present, offering-present, and its prereq
+ *     CSCI-SHU 101 is in coursesTaken). That is a SEPARATE issue, NOT the
+ *     offerings gap, and is out of scope for the offerings fix. A future fix to
+ *     that binding gate (or a real non-CAS fixture) could flip this to the valid
+ *     branch; the test accepts both.
  *
  * THIS TEST DOCUMENTS THE SEAM; IT DOES NOT FIX IT. The classifier is still
  *     CAS-coupled. REAL non-CAS DPR validation remains PENDING a real fixture.
