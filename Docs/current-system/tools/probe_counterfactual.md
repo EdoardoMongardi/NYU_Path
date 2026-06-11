@@ -1,6 +1,6 @@
 # probe_counterfactual — Technical Audit
 
-> Last verified against code: 2026-06-11 (Phase 3 advisor — D2.1 + D3.1).
+> Last verified against code: 2026-06-11 (Phase 3 advisor — D2.1 + D3.1 + D2.2).
 
 ## Purpose
 
@@ -163,12 +163,24 @@ conflicts = [{ kind: infeasibilityReport.conflictSource, detail: infeasibilityRe
 
 ---
 
-## 7. Extension points (D2.2 / D3.1)
+## 7. The why-not framing (D2.2) + trade-off diff (D3.1)
+
+`summarizeResult` frames the two outcomes as a deliberately **symmetric why-not contract**:
+
+| verdict | header line | the "why" |
+|---|---|---|
+| **infeasible** | `PROBE (<arm>) — INFEASIBLE — [<conflictSource>] <conflictDetail>` | the validator's **failing-axis + reason** string |
+| **valid, with trade-offs** | `PROBE (<arm>) — VALID (with trade-offs) — with these changes: …` | the **"Trade-offs:" section** (D3.1) names the deltas |
+| **valid, benign** | `PROBE (<arm>) — VALID — with these changes: …` | no trade-off section (nothing changed for the worse) |
+
+The header announces `(with trade-offs)` **iff** the engine's trade-off diff (`planDiff`'s `newUnmetRequirements` / `newRequiresPetition` / `cascadedShifts` / `newAssumptions`) is non-empty — so the VALID header is the symmetric counterpart of the INFEASIBLE reason, and a benign probe never makes a spurious trade-off claim. The trade-off lines are computed **before** the header so the verdict can reflect their presence (`probeCounterfactual.ts`).
+
+> **HONEST SCOPE — the why-not is AXIS-level, not course-causal.** `graduationPathValidator.ts` ALWAYS sets `conflictSource: "other"`, `conflictDetail: \`Axes failed: <axis>: <reason>\``, and `relaxationSuggestions: []`. The binding constraint surfaced as the "why" is therefore **which graduation axis failed + that axis's own reason** (e.g. `"Axes failed: requirementGroupsSatisfied: Requirement SR/20 (Algorithms) is not satisfied by plan or DPR"`) — **NOT** a course-causal sentence that maps the failure back to the injected counterfactual (e.g. *"failing 101 breaks the prereq chain for 102"*). The validator does not emit course-causal binding constraints, and the tool does **not** fabricate one. A course-causal binding-constraint string is an **explicitly-OPTIONAL future engine enhancement** (it would have to be produced inside the validator), out of scope for D2.2. The why-not framing pins exactly what the engine actually computes. This is regression-pinned in `tests/agent/tools/probeWhyNot.test.ts` (the infeasible probe asserts `conflicts[0].kind === "other"` and the axis-and-reason detail).
 
 The output is shaped to be a clean extension surface for the rest of Phase 3:
 
-- **D2.2 — why-not framing.** `conflicts[].detail` already carries the binding constraint verbatim. D2.2 will wrap it in a student-facing "here's why that doesn't work" summary; the structured field is in place so the framing layer doesn't have to re-derive it.
-- **D3.1 — agent-reachable trade-off diff (DONE).** `planDiff` carries `newUnmetRequirements`, `cascadedShifts`, `newRequiresPetition`, `removedRequiresPetition`, `newAssumptions`, and the per-axis `validationResultsChanges` (computed by `buildPlanDiff` + `diffPlanTradeOffs`). The trade-off diff was already *reachable* on the output as of D2.1; **D3.1 makes it *visible* — `summarizeResult` now renders a guarded "Trade-offs:" section from these fields** (see §9), so the agent SEES the petitions / re-opened requirements / cascaded shifts / new assumptions a counterfactual introduces, beyond the propose/confirm path. No new diff was added — D3.1 reuses `diffPlanTradeOffs` via the existing `planDiff`.
+- **D2.2 — why-not framing (DONE).** See the table above. `conflicts[].detail` carries the validator's binding constraint verbatim; the summary renders it under an `INFEASIBLE — …` header, and the symmetric `VALID (with trade-offs)` header announces a non-empty trade-off diff. No validator change and no fabricated course-causal "why".
+- **D3.1 — agent-reachable trade-off diff (DONE).** `planDiff` carries `newUnmetRequirements`, `cascadedShifts`, `newRequiresPetition`, `removedRequiresPetition`, `newAssumptions`, and the per-axis `validationResultsChanges` (computed by `buildPlanDiff` + `diffPlanTradeOffs`). The trade-off diff was already *reachable* on the output as of D2.1; **D3.1 makes it *visible* — `summarizeResult` renders a guarded "Trade-offs:" section from these fields** (see §9), so the agent SEES the petitions / re-opened requirements / cascaded shifts / new assumptions a counterfactual introduces, beyond the propose/confirm path. No new diff was added — D3.1 reuses `diffPlanTradeOffs` via the existing `planDiff`.
 
 ---
 
@@ -184,10 +196,11 @@ The output is shaped to be a clean extension surface for the rest of Phase 3:
 - `isReadOnly: true`.
 - `maxResultChars: 4000`; `summarizeResult` is truncated with `"…"` above the cap.
 
-`summarizeResult` emits, by verdict:
+`summarizeResult` emits, by verdict (the **D2.2 why-not framing** — symmetric VALID-with-trade-offs vs INFEASIBLE-because-axis):
 
-- **VALID:** `PROBE (<arm>) — VALID — with these changes: <added/removed slots>`
-- **INFEASIBLE:** `PROBE (<arm>) — INFEASIBLE — [<conflictSource>] <conflictDetail>`
+- **VALID, benign:** `PROBE (<arm>) — VALID — with these changes: <added/removed slots>`
+- **VALID, with trade-offs:** `PROBE (<arm>) — VALID (with trade-offs) — with these changes: <added/removed slots>` — the `(with trade-offs)` qualifier is added **iff** the trade-off diff (below) is non-empty, so the VALID header is the symmetric counterpart of the INFEASIBLE reason.
+- **INFEASIBLE:** `PROBE (<arm>) — INFEASIBLE — [<conflictSource>] <conflictDetail>` — the binding constraint is the validator's **failing-axis + reason** string (`conflictSource` always `"other"`); axis-level, not course-causal (see §7 HONEST SCOPE).
 
 …followed by a `Balance: <before> → <after> (<classification>)` line, an optional `Plan state: <from> → <to>` line, the **trade-off section (D3.1)**, and up to 5 `• <consequence>` lines.
 
@@ -214,4 +227,4 @@ This is what makes the trade-off diff **agent-reachable beyond propose/confirm**
 
 - **`bindFreeElective` / `unbindFreeElective` / `bindPoolSlot` are no-ops in Arm A** (inherited from the shared `applyMutationsToPreferences` switch) — sending them changes nothing in the simulated preferences; only a consequence string flags that the binding did not take effect.
 - **No confirm path.** There is intentionally no `confirm_counterfactual`: a student cannot "apply" having failed a completed course. Arm A edits to future placement should be committed via `confirm_plan_change` with the equivalent mutation array, not through this tool.
-- **The "why-not" framing is not yet rendered** (D2.2) — `conflicts[].detail` carries the binding constraint verbatim, but the student-facing prose wrapper over it lands in a later Phase 3 task. (The trade-off diff is now surfaced as of D3.1 — see §7 / §9.)
+- **The "why-not" framing is AXIS-level, not course-causal** (D2.2, DONE). `summarizeResult` frames the two outcomes symmetrically (VALID-with-trade-offs vs INFEASIBLE-because-`<axis>: <reason>` — see §7 / §9), but the INFEASIBLE "why" is the validator's `Axes failed: <axis>: <reason>` string (`conflictSource` always `"other"`), **NOT** a course-causal sentence that maps the failure back to the injected counterfactual. A course-causal binding constraint would require the validator to emit one — an **optional future engine enhancement**, out of scope. (The trade-off diff is surfaced as of D3.1.)
