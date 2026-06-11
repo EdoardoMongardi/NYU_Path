@@ -308,7 +308,7 @@ export interface SpsPolicy {
  * or BOTH (NYU Shanghai uses a course CAP for majors and a credit FLOOR for
  * minors). Surfaced to multi-program students as a CITED advisory; NOT
  * enforced by the solver/validator (cross-program attribution is not modeled
- * — see docs/superpowers/plans/2026-06-07-double-count-data-advisory.md).
+ * — see Docs/plans/31-2026-06-07-double-count-data-advisory.md).
  */
 export interface DoubleCountingConfig {
     /**

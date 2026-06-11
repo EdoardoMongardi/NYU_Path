@@ -1,6 +1,8 @@
 # @nyupath/engine
 
-Core engine for NYU Path: DPR parser + audit adapter, forward-schedule solver, prereq graph, equivalence resolver, school configs, RAG corpus, response validator, and the agent loop. Consumed by `apps/web`.
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+Core engine for NYU Path: DPR parser + audit adapter, forward-schedule planner, prereq graph, equivalence resolver, school configs, RAG corpus, response validator, and the agent loop. Consumed by `apps/web`.
 
 ## Architecture at a glance
 
@@ -16,7 +18,7 @@ Core engine for NYU Path: DPR parser + audit adapter, forward-schedule solver, p
                        │                   │                          │
                        │              +─────────+                +────────────────+
                        │              │ Tools   │                │ Response       │
-                       │              │ (12)    │                │ validator      │
+                       │              │ (20)    │                │ validator      │
                        │              +─────────+                │ (Cardinal §2.1)│
                        │                                         +────────────────+
                        │
@@ -44,11 +46,15 @@ The legacy "authored-rules fallback" (`degreeAudit`, `evaluateRule`, `crossProgr
 | Tool | Source | Output |
 |---|---|---|
 | `run_full_audit` | DPR | `dprToAuditResults(dpr)` + StandingResult synthesized from `cumulative` block |
-| `plan_forward_degree` | DPR + `schoolConfig` | `solveForwardSchedule` over the DPR's unmet requirements + prereq map |
+| `plan_forward_degree` | DPR + `schoolConfig` | `solveForwardSchedule` (constraint search) over the DPR's unmet requirements + prereq map, gated by the 7-axis validator |
 | `what_if_audit` | DPR + RAG | `unauthored_program_estimate` envelope with non-removable disclaimer; the LLM follows up via `search_policy` |
 | `search_policy` / `get_program_requirements` | RAG | Confidence-banded, cited bulletin excerpts |
 
 Output shape stays consistent across tools so downstream consumers (the response validator, the chat layer's renderer, eval cases) don't fork.
+
+## Forward-schedule planner
+
+The forward-schedule subsystem ([src/agent/forwardSchedule/](src/agent/forwardSchedule/)) was rebuilt in the June 2026 planning-engine work — the old greedy term-by-term solver is gone. `solveForwardSchedule` (solver.ts) now runs a feasibility-first pipeline: `buildConstraintContext` (constraintModel.ts) precomputes the immutable constraint context, `findFirstValidPlan` (search.ts) does a backtracking search that returns the first leaf passing every hard constraint, `localImprove` (localImprove.ts) nudges that plan toward the student's preferred balance, and `materializePlan` (materializePlan.ts) turns it into the surfaced schedule; diverse alternatives come from `findDiverseValidPlans`. The authoritative graduation verdict is **not** the solver's coarse signal — it is the 7-axis `runGraduationPathValidator` (graduationPathValidator.ts: requirement groups, pool slots, total credits, thresholds, visa axes, explicit assumptions, graduation target), routed through `finalizeForwardSchedule` (build.ts) on the build, propose, confirm, and simulate paths. Full detail in [Docs/current-system/engine/forward-schedule.md](../../Docs/current-system/engine/forward-schedule.md).
 
 ## DPR module
 
@@ -89,20 +95,20 @@ The agent loop ([src/agent/agentLoop.ts](src/agent/agentLoop.ts)) implements sev
 
 ## Tests
 
-700+ deterministic tests across `tests/eval/`. Highlights:
+The repo-wide suite is **1675 passed / 9 env-gated skips** (the skips need live API keys). Highlights:
 
-- `dprParser.test.ts` (21) + `dprToAuditResult.test.ts` (8) — DPR parsing + adapter
-- `w3DprToolPaths.test.ts` (13) — DPR-driven tool integration
-- `phase4.test.ts` (drift guard) — every quoted bulletin sentence in a policy template must appear verbatim in the source markdown
+- `tests/dpr/` + `dprParser`/`dprToAuditResult` — DPR parsing + adapter
+- `tests/forwardSchedule/` — feasibility-first search, the 7-axis graduation-path validator, materialization, diverse alternatives, infeasibility reporting
+- drift-guard tests — every quoted bulletin sentence in a policy template must appear verbatim in the source markdown
 - `responseValidator` tests — Cardinal Rule §2.1 enforcement
-- `loopState.test.ts` + `architectureGapsLoop.test.ts` — Steps 14-20 compliance
+- `loopState`/`architectureGapsLoop` — Steps 14-20 compliance
 
 Run: `cd /Users/edoardomongardi/Desktop/Ideas/NYU\ Path && npx vitest run`
 
 ## Files most likely to evolve
 
 - [src/dpr/parser.ts](src/dpr/parser.ts) — when NYU IT updates Albert's DPR layout (typically annually). Drift-guard test in `dprParser.test.ts` catches silent format changes.
-- [src/agent/forwardSchedule/solver.ts](src/agent/forwardSchedule/solver.ts) — when the forward-schedule heuristics evolve.
+- [src/agent/forwardSchedule/](src/agent/forwardSchedule/) — when the constraint model, search, or graduation-path validator evolve (`solver.ts` is the entry point; `constraintModel.ts`, `search.ts`, and `graduationPathValidator.ts` carry the bulk of the logic).
 - [src/rag/](src/rag/) — when the bulletin corpus, embedder, or reranker changes.
 
 ## Files that should rarely change

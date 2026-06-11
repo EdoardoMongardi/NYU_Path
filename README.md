@@ -1,137 +1,104 @@
 # NYU Path
 
-**NYU-Specific Degree & Opportunity Intelligence Agent**
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
-An agentic academic advisor for NYU undergraduates that combines deterministic degree audit logic with LLM-powered conversational reasoning. Unlike generic AI chatbots, NYU Path treats the LLM as an **orchestrator, not a truth source** — all numerical claims (credits, GPA, graduation progress) come from deterministic tools, never from free generation.
+**A chat advisor for every NYU undergraduate.** NYU Path answers degree-progress, planning, and policy questions in plain language for students across all 11 undergraduate schools. The LLM is an **orchestrator, not a truth source**: every number (credits, GPA, graduation progress) comes from a deterministic tool or the student's own Degree Progress Report, never from free generation.
 
 ---
 
-## What It Does
+## What it does
 
-- **Degree Audit** — Evaluates a student's progress against their declared programs using deterministic rule evaluation. Handles must-take requirements, elective pools with wildcards, credit minimums, grade thresholds, and double-counting policies.
-- **Semester Planning** — Recommends courses for the next semester based on prerequisite chains, graduation urgency, workload balance, and F-1 visa compliance.
-- **Policy Lookup** — Answers policy questions (P/F rules, credit caps, transfer credits, AP/IB equivalencies) using RAG-retrieved policy documents with school-specific scoping.
-- **What-If Analysis** — Runs hypothetical audits against programs a student is considering but hasn't declared.
-- **Transfer Eligibility** — Checks requirements for internal school transfers (e.g., CAS → Stern) against the student's current progress.
+NYU Path is **DPR-first**. The authoritative source of truth (tier 1) is the student's NYU **Degree Progress Report (DPR)** — the official Albert audit. Personalized answers are computed from the parsed DPR, not from hand-authored rule files.
 
-## Core Architecture
+- **Degree audit** — Reads the student's DPR and reports progress against their declared programs: requirements met/unmet, credits, thresholds, double-counting.
+- **Forward planning** — Builds a term-by-term plan to graduation using a constraint-search planner (prerequisites, credit caps, F-1 visa load, graduation target) and validates it with a 7-axis graduation-path validator.
+- **What-if analysis** — Re-runs an audit or a plan against a program the student is considering but has not declared.
+- **Policy lookup** — Answers policy questions (P/F, credit caps, transfer credit, AP/IB) from the NYU Bulletin via retrieval. This is the **cited, hedged tier 2**: answers are quoted "per the bulletin," never presented as a personalized computation.
 
-```
-Student Message
-     │
-     ▼
-┌─────────────────┐
-│ Template Matcher │ ← Curated FAQ answers (no LLM needed)
-│  5-step gate     │
-└────────┬────────┘
-         │ miss
-         ▼
-┌─────────────────┐
-│ Agent Loop       │ ← LLM selects and calls tools
-│  while(true)     │
-│  max 8 turns     │
-└────────┬────────┘
-         │ calls
-         ▼
-┌─────────────────┐
-│ Deterministic    │ ← degree_audit, plan_semester,
-│ Tools            │   search_policy, check_standing, ...
-└────────┬────────┘
-         │ results
-         ▼
-┌─────────────────┐
-│ Response         │ ← Validates grounding, tool usage,
-│ Validator        │   completeness before delivery
-└─────────────────┘
+**No DPR, no personalized answer.** If a student has not provided a DPR, the personalized tools (audit, plan, what-if) hard-refuse in `validateInput` rather than guess. Policy lookup still works.
+
+## Architecture in brief
+
+```mermaid
+flowchart TD
+    msg[Student message] --> loop
+    loop[Agent loop<br/>up to 10 turns] -->|selects tools| tools
+    tools[20 registered tools] --> dpr[(DPR — tier 1<br/>authoritative)]
+    tools --> planner[Constraint-search planner]
+    tools --> rag[(Bulletin RAG — tier 2<br/>cited, hedged)]
+    planner --> validator[7-axis graduation-path validator]
+    validator -->|gates| planner
+    tools --> reply[Grounded reply]
 ```
 
-**Key principle:** The LLM orchestrates tool calls and synthesizes results into natural language. It never invents numbers, policies, or requirements. Every factual claim traces back to a deterministic tool output or a cited policy document.
+- **Agent loop** (`packages/engine/src/agent/agentLoop.ts`) — runs the model with a tool registry, up to 10 turns by default, returning a final reply or a terminal status (`max_turns`, fallback, etc.). No streaming in the engine layer; the web app streams over this.
+- **Tools** (`packages/engine/src/agent/registry.ts`) — exactly **20** live tools: `run_full_audit`, `what_if_audit`, `search_policy`, `get_program_requirements`, `update_profile`, `confirm_profile_update`, `get_credit_caps`, `search_availability`, `get_academic_standing`, `search_courses`, `plan_forward_degree`, `view_forward_plan`, `propose_plan_change`, `confirm_plan_change`, `simulate_alternatives`, `compare_plan_alternatives`, `bind_free_elective`, `bind_pool_slot`, `materialize_sections`, `confirm_section_combination`.
+- **Constraint-search planner** (`packages/engine/src/agent/forwardSchedule/`) — `solveForwardSchedule` runs `buildConstraintContext` → `findFirstValidPlan` (feasibility-first backtracking search) → `localImprove` → `materializePlan`. Diverse alternatives come from `findDiverseValidPlans`. There is **no greedy solver** anymore.
+- **7-axis validator** (`forwardSchedule/graduationPathValidator.ts`) — `runGraduationPathValidator` is the authoritative gate (requirement groups, pool slots, total credits, thresholds, visa, explicit assumptions, graduation target). It is routed through `finalizeForwardSchedule` on the build, propose, confirm, and simulate paths.
+- **Bulletin RAG** (`packages/engine/src/rag/`) — chunked NYU Bulletin + policy corpus, embedded and reranked (Cohere), scope-filtered by the student's school. Strictly tier 2.
 
-## Safety Model
+## Models
 
-Academic advising is high-stakes — a wrong answer about credit requirements or P/F policies can delay graduation. NYU Path implements multiple safety layers:
+Default primary model is **`claude-sonnet-4-6`** (override via `NYUPATH_PRIMARY_MODEL`); fallback is **`gpt-4.1-mini`** (override via `NYUPATH_FALLBACK_PROVIDER` / `NYUPATH_FALLBACK_MODEL`). See [`Docs/reference/MODEL_SELECTION.md`](Docs/reference/MODEL_SELECTION.md).
 
-- **Deterministic first:** Credit counts, GPA, graduation progress, and rule evaluation are computed by code, not generated by LLM.
-- **Hardened templates:** Common policy answers (F-1 compliance, credit caps, P/F rules) use pre-verified templates that bypass LLM synthesis entirely.
-- **Response validation:** A post-generation validator checks for ungrounded numbers, missing tool calls, and uncited policies. Invalid responses are re-prompted or replaced with a safe fallback.
-- **School-scoped RAG:** Policy retrieval is filtered by the student's home school and catalog year to prevent cross-school policy contamination.
-
-## Program Coverage Strategy (Three-Tier)
-
-NYU has 300+ undergraduate programs. Hand-authoring full rule JSONs for all of them is intractable; pure RAG violates the "no LLM-computed numbers" cardinal rule. NYU Path uses three coverage tiers, with promotion driven by usage and validator signals (see ARCHITECTURE.md §11.6):
-
-- **T1 — Hand-authored** (~40 programs): full rule schema, hand-reviewed, deterministic audit + plan + what-if
-- **T2 — LLM-extracted** (~120 programs): rules extracted by LLM from the bulletin with ≥10% spot-check; deterministic audit runs but caveats to the user that requirements were extracted automatically
-- **T3 — RAG-only** (the long tail): no JSON file — engine refuses to compute an audit and instead quotes the bulletin verbatim
-
-A program moves T3→T2→T1 when traffic and usefulness justify the maintenance cost.
-
-## Data Provenance & Precedence
-
-Every JSON data file carries a `_meta` block (catalog year, source URL, last-verified date, source hash). When two data files disagree about the same fact, the engine resolves via precedence: **school config > program config > department config > course catalog**. Stale files (>180 days unverified or hash-changed upstream) trigger a verification banner on any response that depended on them. See ARCHITECTURE.md §11.0.
-
-## Project Structure
+## Monorepo layout
 
 ```
 nyupath/
-├── packages/
-│   ├── shared/            # Shared types (StudentProfile, Rule, SchoolConfig, etc.)
-│   └── engine/            # Core logic
-│       ├── audit/         # degreeAudit, ruleEvaluator, creditCapValidator, passfailGuard, academicStanding
-│       ├── planner/       # semesterPlanner, priorityScorer, graduationRisk, enrollmentValidator
-│       ├── graph/         # prereqGraph (DAG traversal)
-│       ├── equivalence/   # Cross-listed course resolution
-│       ├── transcript/    # Deterministic transcript parser + invariant checks (Phase 2)
-│       ├── api/           # nyuClassSearch.ts (FOSE client) + tool wrappers
-│       ├── agent/         # Agent orchestrator, tool registry, template matcher, response validator
-│       ├── cohort/        # Phase 6.5 staged-rollout gate
-│       ├── search/        # Policy search (RAG)
-│       └── data/          # Loaders: schools, programs, departments (stub), courses
 ├── apps/
-│   ├── cli/               # CLI interface for testing
-│   └── web/               # Next.js web application
+│   └── web/                # Next.js app: chat route, plan-action APIs, Drizzle DB, auth
+├── packages/
+│   ├── engine/             # Core logic
+│   │   └── src/
+│   │       ├── agent/      # Agent loop, tool registry, tools, system prompt, forwardSchedule/ (planner + validator)
+│   │       ├── dpr/        # DPR parser + audit projection (tier 1, authoritative)
+│   │       ├── rag/        # Bulletin/policy retrieval (tier 2, cited)
+│   │       ├── audit/      # Authored-rule audit helpers
+│   │       ├── api/        # NYU class-search (FOSE) client
+│   │       ├── persistence/ provenance/ observability/
+│   │       └── data/       # School / program / catalog loaders
+│   └── shared/             # Shared types (StudentProfile, grades, etc.)
 ├── data/
-│   ├── schools/           # Per-school config JSONs (CAS, Stern, Tandon, ...)
-│   ├── programs/          # Per-school program requirement JSONs (T1 hand + T2 extracted)
-│   ├── departments/       # Reserved (precedence stub — see §11.9)
-│   ├── transfers/         # Internal transfer requirement files
-│   ├── courses/           # Course catalog (per-prefix, scraped + normalized)
-│   ├── bulletin-raw/      # Raw NYU Bulletin scrape (source of truth)
-│   └── _tiers.json        # Per-program tier assignment (T1/T2/T3)
-├── evals/
-│   ├── modelBakeoff.ts    # §6.5.1 model selection harness
-│   ├── results/           # Bakeoff results, per date
-│   └── cohorts/           # Frozen eval sets per Phase 6.5 cohort
-├── tools/
-│   └── program-extractor/ # T2 LLM extraction pipeline + prompt
-├── ARCHITECTURE.md        # Full system design document (canonical)
-└── MODEL_SELECTION.md     # Current selected model + bakeoff result + re-eval date
+│   ├── schools/            # 11 per-school config JSONs (cas, stern, tandon, …)
+│   ├── programs/           # Authored program requirement JSONs
+│   ├── course-catalog/     # Course descriptions + embeddings
+│   ├── policy-corpus/      # Policy chunks + embeddings
+│   └── bulletin-raw/       # Raw NYU Bulletin scrape (source for the parser)
+├── tools/                  # Offline pipelines: bulletin scrape/parse, embed, cohort eval, FOSE recorder
+├── evals/                  # Model bakeoff + golden/cohort eval sets and results
+└── Docs/                   # All project documentation (start at Docs/README.md)
 ```
 
-## Development
+## Running it
+
+Prerequisites: Node.js ≥ 18 and pnpm.
 
 ```bash
-# Prerequisites: Node.js ≥ 18, pnpm
-pnpm install
-pnpm build
-pnpm test
+pnpm install                # install all workspace deps
+npx vitest run              # run the test suite (1675 pass / 9 env-gated skips)
+pnpm -r build               # build all packages
+
+# Web app (chat UI)
+cd apps/web && pnpm dev     # Next.js dev server
 ```
 
-## Roadmap
+Create `.env.local` (repo root and/or `apps/web`) with the keys you need:
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 0. Pre-flight | ⬜ Planned | FOSE client wiring, `_meta` provenance schema, catalog-year pinning, eval harness skeleton |
-| 1. Multi-School Engine | 🔄 In Progress | De-hardcode CS-specific logic, add SchoolConfig types, T1 program data files (5 majors), generalize engine to read config + precedence rule |
-| 2. Cross-Program + Transcript Ingestion | ⬜ Planned | Multi-program audit coordinator, transfer eligibility, what-if analysis, deterministic transcript parser with reconciliation invariants |
-| 3. Planner Extensions + Confirmation UI | ⬜ Planned | Exploratory/transfer-prep planning, multi-semester projection, two-step transcript confirmation |
-| 4. RAG Pipeline | ⬜ Planned | Policy document chunking, embedding, vector search with Cohere Rerank, T3 bulletin coverage |
-| 5. Agent Orchestrator + Model Bakeoff | ⬜ Planned | Run model bakeoff, agent loop, system prompt, template matcher, **launch-blocking** invocation auditor + completeness checker |
-| 6. Integration + Hardening | ⬜ Planned | Web API, streaming, T2 extraction pipeline, deprecation of old modules, fallback logging |
-| 6.5. Staged Rollout (Eval-Gated) | ⬜ Planned | Internal alpha → closed beta → invite-only → public, each cohort gated by ≥0.90 composite eval score |
-| 7. Scale to All Majors (Three-Tier) | ⬜ Planned | T1 hand-authored batches, T2 LLM extraction with spot-check, T3 RAG-only long tail |
+| Key | Purpose |
+|-----|---------|
+| `ANTHROPIC_API_KEY` | Primary model (`claude-sonnet-4-6`) |
+| `OPENAI_API_KEY` | Fallback model + embeddings |
+| `COHERE_API_KEY` | RAG reranker |
+| `DATABASE_URL` | Postgres/Neon (web persistence) |
+| `RESEND_API_KEY` | Email (optional) |
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full design document.
+## Status
+
+The **planning-engine rebuild (Phases 0–2)** is complete and merged to `main` (PRs #35–#41, June 2026). This replaced the old greedy planner with feasibility-first constraint search, consolidated the duplicate planning paths, and made the 7-axis validator the single authoritative gate. **Phase 3 — the advisor layer** (richer conversational planning over the rebuilt engine) is next.
+
+## Documentation
+
+All design docs, specs, plans, audits, and per-subsystem references live in **[`Docs/`](Docs/)** — start at [`Docs/README.md`](Docs/README.md). The canonical rebuild design is [`Docs/specs/2026-06-05-planning-engine-rebuild-design.md`](Docs/specs/2026-06-05-planning-engine-rebuild-design.md); a plain-English tour is in [`Docs/current-system/00-overview.md`](Docs/current-system/00-overview.md).
 
 ## License
 
