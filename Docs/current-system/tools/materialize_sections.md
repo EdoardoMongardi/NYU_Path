@@ -37,7 +37,7 @@ It does NOT modify the schedule. It runs an end-to-end pipeline that:
 - Stages every resulting combination under a deterministic `proposalId`, and
 - Returns the orchestrator output plus the list of proposal IDs so the LLM (or a follow-up tool call) can apply one via `confirm_section_combination`.
 
-The tool is registered as a live tool in `packages/engine/src/agent/registry.ts` (one of the 20 live tools). Defined at `packages/engine/src/agent/tools/materializeSections.ts:80-306`; the orchestrator pipeline lives in `packages/engine/src/agent/sectionMaterialization/materialize.ts:228-448`.
+The tool is registered as a live tool in `packages/engine/src/agent/registry.ts` (one of the 21 live tools). Defined at `packages/engine/src/agent/tools/materializeSections.ts:80-306`; the orchestrator pipeline lives in `packages/engine/src/agent/sectionMaterialization/materialize.ts:228-448`.
 
 > **Known limitations.** The course-swap cascade (Decision #19) is a STUB: the tool's `swapHook` always returns `null` (`materializeSections.ts:198-201`), so a course wiped by "no open sections" or by a strict scheduling preference is simply dropped — no structural-plan alternative is ever substituted. Wiring `swapHook` into the structural solver's swap path is marked as deferred to Phase 16 (file-header comment at `materializeSections.ts:22-24`). A related deferral, "I-1", lives in `materialize.ts:353-377`: re-rank weights for any swapped-in alternative course are dropped, so swapped sections always score at the default weight of 1. Because the swap hook never fires today, I-1 is currently a no-op.
 

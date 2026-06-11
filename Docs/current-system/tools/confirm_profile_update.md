@@ -2,7 +2,7 @@
 
 > Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
-A technical audit of the apply half of the two-step profile-mutation contract. This tool was not touched by the Phase 0-2 solver rebuild — it is a Phase-5 profile tool and remains one of the 20 live tools in `packages/engine/src/agent/registry.ts`. It is the ONLY tool in the system that mutates the student profile through the agent loop.
+A technical audit of the apply half of the two-step profile-mutation contract. This tool was not touched by the Phase 0-2 solver rebuild — it is a Phase-5 profile tool and remains one of the 21 live tools in `packages/engine/src/agent/registry.ts`. It is the ONLY tool in the system that mutates the student profile through the agent loop.
 
 Source: `packages/engine/src/agent/tools/updateProfile.ts` (lines 198-292) and `packages/engine/src/persistence/profileStore.ts`.
 

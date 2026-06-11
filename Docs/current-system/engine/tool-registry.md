@@ -23,7 +23,7 @@ flowchart LR
 
 ---
 
-This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 20 live tools.
+This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 21 live tools.
 
 ---
 
@@ -120,13 +120,14 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 11. plan_forward_degree
 12. view_forward_plan
 13. propose_plan_change
-14. confirm_plan_change
-15. simulate_alternatives
-16. bind_free_elective
-17. bind_pool_slot
-18. compare_plan_alternatives
-19. materialize_sections
-20. confirm_section_combination
+14. probe_counterfactual
+15. confirm_plan_change
+16. simulate_alternatives
+17. bind_free_elective
+18. bind_pool_slot
+19. compare_plan_alternatives
+20. materialize_sections
+21. confirm_section_combination
 ```
 
 `buildDefaultRegistry()` (`registry.ts:94-96`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts:556`).
@@ -154,7 +155,7 @@ sequenceDiagram
     participant Tool as Tool.call
 
     Route->>Reg: buildDefaultRegistry()
-    Reg-->>Route: registry (20 tools)
+    Reg-->>Route: registry (21 tools)
     Route->>Loop: runAgentTurnStreaming(client, registry, session, msg, opts)
     Loop->>Reg: registry.list() (via toLLMToolDefs)
     Reg-->>Loop: [Tool, …]

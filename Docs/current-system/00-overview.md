@@ -20,7 +20,7 @@ NYU Path is a **chat-based academic advisor** for **NYU undergraduates**. A stud
 graph LR
     STUDENT([🧑‍🎓 Student]) -->|asks a question| CHAT[💬 Chat UI]
     CHAT --> BRAIN{🧠 Smart Advisor}
-    BRAIN -->|when it needs facts| TOOLS[🛠️ Toolbox<br/>20 specialists]
+    BRAIN -->|when it needs facts| TOOLS[🛠️ Toolbox<br/>21 specialists]
     TOOLS -->|fetches from| MEMORY[(📚 Knowledge:<br/>your DPR,<br/>NYU bulletin,<br/>live class data)]
     MEMORY -->|facts| TOOLS
     TOOLS -->|results| BRAIN
@@ -29,7 +29,7 @@ graph LR
     GUARD -.fails: redo it.-> BRAIN
 ```
 
-That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 20 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy/curriculum lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
+That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 21 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy/curriculum lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
 
 ---
 
@@ -141,7 +141,7 @@ graph TB
     subgraph Engine["The brain + tools (packages/engine)"]
         AGENT[Agent loop<br/>orchestrates LLM + tools]
         VALIDATOR[Response validator<br/>7 safety checks]
-        TOOLS[20 tools]
+        TOOLS[21 tools]
         ALGOS[Audit, constraint-search planner,<br/>7-axis graduation-path validator,<br/>section materializer,<br/>RAG retriever, DPR parser]
         SESSION[Session state<br/>the shared bag every<br/>tool reads from]
     end
@@ -269,7 +269,7 @@ sequenceDiagram
     Student->>Web: "What's my GPA and how many credits do I need?"
     Web->>DB: Load profile, saved plan, chat history
     DB-->>Web: Here you go
-    Web->>Brain: System prompt + history + question + 20 tools available
+    Web->>Brain: System prompt + history + question + 21 tools available
     Brain->>Brain: This needs the audit tool
     Brain->>Web: Please run `run_full_audit`
     Web->>Tool: Run it

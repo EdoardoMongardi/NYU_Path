@@ -148,7 +148,7 @@ If `opts.dprLoaded === true`, a block titled `## DEGREE PROGRESS REPORT IS LOADE
 
 This is the prompt-level mirror of the personal tools' `validateInput` DPR guards — belt-and-suspenders so the agent both explains the upload and the tools enforce it.
 
-> **Correction (2026-06-10):** the earlier version of this doc listed `check_overlap` and `check_transfer_eligibility` among the personal tools that refuse without a DPR. Both tools were **removed** in the pure-RAG decommission (they no longer exist in the registry — see [`registry.ts`](../../../packages/engine/src/agent/registry.ts), 20 live tools). Internal-transfer questions are now routed through `search_policy` over the bulletin's transfer pages.
+> **Correction (2026-06-10):** the earlier version of this doc listed `check_overlap` and `check_transfer_eligibility` among the personal tools that refuse without a DPR. Both tools were **removed** in the pure-RAG decommission (they no longer exist in the registry — see [`registry.ts`](../../../packages/engine/src/agent/registry.ts), 21 live tools). Internal-transfer questions are now routed through `search_policy` over the bulletin's transfer pages.
 
 ---
 
@@ -237,7 +237,7 @@ flowchart TD
 
 ## 9. What the prompt deliberately doesn't include
 
-- No tool-by-tool routing table for the 20 live tools (see [`registry.ts`](../../../packages/engine/src/agent/registry.ts)). Each tool's `description` carries its own routing hints; the prompt's `TOOL ROUTING` paragraph just says "read them, decide, the validator will reject misroutes" (the DPR-loaded ROUTING block does carry a handful of explicit per-tool bullets, e.g. `run_full_audit` vs `search_policy` vs `get_program_requirements`).
+- No tool-by-tool routing table for the 21 live tools (see [`registry.ts`](../../../packages/engine/src/agent/registry.ts)). Each tool's `description` carries its own routing hints; the prompt's `TOOL ROUTING` paragraph just says "read them, decide, the validator will reject misroutes" (the DPR-loaded ROUTING block does carry a handful of explicit per-tool bullets, e.g. `run_full_audit` vs `search_policy` vs `get_program_requirements`).
 - No few-shot examples.
 - No persona / personality instructions beyond "precise, factual, and helpful".
 - No safety / content-policy text.
