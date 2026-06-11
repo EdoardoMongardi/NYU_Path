@@ -1,12 +1,12 @@
 # Response Validator
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (post planning-engine rebuild + D5.1 plan-claim check).
 
-> **Source files:** `packages/engine/src/agent/responseValidator.ts`, `agent/verifiers/blockquoteAttribution.ts`
+> **Source files:** `packages/engine/src/agent/responseValidator.ts`, `agent/verifiers/blockquoteAttribution.ts`, `agent/forwardSchedule/termLabel.ts`
 
 ## TL;DR
 
-Before any answer reaches the student, it goes through seven safety checks — like a copy editor that catches dangerous mistakes before publication. The first check makes sure every number in the answer actually came from a real lookup this turn (no making things up from training data). The second makes sure the AI didn't claim to have run a tool it never ran. The next checks make sure required warnings weren't dropped, that any quote from a school document matches the real text, that quotes have honest sources (not fabricated bulletins), that the AI didn't invent fake identity facts about the student, and that quantitative answers like "you need X more credits" use real math. If any check fails and the AI has a retry available, the system asks the AI to redo the answer with notes on what to fix. None of these checks involves another AI call — they're all fast, deterministic code.
+Before any answer reaches the student, it goes through eight safety checks — like a copy editor that catches dangerous mistakes before publication. The first check makes sure every number in the answer actually came from a real lookup this turn (no making things up from training data). The second makes sure the AI didn't claim to have run a tool it never ran. The next checks make sure required warnings weren't dropped, that any quote from a school document matches the real text, that quotes have honest sources (not fabricated bulletins), that the AI didn't invent fake identity facts about the student, and that quantitative answers like "you need X more credits" use real math. The eighth check (D5.1) diffs the AI's *plan* claims — "CSCI-UA 102 is in Fall 2027", "you graduate Spring 2028", "this course is locked" — against the stored forward schedule, so the AI can't mis-state where a course lands, when the student graduates, or whether a slot is movable. If any check fails and the AI has a retry available, the system asks the AI to redo the answer with notes on what to fix. None of these checks involves another AI call — they're all fast, deterministic code.
 
 ```mermaid
 flowchart LR
@@ -17,6 +17,7 @@ flowchart LR
     Draft --> C5[Sources honest?]
     Draft --> C6[Identity facts true?]
     Draft --> C7[Math correct?]
+    Draft --> C8[Plan claims match stored plan?]
     C1 --> Verdict{All pass?}
     C2 --> Verdict
     C3 --> Verdict
@@ -24,6 +25,7 @@ flowchart LR
     C5 --> Verdict
     C6 --> Verdict
     C7 --> Verdict
+    C8 --> Verdict
     Verdict -->|yes| Ship[Send to student]
     Verdict -->|no| Retry[Ask AI to redo]
 ```
@@ -34,11 +36,11 @@ This is the structural gate every final reply passes through before the user see
 
 When a violation fires *and* the agent loop has any replay budget left, the loop appends a system message describing the violations and asks the model to redo the reply (see [`agent-loop.md`](agent-loop.md) §4). If the budget is exhausted, the reply goes out *with* the violations and the chat layer can still surface them.
 
-There are **seven** validators. All run on every reply; the final verdict is the union of their violations.
+There are **eight** validators. All run on every reply; the final verdict is the union of their violations.
 
 ---
 
-## 1. The seven validators at a glance
+## 1. The eight validators at a glance
 
 ```mermaid
 graph LR
@@ -49,6 +51,7 @@ graph LR
     DRAFT --> V5[5. Attribution / blockquote]
     DRAFT --> V6[6. Identity drift]
     DRAFT --> V7[7. Quantitative shortfall]
+    DRAFT --> V8[8. Plan claims]
     V1 --> AGG[Aggregate violations]
     V2 --> AGG
     V3 --> AGG
@@ -56,12 +59,13 @@ graph LR
     V5 --> AGG
     V6 --> AGG
     V7 --> AGG
+    V8 --> AGG
     AGG --> VERDICT{any<br/>violations?}
     VERDICT -->|no| OK[ok: true]
     VERDICT -->|yes| BAD[ok: false<br/>+ list]
 ```
 
-The function name on each is internal: `checkGrounding`, `checkInvocations`, `checkCompleteness`, `checkVerbatim`, `checkAttribution` (delegates to `verifyBlockquoteAttribution`), `checkIdentityDrift`, `checkQuantitativeShortfall`. The public entry point is `validateResponse(ctx) → ValidatorVerdict`.
+The function name on each is internal: `checkGrounding`, `checkInvocations`, `checkCompleteness`, `checkVerbatim`, `checkAttribution` (delegates to `verifyBlockquoteAttribution`), `checkIdentityDrift`, `checkQuantitativeShortfall`, `checkPlanClaims`. The public entry point is `validateResponse(ctx) → ValidatorVerdict`.
 
 ---
 
@@ -75,6 +79,7 @@ verbatim_drift             — semi-hardened tool's required verbatim text not p
 fabricated_attribution     — blockquote attributed to "the bulletin" but not in any search_policy chunk
 identity_drift             — agent told the user to "call me" / "email me" (it isn't a separate entity)
 quantitative_shortfall     — user asked for N units, agent delivered fewer and didn't acknowledge
+ungrounded_plan_claim      — a course-placement / graduation-term / lock-status claim disagrees with the stored forward plan
 ```
 
 ---
@@ -310,19 +315,55 @@ unable to (fill|reach) the (requested )?(target|amount)
 
 ---
 
+## 9.5. Validator 8 — Plan claims (D5.1, the "ungrounded plan claims blocked" gate)
+
+> **Rule:** when the session has a stored forward plan (`ctx.forwardSchedule`), every **course-placement**, **graduation-term**, and **lock-status** claim in the reply must agree with that plan. Plan claims are **Tier-1** (engine-grounded) — there is **no hedging exemption** (opposite the Tier-2 estimate exemption in §3). "Verify with your adviser" does **not** excuse an ungrounded placement / grad-term claim.
+
+`checkPlanClaims(ctx)` is **pure / deterministic / no-LLM** — it diffs the reply's prose against the stored schedule. It is a **no-op when `ctx.forwardSchedule` is absent** (it never invents a plan to diff against; the route populates the field — task D5.2).
+
+### What it catches
+
+- **course-placement** — "CSCI-UA 102 is in Fall 2027" that disagrees with where the stored plan places the course, **or** a concrete-term placement for a course the plan doesn't place at all.
+- **graduation-term** — "you graduate Spring 2028" that disagrees with `forwardSchedule.graduationTerm`.
+- **lock-status** — "CSCI-UA 102 is locked/final" when the stored slot is movable, **or** "you can still move CSCI-UA 101" when the stored slot is `completed`/`in_progress` (or sits in a `locked: true` semester).
+
+### Lock semantics (source of truth = slot `kind` + the semester's `locked`)
+
+`completed` / `in_progress` → fixed (taken / in-term). `specific_planned` / `placeholder` → movable **unless** the slot's semester carries `locked: true`. `placeholder` slots carry **no `courseId`**, so course-placement claims resolve only against `completed` / `in_progress` / `specific_planned` slots.
+
+### The two deterministic primitives
+
+1. **Term-label normalizer** — `psTermToSolverTerm` lives in the shared module `agent/forwardSchedule/termLabel.ts`, imported by **both** `buildSolverInput.ts` (which formerly held a private copy) **and** `responseValidator.ts`, so the prose-vs-plan term comparison can't drift from the solver's term shape. It maps "Fall 2027" / "2027 Fall" / "2027-fall" → `2027-fall` (and Spring / Summer / January / J-Term). The validator **never raw-string-compares** "Fall 2027" against "2027-fall".
+2. **Course-code + term co-occurrence extractor** — a course-code regex (mirrors `buildSolverInput.ts` `COURSE_ID_RE`: `\b([A-Z][A-Z0-9]*-[A-Z]{2,3})\s+(\d{1,4}[A-Z]?)\b`) finds explicit course ids; a term label (`PLAN_TERM_LABEL_RE`) is sought within a **±60-char window** of each code. **Stated known-limit:** only claims with a *deterministically resolvable* term label are checked. Paraphrases like "next fall" / "the following term" produce **no** violation — the check never blocks on a guess (no silent false-negative-block). A course mentioned with no nearby term claim → no violation.
+
+### Counterfactual / hypothetical carve-out (collision with D2 probes)
+
+A placement / grad-term claim that is syntactically marked as a probe result or hypothetical describes a re-solved what-if schedule that **intentionally** differs from the stored plan and is **skipped**. The carve-out fires when the claim's enclosing clause carries a conditional marker (`isConditionalFrame`): `if`, `would`, `hypothetical(ly)`, `what if`, `suppose`, `were you to`. **Known-limit carve-out within the carve-out:** the benign trailing politeness idioms `if you'd like` / `if you want` / `if you prefer` / `if you wish` / `if you choose` are stripped before the conditional test (`BENIGN_CONDITIONAL_IDIOM_RE`) — they offer a real change to the *current* plan, so a lock-status / placement claim in such a clause is still checked.
+
+### Violation shape
+
+```
+{ kind: "ungrounded_plan_claim", detail: "Reply places <COURSE> in <claimedTerm>, but the stored plan places it in <storedTerm> / does not place it at all." }
+{ kind: "ungrounded_plan_claim", detail: "Reply claims graduation in <claimedTerm>, but the stored plan's graduation term is <storedTerm>." }
+{ kind: "ungrounded_plan_claim", detail: "Reply asserts <COURSE> is locked/final, but the stored plan has it as a movable <kind> slot." (and the inverse) }
+```
+
+---
+
 ## 10. The validator context
 
 ```
 ValidatorContext = {
-  assistantText: string,        // the model's draft this turn
-  invocations: ToolInvocation[],// every tool the model called this turn
-  student?: StudentProfile,     // gates the F-1 caveat rule
-  transferIntent?: boolean,     // currently unread by any rule; kept for forward use
-  userQuestion?: string,        // last user message, used by verbatim's F4c skip + shortfall check
+  assistantText: string,            // the model's draft this turn
+  invocations: ToolInvocation[],    // every tool the model called this turn
+  student?: StudentProfile,         // gates the F-1 caveat rule
+  transferIntent?: boolean,         // currently unread by any rule; kept for forward use
+  userQuestion?: string,            // last user message, used by verbatim's F4c skip + shortfall check
+  forwardSchedule?: ForwardSchedule,// D5.1 — stored forward plan; gates checkPlanClaims (no-op when absent)
 }
 ```
 
-The agent loop wires this in via the `validateResponse` callback passed to `runAgentTurnStreaming`. The web chat route in `apps/web/app/api/chat/v2/route.ts` constructs the context per turn.
+The agent loop wires this in via the `validateResponse` callback passed to `runAgentTurnStreaming`. The web chat route in `apps/web/app/api/chat/v2/route.ts` constructs the context per turn. The `forwardSchedule` field is populated by the route in task D5.2; until then `checkPlanClaims` no-ops.
 
 ---
 
@@ -334,6 +375,11 @@ The agent loop wires this in via the `validateResponse` callback passed to `runA
 - It does not enforce that *every* claim is grounded — only "claim numbers" as defined above. Words like "you're on track" or "this is fine" can be made without grounding, by design.
 - It does not block reply delivery on its own. The agent loop owns the replay budget and final return.
 
-### Known limitation — plan-shaped claims are not checked against the engine plan
+### Plan-shaped claims ARE now checked (D5.1 — gap closed)
 
-The grounding validator (§3) only verifies that **numbers** trace to a tool summary, args, the user question, or an `a±b` derivation. It has **no check that a plan-shaped claim — "you'll take CSCI-UA 310 in Fall 2026", "MATH-UA 121 is in your second semester" — actually matches the term placement the forward planner produced in `session.forwardSchedule`.** Course codes and term labels are strings, not "claim numbers", so the agent can mis-state which course lands in which term (or invent a placement the planner never made) and no validator fires. This is a known **Phase-3 gap**: the post-rebuild planner (`finalizeForwardSchedule` → 7-axis `runGraduationPathValidator`) is the authority on the plan itself, but the *response* validator does not cross-check the agent's prose against that authoritative plan. Closing it would mean a new validator that diffs the reply's stated placements against the stored schedule.
+> Historical note: this section previously documented a Phase-3 gap — plan-shaped claims ("CSCI-UA 310 in Fall 2026") were *not* cross-checked against the stored schedule, because course codes and term labels are strings, not "claim numbers". **That gap is closed by Validator 8 (`checkPlanClaims`, §9.5)**, which diffs the reply's course-placement / graduation-term / lock-status claims against `ctx.forwardSchedule` deterministically.
+
+Residual bounds of the check (by design, not bugs):
+- It only acts when `ctx.forwardSchedule` is present (no-op otherwise — the route wires the field in D5.2).
+- It only resolves placement claims with a *deterministically parseable* term label co-occurring within ±60 chars of an explicit course code; paraphrased terms ("next fall") are out of scope and never block.
+- It skips claims inside a conditional / hypothetical frame (the counterfactual carve-out), so probe / what-if replies aren't flagged against the current plan.
