@@ -12,6 +12,7 @@ import {
 } from "../../lib/chatV2Client";
 import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
 import { formatDuration } from "../../lib/formatDuration";
+import { renderMarkdown } from "../../lib/renderMarkdown";
 import type { ForwardSchedule, SchedulePreferences, StudentProfile } from "@nyupath/shared";
 import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@nyupath/engine";
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
@@ -1082,14 +1083,6 @@ export default function ChatPage() {
             e.preventDefault();
             handleSend();
         }
-    };
-
-    const renderMarkdown = (text: string) => {
-        return text
-            .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-            .replace(/\*(.*?)\*/g, "<em>$1</em>")
-            .replace(/`(.*?)`/g, '<code>$1</code>')
-            .replace(/\n/g, "<br />");
     };
 
     return (
