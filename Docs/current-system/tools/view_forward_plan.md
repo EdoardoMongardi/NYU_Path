@@ -1,6 +1,6 @@
 # view_forward_plan — Tool Audit
 
-> Last verified against code: 2026-06-11 (Phase 3 Task D1.1 — `detail: "rich"` mode added).
+> Last verified against code: 2026-06-11 (Phase 3 Task D1.1 — `detail: "rich"` mode added; D1.2 — explain-why eval added).
 
 ## Purpose
 
@@ -214,6 +214,17 @@ This tool chains to nothing and emits no `suggestedFollowUps`.
 - **`computedAt` not a valid ms timestamp** — `new Date(...).toISOString()` would throw; the tool does not guard.
 - **`balanceScore` not a number** — `.toFixed(2)` would throw; the tool does not guard.
 - **`schedule.semesters` undefined** — `.length` would throw; the tool assumes a well-formed `ForwardSchedule`.
+
+---
+
+## 10. Explain-why affordance (D1.2 — verified, no per-question router)
+
+"Why is course X planned for term Y?" is answered by **composing this tool**, not by a dedicated keyword-routed handler. The agent calls `view_forward_plan` with `detail: "rich"`, reads the target slot's recorded `reason` (the WHY) + flexibility window + critical-path flag from the summary, and cites it VERBATIM — never inventing a rationale. The affordance is wired by D1.1 (rich slot detail here) + the tool `description` (advertises rich detail for "why is `<course>` in `<term>`?" and says to cite the recorded reason, "never invent one") + D4.1's CORE RULE 9 (directs the agent to explain WHY citing the recorded rationale).
+
+This composition is **verified** by `packages/engine/tests/agent/explainWhy.eval.ts`:
+
+- **Deterministic affordance pin (runs in CI, no API key)** — builds a `ForwardSchedule` with a `specific_planned` slot carrying a known `reason` + flexibility window + `isCriticalPath`, drives `view_forward_plan` with `{ detail: "rich" }` over a session holding that schedule, and asserts the tool summary CONTAINS the recorded reason + the flexibility terms (and that terse mode does NOT carry the reason — so the affordance is detail-gated). This is the "compose, don't fabricate" data contract: the explain-why material the agent would cite is reachable through the tool. A light wiring check also asserts the tool `description` advertises rich detail for "why" questions.
+- **Operator-gated agent-loop eval (`ANTHROPIC_API_KEY`)** — drives a REAL agent turn (`runAgentTurn` + `buildDefaultRegistry()` + `buildSystemPrompt(...)` over a `ToolSession` carrying the fixture `forwardSchedule`) asking "Why is CSCI-UA 102 planned for Fall 2027?" and asserts the reply (a) CITES the recorded reason and/or flexibility window, (b) did so by CALLING `view_forward_plan` (composition, not a hardcoded handler), and (c) does NOT fabricate a different rationale. Skips cleanly with no key.
 
 ---
 
