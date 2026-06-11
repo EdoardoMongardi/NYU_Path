@@ -153,25 +153,34 @@ describe("plan_forward_degree — double-count advisory wiring", () => {
 // ---------------------------------------------------------------------------
 // Edit-tool wiring (propose_plan_change / confirm_plan_change)
 //
-// These tools surface the advisory in `consequences[]` (NOT an envelope
-// Disclaimer). Both require an existing plan in the session, so each case
-// first runs plan_forward_degree on the SAME session (which writes
+// D3.2: these tools now carry the advisory as a STRUCTURED, cited envelope
+// `Disclaimer` (id + reason + bulletinSource), mirroring plan_forward_degree —
+// NOT as a bare `.text` string in `consequences[]` (which dropped the
+// citation; that was the bug this test originally encoded). The detailed
+// cited-envelope assertions live in
+// tests/agent/forwardSchedule/doubleCountAdvisory.test.ts; here we pin the
+// wiring shape. Both tools require an existing plan in the session, so each
+// case first runs plan_forward_degree on the SAME session (which writes
 // session.forwardSchedule — the multi-program synthetic DPR plans feasibly,
 // as the plan_forward_degree block above proves) and then runs the edit tool.
 // The mutation is a plan-level `loadStyleOverride: balanced` — the simplest
 // PlanMutation that applies cleanly (no no-op) and never depends on a real
 // course catalog. The advisory is purely additive: it must NEVER change
-// feasible / storedIn / the schedule — only add a string to consequences.
+// feasible / storedIn / the schedule — only ride the envelope.
 // ---------------------------------------------------------------------------
 
 const SET_BALANCED_LOAD = { kind: "loadStyleOverride", style: "balanced" } as const;
+
+function hasAdvisoryDisclaimer(output: { disclaimers?: { id: string }[] }): boolean {
+    return output.disclaimers?.some((d) => d.id === "double_count_advisory") ?? false;
+}
 
 function hasDoubleCountConsequence(consequences: string[]): boolean {
     return consequences.some((c) => /double-count/i.test(c));
 }
 
 describe("plan-change tools — double-count advisory wiring", () => {
-    it("propose_plan_change pushes a double-count consequence for a multi-program student", async () => {
+    it("propose_plan_change carries the cited advisory Disclaimer (not a bare consequences string) for a multi-program student", async () => {
         const session = makeSession(TWO_PROGRAMS, CAS_DC);
         // Seed session.forwardSchedule so propose_plan_change's validateInput
         // passes and currentPlan is present.
@@ -184,10 +193,12 @@ describe("plan-change tools — double-count advisory wiring", () => {
             makeCtx(session),
         );
 
-        expect(hasDoubleCountConsequence(output.consequences)).toBe(true);
+        // D3.2: carried as a cited envelope Disclaimer, NOT a bare consequences string.
+        expect(hasAdvisoryDisclaimer(output)).toBe(true);
+        expect(hasDoubleCountConsequence(output.consequences)).toBe(false);
     });
 
-    it("confirm_plan_change pushes a double-count consequence for a multi-program student", async () => {
+    it("confirm_plan_change carries the cited advisory Disclaimer (not a bare consequences string) for a multi-program student", async () => {
         const session = makeSession(TWO_PROGRAMS, CAS_DC);
         const plan = await planForwardDegreeTool.call({}, makeCtx(session));
         expect(plan.storedIn).toBe("forwardSchedule");
@@ -198,10 +209,11 @@ describe("plan-change tools — double-count advisory wiring", () => {
             makeCtx(session),
         );
 
-        expect(hasDoubleCountConsequence(output.consequences)).toBe(true);
+        expect(hasAdvisoryDisclaimer(output)).toBe(true);
+        expect(hasDoubleCountConsequence(output.consequences)).toBe(false);
     });
 
-    it("does NOT push a double-count consequence for a single-program student", async () => {
+    it("does NOT carry the advisory for a single-program student", async () => {
         const session = makeSession(ONE_PROGRAM, CAS_DC);
         const plan = await planForwardDegreeTool.call({}, makeCtx(session));
         expect(session.forwardSchedule ?? session.studentDraftPlan).toBeTruthy();
@@ -215,6 +227,8 @@ describe("plan-change tools — double-count advisory wiring", () => {
             makeCtx(session),
         );
 
+        expect(hasAdvisoryDisclaimer(proposed)).toBe(false);
+        expect(hasAdvisoryDisclaimer(confirmed)).toBe(false);
         expect(hasDoubleCountConsequence(proposed.consequences)).toBe(false);
         expect(hasDoubleCountConsequence(confirmed.consequences)).toBe(false);
     });

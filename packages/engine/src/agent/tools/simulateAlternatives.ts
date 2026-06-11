@@ -14,6 +14,8 @@ import { z } from "zod";
 import { buildTool } from "../tool.js";
 import { simulateAlternatives as coreSimulateAlternatives } from "../forwardSchedule/alternatives.js";
 import { buildSolverInputFromSession } from "../forwardSchedule/planChangeHelpers.js";
+import { buildDoubleCountAdvisory } from "../forwardSchedule/doubleCountAdvisory.js";
+import { renderEnvelopeMeta, type Disclaimer } from "../toolEnvelope.js";
 import type { AlternativeCandidate } from "@nyupath/shared";
 
 // ---------------------------------------------------------------------------
@@ -24,6 +26,15 @@ interface SimulateAlternativesOutput {
     candidates: AlternativeCandidate[];
     /** Human-readable notes (e.g. "plan is already feasible"). */
     note?: string;
+    /**
+     * Phase 10 envelope — advisory disclaimers (e.g. the double-count
+     * heads-up for multi-program students). Carried as a STRUCTURED
+     * Disclaimer (id + reason + bulletinSource), mirroring
+     * plan_forward_degree, so the citation is surfaced by summarizeResult.
+     * Advisory only — never affects the candidates. (D3.2: previously the
+     * advisory was ABSENT from this tool entirely.)
+     */
+    disclaimers?: Disclaimer[];
 }
 
 // ---------------------------------------------------------------------------
@@ -69,12 +80,20 @@ export const simulateAlternativesTool = buildTool({
     async call(_input, { session }): Promise<SimulateAlternativesOutput> {
         const dpr = session.degreeProgressReport!;
 
+        // D3.2 — derive the double-count advisory from the DPR + school config and
+        // carry it as a STRUCTURED, cited Disclaimer on the envelope (mirrors
+        // plan_forward_degree). Advisory only — never affects the candidates.
+        // Both `dpr` and `session.schoolConfig` are already in scope here.
+        const dcAdvisory = buildDoubleCountAdvisory(dpr, session.schoolConfig);
+        const disclaimers = dcAdvisory ? [dcAdvisory] : undefined;
+
         // Check current plan feasibility.
         const currentPlan = session.forwardSchedule ?? session.studentDraftPlan;
         if (currentPlan && currentPlan.feasibility.feasible === true) {
             return {
                 candidates: [],
                 note: "Current plan is feasible; no alternatives needed.",
+                ...(disclaimers ? { disclaimers } : {}),
             };
         }
 
@@ -87,22 +106,27 @@ export const simulateAlternativesTool = buildTool({
 
         const candidates = coreSimulateAlternatives(solverInput);
 
-        return { candidates };
+        return { candidates, ...(disclaimers ? { disclaimers } : {}) };
     },
     summarizeResult(output) {
+        const lines: string[] = [];
         if (output.note) {
-            return output.note;
+            lines.push(output.note);
+        } else if (output.candidates.length === 0) {
+            lines.push("No alternative candidates generated.");
+        } else {
+            lines.push(`ALTERNATIVE CANDIDATES (${output.candidates.length}):`);
+            for (const c of output.candidates) {
+                const scheduleInfo = c.schedule
+                    ? `feasible → grad ${c.schedule.graduationTerm}`
+                    : `still infeasible (${c.stillInfeasibleReason ?? "unknown"})`;
+                lines.push(`  [${c.relaxation}] ${c.summary} — ${scheduleInfo}`);
+            }
         }
-        if (output.candidates.length === 0) {
-            return "No alternative candidates generated.";
-        }
-        const lines: string[] = [`ALTERNATIVE CANDIDATES (${output.candidates.length}):`];
-        for (const c of output.candidates) {
-            const scheduleInfo = c.schedule
-                ? `feasible → grad ${c.schedule.graduationTerm}`
-                : `still infeasible (${c.stillInfeasibleReason ?? "unknown"})`;
-            lines.push(`  [${c.relaxation}] ${c.summary} — ${scheduleInfo}`);
-        }
+        // D3.2 — render the advisory disclaimer (reason + bulletinSource cited),
+        // mirroring plan_forward_degree. Adds nothing when there is no advisory.
+        const env = renderEnvelopeMeta({ disclaimers: output.disclaimers });
+        if (env) lines.push("", env);
         return lines.join("\n");
     },
 });
