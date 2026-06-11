@@ -28,7 +28,6 @@ import {
     // removed from the active path — every question enters the agent
     // loop. runRecoveryMode handles the cohort-gate-failing path.
     validateResponse,
-    reviewCompleteness,
     createPrimaryClient,
     createFallbackClient,
     getCohortConfig,
@@ -721,24 +720,6 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             userQuestion: userMessage,
         });
 
-        // Phase 12.5 Task 4 — completeness reviewer. Runs after
-        // validateResponse so envelope-metadata drops (missing
-        // disclaimers / bulletin anchors) are surfaced as
-        // `incompleteness` violations alongside the existing validator
-        // violations. Same `validator_block` event, no new event kind.
-        const completenessVerdict = reviewCompleteness(
-            finalResult.finalText,
-            finalResult.invocations,
-        );
-        const completenessViolations = completenessVerdict.pass
-            ? []
-            : [
-                {
-                    kind: "incompleteness" as const,
-                    detail: completenessVerdict.retryGuidance,
-                },
-            ];
-
         const allViolations = [
             ...verdict.violations.map((v) => ({
                 kind: v.kind,
@@ -746,9 +727,8 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 ...(v.caveatId ? { caveatId: v.caveatId } : {}),
                 ...(v.number ? { number: v.number } : {}),
             })),
-            ...completenessViolations,
         ];
-        const allOk = verdict.ok && completenessVerdict.pass;
+        const allOk = verdict.ok;
 
         // Phase 11 follow-up — when the validator catches fabricated
         // bulletin attribution AFTER the replay budget is spent, strip
