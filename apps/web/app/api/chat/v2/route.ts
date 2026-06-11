@@ -322,23 +322,36 @@ export async function POST(req: NextRequest): Promise<Response> {
     // `students.parsed_dpr` stayed null and `/api/session/restore`
     // returned an empty payload on every refresh.
     //
+    // P3.2 — gate this to INITIAL ONBOARDING ONLY. `student` is rebuilt
+    // from the re-sent body DPR every turn, so running the upsert on
+    // every message would CLOBBER a profile a prior `confirm_profile_update`
+    // wrote (a confirmed edit) and append a synthetic audit row per
+    // message. We therefore only persist when no profile exists yet
+    // (`profileStore.get` is null). A returning student's confirmed edits
+    // are left intact; DPR updates are owned by the Update-DPR route.
+    // (This is the WRITE-path fix only — reading the persisted profile
+    // back INTO `session.student` each turn is Phase-4 full hydration.)
+    //
     // No-throw: persistence failures don't break the live turn.
     if (parsedDpr && userId !== "anonymous") {
         try {
-            await stores.profileStore.persistMutation(
-                student,
-                {
-                    pendingMutationId: `bootstrap-${Date.now()}`,
-                    field: "homeSchool" as const, // discriminator unused at restore — we just need a row
-                    before: null,
-                    after: student.homeSchool,
-                    confirmedAt: new Date().toISOString(),
-                },
-                parsedDpr,
-            );
+            const existingProfile = await stores.profileStore.get(userId);
+            if (!existingProfile) {
+                await stores.profileStore.persistMutation(
+                    student,
+                    {
+                        pendingMutationId: `bootstrap-${Date.now()}`,
+                        field: "homeSchool" as const, // discriminator unused at restore — we just need a row
+                        before: null,
+                        after: student.homeSchool,
+                        confirmedAt: new Date().toISOString(),
+                    },
+                    parsedDpr,
+                );
+            }
         } catch (err) {
             console.warn(
-                `[v2 route] bootstrap persistMutation failed: ${err instanceof Error ? err.message : String(err)}`,
+                `[v2 route] bootstrap persistMutation failed for ${userId}: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
     }

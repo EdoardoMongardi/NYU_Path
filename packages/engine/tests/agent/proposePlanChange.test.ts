@@ -274,6 +274,38 @@ describe("confirmPlanChangeTool — applies change and routes per Decision #32",
         expect(output.storedIn === "forwardSchedule" || output.storedIn === "studentDraftPlan").toBe(true);
     });
 
+    // ------------------------------------------------------------------
+    // P3.2 — pin-preservation lock-in. confirmPlanChange reads
+    // `session.schedulePreferences ?? {}` as the base for the new prefs
+    // (confirmPlanChange.ts:101). P3.1 now hydrates
+    // session.schedulePreferences each turn, so the `?? {}` fallback no
+    // longer fires on a chat-driven confirm — an UNRELATED mutation must
+    // build ON TOP of the existing pins, never wiping them. This test
+    // pins that invariant: it pre-seeds a pin, confirms a different
+    // mutation (loadStyleOverride), and asserts the original pin survives
+    // in the resulting session.schedulePreferences. If `basePrefs` ever
+    // regresses to `{}` (the pre-P3.1 prefs-from-{} wipe), this fails.
+    // ------------------------------------------------------------------
+    it("preserves an existing pin when confirming an unrelated mutation (P3.2 — basePrefs from session, not {})", async () => {
+        const existingPin = { courseId: "CSCI-UA 101", term: "2026-fall" };
+        const session = makeSession({
+            schedulePreferences: { pins: [existingPin] },
+        });
+        const ctx = makeCtx(session);
+
+        // A loadStyleOverride is an UNRELATED mutation — it touches
+        // loadStyle, never the pins array. The existing pin must survive.
+        await confirmPlanChangeTool.call(
+            { mutations: [{ kind: "loadStyleOverride", style: "balanced" }] },
+            ctx,
+        );
+
+        const pins = session.schedulePreferences?.pins ?? [];
+        expect(
+            pins.some(p => p.courseId === existingPin.courseId && p.term === existingPin.term),
+        ).toBe(true);
+    });
+
     it("routes a validator-infeasible result to session.studentDraftPlan (Decision #32)", async () => {
         // RECONCILED (P2.7/PLAN-3): the original version pinned CSCI-UA 102 to
         // "2099-fall" and asserted the SOLVER's coarse state was infeasible-draft.
