@@ -110,7 +110,7 @@ There is no longer a keyword/template short-circuit at the start of a turn. The 
 
 ## 7. Clarifier Gate
 
-Before the loop, the route calls `detectAmbiguity(body.message, body.history ?? [])` (`route.ts:380`) — a deterministic, regex-style check, no LLM call. If `ambiguity.ambiguous` is true, it invokes `askClarification(primary, message, history, contextHints)` (`route.ts:383-395`), a cheap small-model (Haiku) one-shot with no tools. Context hints carry `homeSchool`, `declaredPrograms`, and `visaStatus` when known. Failures are caught and the route falls through to the main loop.
+Before the loop, the route calls `detectAmbiguity(body.message, body.history ?? [])` (`route.ts:380`) — a deterministic, regex-style check, no LLM call. If `ambiguity.ambiguous` is true, it invokes `askClarification(primary, message, history, contextHints)` (`route.ts:383-395`), a one-shot on the **primary** client (`claude-sonnet-4-6` by default) with no tools. Context hints carry `homeSchool`, `declaredPrograms`, and `visaStatus` when known. Failures are caught and the route falls through to the main loop.
 
 When the clarifier returns `!isClear && output.length > 0`, the route streams the clarifying question as this turn's reply (`route.ts:396-410`):
 1. Chunks the output into 40-char segments, one `token` event per chunk.
@@ -266,7 +266,7 @@ sequenceDiagram
 
     Route->>Clarifier: detectAmbiguity(message, history)
     alt Ambiguous
-        Route->>Clarifier: askClarification (Haiku, no tools)
+        Route->>Clarifier: askClarification (primary model, no tools)
         Clarifier-->>Route: clarifying question
         Route-->>Client: token (chunked) + done; close
     end
