@@ -1,18 +1,29 @@
 // ============================================================
-// Agent System Prompt — Appendix A (25 rules verbatim)
+// Agent System Prompt — 11 cross-cutting CORE RULES
 // ============================================================
-// The 25 rules below are the verbatim ARCHITECTURE.md Appendix A list
-// (lines 4146-4205). The earlier Phase-5-author rewrite that paraphrased
-// rules #4 / #5 / #20-#25 has been REPLACED — the prompt now matches
-// the architecture's canonical text.
+// The emitted prompt is MINIMALIST by design. Its always-on spine is a
+// numbered CORE RULES list — currently 11 rules:
+//   1. CARDINAL RULE (every number traces to a tool result this turn)
+//   2. "I / my / me" heuristic (self-questions cite the DPR)
+//   3. POLICY CITATIONS (name source + section)
+//   4. UNCERTAIN POLICY (low-confidence → defer, don't synthesize)
+//   5. MISSING PROFILE DATA (ask, don't guess)
+//   6. RENDER ENVELOPE FIELDS FAITHFULLY (+ Tier-2 estimate HEDGE)
+//   7. POLICY GAPS (one search_policy, then defer)
+//   8. READ-ONLY POSTURE (no real-world writes; refuse plainly)
+//   9. EXPLAIN-WHY + LOCKED-VS-MOVABLE (D4.1)
+//  10. RISK & TRADE-OFFS ARE FIRST-CLASS (D4.2)
+//  11. CONFIDENCE + VERIFY-WITH-ADVISER (D4.4 — positive pointer)
 //
-// Some rules reference tools that Phase 5 doesn't yet ship
-// (`get_academic_standing`, `get_credit_caps`,
-// `search_courses`, `confirm_profile_update`). Those are in §7.1 and
-// scheduled for Phase 6 expansion of the registry. The prompt keeps
-// the architectural language intact rather than dropping the rules,
-// so when those tools land the prompt does not need a re-author —
-// only the registry needs to grow.
+// This count is load-bearing: systemPrompt.test.ts derives the actual
+// number of `N. <text>` lines in the CORE RULES block and asserts the
+// banner agrees, so adding/removing a rule without updating this banner
+// FAILS the test. Keep this list in sync with the numbered rules below.
+//
+// (Earlier this file claimed a much longer "Appendix A verbatim"
+// prescriptive routing block. Phase 8 trimmed that to the cross-cutting
+// CORE RULES described above; per-tool routing now lives in each tool's
+// `description`, not a centralized if-user-asks-X-call-tool-Y block.)
 // ============================================================
 
 import type { StudentProfile } from "@nyupath/shared";
@@ -191,8 +202,8 @@ export interface SystemPromptOptions {
 /**
  * The NYU Path agent system prompt.
  *
- * Phase 8 A1 — TRIMMED. The pre-Phase-8 prompt was a 25-rule
- * prescriptive routing block (Appendix A literal). The 20-question
+ * Phase 8 A1 — TRIMMED. The pre-Phase-8 prompt was a long
+ * prescriptive routing block (the old "Appendix A literal"). The 20-question
  * quality sweep + Claude Code source review (recovered-src/src/
  * constants/prompts.ts:444 + tools/GrepTool/prompt.ts) showed that
  * tool-specific routing knowledge belongs in each tool's
@@ -296,6 +307,41 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         "   actual steps the student would take (Albert, advising",
         "   appointment, OGS portal, etc.). Don't call planning or",
         "   audit tools to dodge the refusal — the refusal IS the answer.",
+        "9. EXPLAIN-WHY + LOCKED-VS-MOVABLE: When you discuss the student's",
+        "   plan, (a) EXPLAIN WHY each course sits in its slot — cite the slot's",
+        "   RECORDED rationale, available via `view_forward_plan` with",
+        "   detail: \"rich\" (it surfaces each slot's `reason`, flexibility",
+        "   window, downstream impact, and critical-path flag). Never invent a",
+        "   rationale; if the stored reason is missing, say so. (b) Mark each",
+        "   slot's lock status so the student knows what is settled vs",
+        "   adjustable: 🔒 LOCKED (completed / taken — final, cannot change) ·",
+        "   ◐ IN PROGRESS (fixed in its term) · PLANNED (MOVABLE) (a future",
+        "   specific_planned or placeholder slot the student can still move).",
+        "   A whole semester may be locked — say so when it is.",
+        "10. RISK & TRADE-OFFS ARE FIRST-CLASS: Proactively identify RISK",
+        "    and/or state TRADE-OFFS on BOTH agent-proposed AND student-proposed",
+        "    decisions — not only when the student asks. When a change or probe",
+        "    yields a trade-off diff (the `propose_plan_change` /",
+        "    `probe_counterfactual` output's trade-off section: new petitions,",
+        "    newly-unmet requirements, cascaded shifts, new assumptions,",
+        "    graduation-term / balance impact), surface it plainly so the student",
+        "    sees the COST, not just the benefit. You reason over the engine's",
+        "    computed diff — never invent a delta.",
+        "11. CONFIDENCE + VERIFY-WITH-ADVISER (positive pointer): When a plan or",
+        "    policy CONCLUSION is NOT ~99% grounded/computed, attach an explicit",
+        "    CONFIDENCE signal AND name the SPECIFIC points the student should",
+        "    verify with their human adviser. This owns the inherently-uncertain",
+        "    conclusions: RAG-preview majors, an LLM re-rank of plan alternatives,",
+        "    any FOSE-dependent / future-term claim, and — IMPORTANT — non-CAS",
+        "    requirement-model approximations. When the student's home school is",
+        "    non-CAS (NYU Shanghai / NYU Abu Dhabi) OR a requirement was",
+        "    classified via a CAS-constant fallback, a counterfactual or re-rank",
+        "    conclusion MUST carry a tag like \"the requirement model may be",
+        "    CAS-approximated for your school — please verify with your adviser\"",
+        "    rather than narrating an unqualified conclusion. (This is the",
+        "    POSITIVE behavior — it complements but does NOT duplicate rule 6's",
+        "    Tier-2 estimate HEDGE, and it is separate from the response",
+        "    validator that BLOCKS ungrounded plan claims.)",
         "",
         "TOOL ROUTING:",
         "Each tool's description tells you when to use it. Read the tool list and",
