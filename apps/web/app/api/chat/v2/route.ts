@@ -51,6 +51,7 @@ import {
     askClarification,
     type DegreeProgressReport,
 } from "@nyupath/engine";
+import type { ForwardSchedule, SchedulePreferences } from "@nyupath/shared";
 import {
     buildStudentProfileFromDpr,
 } from "../../../../lib/buildSession";
@@ -252,6 +253,37 @@ export async function POST(req: NextRequest): Promise<Response> {
             return null;
         }
     })();
+    // P3.1 — hydrate the student's PERSISTED plan + preferences into the
+    // per-turn session so the chat agent sees the plan the student built
+    // (e.g. via the sidebar) and the plan-claim validator has a plan to
+    // verify against. Mirrors planActionOrchestrator + /api/session/restore:
+    // loadLatestSchedule classifies a draft state into studentDraftPlan,
+    // otherwise into forwardSchedule; loadPreferences carries pins/exclusions.
+    // Guarded for userId === "anonymous" (no durable store) just like the
+    // bootstrap persist below. Best-effort: a load failure must NOT break
+    // the live turn — warn and continue with the plan slot unset.
+    let forwardSchedule: ForwardSchedule | undefined;
+    let studentDraftPlan: ForwardSchedule | undefined;
+    let schedulePreferences: SchedulePreferences | undefined;
+    if (userId !== "anonymous") {
+        try {
+            const loaded = await stores.scheduleStore.loadLatestSchedule(userId);
+            if (loaded) {
+                const isDraft =
+                    loaded.schedule.state === "infeasible-draft" ||
+                    loaded.schedule.state === "student-preferred-invalid-draft";
+                if (isDraft) studentDraftPlan = loaded.schedule;
+                else         forwardSchedule  = loaded.schedule;
+            }
+            const prefs = await stores.scheduleStore.loadPreferences(userId);
+            if (prefs) schedulePreferences = prefs;
+        } catch (err) {
+            console.warn(
+                `[v2 route] plan/prefs hydration failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+
     const session: ToolSession = {
         student,
         profileStore: stores.profileStore,
@@ -272,6 +304,10 @@ export async function POST(req: NextRequest): Promise<Response> {
         ...(ragBundle ? { rag: ragBundle } : {}),
         ...(searchCoursesFn ? { searchCoursesFn } : {}),
         ...(parsedDpr ? { degreeProgressReport: parsedDpr } : {}),
+        // P3.1 — persisted plan + prefs hydrated above.
+        ...(forwardSchedule ? { forwardSchedule } : {}),
+        ...(studentDraftPlan ? { studentDraftPlan } : {}),
+        ...(schedulePreferences ? { schedulePreferences } : {}),
     } as ToolSession & {
         searchCoursesFn?: ReturnType<typeof getCourseSearchFn>;
     };
