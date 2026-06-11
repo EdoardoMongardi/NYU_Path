@@ -28,6 +28,7 @@ function completedSlot(courseId: string): ScheduleSlot {
 
 // CSCI-UA 102 → specific_planned (movable) in 2027-fall (unlocked).
 // CSCI-UA 101 → completed (locked/final) in 2025-fall (locked).
+// CSCI-UA 201 → specific_planned (movable) in 2027-spring (unlocked).
 // graduationTerm → 2028-spring.
 function makeSchedule(): ForwardSchedule {
     return {
@@ -44,6 +45,14 @@ function makeSchedule(): ForwardSchedule {
                 term: "2025-fall",
                 locked: true,
                 slots: [completedSlot("CSCI-UA 101")],
+                plannedCredits: 4,
+                notes: [],
+                loadRationale: {} as never,
+            },
+            {
+                term: "2027-spring",
+                locked: false,
+                slots: [plannedSlot("CSCI-UA 201")],
                 plannedCredits: 4,
                 notes: [],
                 loadRationale: {} as never,
@@ -157,6 +166,65 @@ describe("checkPlanClaims (D5.1)", () => {
     it("(f) does NOT flag a counterfactual/hypothetical placement or grad-term claim", () => {
         const v = planViolations(
             "If you failed CSCI-UA 101, you would graduate Spring 2029 and CSCI-UA 102 would move to Spring 2028.",
+            makeSchedule(),
+        );
+        expect(v.length).toBe(0);
+    });
+});
+
+// ============================================================
+// GUARD — fully-GROUNDED replies must NOT false-block. These are
+// the worst outcome for a launch-blocking gate: blocking a TRUE,
+// grounded adviser reply. Each reply below is TRUE against the
+// stored plan (102 @ 2027-fall, 101 @ 2025-fall completed/locked,
+// 201 @ 2027-spring, graduationTerm 2028-spring) and MUST emit
+// ZERO ungrounded_plan_claim violations.
+// ============================================================
+describe("checkPlanClaims — grounded replies must NOT false-block", () => {
+    // C1 — prereq chain: a NEIGHBOR course's term must not bind to 102.
+    // 102 is in 2027-fall; 101's "Fall 2025" must NOT bind to 102.
+    it("(C1) does NOT bind a neighboring prereq's term to the course", () => {
+        const v = planViolations(
+            "Since CSCI-UA 102 requires CSCI-UA 101 (which you finished in Fall 2025), it's placed afterward.",
+            makeSchedule(),
+        );
+        expect(v.length).toBe(0);
+    });
+
+    // C2 — cross-bind two courses: 201's "Spring 2027" must not bind to 102.
+    it("(C2) does NOT cross-bind a second course's term to the first", () => {
+        const v = planViolations(
+            "CSCI-UA 102 builds on CSCI-UA 201 which you take in Spring 2027.",
+            makeSchedule(),
+        );
+        expect(v.length).toBe(0);
+    });
+
+    // C3 — sentence boundary: the grad term from a prior sentence must not
+    // bind to 102.
+    it("(C3) does NOT let a term from a prior sentence bind to the course", () => {
+        const v = planViolations(
+            "With this plan you graduate Spring 2028. CSCI-UA 102 is your last CS requirement.",
+            makeSchedule(),
+        );
+        expect(v.length).toBe(0);
+    });
+
+    // C4 — grad path matches a placement term: a placement term in a
+    // "graduat…" clause must NOT fire the grad path.
+    it("(C4) does NOT fire the grad path on a placement term in a graduate clause", () => {
+        const v = planViolations(
+            "To graduate on time, plan to take CSCI-UA 102 in Fall 2027.",
+            makeSchedule(),
+        );
+        expect(v.length).toBe(0);
+    });
+
+    // C5 — two courses, opposite lock status, one comma-spanning sentence:
+    // 101 is final (correct), 102 can still move (correct). ZERO blocks.
+    it("(C5) attributes opposite lock/movable assertions to the nearest course", () => {
+        const v = planViolations(
+            "CSCI-UA 101 is final, and CSCI-UA 102 can still move.",
             makeSchedule(),
         );
         expect(v.length).toBe(0);

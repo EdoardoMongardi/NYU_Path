@@ -846,13 +846,133 @@ function clauseAround(text: string, idx: number): string {
     // markers ("if …, …") often span a comma, so we DON'T split on commas
     // — a leading "If you failed X, you'd graduate Y" must stay one clause
     // so the carve-out catches the consequent too.
+    const [start, end] = clauseBounds(text, idx);
+    return text.slice(start, end);
+}
+
+/** Absolute [start, end) bounds of the clause enclosing `idx` — same
+ *  delimiters as clauseAround (sentence terminators + semicolons, NOT
+ *  commas), but returns offsets in `text` so callers can reason about
+ *  which course code / term label sits between two positions. */
+function clauseBounds(text: string, idx: number): [number, number] {
     const before = text.slice(0, idx);
     const after = text.slice(idx);
     const startM = before.search(/[.!?;][^.!?;]*$/);
     const start = startM === -1 ? 0 : startM + 1;
     const endRel = after.search(/[.!?;]/);
     const end = endRel === -1 ? text.length : idx + endRel;
-    return text.slice(start, end);
+    return [start, end];
+}
+
+/** Absolute char offsets of every course-code match in `text`. Used to
+ *  enforce "nearest course code wins": a term label only binds to a
+ *  course if no OTHER course code sits between them. */
+function courseCodeOffsets(text: string): number[] {
+    PLAN_COURSE_ID_RE.lastIndex = 0;
+    return [...text.matchAll(PLAN_COURSE_ID_RE)].map((m) => m.index ?? 0);
+}
+
+/** Absolute [start, end) spans of every course-code match in `text`. */
+function courseCodeSpans(text: string): Array<[number, number]> {
+    PLAN_COURSE_ID_RE.lastIndex = 0;
+    return [...text.matchAll(PLAN_COURSE_ID_RE)].map((m) => {
+        const s = m.index ?? 0;
+        return [s, s + m[0].length] as [number, number];
+    });
+}
+
+/**
+ * Resolve the term labels that legitimately bind to the course code at
+ * `courseIdx` (length `courseLen`). A label binds only when:
+ *   (1) it sits inside the course code's own CLAUSE (no cross-sentence
+ *       / cross-semicolon bleed — fixes C3), AND
+ *   (2) within the bounded co-occurrence window, AND
+ *   (3) NO OTHER course code sits strictly between the course code and
+ *       that label ("nearest course code wins" — fixes C1/C2: a
+ *       neighbor course's term can't bind to this one).
+ * Returns the normalized solver terms (unresolvable labels dropped — we
+ * never block on a guess).
+ */
+function termsBoundToCourse(text: string, courseIdx: number, courseLen: number): string[] {
+    const [clauseStart, clauseEnd] = clauseBounds(text, courseIdx);
+    const windowStart = Math.max(clauseStart, courseIdx - PLAN_COOCCUR_WINDOW);
+    const windowEnd = Math.min(clauseEnd, courseIdx + courseLen + PLAN_COOCCUR_WINDOW);
+    const courseEnd = courseIdx + courseLen;
+    // Other course codes anywhere in the text — used to gate each label.
+    const otherCourses = courseCodeOffsets(text).filter((o) => o !== courseIdx);
+
+    const out: string[] = [];
+    PLAN_TERM_LABEL_RE.lastIndex = 0;
+    for (const tm of text.matchAll(PLAN_TERM_LABEL_RE)) {
+        const labelStart = tm.index ?? 0;
+        const labelEnd = labelStart + tm[0].length;
+        // Must overlap the bounded window in this course's clause.
+        if (labelEnd <= windowStart || labelStart >= windowEnd) continue;
+        // Nearest-course-wins: reject if another course code sits between
+        // this course code and the label (either side).
+        const lo = Math.min(courseEnd, labelStart);
+        const hi = Math.max(courseIdx, labelEnd);
+        const intervening = otherCourses.some((o) => o >= lo && o < hi);
+        if (intervening) continue;
+        const solver = psTermToSolverTerm(tm[0]);
+        if (solver !== null) out.push(solver);
+    }
+    return out;
+}
+
+/** True when a lock/movable assertion matched by `re` is attributable to
+ *  the course code at [courseIdx, courseEnd) — i.e. somewhere inside that
+ *  course's CLAUSE there's an assertion match whose position is closer to
+ *  THIS course code than to any OTHER course code. So "X is final, and Y
+ *  can still move" attributes "final" to X (nearest) and "can still move"
+ *  to Y (nearest), instead of testing both regexes against the whole
+ *  comma-spanning clause (fixes C5). Distance is to the nearest edge of
+ *  the course-code span, so a leading "…final, and CSCI-UA Y" doesn't
+ *  drag Y's keyword onto X. */
+function assertionAttributedToCourse(
+    text: string,
+    re: RegExp,
+    courseIdx: number,
+    courseEnd: number,
+): boolean {
+    const [clauseStart, clauseEnd] = clauseBounds(text, courseIdx);
+    const clause = text.slice(clauseStart, clauseEnd);
+    const spans = courseCodeSpans(text).filter(([s]) => s >= clauseStart && s < clauseEnd);
+    const distTo = (pos: number, s: number, e: number): number =>
+        pos < s ? s - pos : pos >= e ? pos - e + 1 : 0;
+    const scan = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    for (const am of clause.matchAll(scan)) {
+        const pos = clauseStart + (am.index ?? 0);
+        const mine = distTo(pos, courseIdx, courseEnd);
+        // Nearest course wins: this match belongs to us only if no OTHER
+        // course code is strictly closer to it.
+        const nearer = spans.some(
+            ([s, e]) => s !== courseIdx && distTo(pos, s, e) < mine,
+        );
+        if (!nearer) return true;
+    }
+    return false;
+}
+
+/** True when a term label (in [labelStart, labelEnd)) is attributable to
+ *  the "graduat…" token at `gradIdx`: adjacent to or following it within
+ *  the same clause, with no intervening course code (a placement term in
+ *  a graduate clause is NOT a graduation claim — fixes C4). */
+function labelAttributableToGrad(
+    text: string,
+    gradIdx: number,
+    labelStart: number,
+    labelEnd: number,
+    courseOffsets: number[],
+): boolean {
+    // The label must sit AFTER the "graduat…" token (English: "graduate
+    // <term>"), not before some unrelated earlier mention.
+    if (labelStart < gradIdx) return false;
+    // No course code may sit between "graduat…" and the term label — if
+    // one does, the term attaches to the course (placement), not grad.
+    const intervening = courseOffsets.some((o) => o > gradIdx && o < labelEnd);
+    if (intervening) return false;
+    return true;
 }
 
 /** All course → canonical-term placements in the stored plan that carry
@@ -893,6 +1013,24 @@ function isStoredLocked(p: StoredPlacement): boolean {
  * within PLAN_COOCCUR_WINDOW chars of an explicit course code. Paraphrases
  * with no deterministic term label ("next fall", "the following term")
  * are OUT OF SCOPE and produce NO violation — we never block on a guess.
+ *
+ * Attribution is NEAREST-COURSE-SCOPED to avoid cross-clause / cross-course
+ * term-bleed (the worst failure for a launch gate: false-blocking a TRUE
+ * reply). Specifically:
+ *   - PLACEMENT: a term label binds to a course only inside that course's
+ *     own clause (no sentence-boundary bleed) AND only when no OTHER course
+ *     code sits between the code and the label ("nearest course wins"), so a
+ *     neighbor's term ("…102 requires 101 in Fall 2025") or a prior-sentence
+ *     grad term doesn't bind to this course (see termsBoundToCourse).
+ *   - LOCK STATUS: a lock/movable assertion is attributed to the nearest
+ *     course code by keyword position, so "X is final, and Y can still move"
+ *     resolves each course independently (see assertionAttributedToCourse).
+ *   - GRADUATION: a term only counts as a grad claim when it follows the
+ *     "graduat…" token with no course code between them AND does not
+ *     co-occur with a course code (a placement term — "take 102 in Fall
+ *     2027" — is never a graduation claim; see labelAttributableToGrad).
+ * This tightening makes attribution precise; it does NOT disable detection —
+ * a genuinely ungrounded single-course / grad / lock claim still fires.
  */
 function checkPlanClaims(ctx: ValidatorContext): Violation[] {
     const schedule = ctx.forwardSchedule;
@@ -916,17 +1054,12 @@ function checkPlanClaims(ctx: ValidatorContext): Violation[] {
 
         const stored = planIndex.get(courseId);
 
-        // -- placement: find a term label co-occurring with this course --
-        const windowStart = Math.max(0, idx - PLAN_COOCCUR_WINDOW);
-        const windowEnd = Math.min(text.length, idx + (m[0]?.length ?? 0) + PLAN_COOCCUR_WINDOW);
-        const window = text.slice(windowStart, windowEnd);
-        PLAN_TERM_LABEL_RE.lastIndex = 0;
-        const termMatches = [...window.matchAll(PLAN_TERM_LABEL_RE)];
-        // Resolve each nearby label deterministically; ignore the ones we
-        // can't normalize (never a guess-block).
-        const claimedTerms = termMatches
-            .map((tm) => psTermToSolverTerm(tm[0]))
-            .filter((t): t is string => t !== null);
+        // -- placement: find term labels ATTRIBUTABLE to this course ----
+        // Clause-clipped + nearest-course-wins (see termsBoundToCourse):
+        // a neighbor course's term or a term across a sentence boundary
+        // no longer binds here. Unresolvable labels are dropped (never a
+        // guess-block).
+        const claimedTerms = termsBoundToCourse(text, idx, m[0]?.length ?? 0);
 
         if (claimedTerms.length > 0) {
             if (!stored) {
@@ -958,8 +1091,14 @@ function checkPlanClaims(ctx: ValidatorContext): Violation[] {
         // -- lock-status: only when the course IS in the plan -----------
         if (stored && stored.length > 0) {
             const locked = isStoredLocked(stored[0]!);
-            const assertsLocked = LOCK_ASSERT_RE.test(clause);
-            const assertsMovable = MOVABLE_ASSERT_RE.test(clause);
+            // Attribute the assertion to the NEAREST course code (by the
+            // keyword-match position), so "X is final, and Y can still
+            // move" resolves X→locked and Y→movable independently instead
+            // of testing both regexes against the whole comma-spanning
+            // clause.
+            const courseEnd = idx + (m[0]?.length ?? 0);
+            const assertsLocked = assertionAttributedToCourse(text, LOCK_ASSERT_RE, idx, courseEnd);
+            const assertsMovable = assertionAttributedToCourse(text, MOVABLE_ASSERT_RE, idx, courseEnd);
             if (assertsLocked && !locked) {
                 violations.push({
                     kind: "ungrounded_plan_claim",
@@ -982,16 +1121,36 @@ function checkPlanClaims(ctx: ValidatorContext): Violation[] {
     // Detect "graduate <term>" phrasing and compare the term to the
     // stored graduationTerm. Skip claims inside a conditional frame.
     const GRAD_CLAIM_RE = /\bgraduat\w*\b/gi;
+    const allCourseOffsets = courseCodeOffsets(text);
     for (const gm of text.matchAll(GRAD_CLAIM_RE)) {
         const idx = gm.index ?? 0;
-        const clause = clauseAround(text, idx);
+        const [clauseStart, clauseEnd] = clauseBounds(text, idx);
+        const clause = text.slice(clauseStart, clauseEnd);
         if (isConditionalFrame(clause)) continue;
+        // Bind the term to the GRADUATION concept, not "any term in the
+        // clause": keep only labels that (a) follow the "graduat…" token
+        // with no course code between them, AND (b) do NOT co-occur with a
+        // course code (a placement term — "take CSCI-UA 102 in Fall 2027"
+        // — is a placement claim, never a grad claim). This stops C4.
         PLAN_TERM_LABEL_RE.lastIndex = 0;
-        const labels = [...clause.matchAll(PLAN_TERM_LABEL_RE)]
-            .map((tm) => psTermToSolverTerm(tm[0]))
-            .filter((t): t is string => t !== null);
-        if (labels.length === 0) continue; // no resolvable term → no claim
-        // Fire only when NO nearby grad-term label matches the stored one.
+        const labels: string[] = [];
+        for (const tm of clause.matchAll(PLAN_TERM_LABEL_RE)) {
+            const labelStart = clauseStart + (tm.index ?? 0);
+            const labelEnd = labelStart + tm[0].length;
+            if (!labelAttributableToGrad(text, idx, labelStart, labelEnd, allCourseOffsets)) continue;
+            // Placement-term exclusion (per-label): drop THIS label if a
+            // course code sits within the co-occurrence window of it — that
+            // makes it a placement term ("take CSCI-UA 102 in Fall 2027"),
+            // not a graduation claim.
+            const coOccursWithCourse = allCourseOffsets.some(
+                (o) => o >= labelStart - PLAN_COOCCUR_WINDOW && o < labelEnd + PLAN_COOCCUR_WINDOW,
+            );
+            if (coOccursWithCourse) continue;
+            const solver = psTermToSolverTerm(tm[0]);
+            if (solver !== null) labels.push(solver);
+        }
+        if (labels.length === 0) continue; // no grad-attributed term → no claim
+        // Fire only when NO grad-attributed label matches the stored one.
         if (!labels.includes(canonGradTerm)) {
             violations.push({
                 kind: "ungrounded_plan_claim",
