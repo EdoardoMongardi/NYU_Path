@@ -81,9 +81,10 @@ The validator does NOT check whether the existing plan is actually infeasible �
 ## 4. What it reads from session
 
 - `session.degreeProgressReport` — non-null after validation.
-- `session.forwardSchedule` first, else `session.studentDraftPlan` (`simulateAlternatives.ts:73`) — used **only** for the feasibility short-circuit check.
-- `session.schedulePreferences` — passed through to `buildSolverInputFromSession` (line 85).
-- `session.student`, `session.schoolConfig`, `session.prereqs`, `session.courses` — consumed indirectly via `buildSolverInputFromSession`.
+- `session.forwardSchedule` first, else `session.studentDraftPlan` (`simulateAlternatives.ts`) — used **only** for the feasibility short-circuit check.
+- `session.schedulePreferences` — passed through to `buildSolverInputFromSession`.
+- `session.schoolConfig` — read directly (with the DPR) by `buildDoubleCountAdvisory` for the double-count advisory (D3.2). Also consumed indirectly via `buildSolverInputFromSession`.
+- `session.student`, `session.prereqs`, `session.courses` — consumed indirectly via `buildSolverInputFromSession`.
 
 ---
 
@@ -105,10 +106,13 @@ flowchart TD
 
 ### Step-by-step inside the tool
 
+**Step 0 — Build the cited double-count advisory (D3.2).**
+Before the short-circuit, `buildDoubleCountAdvisory(dpr, session.schoolConfig)` derives the multi-program advisory. When non-null it is carried as a structured `Disclaimer` (id + `reason` + `bulletinSource`) on the output's `disclaimers[]` envelope field, on **both** return paths (the feasible short-circuit and the alternatives path), and rendered by `summarizeResult` via `renderEnvelopeMeta`. This matches `plan_forward_degree`; previously the advisory was **absent** from this tool entirely. Advisory only — it never affects the candidates.
+
 **Step 1 — Feasibility short-circuit.**
-`simulateAlternatives.ts:73-79`: if `currentPlan.feasibility.feasible === true`, return:
+If `currentPlan.feasibility.feasible === true`, return:
 ```
-{ candidates: [], note: "Current plan is feasible; no alternatives needed." }
+{ candidates: [], note: "Current plan is feasible; no alternatives needed.", disclaimers? }
 ```
 No solver run, no work. This is the happy path.
 
@@ -217,7 +221,8 @@ Output type `SimulateAlternativesOutput` (`simulateAlternatives.ts:23-27`):
 ```
 {
   candidates: AlternativeCandidate[],
-  note?: string
+  note?: string,
+  disclaimers?: Disclaimer[]   // D3.2 — cited double-count advisory (id + reason + bulletinSource)
 }
 ```
 
@@ -287,13 +292,15 @@ From `buildTool`:
      - Feasible: `  [<relaxation>] <summary> — feasible → grad <graduationTerm>`
      - Infeasible: `  [<relaxation>] <summary> — still infeasible (<stillInfeasibleReason | "unknown">)`
 
+In **all three** branches, when `disclaimers` is non-empty (D3.2) the `renderEnvelopeMeta` block — a "DISCLAIMERS YOU MUST SURFACE" header with the advisory text and its `(reason: …; source: …)` citation line — is appended. `renderEnvelopeMeta` adds nothing when there is no advisory.
+
 The output is then truncated at 3000 chars by the envelope wrapper.
 
 ---
 
 ## 11. Known limitations
 
-- **Does NOT surface the double-count advisory.** The double-count advisory (over-counting one course toward two requirements) is assembled and surfaced on `plan_forward_degree`, `propose_plan_change`, and `confirm_plan_change` — the only three tools that call `buildDoubleCountAdvisory` (PR #41) — but **not** on `simulate_alternatives` (nor on `run_full_audit` or `update_profile`). A candidate schedule returned here may contain a double-count that the student is never warned about until they commit it through the plan-change path. This is a deliberate gap, not yet closed.
+- **Now surfaces the double-count advisory, cited (D3.2 — closed).** The advisory is assembled via `buildDoubleCountAdvisory(dpr, session.schoolConfig)` and carried as a structured `Disclaimer` (id + `reason` + `bulletinSource`) on the output's `disclaimers[]` envelope field, rendered by `summarizeResult` via `renderEnvelopeMeta` — matching `plan_forward_degree`, `propose_plan_change`, and `confirm_plan_change`. Previously this tool did not surface the advisory at all, so a candidate schedule could contain a double-count the student was never warned about until they committed it through the plan-change path; that gap is now closed. (`run_full_audit` / `update_profile` still do not surface it.)
 - **Only 3 of 5 declared relaxations are emitted.** `extend_grad_one_year` and `lower_credit_target` exist in the `AlternativeCandidate["relaxation"]` union but are never produced by this tool.
 - **Greedy-skip diagnostics caveat (historical).** The pre-rebuild greedy solver is gone; the engine is now feasibility-first backtracking search, so candidates that come back `schedule: null` reflect a genuine search exhaustion (within budget) rather than a greedy skip hiding unmet requirements.
 

@@ -4,14 +4,14 @@
 
 ## Purpose
 
-Everything the rest of the app needs from the engine flows through one front door. This document is the map of that door. `@nyupath/engine` is a TypeScript library (no website, no server, just code) that bundles the business logic: academic-standing/GPA calculators, the DPR parser, the agent loop and its 20 tools, the forward-schedule planner, the RAG policy-search stack, the LLM client adapters, and the persistence interfaces. The web app and CLI import only the names listed in this barrel, not the deep internals — so the engine can reorganize inside without breaking consumers, as long as the exported names keep working.
+Everything the rest of the app needs from the engine flows through one front door. This document is the map of that door. `@nyupath/engine` is a TypeScript library (no website, no server, just code) that bundles the business logic: academic-standing/GPA calculators, the DPR parser, the agent loop and its 21 tools, the forward-schedule planner, the RAG policy-search stack, the LLM client adapters, and the persistence interfaces. The web app and CLI import only the names listed in this barrel, not the deep internals — so the engine can reorganize inside without breaking consumers, as long as the exported names keep working.
 
 ```mermaid
 flowchart LR
     Web[Web App] --> Barrel[Engine barrel]
     CLI[CLI Tool] --> Barrel
     Barrel --> Standing[Standing + GPA]
-    Barrel --> Agent[Agent loop + 20 tools]
+    Barrel --> Agent[Agent loop + 21 tools]
     Barrel --> Planner[Forward schedule]
     Barrel --> RAG[RAG policy search]
     Barrel --> DPR[DPR parser]
@@ -72,7 +72,7 @@ agent/
   llmClient.ts recordingClient.ts registry.ts
   clients/        openaiClient.ts anthropicClient.ts index.ts
   verifiers/      multiIntentDetector.ts blockquoteAttribution.ts
-  tools/          20 tool modules (see §4)
+  tools/          21 tool modules (see §4)
   forwardSchedule/    solver, search, validator, materialize, alternatives, ...
   sectionMaterialization/  materialize, conflictDetection, foseAvailabilityGate, ...
 ```
@@ -107,18 +107,18 @@ The agent group (`index.ts:48-114`) re-exports: the loop (`runAgentTurn`, `runAg
 
 ---
 
-## 4. The agent barrel (`agent/index.ts`) and the 20 live tools
+## 4. The agent barrel (`agent/index.ts`) and the 21 live tools
 
-The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types, and the tool registry. The registry (`registry.ts`) wires **exactly 20 live tools** into `ALL_NYUPATH_TOOLS`:
+The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types, and the tool registry. The registry (`registry.ts`) wires **exactly 21 live tools** into `ALL_NYUPATH_TOOLS`:
 
 ```
 run_full_audit              what_if_audit              search_policy
 get_program_requirements    update_profile             confirm_profile_update
 get_credit_caps             search_availability        get_academic_standing
 search_courses              plan_forward_degree        view_forward_plan
-propose_plan_change         confirm_plan_change        simulate_alternatives
-compare_plan_alternatives   bind_free_elective         bind_pool_slot
-materialize_sections        confirm_section_combination
+propose_plan_change         probe_counterfactual       confirm_plan_change
+simulate_alternatives       compare_plan_alternatives  bind_free_elective
+bind_pool_slot              materialize_sections       confirm_section_combination
 ```
 
 > **Removed tools.** `check_overlap`, `check_transfer_eligibility`, and `plan_semester` are gone — their tool modules no longer exist in `agent/tools/`. Older docs and the agent-barrel comment that list `checkOverlapTool` / `checkTransferEligibilityTool` / `planSemesterTool` are stale.

@@ -25,6 +25,7 @@ import {
 } from "../forwardSchedule/planChangeHelpers.js";
 import { computeDprFingerprint } from "../../dpr/fingerprint.js";
 import { buildDoubleCountAdvisory } from "../forwardSchedule/doubleCountAdvisory.js";
+import { renderEnvelopeMeta, type Disclaimer } from "../toolEnvelope.js";
 import type {
     PlanChangeOutcome,
     PlanDiff,
@@ -40,6 +41,16 @@ interface ConfirmPlanChangeOutput extends PlanChangeOutcome {
     planDiff?: PlanDiff;
     /** Where the resulting schedule was stored. */
     storedIn: "forwardSchedule" | "studentDraftPlan";
+    /**
+     * Phase 10 envelope — advisory disclaimers (e.g. the double-count
+     * heads-up for multi-program students). Carried as a STRUCTURED
+     * Disclaimer (id + reason + bulletinSource), mirroring
+     * plan_forward_degree, so the citation is surfaced by summarizeResult.
+     * Advisory only — never affects feasibility / storedIn / the schedule.
+     * (D3.2: previously the advisory's `.text` was pushed bare into
+     * `consequences[]`, dropping the citation.)
+     */
+    disclaimers?: Disclaimer[];
 }
 
 // ---------------------------------------------------------------------------
@@ -189,8 +200,11 @@ export const confirmPlanChangeTool = buildTool({
         // Step 4: Build outcome.
         const diff = computeSlotDiff(currentPlan, newSchedule);
         const consequences = deriveConsequences(diff, newSchedule, noOpConsequences);
+        // D3.2 — carry the double-count advisory as a STRUCTURED, cited
+        // Disclaimer on the envelope (mirrors plan_forward_degree), NOT as a
+        // bare `.text` in consequences[] (which dropped reason + bulletinSource).
         const dcAdvisory = buildDoubleCountAdvisory(dpr, session.schoolConfig);
-        if (dcAdvisory) consequences.push(dcAdvisory.text);
+        const disclaimers = dcAdvisory ? [dcAdvisory] : undefined;
         const planDiff = buildPlanDiff(currentPlan, newSchedule, {
             before: beforeAxes,
             after: validatorResult.axisResults,
@@ -224,6 +238,7 @@ export const confirmPlanChangeTool = buildTool({
             conflicts: conflicts.length > 0 ? conflicts : undefined,
             planDiff,
             storedIn,
+            ...(disclaimers ? { disclaimers } : {}),
         };
     },
     summarizeResult(output) {
@@ -250,6 +265,10 @@ export const confirmPlanChangeTool = buildTool({
                 lines.push(`Plan state: ${sc.from} → ${sc.to}`);
             }
         }
+        // D3.2 — render the advisory disclaimer (reason + bulletinSource cited),
+        // mirroring plan_forward_degree. Adds nothing when there is no advisory.
+        const env = renderEnvelopeMeta({ disclaimers: output.disclaimers });
+        if (env) lines.push("", env);
         return lines.join("\n");
     },
 });

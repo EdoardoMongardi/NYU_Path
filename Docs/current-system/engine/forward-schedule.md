@@ -225,7 +225,7 @@ The ONE shared `SolverInput` builder for BOTH the build path and the edit path (
 
 ### 9.6 doubleCountAdvisory.ts (118 ln)
 
-A pure detector/builder. `countDeclaredPrograms` and `detectSharedCourses` feed `buildDoubleCountAdvisory`, which returns a CITED `Disclaimer` for multi-program students (≥2 majors/minors/concentrations), quantified from the school's bulletin `doubleCounting` config when present, generic otherwise. It NEVER asserts an uncited number and NEVER enforces or flips feasibility — advisory only.
+A pure detector/builder. `countDeclaredPrograms` and `detectSharedCourses` feed `buildDoubleCountAdvisory`, which returns a CITED `Disclaimer` for multi-program students (≥2 majors/minors/concentrations), quantified from the school's bulletin `doubleCounting` config when present, generic otherwise. It NEVER asserts an uncited number and NEVER enforces or flips feasibility — advisory only. As of D3.2, all four consuming tools — `plan_forward_degree`, `propose_plan_change`, `confirm_plan_change`, and `simulate_alternatives` — carry it the same way: as a structured `Disclaimer` on a `disclaimers[]` envelope field rendered via `renderEnvelopeMeta`, so the `reason` + `bulletinSource` citation surfaces uniformly. (Previously propose/confirm dropped the citation by pushing only the bare `text` into `consequences[]`, and simulate omitted the advisory entirely.)
 
 ### 9.7 alternatives.ts (192 ln)
 

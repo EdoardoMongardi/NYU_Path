@@ -160,7 +160,7 @@ After routing, the tool derives a double-count advisory from the DPR + `session.
 - When the school's `schoolConfig.doubleCounting` config has numeric caps/floors, the advisory is **quantified and cited** (`bulletinSource = dc.sourceRef`).
 - When no quantifiable config exists, it degrades to a number-free, generic heads-up (cite-or-stop: it never asserts a number it cannot cite).
 
-The advisory is a `Disclaimer` (`{ id: "double_count_advisory", text, reason, bulletinSource? }`). It is **advisory only** — it never affects `storedIn`, feasibility, or the schedule. `summarizeResult` (`planForwardDegree.ts:177`) appends it via `renderEnvelopeMeta`, which prints it under a `-- DISCLAIMERS YOU MUST SURFACE (verbatim) --` header that carries the reason and source. (Contrast `propose_plan_change` / `confirm_plan_change`, which push the same advisory's bare `text` into their consequence list and drop the citation — a known inconsistency.)
+The advisory is a `Disclaimer` (`{ id: "double_count_advisory", text, reason, bulletinSource? }`). It is **advisory only** — it never affects `storedIn`, feasibility, or the schedule. `summarizeResult` (`planForwardDegree.ts:177`) appends it via `renderEnvelopeMeta`, which prints it under a `-- DISCLAIMERS YOU MUST SURFACE (verbatim) --` header that carries the reason and source. As of D3.2, `propose_plan_change`, `confirm_plan_change`, and `simulate_alternatives` carry the advisory the **same** way — as a cited `Disclaimer` on a `disclaimers[]` envelope field rendered via `renderEnvelopeMeta` — so the citation is consistent across all four tools. (Previously propose/confirm pushed the advisory's bare `text` into their consequence list and dropped the citation, and simulate omitted it entirely.)
 
 ---
 

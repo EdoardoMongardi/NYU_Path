@@ -6,7 +6,7 @@
 
 ## Purpose
 
-The AI doesn't look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 20 such tools, each good at one thing (auditing a degree, finding a course, planning the remaining degree, etc.). To keep them consistent, every tool follows the same recipe: a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some surface a verbatim string the reply MUST contain, the rest are synthesized freely.
+The AI doesn't look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 21 such tools, each good at one thing (auditing a degree, finding a course, planning the remaining degree, etc.). To keep them consistent, every tool follows the same recipe: a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some surface a verbatim string the reply MUST contain, the rest are synthesized freely.
 
 ```mermaid
 flowchart LR
@@ -23,7 +23,7 @@ flowchart LR
 
 ---
 
-This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 20 live tools.
+This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 21 live tools.
 
 ---
 
@@ -104,7 +104,7 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 
 ## 5. `ALL_NYUPATH_TOOLS` — the wired set
 
-`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:67-88`), containing exactly **20** tools in this fixed order:
+`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:67-88`), containing exactly **21** tools in this fixed order:
 
 ```
 1.  run_full_audit
@@ -120,13 +120,14 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 11. plan_forward_degree
 12. view_forward_plan
 13. propose_plan_change
-14. confirm_plan_change
-15. simulate_alternatives
-16. bind_free_elective
-17. bind_pool_slot
-18. compare_plan_alternatives
-19. materialize_sections
-20. confirm_section_combination
+14. probe_counterfactual
+15. confirm_plan_change
+16. simulate_alternatives
+17. bind_free_elective
+18. bind_pool_slot
+19. compare_plan_alternatives
+20. materialize_sections
+21. confirm_section_combination
 ```
 
 `buildDefaultRegistry()` (`registry.ts:94-96`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts:556`).
@@ -154,7 +155,7 @@ sequenceDiagram
     participant Tool as Tool.call
 
     Route->>Reg: buildDefaultRegistry()
-    Reg-->>Route: registry (20 tools)
+    Reg-->>Route: registry (21 tools)
     Route->>Loop: runAgentTurnStreaming(client, registry, session, msg, opts)
     Loop->>Reg: registry.list() (via toLLMToolDefs)
     Reg-->>Loop: [Tool, …]
@@ -206,7 +207,7 @@ The public type and value surface (`buildTool`, `ToolRegistry`, `Tool`, `buildDe
 
 The registry is a thin map but it's built per turn for a real reason: the tool descriptions (`prompt(ctx: { session })`) are dynamic. They read `session.degreeProgressReport`, `session.student?.homeSchool`, `session.forwardSchedule`, etc., to emit context-sensitive hints. A long-lived global registry would bake stale hints in.
 
-The Map itself is constructed in O(N) (N = 20), so per-turn rebuild has no measurable cost.
+The Map itself is constructed in O(N) (N = 21), so per-turn rebuild has no measurable cost.
 
 ---
 
