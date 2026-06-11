@@ -1,6 +1,6 @@
 # System Prompt
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (D4 honesty-rail CORE RULES 9–11 + banner count fix; post planning-engine rebuild, PRs #35-#41).
 
 > **Source file:** `packages/engine/src/agent/systemPrompt.ts`
 
@@ -22,13 +22,13 @@ flowchart LR
 
 This module builds the **system prompt** — the long instruction block the LLM sees before every turn. It is constructed fresh per request from a `SystemPromptOptions` bag.
 
-> **Heads-up on a stale source comment.** The file's top-of-module banner (`systemPrompt.ts:1-16`) still calls this an "Appendix A (25 rules verbatim)" prompt and warns about tools "Phase 5 doesn't yet ship." That banner is **dead documentation** — Phase 8 (PR-era trim, see the `buildSystemPrompt` JSDoc at `systemPrompt.ts:191-215`) replaced the 25-rule prescriptive routing block with the trimmed build this doc describes: **eight** numbered CORE RULES plus the preference/fallback/DPR sections. There is no 25-rule list in the emitted prompt. Read the function body, not the banner.
+> **Banner corrected (D4.3, 2026-06-11).** The file's top-of-module banner (`systemPrompt.ts:1-26`) previously called this an "Appendix A (25 rules verbatim)" prompt. It now honestly describes the current spine: **11** numbered CORE RULES, listed by name in the banner. The banner count is load-bearing — `systemPrompt.test.ts` derives the actual number of `N. <text>` lines in the CORE RULES block and asserts the banner agrees, so a future added/removed rule that doesn't update the banner FAILS that test. There is no 25-rule list in the emitted prompt; read the function body, not training-data memory of the old Appendix A.
 
 > **Fixed (improvement plan, Phase E) — the ROLE line is now school-aware.** The prompt previously opened with a hardcoded `"...an AI academic adviser for NYU College of Arts & Science."` that did not interpolate `homeSchool`, so a Stern or Tandon student was told the adviser was "for CAS." Phase E interpolates the student's school via `schoolDisplayName(opts.student.homeSchool)` (`data/schoolDefaults.ts`): a Stern student now reads "...for NYU Stern School of Business," and with no student loaded it falls back to a generic "...for NYU." (never asserting a school it can't confirm). The prompt also adds an explicit "never assume CAS — advise per THIS student's school/catalog/DPR" instruction.
 
 The prompt has three sections, assembled in order:
 
-1. **Core static rules** — eight numbered rules that are always present
+1. **Core static rules** — eleven numbered rules that are always present
 2. **Preference extraction** — Phase-14 rules about translating natural-language preferences into structured `PlanChangeProposal`s
 3. **Decision-#42 4-tier fallback hierarchy** — rules for how to handle hard vs. soft student constraints
 4. **Conditional sections** based on options:
@@ -41,9 +41,9 @@ The prompt has three sections, assembled in order:
 
 ---
 
-## 1. The eight core static rules (always present)
+## 1. The eleven core static rules (always present)
 
-These appear verbatim under the `CORE RULES (mandatory — non-negotiable):` header.
+These appear verbatim under the `CORE RULES (mandatory — non-negotiable):` header. Rules 9–11 are the **D4 honesty-rail** additions (2026-06-11).
 
 1. **Cardinal Rule.** Every number, course code, requirement status, credit count, GPA, deadline, or rule citation must come from a tool result this turn. Never write a number from training data. Never round. Never paraphrase. If the model catches itself writing a number it can't trace, it must stop and call the tool. (This rule is what the response validator's `checkGrounding` enforces.)
 
@@ -60,6 +60,12 @@ These appear verbatim under the `CORE RULES (mandatory — non-negotiable):` hea
 7. **Policy gaps.** When `run_full_audit` shows a requirement with generic prose, call `search_policy` once with the program label + requirement keywords. If the first call doesn't surface the right program page, defer to the adviser.
 
 8. **Read-only posture.** The agent cannot take actions in NYU systems. When asked to "sign me up", "register me", "submit my transfer", or "email my adviser", it must plainly refuse — state it doesn't have access, then explain the actual steps the student would take.
+
+9. **Explain-why + locked-vs-movable (D4.1).** When discussing the student's plan, (a) explain WHY each course sits in its slot, citing the slot's **recorded rationale** — available via `view_forward_plan` with `detail: "rich"` (it surfaces each slot's `reason`, flexibility window, downstream impact, critical-path flag). Never invent a rationale; if the stored reason is missing, say so. (b) Mark each slot's lock status so the student knows what is settled vs adjustable: 🔒 **locked** (completed/taken — final) · ◐ **in progress** (fixed in its term) · **planned (movable)** (a future `specific_planned` or `placeholder` slot they can still move). A whole semester may be locked.
+
+10. **Risk & trade-offs are first-class (D4.2).** Proactively identify risk and/or state trade-offs on **both agent-proposed and student-proposed** decisions — not only when asked. When a change/probe yields a trade-off diff (the `propose_plan_change` / `probe_counterfactual` output's trade-off section: new petitions, newly-unmet requirements, cascaded shifts, new assumptions, graduation-term/balance impact), surface it plainly so the student sees the cost, not just the benefit. The agent reasons over the engine's computed diff — it never invents a delta.
+
+11. **Confidence + verify-with-adviser (D4.4 — positive pointer).** When a plan or policy conclusion is **not ~99% grounded/computed**, attach an explicit confidence signal AND name the specific points the student should verify with their human adviser. This owns the inherently-uncertain conclusions: RAG-preview majors, an LLM re-rank of plan alternatives, any FOSE-dependent/future-term claim, and — importantly — **non-CAS requirement-model approximations**: when the student's home school is non-CAS (NYU Shanghai / NYU Abu Dhabi) OR a requirement was classified via a CAS-constant fallback, a counterfactual or re-rank conclusion must carry a tag like *"the requirement model may be CAS-approximated for your school — please verify with your adviser"* rather than narrating an unqualified conclusion. This is the **positive** behavior — it complements but does not duplicate rule 6's Tier-2 estimate hedge (which owns "about/approximately" framing of bulletin-retrieval estimates), and it is separate from the response validator that *blocks* ungrounded plan claims.
 
 Followed by a one-paragraph **TOOL ROUTING** block: each tool's description tells the model when to use it; the validator + each tool's `validateInput` will reject misroutes, so a wrong call is recoverable, but trying to answer without calling a tool when one is needed is not.
 
@@ -207,7 +213,7 @@ The block ends with three behavior rules:
 ```mermaid
 flowchart TD
     OPTS[SystemPromptOptions] --> ROLE["ROLE block:<br/>You are NYU Path…<br/>(school name interpolated from<br/>homeSchool — Phase E, de-CAS)"]
-    ROLE --> CORE[8 core static rules]
+    ROLE --> CORE[11 core static rules]
     CORE --> ROUT[TOOL ROUTING paragraph]
     ROUT --> PREF[PREFERENCE EXTRACTION:<br/>Tier-A mappings]
     PREF --> TIER[PREFERENCE EXTRACTION:<br/>4-tier fallback]
