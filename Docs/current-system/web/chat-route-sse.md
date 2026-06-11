@@ -6,7 +6,7 @@
 
 This is the main "ask the AI a question" endpoint — the brain on the server side. Every time a student types a message in the chat and hits send, the message lands here. The endpoint takes the student's degree progress report (which the browser re-sends with every message), rebuilds who the student is, makes sure they haven't asked too many questions today, and hands the question off to the AI agent. As the AI thinks, calls tools, and writes its reply, this endpoint pipes everything back to the browser live so the student sees the reasoning unfold in real time instead of waiting for one big block of text. It also watches the side effects: if a tool updated the student's plan or pulled in section times, it pushes those updates to the sidebar so the page stays in sync. After the turn ends, it quietly saves the conversation so the next visit can pick up where the student left off.
 
-> **Honest caveat — the remaining profile hydration gap.** As of **P3.1**, this route now hydrates the persisted forward schedule, draft plan, and scheduling preferences from Postgres each turn (`scheduleStore.loadLatestSchedule` + `loadPreferences`), so the agent sees the plan the student built. It still does **not** read the persisted *profile* — that is rebuilt from the DPR the browser re-sends every turn, and the bootstrap upsert can clobber confirmed profile mutations (the separate **P3.2** task). See [§5.1 Per-turn plan + prefs hydration](#51-per-turn-plan--prefs-hydration). The `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) hydrate fully from Postgres (profile included).
+> **Honest caveat — profile read-hydration is still Phase 4.** As of **P3.1**, this route hydrates the persisted forward schedule, draft plan, and scheduling preferences from Postgres each turn (`scheduleStore.loadLatestSchedule` + `loadPreferences`), so the agent sees the plan the student built. **P3.2** then closed the profile *write*-clobber: the bootstrap upsert is gated to initial onboarding, so a confirmed profile mutation is no longer overwritten on every message. What remains (Phase 4) is reading the persisted *profile* back into the live session — the route still rebuilds `StudentProfile` from the DPR the browser re-sends each turn rather than from `profileStore.get`, so the session uses the body-derived profile for the turn (the stored profile is intact). See [§5.1 Per-turn plan + prefs hydration](#51-per-turn-plan--prefs-hydration). The `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) hydrate fully from Postgres (profile included).
 
 ```mermaid
 flowchart LR
@@ -88,7 +88,7 @@ Tools never write to `chatHistoryStore` directly — the route handles that AFTE
 - the **cohort flag** from `stores.cohortLookup(userId)` (`route.ts:358`), and
 - **(P3.1)** the persisted `forwardSchedule` / `studentDraftPlan` / `schedulePreferences` via `scheduleStore.loadLatestSchedule` + `loadPreferences`.
 
-**Remaining gap (profile):** this is READ-hydration of the plan + prefs only. The route still rebuilds `StudentProfile` from the **client-resent** DPR every turn — it does **not** read the persisted profile via `profileStore.get`. The bootstrap upsert below (`route.ts` §5.3) still rewrites `students.profile` from that rebuilt DPR profile every message, **clobbering confirmed profile mutations** a prior `confirm_profile_update` wrote, and appends a synthetic audit row per message. Stopping that profile clobber (and the related preferences-from-`{}` wipe) is the separate **P3.2** task.
+**Profile write-clobber — fixed in P3.2.** This is READ-hydration of the plan + prefs only; the route still rebuilds `StudentProfile` from the **client-resent** DPR every turn (it does **not** yet read the persisted profile via `profileStore.get` into the session — that read-hydration is Phase 4). But the *write* side is fixed: the bootstrap upsert below (§5.3) is now **gated to initial onboarding** (`profileStore.get(userId) === null`), so it no longer rewrites `students.profile` on every message and no longer **clobbers confirmed profile mutations** a prior `confirm_profile_update` wrote, nor appends a synthetic audit row per message. The related preferences-from-`{}` wipe is also resolved: a chat-driven `confirm_plan_change` now reads the P3.1-hydrated `session.schedulePreferences` (not `{}`), so existing pins survive.
 
 Contrast: the `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) hydrate fully from Postgres (profile included).
 
@@ -98,7 +98,7 @@ When the client sends no `homeSchool`, the builder runs `deriveHomeSchool` over 
 
 ### 5.3 Bootstrap profile persistence
 
-The route performs a no-throw bootstrap upsert (`route.ts:289-307`): when `userId !== "anonymous"`, it calls `profileStore.persistMutation(student, audit, parsedDpr)` with a synthetic `bootstrap-<ts>` audit record (`field: "homeSchool"`, used only as a discriminator) so a refresh or new login can restore profile + DPR via `/api/session/restore`. Failures are logged (`console.warn`) but never break the turn. As noted in §5.1, this upsert re-writes `students.profile` from the re-sent DPR on every message.
+The route performs a no-throw bootstrap upsert: when `userId !== "anonymous"` **and no persisted profile exists yet** (`profileStore.get(userId) === null` — the P3.2 gate, so it fires only on **initial onboarding**), it calls `profileStore.persistMutation(student, audit, parsedDpr)` with a synthetic `bootstrap-<ts>` audit record (`field: "homeSchool"`, used only as a discriminator) so a refresh or new login can restore profile + DPR via `/api/session/restore`. Failures are logged (`console.warn`) but never break the turn. On every later turn the gate skips the upsert, so a returning student's confirmed profile edits are never clobbered and the audit log does not grow per message. (DPR *updates* for a returning student are owned by the Update-DPR route, not this bootstrap.)
 
 ### 5.4 Temporal context + system prompt
 
@@ -258,8 +258,8 @@ sequenceDiagram
     Route->>Stores: profileStore, scheduleStore, chatHistoryStore, sessionStore, cohortLookup
     Route->>Stores: scheduleStore.loadLatestSchedule + loadPreferences (P3.1 hydration)
     Route->>Session: buildStudentProfileFromDpr + assemble ToolSession inline (schedule/prefs hydrated)
-    Note over Route,Session: P3.1 reads persisted schedule + prefs; profile still rebuilt from DPR (P3.2)
-    Route->>Persist: bootstrap persistMutation (DPR + profile, rewrites students.profile)
+    Note over Route,Session: P3.1 reads persisted schedule + prefs; P3.2 gates the profile upsert to initial onboarding (live session still uses the body-DPR profile this turn)
+    Route->>Persist: bootstrap persistMutation — gated: only when no persisted profile exists
     Route->>Route: deriveTemporalContext + buildSystemPrompt + detectMultiIntent
     Route->>Stores: cohortLookup(userId) + getCohortConfig + sessionStore.get → summaries
     Route-->>Client: 200 text/event-stream (opened)
