@@ -298,7 +298,7 @@ describe("probe why-not — VALID renders the trade-off-aware framing", () => {
                 weightedCreditsByTermDelta: {},
                 workloadTierShifts: [],
                 graduationTermShift: 0,
-                balanceImpact: { before: 10, after: 12, classification: "worsened" },
+                balanceImpact: { before: 10, after: 12, delta: 2, classification: "degraded-mild" },
                 planStateChange: undefined,
                 newRequiresPetition: ["CSCI-UA 310"],
                 removedRequiresPetition: [],
@@ -307,7 +307,7 @@ describe("probe why-not — VALID renders the trade-off-aware framing", () => {
                     { courseId: "CSCI-UA 201", fromTerm: "2026-fall", toTerm: "2027-spring", becauseOf: "pin" },
                 ],
                 newAssumptions: [],
-                validationResultsChanges: [],
+                validationResultsChanges: {},
             },
         } as unknown as ProbeCounterfactualOutput;
 
@@ -337,14 +337,14 @@ describe("probe why-not — VALID renders the trade-off-aware framing", () => {
                 weightedCreditsByTermDelta: {},
                 workloadTierShifts: [],
                 graduationTermShift: 0,
-                balanceImpact: { before: 10, after: 10, classification: "unchanged" },
+                balanceImpact: { before: 10, after: 10, delta: 0, classification: "negligible" },
                 planStateChange: undefined,
                 newRequiresPetition: [],
                 removedRequiresPetition: [],
                 newUnmetRequirements: [],
                 cascadedShifts: [],
                 newAssumptions: [],
-                validationResultsChanges: [],
+                validationResultsChanges: {},
             },
         } as unknown as ProbeCounterfactualOutput;
 
