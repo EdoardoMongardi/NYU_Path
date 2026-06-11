@@ -6,7 +6,7 @@
 
 This is the main "ask the AI a question" endpoint — the brain on the server side. Every time a student types a message in the chat and hits send, the message lands here. The endpoint takes the student's degree progress report (which the browser re-sends with every message), rebuilds who the student is, makes sure they haven't asked too many questions today, and hands the question off to the AI agent. As the AI thinks, calls tools, and writes its reply, this endpoint pipes everything back to the browser live so the student sees the reasoning unfold in real time instead of waiting for one big block of text. It also watches the side effects: if a tool updated the student's plan or pulled in section times, it pushes those updates to the sidebar so the page stays in sync. After the turn ends, it quietly saves the conversation so the next visit can pick up where the student left off.
 
-> **Honest caveat — the hydration gap.** Despite the "pick up where you left off" framing, this route does **not** read the student's persisted profile, forward schedule, draft plan, or scheduling preferences from Postgres. Each turn is rebuilt almost entirely from what the browser re-sends (the DPR + the last few messages). See [§5.1 The hydration gap](#51-the-hydration-gap) — it has real consequences (chat-driven confirms can clobber sidebar-set pins). The `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) are the routes that *do* hydrate fully from Postgres.
+> **Honest caveat — the remaining profile hydration gap.** As of **P3.1**, this route now hydrates the persisted forward schedule, draft plan, and scheduling preferences from Postgres each turn (`scheduleStore.loadLatestSchedule` + `loadPreferences`), so the agent sees the plan the student built. It still does **not** read the persisted *profile* — that is rebuilt from the DPR the browser re-sends every turn, and the bootstrap upsert can clobber confirmed profile mutations (the separate **P3.2** task). See [§5.1 Per-turn plan + prefs hydration](#51-per-turn-plan--prefs-hydration). The `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) hydrate fully from Postgres (profile included).
 
 ```mermaid
 flowchart LR
@@ -71,26 +71,26 @@ The `ToolSession` is assembled **inline** at `route.ts:256-278` with:
 - `rag` — the policy-RAG bundle from `getPolicyRagBundle()` (`route.ts:233`); `null` when the corpus/keys are missing (see [build-session.md §3](build-session.md#3-boot-time-rag-setup-policyragsetup)).
 - `searchCoursesFn` — the semantic course-catalog search function from `getCourseSearchFn()` (`route.ts:232`); spread in only when present.
 - `degreeProgressReport` — the parsed DPR (always present here).
+- `forwardSchedule` / `studentDraftPlan` / `schedulePreferences` — **P3.1**: hydrated from Postgres before the session literal is built (see [§5.1](#51-per-turn-plan--prefs-hydration)). Spread in only when the load returns a value.
 
 Every one of those contributors degrades silently to `null`/omitted on failure, so a missing data file or unset key narrows the agent's abilities for the turn rather than crashing it.
 
 Tools never write to `chatHistoryStore` directly — the route handles that AFTER the agent loop finishes ([§13](#13-persistence-after-the-turn)).
 
-### 5.1 The hydration gap
+### 5.1 Per-turn plan + prefs hydration
 
-This is the most important honest fact about the route. **Each turn hydrates ONLY:**
+**P3.1** — before the `ToolSession` literal is built (`route.ts`, between the catalog load and the session literal), the route now hydrates the student's **persisted plan + preferences** from Postgres so the agent sees the plan the student built (e.g. via the sidebar) and the plan-claim validator has a plan to verify against. For `userId !== "anonymous"`, it calls `scheduleStore.loadLatestSchedule(userId)` — classifying a draft `state` (`infeasible-draft` / `student-preferred-invalid-draft`) into `studentDraftPlan` and any other state into `forwardSchedule` — and `scheduleStore.loadPreferences(userId)` into `schedulePreferences`. The three values are spread into the session only when present. This mirrors the `planActionOrchestrator` and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) load pattern. Hydration is **best-effort**: a load failure is `console.warn`ed and the turn continues with the plan slot unset (`session.*` stays `undefined`, exactly as before any tool writes), and the `userId === "anonymous"` branch (no durable store) is skipped — both mirroring the bootstrap-persist posture below.
+
+**Each turn now hydrates:**
 - the **client-resent** DPR (re-validated, rebuilt into a profile every turn),
 - the **client-supplied** `history` (last ~10 messages),
-- the rolling **session summaries** read from `sessionStore.get(userId)` (`route.ts:364-370`), and
-- the **cohort flag** from `stores.cohortLookup(userId)` (`route.ts:358`).
+- the rolling **session summaries** read from `sessionStore.get(userId)` (`route.ts:364-370`),
+- the **cohort flag** from `stores.cohortLookup(userId)` (`route.ts:358`), and
+- **(P3.1)** the persisted `forwardSchedule` / `studentDraftPlan` / `schedulePreferences` via `scheduleStore.loadLatestSchedule` + `loadPreferences`.
 
-It **never** reads the persisted profile, forward schedule, draft plan, or `schedulePreferences` from Postgres. There is no `scheduleStore.loadLatestSchedule`, no `scheduleStore.loadPreferences`, and no `profileStore.get` anywhere in this route — the store handles on the session are **write-only** here. The `session.forwardSchedule` / `session.studentDraftPlan` / `session.lastMaterializationResult` slots all start `undefined` and are only populated if a tool writes to them during *this* turn.
+**Remaining gap (profile):** this is READ-hydration of the plan + prefs only. The route still rebuilds `StudentProfile` from the **client-resent** DPR every turn — it does **not** read the persisted profile via `profileStore.get`. The bootstrap upsert below (`route.ts` §5.3) still rewrites `students.profile` from that rebuilt DPR profile every message, **clobbering confirmed profile mutations** a prior `confirm_profile_update` wrote, and appends a synthetic audit row per message. Stopping that profile clobber (and the related preferences-from-`{}` wipe) is the separate **P3.2** task.
 
-Consequences (documented honestly, not hypothetical):
-- A chat-driven `confirm_plan_change` rebuilds scheduling preferences from `{}` (nothing loaded) and persists that, **clobbering pins the student set via the sidebar** (`/api/plan/*` path).
-- The bootstrap upsert below rewrites `students.profile` from the freshly rebuilt DPR profile every message, **clobbering confirmed profile mutations** that a prior `confirm_profile_update` wrote, and appends a synthetic audit row per message.
-
-Contrast: the `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) DO hydrate fully from Postgres. The hydration gap is specific to this chat route.
+Contrast: the `/api/plan/*` orchestrator and [`/api/session/restore`](session-and-onboarding-routes.md#2-get-apisessionrestore) hydrate fully from Postgres (profile included).
 
 ### 5.2 Home-school derivation and the `unknown` fallback
 
@@ -256,8 +256,9 @@ sequenceDiagram
         Route-->>Client: 429 + Retry-After
     end
     Route->>Stores: profileStore, scheduleStore, chatHistoryStore, sessionStore, cohortLookup
-    Route->>Session: buildStudentProfileFromDpr + assemble ToolSession inline
-    Note over Route,Session: NO read of persisted schedule / prefs / profile (hydration gap)
+    Route->>Stores: scheduleStore.loadLatestSchedule + loadPreferences (P3.1 hydration)
+    Route->>Session: buildStudentProfileFromDpr + assemble ToolSession inline (schedule/prefs hydrated)
+    Note over Route,Session: P3.1 reads persisted schedule + prefs; profile still rebuilt from DPR (P3.2)
     Route->>Persist: bootstrap persistMutation (DPR + profile, rewrites students.profile)
     Route->>Route: deriveTemporalContext + buildSystemPrompt + detectMultiIntent
     Route->>Stores: cohortLookup(userId) + getCohortConfig + sessionStore.get → summaries
