@@ -1,6 +1,6 @@
 # confirm_plan_change — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (D6.3 — re-rank provenance durability; prior pass 2026-06-10 post-rebuild PRs #35-#41).
 
 ## Purpose
 
@@ -44,13 +44,30 @@ The routing rule keys on the **validator's verdict**, not the solver's coarse st
 
 ## 2. Input schema
 
-Identical to `propose_plan_change`:
-
 ```
-{ mutations: PlanMutation[] }   // min length 1
+{
+  mutations: PlanMutation[],          // min length 1 — shared verbatim with propose
+  rankedAlternative?: {               // D6.3 — OPTIONAL re-rank provenance
+    studentStatedFactor: string,
+    selectedPlanIndex: number,        // planIndex from compare_plan_alternatives
+    reasoning: string,
+    dimensionsConsidered: string[]
+  }
+}
 ```
 
 The 12-kind `PlanMutationSchema` (`planChangeHelpers.ts:55-93`) is **shared verbatim** between propose and confirm — they import the same Zod schema. Every variant accepted by propose is accepted here. See [propose_plan_change §2](propose_plan_change.md) for the full mutation table; the effects on `session.schedulePreferences` are identical, with the same no-op behavior for `bindFreeElective` / `unbindFreeElective` / `bindPoolSlot` and ill-formed `loadStyleOverride` combinations. Mutations apply left-to-right; a `default: never` branch enforces exhaustiveness.
+
+**`rankedAlternative` is confirm-only (D6.3) and OPTIONAL.** `propose_plan_change` does NOT accept it. The agent passes it **only** when applying an alternative it chose by re-ranking the schedule's `alternativeCandidates` via [`compare_plan_alternatives`](compare_plan_alternatives.md) (Tier B, Decision #42) — its `selectedPlanIndex` / `dimensionsConsidered` come straight from that read-only comparison. When present, confirm records the choice as a **durable `LLM_RANKED_ALTERNATIVE` Assumption** on the confirmed schedule (see §5a). Ordinary edits omit it and no provenance Assumption is added (it is **not** always-on).
+
+---
+
+## 2a. Re-rank provenance durability (D6.3)
+
+The `compare_plan_alternatives` tool is strictly read-only — it surfaces the solver-generated candidate summaries for the LLM to reason over but writes nothing. So when the agent re-ranks those candidates against a student-stated soft factor and applies the winner, the *rationale* for that choice (which alternative, why, which dimensions) would be lost on the next turn unless it is recorded. D6.3 closes that gap **without adding a new persistence channel**:
+
+- The provenance rides on the existing **`ForwardSchedule.assumptions[]`** as an `LLM_RANKED_ALTERNATIVE` Assumption (the variant already defined in `@nyupath/shared` types.ts; discriminated-union per Decision #42).
+- `confirm_plan_change` persists the confirmed schedule via `scheduleStore.persistSchedule(...)`, and the P3.1 hydration path (`loadLatestSchedule`) returns the **full** `ForwardSchedule` including `assumptions`. So an Assumption appended to the confirmed schedule **persists, survives hydration, and is re-readable/re-explainable on a later turn** — the parallel-Assumption channel is durable. **No separate per-preference provenance store is needed** (Risk #6 default).
 
 ---
 
@@ -111,6 +128,8 @@ flowchart TD
 
 **Step 4 — Validate BEFORE + finalize AFTER through the 7-axis validator.** `runGraduationPathValidator({ plan: currentPlan, … })` produces `beforeAxes` (for `validationResultsChanges`). `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`confirmPlanChange.ts:138`) assembles `newSchedule` AND runs the validator, returning `{ newSchedule, validatorResult }`. **The routing keys on `validatorResult.feasible`, not on the solver's coarse `state`** — closing the PLAN-3 hole where a confirmed edit could be stored to `forwardSchedule` ("valid") without the 7-axis validator passing.
 
+**Step 4a — Attach re-rank provenance (D6.3, when `rankedAlternative` was passed).** Immediately after `finalizeForwardSchedule` returns `newSchedule` and **before** the routing/persist below, if `input.rankedAlternative` is present the tool builds an `LLM_RANKED_ALTERNATIVE` Assumption `{ type, studentStatedFactor, selectedPlanIndex, reasoning, dimensionsConsidered }` and appends it to `newSchedule.assumptions[]` (immutably: `newSchedule.assumptions = [...newSchedule.assumptions, provenance]`). A **de-dupe** guard (`sameRankedAssumption`, comparing all four fields incl. the `dimensionsConsidered` array) skips the append if an equal one is already present, so a re-confirm of the same choice does not stack duplicates. Because each `finalizeForwardSchedule` rebuilds `assumptions` fresh from the solver's emitted assumptions, a re-confirm yields exactly one `LLM_RANKED_ALTERNATIVE` on the live schedule. The append lands **before** Step 6's `persistSchedule`, so the provenance is on the row written to the store — and therefore survives `loadLatestSchedule` (P3.1) on a later turn (see §2a).
+
 **Step 5 — Decision #32 routing** (`confirmPlanChange.ts:151`):
 
 ```
@@ -152,9 +171,14 @@ Like propose, `buildPlanDiff` here populates the five trade-off fields (`newRequ
   conflicts?: Array<{ kind, detail }>,       // from the validator's infeasibilityReport
   planDiff?: { ...same shape as propose's planDiff... },
   storedIn: "forwardSchedule" | "studentDraftPlan",
-  disclaimers?: Disclaimer[]                 // D3.2 — cited double-count advisory (id + reason + bulletinSource)
+  disclaimers?: Disclaimer[],                // D3.2 — cited double-count advisory (id + reason + bulletinSource)
+  rankedAlternative?: {                      // D6.3 — echoed re-rank provenance (present only when passed in)
+    studentStatedFactor, selectedPlanIndex, reasoning, dimensionsConsidered
+  }
 }
 ```
+
+The output's `rankedAlternative` mirrors the input and exists so `summarizeResult` can surface the recorded rationale to the student (§9); the **durable** copy is the `LLM_RANKED_ALTERNATIVE` Assumption on the persisted schedule's `assumptions[]` (§2a / §4a-equivalent Step 4a).
 
 `storedIn` is always present. `planDiff` is populated whenever the solver ran. `conflicts` is conditional.
 
@@ -179,10 +203,11 @@ There is **no** pending-mutation id. `confirm_plan_change` consults no `pendingM
 In order, during a successful call:
 
 1. **`session.schedulePreferences`** — replaced with the post-mutation prefs (`confirmPlanChange.ts:106`).
-2. **One of:**
+2. **`newSchedule.assumptions[]`** (D6.3, only when `rankedAlternative` was passed) — gains one `LLM_RANKED_ALTERNATIVE` Assumption, appended **before** the routing/persist below, de-duped. This rides on whichever slot `newSchedule` lands in (step 3) and on the persisted row (step 4).
+3. **One of:**
    - `session.forwardSchedule = newSchedule` AND `delete session.studentDraftPlan` (when `validatorResult.feasible`).
    - `session.studentDraftPlan = newSchedule` (otherwise; `forwardSchedule` is **kept**).
-3. **(Optional, swallowed on failure):** `persistSchedule(...)` then `persistPreferences(...)`.
+4. **(Optional, swallowed on failure):** `persistSchedule(...)` then `persistPreferences(...)`. The provenance Assumption from step 2 is on `newSchedule`, so it is part of the persisted row → durable across hydration.
 
 What is NOT written: `studentDraftPlan` is not explicitly cleared on the draft path (only on the valid path); `pendingMutations`, `pendingMaterializations`, `lastMaterializationResult`, `degreeProgressReport`, `student`, `schoolConfig` are never touched.
 
@@ -200,7 +225,8 @@ What is NOT written: `studentDraftPlan` is not explicitly cleared on the draft p
 3. `Added slots: <n>, removed slots: <m>`
 4. If consequences: `Consequences:` then up to 5 `  • <consequence>` lines.
 5. If `planDiff`: `Balance: <before> → <after> (<classification>)`; if `planStateChange`: `Plan state: <from> → <to>`.
-6. If `disclaimers` is non-empty (D3.2): the `renderEnvelopeMeta` block — a "DISCLAIMERS YOU MUST SURFACE" header with the advisory text and its `(reason: …; source: …)` citation line. Adds nothing when there is no advisory.
+6. If `rankedAlternative` is present (D6.3): `Recorded why this plan was chosen: <reasoning> (dimensions: <dimensionsConsidered>)` — so the student sees the recorded rationale. Adds nothing for ordinary edits.
+7. If `disclaimers` is non-empty (D3.2): the `renderEnvelopeMeta` block — a "DISCLAIMERS YOU MUST SURFACE" header with the advisory text and its `(reason: …; source: …)` citation line. Adds nothing when there is no advisory.
 
 Compared to propose's summary: the header line differs (it reports `storedIn`); both share the cited-advisory block.
 

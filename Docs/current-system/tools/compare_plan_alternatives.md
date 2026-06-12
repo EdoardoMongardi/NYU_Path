@@ -1,6 +1,6 @@
 # `compare_plan_alternatives` — Tool Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (D6.3 — re-rank provenance recorded on confirm; this tool stays read-only; prior pass 2026-06-10 PRs #35-#41).
 
 ## Purpose
 
@@ -219,7 +219,7 @@ The per-candidate line uses 2-decimal `balanceScore` and integer counts. The `di
 - **`plan_forward_degree`** — Populates `session.forwardSchedule.alternativeCandidates` via the solver's `findDiverseValidPlans` → `buildAlternativeSummaries` → `finalizeForwardSchedule` path. `compare_plan_alternatives` reads exactly what that wrote.
 - **`view_forward_plan`** — Companion read-only tool that surfaces the current `forwardSchedule` itself. `view_forward_plan` shows the plan; `compare_plan_alternatives` shows its alternatives.
 - **`simulate_alternatives`** — Different and complementary. [`simulate_alternatives`](./simulate_alternatives.md) is for *infeasible* plans (it re-solves under relaxations); `compare_plan_alternatives` is for *feasible* plans (it reads the already-attached diversity candidates). They consume different data paths and don't share code.
-- **`confirm_plan_change`** — The mutation step. After the LLM picks a candidate (in-prompt reasoning), the actual mutation is applied via [`confirm_plan_change`](./confirm_plan_change.md)'s two-step. The tool description explicitly directs the LLM to that flow.
+- **`confirm_plan_change`** — The mutation step. After the LLM picks a candidate (in-prompt reasoning), the actual mutation is applied via [`confirm_plan_change`](./confirm_plan_change.md)'s two-step. The tool description explicitly directs the LLM to that flow. **D6.3 — re-rank provenance is recorded on *confirm*, never here.** Because `compare_plan_alternatives` is strictly read-only, the rationale for choosing a candidate would be lost otherwise; when the agent applies its pick it passes a `rankedAlternative` provenance object (its `selectedPlanIndex` / `dimensionsConsidered` come from this comparison) to `confirm_plan_change`, which records it as a durable `LLM_RANKED_ALTERNATIVE` Assumption on the confirmed `ForwardSchedule.assumptions[]` (persists + survives P3.1 hydration). This tool itself still writes nothing.
 - **Tier C / Tier D fallback** — When the tool returns the no-alternatives framing, the LLM escalates to a Tier C clarification question or, for soft-only preferences, a Tier D heuristic mapping. Those paths are not implemented as a single tool — they're routing the LLM follows based on the `decisionFraming` string.
 
 This tool does NOT chain to anything itself; no `suggestedFollowUps`.
