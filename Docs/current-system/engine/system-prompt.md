@@ -1,6 +1,6 @@
 # System Prompt
 
-> Last verified against code: 2026-06-11 (D6.2 — rung-1 table now carries the rung-2 `addSoftObjective`/`clearSoftObjectives` SOFT-only mapping, recorded + ranker-read, never changes validity; D6.1 — rung-1 preference table + Tier-A eval reconciled to the live `PlanMutation` union, incl. Phase-17 `move`/`unpin`/`freeze`; D4 honesty-rail CORE RULES 9–11 + banner count fix; post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (D6.4 — Tier-D 3-layer SOFT-only guard documented as intact (Layer 1 prompt / Layer 2 compile-guard ×2 / Layer 3 Dneg eval) and rung-4 → rung-2 enablement: a genuinely-new SOFT factor may now map via `HEURISTIC_MAPPING` to `addSoftObjective` (recorded, ranker-read) instead of `null`, SOFT-only invariant preserved end to end; D6.2 — rung-1 table now carries the rung-2 `addSoftObjective`/`clearSoftObjectives` SOFT-only mapping, recorded + ranker-read, never changes validity; D6.1 — rung-1 preference table + Tier-A eval reconciled to the live `PlanMutation` union, incl. Phase-17 `move`/`unpin`/`freeze`; D4 honesty-rail CORE RULES 9–11 + banner count fix; post planning-engine rebuild, PRs #35-#41).
 
 > **Source file:** `packages/engine/src/agent/systemPrompt.ts`
 
@@ -129,9 +129,19 @@ Then the four tiers, applied in order:
 | **A** | Factor maps to a modeled `SchedulePreferences` field or `PlanMutation` kind. Extract deterministically. | Yes |
 | **B** | Call `compare_plan_alternatives` first. Pick from the returned candidates; explain the pick referencing structured dimensions (balance score, distinct subjects, hard-count). Apply via `confirm_plan_change`. Emit a `LLM_RANKED_ALTERNATIVE` assumption. | Only if at least one candidate satisfies the constraint |
 | **C** | No candidate satisfies a hard constraint OR confidence in the mapping is low: ask the student to drop / swap / relax. | Yes |
-| **D** | Last resort. SOFT constraints only. Apply a heuristic mapping with the `HEURISTIC_MAPPING` assumption flag (`studentConstraintFraming` MUST be `"soft"` — this is enforced at compile time). | **FORBIDDEN** |
+| **D** | Last resort. SOFT constraints only. Apply a heuristic mapping with the `HEURISTIC_MAPPING` assumption flag (`studentConstraintFraming` MUST be `"soft"` — this is enforced at compile time). A genuinely-new SOFT factor with no modeled field may map to `{ kind: "addSoftObjective" }` (recorded, ranker-read) instead of `null`. | **FORBIDDEN** |
 
 The model is told to surface the chosen tier in plain language so the student knows what reasoning was applied.
+
+### Tier D — the 3-layer SOFT-only guard (intact) + rung-4 → rung-2 enablement (D6.4)
+
+Tier D is the agent's `HEURISTIC_MAPPING` last resort, and it is **SOFT-only by construction**. Three independent layers enforce that hard constraints never route through Tier D (the asymmetric-stakes invariant — mis-mapping a hard constraint as a soft heuristic is the costly error):
+
+- **Layer 1 — the prompt.** `FOUR_TIER_FALLBACK_RULES` states *"Tier D is FORBIDDEN for hard constraints"* and that `studentConstraintFraming` MUST be `"soft"`.
+- **Layer 2 — the type system.** The `HEURISTIC_MAPPING` `Assumption` variant ([`@nyupath/shared` `types.ts`](../../../packages/shared/src/types.ts)) types `studentConstraintFraming` as the **literal `"soft"`**, so a hard-framed instance is a TypeScript compile error. This is pinned by two compile-guard files (no runtime; `tsc --noEmit` is the assertion, and vitest never runs them because they sit in `src/`, outside the `tests/**` globs): the shared [`types.heuristicMappingGuard.compile.test.ts`](../../../packages/shared/src/types.heuristicMappingGuard.compile.test.ts) and the engine-side [`heuristicMappingGuard.compile.test.ts`](../../../packages/engine/src/agent/heuristicMappingGuard.compile.test.ts) (D6.4). Each carries a `@ts-expect-error` on a `studentConstraintFraming: "hard"` line; if a future edit ever widened the literal, the `"hard"` line would stop erroring, the directive would become UNUSED, and `tsc` would fail with `TS2578` — so the guard is load-bearing in both directions.
+- **Layer 3 — the eval.** `preferenceExtraction.eval.ts`'s **Dneg** bucket (hard-framed fixtures, each `mustNotEmit: "HEURISTIC_MAPPING"`, `expectedTier: "C"`) plus the inline asymmetric-stakes unit test that locks every Dneg fixture to `framing: "hard"` + `expectedTier: "C"`. The per-bucket eval bar is **≥85% accuracy on each** of A / B / C / Dpos / Dneg individually.
+
+**Rung-4 → rung-2 enablement (D6.4).** Before D6.2, a genuinely-new SOFT factor reached via Tier D could only map to an *existing* `PlanMutation` kind or `null` (recorded but not actionable). Now the rung-2 `addSoftObjective` primitive exists, so such a factor maps to `{ kind: "addSoftObjective", objective: { framing: "soft", dimension, preference } }` — a structured `GenericSoftConstraint` recorded into `prefs.softObjectives[]`. **The SOFT-only invariant is preserved end to end:** the `HEURISTIC_MAPPING.studentConstraintFraming` stays `"soft"` AND the mapped objective's own `framing` is the literal `"soft"`. The objective is read **only by the ranker** (`scorePlan`) — never by the hard solver's feasibility/validity logic — so it can change which already-VALID plan ranks first but can NEVER make a valid plan invalid (or vice versa). The engine-side compile-guard above includes a `SOFT_FRAMED_MAPS_TO_ADD_SOFT_OBJECTIVE` probe that type-checks this exact shape, and `preferenceExtraction.eval.ts`'s **Dpos** bucket (fixture `Dpos-11`, the meeting-frequency preference) demonstrates it with an inline test asserting `mappedToMutation.kind === "addSoftObjective"` and `objective.framing === "soft"`.
 
 ---
 
