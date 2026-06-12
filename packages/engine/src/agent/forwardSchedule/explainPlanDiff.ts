@@ -46,6 +46,8 @@ export function explainPlanDiff(diff: PlanDiff, mutation: PlanMutation): string 
         case "bindPoolSlot":       return renderBindPoolSlot(diff, mutation);
         case "setSchedulingPreference":   return renderSetSchedulingPreference(diff);
         case "clearSchedulingPreference": return renderClearSchedulingPreference(diff);
+        case "addSoftObjective":   return renderAddSoftObjective(diff);
+        case "clearSoftObjectives": return renderClearSoftObjectives(diff);
         default: {
             // Exhaustiveness guard — TS will error here if a new kind
             // is added to PlanMutation without a template above.
@@ -189,6 +191,16 @@ function renderSetSchedulingPreference(_diff: PlanDiff): string {
 
 function renderClearSchedulingPreference(_diff: PlanDiff): string {
     return "Clearing scheduling preferences (time/day filters). All sections become eligible again.";
+}
+
+function renderAddSoftObjective(_diff: PlanDiff): string {
+    // D6.2 — rung-2 SOFT objective: recorded and used only to bias which VALID
+    // plan ranks first; it never changes feasibility or validity.
+    return "Recorded a soft scheduling preference (applies when ranking equally-valid plans).";
+}
+
+function renderClearSoftObjectives(_diff: PlanDiff): string {
+    return "Cleared the recorded soft scheduling preferences.";
 }
 
 // ---------------------------------------------------------------------------

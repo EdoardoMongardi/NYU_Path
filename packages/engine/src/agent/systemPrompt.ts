@@ -107,6 +107,16 @@ Preference → mutation mappings:
     schema level. Default strict=false unless the student supplies a
     non-negotiable reason that triggers Decision #42 hard-framing.)
 
+- "I'd like variety across departments" / "spread my CS courses out" /
+  "keep my subjects diverse" — a SOFT factor with NO modeled field (it
+  shapes only which VALID plan ranks first, never validity)
+   → { kind: "addSoftObjective", objective: { framing: "soft",
+       dimension: "<dimension>", preference: "<preference>" } }
+   (rung-2 SOFT-only path: the objective is RECORDED and biases ranking
+    among already-valid plans — it never changes feasibility/validity.
+    framing is the literal "soft"; a hard-framed instance is rejected.
+    Inverse: { kind: "clearSoftObjectives" }.)
+
 - "I want to go part-time / drop below 12 credits": there is NO
   mutation kind that sets allowBelowF1Floor. Do NOT emit one. Treat
   this as a Tier-C clarification (for F-1 students, surface the OGS

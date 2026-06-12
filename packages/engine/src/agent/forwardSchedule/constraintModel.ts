@@ -21,7 +21,7 @@
  */
 
 import type { SolverInput } from "./types.js";
-import type { WorkloadTier, FeasibilityReport, ForwardSemester } from "@nyupath/shared";
+import type { WorkloadTier, FeasibilityReport, ForwardSemester, GenericSoftConstraint } from "@nyupath/shared";
 import type { ValidatorAxis } from "./graduationPathValidator.js";
 import { computeBalanceScore, type LoadStyle } from "./balanceScore.js";
 import {
@@ -723,15 +723,80 @@ export function checkHardConstraints(
 // Soft objective
 // ===========================================================================
 
-/** Weights for the two soft-objective components. */
+/** Weights for the soft-objective components. */
 export interface ObjectiveWeights {
     /** Weight on workload-balance cost (computeBalanceScore). Default 1. */
     balance: number;
     /** Weight on time-to-degree (earlier completion = lower cost). Default 0.5. */
     timeToDegree: number;
+    /**
+     * D6.2 — weight on the rung-2 generic SOFT-objective cost
+     * (`computeSoftObjectiveCost` over `ctx.input.preferences?.softObjectives`).
+     * Default 0.25 — below balance/timeToDegree so a recorded soft preference
+     * biases ranking among already-balanced VALID plans rather than overriding
+     * the core objectives. The cost is 0 whenever `softObjectives` is absent or
+     * empty, so this term is default-off and every existing plan's score is
+     * unchanged. Optional in callers; defaults applied per-field below. */
+    softObjective?: number;
 }
 
-export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = { balance: 1, timeToDegree: 0.5 };
+export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = { balance: 1, timeToDegree: 0.5, softObjective: 0.25 };
+
+/** Default per-objective strength when a GenericSoftConstraint omits `weight`. */
+const DEFAULT_SOFT_OBJECTIVE_WEIGHT = 1;
+
+/**
+ * D6.2 — generic, extensible SOFT-objective cost (LOWER = better-satisfied).
+ *
+ * Reads ONLY `plan.placed` (course ids + terms) — never any solver/validity
+ * surface — so this is a pure RANKING signal: adding it can change which VALID
+ * plan ranks first, but cannot change feasibility or validity.
+ *
+ * Dispatch on `dimension`. Implemented dimension:
+ *  - "departmentDiversity": parse each placed course's department prefix.
+ *      preference "diverse"       → cost = placedCount − distinctDeptCount
+ *                                   (fully diverse ⇒ 0; all one dept ⇒ max).
+ *      preference "concentrated"  → cost = distinctDeptCount − 1
+ *                                   (single dept ⇒ 0; all distinct ⇒ max).
+ *      Courses with no parseable department are ignored for this dimension.
+ *
+ * Dimensions the ranker cannot evaluate from the plan return 0
+ * ("recorded-not-enforced"); D6.5 surfaces that honestly. Each objective's
+ * contribution is scaled by its optional `weight` (default 1).
+ */
+export function computeSoftObjectiveCost(plan: PartialPlan, objectives: GenericSoftConstraint[]): number {
+    let total = 0;
+    for (const obj of objectives) {
+        const w = obj.weight ?? DEFAULT_SOFT_OBJECTIVE_WEIGHT;
+        let cost = 0;
+        switch (obj.dimension) {
+            case "departmentDiversity": {
+                const depts = new Set<string>();
+                let parseable = 0;
+                for (const p of plan.placed) {
+                    const dept = parseCourseComponents(p.courseId)?.dept;
+                    if (dept === undefined) continue;
+                    parseable += 1;
+                    depts.add(dept);
+                }
+                if (parseable === 0) break; // nothing to evaluate
+                if (obj.preference === "concentrated") {
+                    cost = depts.size - 1; // single dept ⇒ 0
+                } else {
+                    // default direction = "diverse"
+                    cost = parseable - depts.size; // fully diverse ⇒ 0
+                }
+                break;
+            }
+            default:
+                // Recorded-not-enforced: a dimension the ranker can't evaluate
+                // contributes 0 cost (D6.5 surfaces this honestly).
+                cost = 0;
+        }
+        total += w * cost;
+    }
+    return total;
+}
 
 /**
  * Soft objective — LOWER is better (a cost the search minimises). Deterministic.
@@ -801,5 +866,20 @@ export function scorePlan(
         }
     }
 
-    return w.balance * balanceCost + w.timeToDegree * timeToDegreeIndex;
+    // --- D6.2 rung-2 generic SOFT-objective component ---
+    // Reads ONLY ctx.input.preferences?.softObjectives via computeSoftObjectiveCost,
+    // which itself reads ONLY plan.placed. The cost is 0 whenever softObjectives is
+    // absent or empty (computeSoftObjectiveCost(plan, []) === 0), so this term is
+    // default-off — every existing plan's score is byte-identical. It can only
+    // re-rank already-VALID plans; the hard solver contract never reads it.
+    const softObjectiveCost = computeSoftObjectiveCost(
+        plan,
+        ctx.input.preferences?.softObjectives ?? [],
+    );
+
+    return (
+        w.balance * balanceCost +
+        w.timeToDegree * timeToDegreeIndex +
+        (w.softObjective ?? 0) * softObjectiveCost
+    );
 }
