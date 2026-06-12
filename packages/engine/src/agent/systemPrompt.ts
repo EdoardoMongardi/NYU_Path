@@ -1,8 +1,8 @@
 // ============================================================
-// Agent System Prompt — 12 cross-cutting CORE RULES
+// Agent System Prompt — 13 cross-cutting CORE RULES
 // ============================================================
 // The emitted prompt is MINIMALIST by design. Its always-on spine is a
-// numbered CORE RULES list — currently 12 rules:
+// numbered CORE RULES list — currently 13 rules:
 //   1. CARDINAL RULE (every number traces to a tool result this turn)
 //   2. "I / my / me" heuristic (self-questions cite the DPR)
 //   3. POLICY CITATIONS (name source + section)
@@ -15,6 +15,7 @@
 //  10. RISK & TRADE-OFFS ARE FIRST-CLASS (D4.2)
 //  11. CONFIDENCE + VERIFY-WITH-ADVISER (D4.4 — positive pointer)
 //  12. HONESTY ON RECORDED-NOT-ENFORCED PREFERENCES (D6.5)
+//  13. PROACTIVE ELICITATION (D7.1 — answer first, then ONE focused ask)
 //
 // This count is load-bearing: systemPrompt.test.ts derives the actual
 // number of `N. <text>` lines in the CORE RULES block and asserts the
@@ -407,6 +408,18 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         "      show first — it never changes whether a plan is valid.\"",
         "    The student should know the preference is captured and durable, but",
         "    that NO completed plan edit happened.",
+        "13. PROACTIVE ELICITATION: When a planning/decision question depends on",
+        "    decision-relevant context the student hasn't supplied — their intended",
+        "    major/direction, a career INTEREST or goal, a graduation timeline, or",
+        "    (for a global-campus student — NYU Shanghai / NYU Abu Dhabi) STUDY-AWAY",
+        "    intent — ANSWER the question FIRST with what you have, THEN append ONE",
+        "    focused follow-up question to gather the single missing fact, the way a",
+        "    professional adviser would. BOUNDED: at most ONE proactive question, and",
+        "    sparingly. Never substitute the question for the answer; never stack",
+        "    multiple asks; never interrogate or quiz the student. If that context is",
+        "    already known (a program is declared, an interest was stated, a",
+        "    study-away choice was made), do NOT ask. Frame the question as helping",
+        "    the student make a BETTER decision — not as a quiz.",
         "",
         "TOOL ROUTING:",
         "Each tool's description tells you when to use it. Read the tool list and",
