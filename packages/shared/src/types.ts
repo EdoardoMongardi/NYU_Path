@@ -1179,7 +1179,13 @@ export interface SchedulingPreferences {
  *
  *  - `dimension`  — what the soft factor is about (e.g. "departmentDiversity").
  *  - `preference` — the desired direction (e.g. "diverse" / "concentrated").
- *  - `weight`     — optional 0..1 strength multiplier on the soft cost.
+ *  - `weight`     — optional strength multiplier on the soft cost, bounded to
+ *                   [0, 1]. TypeScript can't express a numeric range, so the
+ *                   bound is enforced at the schema boundary
+ *                   (`GenericSoftConstraintSchema` = `z.number().min(0).max(1)`
+ *                   in engine/planChangeHelpers.ts) and pinned by a unit test
+ *                   (genericConstraint test (e)). Omitted ⇒ the ranker's
+ *                   default weight (1).
  *
  * Dimensions the ranker cannot yet evaluate from the plan default to ZERO cost
  * ("recorded-not-enforced"); D6.5 surfaces that honestly to the student.
@@ -1189,6 +1195,9 @@ export interface GenericSoftConstraint {
     framing: "soft";
     dimension: string;
     preference: string;
+    /** Range [0, 1]. The bound is enforced at the schema boundary
+     *  (`GenericSoftConstraintSchema`), not by this structural type — TypeScript
+     *  can't express a numeric range. Omitted ⇒ default weight 1. */
     weight?: number;
 }
 
