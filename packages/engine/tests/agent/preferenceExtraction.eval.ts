@@ -904,6 +904,45 @@ describe("preferenceExtraction eval suite — fixture invariants", () => {
 });
 
 // ============================================================
+// D6.6 — operator-gated per-bucket ≥85% accuracy assertion.
+// Same gating idiom as explainWhy.eval.ts / honestyInterlock.test.ts:
+// the describe early-returns with a single it.skip when no key is set,
+// so under keyless CI the test is COLLECTED + SKIPPED (never errors and
+// never makes a network call). With a key (CI-with-key or a local run)
+// it drives the full 59-fixture suite through evalSuite() and asserts
+// the ≥85% bar PER BUCKET — a regression below 85% on any one of
+// A/B/C/Dpos/Dneg now fails this test (previously the bar was only
+// logged by the import-side-effect, never asserted).
+//
+// `evalSuite` is a hoisted `function` declaration further down this
+// file, so referencing it here (before its textual definition) is safe.
+// The 600s per-test timeout (3rd it() arg) covers ~59 sequential real
+// API calls; the global vitest timeout is intentionally left untouched.
+// ============================================================
+describe("preferenceExtraction eval — per-bucket ≥85% bar (gated on ANTHROPIC_API_KEY)", () => {
+    if (!process.env.ANTHROPIC_API_KEY) {
+        it.skip("requires ANTHROPIC_API_KEY — per-bucket ≥85% accuracy on A/B/C/Dpos/Dneg", () => {
+            /* gated: no API key in this environment */
+        });
+        return;
+    }
+
+    it("every bucket (A/B/C/Dpos/Dneg) meets the ≥85% accuracy bar", async () => {
+        const result = await evalSuite();
+        // Operator visibility: print the full per-bucket breakdown
+        // (incl. which fixtures failed) before asserting.
+        printEvalSummary(result);
+
+        for (const b of result.buckets) {
+            expect(
+                b.accuracy,
+                `bucket ${b.bucket}: ${b.passed}/${b.total} — ${b.failed.map((f) => f.id).join(",")}`,
+            ).toBeGreaterThanOrEqual(0.85);
+        }
+    }, 600_000);
+});
+
+// ============================================================
 // Operator-gated LLM-call runner
 // Runs only when ANTHROPIC_API_KEY is set. Mirror Phase 7-A
 // surrogate-eval pattern.
@@ -1139,12 +1178,15 @@ export async function evalSuite(): Promise<EvalRunResult> {
         meetsBar,
     };
 
-    // The summary is printed by the top-level direct-invocation block
-    // below (lines 1010+) when the file is run via `tsx` with the
-    // ANTHROPIC_API_KEY env var. The package is ESM ("type": "module"),
-    // so `require.main === module` is never defined at runtime — the
-    // print-on-direct-call path lives entirely in the import.meta.url
-    // check below.
+    // The summary is printed by:
+    //   (1) the gated vitest test above (printEvalSummary(result)), and
+    //   (2) the standalone direct-invocation block at the bottom of this
+    //       file when run via `tsx` with ANTHROPIC_API_KEY set.
+    // The package is ESM ("type": "module"), so `require.main === module`
+    // is never defined at runtime; the standalone path is therefore gated
+    // on `ANTHROPIC_API_KEY && !VITEST` (see the bottom block) so it fires
+    // ONLY for the direct `tsx` invocation and never as an import
+    // side-effect under vitest.
     return summary;
 }
 
@@ -1164,9 +1206,18 @@ export function printEvalSummary(result: EvalRunResult): void {
     }
 }
 
-// Allow direct invocation via tsx:
+// Standalone direct-invocation entry (tsx ONLY — never under vitest):
 //   ANTHROPIC_API_KEY=sk-... pnpm tsx packages/engine/tests/agent/preferenceExtraction.eval.ts
-if (process.env.ANTHROPIC_API_KEY) {
+//
+// vitest sets VITEST / VITEST_WORKER_ID in the worker env, so the
+// `!process.env.VITEST` guard prevents this block from firing as an
+// import side-effect during vitest collection (which — with a key set —
+// would otherwise launch ~59 real API calls during collection and could
+// `process.exit(1)` and crash the whole vitest process). Under vitest the
+// ≥85%-per-bucket bar is instead asserted by the gated `it(...)` above.
+// For the standalone `tsx` run this still prints the summary and exits
+// non-zero on failure.
+if (process.env.ANTHROPIC_API_KEY && !process.env.VITEST) {
     evalSuite()
         .then(printEvalSummary)
         .catch((err) => {
