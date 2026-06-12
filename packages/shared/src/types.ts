@@ -1219,12 +1219,7 @@ export interface SchedulePreferences {
     softObjectives?: GenericSoftConstraint[];
 }
 
-// ---- 3. PlanChangeProposal + PlanChangeOutcome + AlternativeCandidate (Phase 14 literal spec) ----
-
-export interface PlanChangeProposal {
-    kind: "pin" | "exclude" | "load_style" | "credit_target" | "include_summer" | "include_jterm" | "allow_below_floor";
-    payload: Record<string, unknown>;
-}
+// ---- 3. PlanChangeOutcome + AlternativeCandidate (Phase 14 literal spec) ----
 
 export interface PlanChangeOutcome {
     feasible: boolean;
