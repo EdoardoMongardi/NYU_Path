@@ -1,6 +1,6 @@
 # Chat Route — `/api/chat/v2` (SSE Streaming Endpoint)
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (D7.2 — added the post-loop proactive-elicitation append: on the OK terminal path the route appends one bounded question to `done.finalText`, append-not-substitute + frequency-bounded; see §11).
 
 ## Purpose
 
@@ -183,6 +183,15 @@ The route uses snapshot-and-compare to detect side-effect writes by tools during
 - **Materialization** — `materialize_sections` writes to `session.lastMaterializationResult`. When `computedAt` changed, the route emits `forward_materialization_update` with the full payload.
 
 All three checks run before the `done`/`error` event so the sidebar can react before the chat bubble settles.
+
+### Proactive-elicitation append (D7.2 — append, not substitute)
+
+After the post-loop validator runs and `stripFabricatedBlockquotes` has (conditionally) scrubbed the reply, but **before** the `done` write, the route runs the proactive-elicitation append — **only on the OK terminal path** (`allOk`). A professional adviser answers first, then asks ONE focused follow-up; so this is **append-not-substitute** (contrast the reactive clarifier gate at §7, which streams a question and `return`s *before* the agent loop). The route:
+
+1. Calls `detectElicitationOpportunity(userMessage, priorMessages, studentContext)` (from [`proactiveElicitation.ts`](../../../packages/engine/src/agent/proactiveElicitation.ts), see [clarifier.md](../engine/clarifier.md)). `studentContext` mirrors the clarifier call — `homeSchool` / `declaredPrograms[].programId` / `visaStatus` from `session.student`.
+2. Calls the pure `decideElicitationAppend({ report, finalText: finalTextOut, priorMessages })`. When it returns `{ append: true, text }`, the route does `finalTextOut = `${finalTextOut}\n\n${text}``.
+
+Because `finalTextOut` is mutated **before** the `done` write, the appended question rides into `done.finalText` (the client reconciles the rendered bubble to `ev.finalText`) **and** into the durable transcript (§13 persists `finalTextOut`). That self-propagation is what makes the **bounded-frequency guard** work: `decideElicitationAppend` greps the LAST assistant message in `priorMessages` for the stable `ELICITATION_LEAD_IN` marker and stays silent when we elicited on the immediately-prior turn — so no two proactive asks land back-to-back. It also stays silent when the agent's own reply already asks (ends with `?` or already carries the lead-in). The whole block is wrapped in try/catch — a detector failure logs and proceeds with the un-appended answer, never breaking the turn. The append-not-substitute guarantee is **structural** in the engine: `decideElicitationAppend` only ever returns text to APPEND (or `null`).
 
 ### Recovery mode (cohort-gate failing)
 
