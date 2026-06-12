@@ -184,7 +184,11 @@ Tier hierarchy (apply in order):
   heuristic mapping with the HEURISTIC_MAPPING assumption flag
   (studentConstraintFraming MUST be "soft" — schema-enforced;
   emitting Tier D for a hard-framed constraint is a compile-time
-  error, not a prompt-rule violation).
+  error, not a prompt-rule violation). A genuinely-new SOFT factor
+  with no modeled field may now map to { kind: "addSoftObjective" }
+  (recorded, ranker-read, never changes validity) instead of null —
+  the mapped objective's framing stays the literal "soft", so the
+  SOFT-only invariant is preserved end to end.
 
 Never silently translate. Surface the chosen tier to the student
 in plain language:

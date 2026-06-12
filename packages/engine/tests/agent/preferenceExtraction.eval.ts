@@ -613,8 +613,28 @@ const BUCKET_DPOS: EvalFixture[] = [
             type: "HEURISTIC_MAPPING",
             studentConstraintFraming: "soft",
             confidenceFloor: "low",
+            // D6.4 — rung-4 → rung-2 enablement. This genuinely-new SOFT
+            // factor has no modeled SchedulePreferences field (rung-1) and
+            // no axis-aligned compare_plan_alternatives dimension, so it
+            // reaches Tier D. BEFORE D6.2 it could only be recorded with
+            // mappedToMutation: null. NOW it is ACTIONABLE via the rung-2
+            // generic SOFT-objective primitive: a structured
+            // GenericSoftConstraint recorded into prefs.softObjectives[],
+            // read ONLY by the ranker (scorePlan) — never by the hard
+            // solver. studentConstraintFraming stays "soft" and the
+            // objective's own framing is the literal "soft", so the
+            // SOFT-only invariant holds end to end.
+            mappedToMutation: {
+                kind: "addSoftObjective",
+                objective: {
+                    id: "meeting-frequency",
+                    framing: "soft",
+                    dimension: "meetingFrequency",
+                    preference: "fewerLongerSessions",
+                },
+            },
         },
-        fixtureNote: "meeting-frequency preference has no modeled axis; soft framing → Tier D acceptable",
+        fixtureNote: "meeting-frequency preference has no modeled axis; soft framing → Tier D, now ACTIONABLE via addSoftObjective (rung-2). Recorded/ranker-read; never changes validity.",
     },
 ];
 
@@ -824,6 +844,61 @@ describe("preferenceExtraction eval suite — fixture invariants", () => {
                 fixture.expectedTier,
                 `Dneg fixture ${fixture.id} must have expectedTier='C' (Tier D MUST NOT fire for hard constraints)`,
             ).toBe("C");
+        }
+    });
+
+    // ----------------------------------------------------------------
+    // D6.4 — rung-4 → rung-2 enablement. Before D6.2 a genuinely-new
+    // SOFT factor reached via HEURISTIC_MAPPING (Tier D) could only map
+    // to an EXISTING PlanMutation kind or `null` (recorded-but-not-
+    // actionable). Now `addSoftObjective` (the rung-2 SOFT, ranker-read
+    // primitive) exists, so at least one Dpos fixture must demonstrate a
+    // brand-new soft factor becoming ACTIONABLE while staying strictly
+    // SOFT-only: studentConstraintFraming stays "soft" (Layer 2) AND the
+    // mapped objective's framing is the literal "soft".
+    // ----------------------------------------------------------------
+    it("at least one Dpos fixture maps a genuinely-new SOFT factor to addSoftObjective (D6.4 rung-4→rung-2 enablement)", () => {
+        const actionable = EVAL_BUCKETS.Dpos.filter((f) => {
+            const m = (f.expectedAction as {
+                mappedToMutation?: { kind?: string };
+            }).mappedToMutation;
+            return m?.kind === "addSoftObjective";
+        });
+        expect(
+            actionable.length,
+            "≥1 Dpos fixture must carry expectedAction.mappedToMutation.kind === 'addSoftObjective'",
+        ).toBeGreaterThanOrEqual(1);
+
+        for (const f of actionable) {
+            const action = f.expectedAction as {
+                studentConstraintFraming?: string;
+                mappedToMutation?: {
+                    kind?: string;
+                    objective?: { framing?: string; dimension?: string; preference?: string };
+                };
+            };
+            // SOFT-only invariant holds end to end:
+            expect(
+                action.studentConstraintFraming,
+                `Dpos fixture ${f.id} HEURISTIC_MAPPING must stay studentConstraintFraming='soft'`,
+            ).toBe("soft");
+            expect(
+                action.mappedToMutation?.kind,
+                `Dpos fixture ${f.id} mappedToMutation must be addSoftObjective`,
+            ).toBe("addSoftObjective");
+            expect(
+                action.mappedToMutation?.objective?.framing,
+                `Dpos fixture ${f.id} addSoftObjective objective.framing must be the literal 'soft'`,
+            ).toBe("soft");
+            // The objective is a real GenericSoftConstraint shape (dimension + preference):
+            expect(
+                action.mappedToMutation?.objective?.dimension,
+                `Dpos fixture ${f.id} addSoftObjective objective must carry a dimension`,
+            ).toBeTruthy();
+            expect(
+                action.mappedToMutation?.objective?.preference,
+                `Dpos fixture ${f.id} addSoftObjective objective must carry a preference`,
+            ).toBeTruthy();
         }
     });
 });
