@@ -1,6 +1,6 @@
 # System Prompt
 
-> Last verified against code: 2026-06-11 (D6.4 — Tier-D 3-layer SOFT-only guard documented as intact (Layer 1 prompt / Layer 2 compile-guard ×2 / Layer 3 Dneg eval) and rung-4 → rung-2 enablement: a genuinely-new SOFT factor may now map via `HEURISTIC_MAPPING` to `addSoftObjective` (recorded, ranker-read) instead of `null`, SOFT-only invariant preserved end to end; D6.2 — rung-1 table now carries the rung-2 `addSoftObjective`/`clearSoftObjectives` SOFT-only mapping, recorded + ranker-read, never changes validity; D6.1 — rung-1 preference table + Tier-A eval reconciled to the live `PlanMutation` union, incl. Phase-17 `move`/`unpin`/`freeze`; D4 honesty-rail CORE RULES 9–11 + banner count fix; post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (D6.5 — CORE RULE 12 (honesty interlock — recorded-not-enforced): when a scheduling preference (`setSchedulingPreference`) or a soft objective (`addSoftObjective`) is RECORDED, the agent must NOT claim the visible course-level plan changed (no "I've made Tuesday free"); it states the preference is recorded and names WHEN/HOW it applies — scheduling prefs at section materialization (strict ⇒ eliminate conflicting sections, soft ⇒ deprioritize), soft objectives as ranking bias among equally-valid plans that never changes validity. Banner/count 11→12; `renderSetSchedulingPreference` tightened to the recorded-not-enforced framing. D6.4 — Tier-D 3-layer SOFT-only guard documented as intact (Layer 1 prompt / Layer 2 compile-guard ×2 / Layer 3 Dneg eval) and rung-4 → rung-2 enablement: a genuinely-new SOFT factor may now map via `HEURISTIC_MAPPING` to `addSoftObjective` (recorded, ranker-read) instead of `null`, SOFT-only invariant preserved end to end; D6.2 — rung-1 table now carries the rung-2 `addSoftObjective`/`clearSoftObjectives` SOFT-only mapping, recorded + ranker-read, never changes validity; D6.1 — rung-1 preference table + Tier-A eval reconciled to the live `PlanMutation` union, incl. Phase-17 `move`/`unpin`/`freeze`; D4 honesty-rail CORE RULES 9–11 + banner count fix; post planning-engine rebuild, PRs #35-#41).
 
 > **Source file:** `packages/engine/src/agent/systemPrompt.ts`
 
@@ -22,13 +22,13 @@ flowchart LR
 
 This module builds the **system prompt** — the long instruction block the LLM sees before every turn. It is constructed fresh per request from a `SystemPromptOptions` bag.
 
-> **Banner corrected (D4.3, 2026-06-11).** The file's top-of-module banner (`systemPrompt.ts:1-26`) previously called this an "Appendix A (25 rules verbatim)" prompt. It now honestly describes the current spine: **11** numbered CORE RULES, listed by name in the banner. The banner count is load-bearing — `systemPrompt.test.ts` derives the actual number of `N. <text>` lines in the CORE RULES block and asserts the banner agrees, so a future added/removed rule that doesn't update the banner FAILS that test. There is no 25-rule list in the emitted prompt; read the function body, not training-data memory of the old Appendix A.
+> **Banner corrected (D4.3, 2026-06-11; count bumped to 12 in D6.5).** The file's top-of-module banner (`systemPrompt.ts:1-27`) previously called this an "Appendix A (25 rules verbatim)" prompt. It now honestly describes the current spine: **12** numbered CORE RULES, listed by name in the banner. The banner count is load-bearing — `systemPrompt.test.ts` derives the actual number of `N. <text>` lines in the CORE RULES block and asserts the banner agrees, so a future added/removed rule that doesn't update the banner FAILS that test. There is no 25-rule list in the emitted prompt; read the function body, not training-data memory of the old Appendix A.
 
 > **Fixed (improvement plan, Phase E) — the ROLE line is now school-aware.** The prompt previously opened with a hardcoded `"...an AI academic adviser for NYU College of Arts & Science."` that did not interpolate `homeSchool`, so a Stern or Tandon student was told the adviser was "for CAS." Phase E interpolates the student's school via `schoolDisplayName(opts.student.homeSchool)` (`data/schoolDefaults.ts`): a Stern student now reads "...for NYU Stern School of Business," and with no student loaded it falls back to a generic "...for NYU." (never asserting a school it can't confirm). The prompt also adds an explicit "never assume CAS — advise per THIS student's school/catalog/DPR" instruction.
 
 The prompt has three sections, assembled in order:
 
-1. **Core static rules** — eleven numbered rules that are always present
+1. **Core static rules** — twelve numbered rules that are always present
 2. **Preference extraction** — Phase-14 rules (reconciled in D6.1) about translating natural-language preferences into live `PlanMutation` entries for the `propose_plan_change` `mutations` array
 3. **Decision-#42 4-tier fallback hierarchy** — rules for how to handle hard vs. soft student constraints
 4. **Conditional sections** based on options:
@@ -41,9 +41,9 @@ The prompt has three sections, assembled in order:
 
 ---
 
-## 1. The eleven core static rules (always present)
+## 1. The twelve core static rules (always present)
 
-These appear verbatim under the `CORE RULES (mandatory — non-negotiable):` header. Rules 9–11 are the **D4 honesty-rail** additions (2026-06-11).
+These appear verbatim under the `CORE RULES (mandatory — non-negotiable):` header. Rules 9–11 are the **D4 honesty-rail** additions (2026-06-11); rule 12 is the **D6.5 honesty interlock** addition.
 
 1. **Cardinal Rule.** Every number, course code, requirement status, credit count, GPA, deadline, or rule citation must come from a tool result this turn. Never write a number from training data. Never round. Never paraphrase. If the model catches itself writing a number it can't trace, it must stop and call the tool. (This rule is what the response validator's `checkGrounding` enforces.)
 
@@ -66,6 +66,10 @@ These appear verbatim under the `CORE RULES (mandatory — non-negotiable):` hea
 10. **Risk & trade-offs are first-class (D4.2).** Proactively identify risk and/or state trade-offs on **both agent-proposed and student-proposed** decisions — not only when asked. When a change/probe yields a trade-off diff (the `propose_plan_change` / `probe_counterfactual` output's trade-off section: new petitions, newly-unmet requirements, cascaded shifts, new assumptions, graduation-term/balance impact), surface it plainly so the student sees the cost, not just the benefit. The agent reasons over the engine's computed diff — it never invents a delta.
 
 11. **Confidence + verify-with-adviser (D4.4 — positive pointer).** When a plan or policy conclusion is **not ~99% grounded/computed**, attach an explicit confidence signal AND name the specific points the student should verify with their human adviser. This owns the inherently-uncertain conclusions: RAG-preview majors, an LLM re-rank of plan alternatives, any FOSE-dependent/future-term claim, and — importantly — **non-CAS requirement-model approximations**: when the student's home school is non-CAS (NYU Shanghai / NYU Abu Dhabi) OR a requirement was classified via a CAS-constant fallback, a counterfactual or re-rank conclusion must carry a tag like *"the requirement model may be CAS-approximated for your school — please verify with your adviser"* rather than narrating an unqualified conclusion. This is the **positive** behavior — it complements but does not duplicate rule 6's Tier-2 estimate hedge (which owns "about/approximately" framing of bulletin-retrieval estimates), and it is separate from the response validator that *blocks* ungrounded plan claims.
+
+12. **Honesty on recorded-not-enforced preferences (D6.5).** When the agent RECORDS a scheduling preference (`setSchedulingPreference`) or a soft objective (`addSoftObjective`), it must **not** claim the visible **course-level plan** changed — never *"I've made Tuesday free"* / *"Tuesday is now clear."* Nothing on the course-by-term plan the student sees moves. The agent states the preference is **recorded** (it persists and rides into the downstream step) and names **WHEN/HOW** it applies:
+    - **scheduling preference** → *"recorded; it applies when we pick specific **sections** (meeting times), not the course-level plan you see now."* It distinguishes honestly: a **strict** preference will **eliminate** conflicting sections at materialization; a **soft** one will only **deprioritize** (deboost ~0.7×) them, never drop them. This matches `applySchedulingPreferences.ts` exactly — the strict pass drops sections; the soft pass reweights them; the course-level forward plan is untouched.
+    - **soft objective** → *"recorded; it biases which equally-valid plan I show first — it never changes whether a plan is valid."* This matches D6.2: the objective is read only by the ranker (`scorePlan`), never by the hard solver's feasibility/validity logic. The tie is also enforced in the deterministic confirm-bubble templates (`explainPlanDiff.ts`): `renderSetSchedulingPreference` now says the course-level plan is unchanged and the prefs apply at section selection (strict eliminate / soft deprioritize); `renderAddSoftObjective` already says "Recorded a soft scheduling preference (applies when ranking equally-valid plans)."
 
 Followed by a one-paragraph **TOOL ROUTING** block: each tool's description tells the model when to use it; the validator + each tool's `validateInput` will reject misroutes, so a wrong call is recoverable, but trying to answer without calling a tool when one is needed is not.
 
@@ -234,7 +238,7 @@ The block ends with three behavior rules:
 ```mermaid
 flowchart TD
     OPTS[SystemPromptOptions] --> ROLE["ROLE block:<br/>You are NYU Path…<br/>(school name interpolated from<br/>homeSchool — Phase E, de-CAS)"]
-    ROLE --> CORE[11 core static rules]
+    ROLE --> CORE[12 core static rules]
     CORE --> ROUT[TOOL ROUTING paragraph]
     ROUT --> PREF[PREFERENCE EXTRACTION:<br/>Tier-A mappings]
     PREF --> TIER[PREFERENCE EXTRACTION:<br/>4-tier fallback]
