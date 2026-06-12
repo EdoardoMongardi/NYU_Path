@@ -18,8 +18,9 @@
  *      survives persistence + hydration (re-readable on a later turn).
  *  (c) no-provenance control: confirm WITHOUT rankedAlternative → no
  *      LLM_RANKED_ALTERNATIVE Assumption added (not always-on).
- *  (d) de-dupe: re-confirming the SAME rankedAlternative does not duplicate
- *      the assumption.
+ *  (d) exactly-one: re-confirming the SAME rankedAlternative still yields
+ *      exactly one assumption (finalize rebuilds assumptions fresh — nothing
+ *      to stack against).
  *  (e) compare stays read-only: compare_plan_alternatives is byte-identical-
  *      session (no write, no persist).
  */
@@ -305,10 +306,12 @@ describe("confirm_plan_change — no re-rank provenance (control, D6.3)", () => 
 });
 
 // ---------------------------------------------------------------------------
-// (d) de-dupe — re-confirming the SAME provenance does not duplicate it
+// (d) exactly-one — re-confirming the SAME provenance still yields exactly one
+//     (finalizeForwardSchedule rebuilds assumptions fresh each confirm, so a
+//     prior provenance is never carried forward to stack against)
 // ---------------------------------------------------------------------------
 
-describe("confirm_plan_change — re-rank provenance de-dupe (D6.3)", () => {
+describe("confirm_plan_change — re-rank provenance: exactly one, no stacking (D6.3)", () => {
     it("(d) re-confirming the same rankedAlternative does not duplicate the assumption", async () => {
         const store = new InMemoryScheduleStore();
         const session = makeSession({ scheduleStore: store });

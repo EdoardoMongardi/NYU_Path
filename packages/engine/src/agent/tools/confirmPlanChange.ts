@@ -62,23 +62,6 @@ const RankedAlternativeSchema = z.object({
         .describe("The comparison axes weighed during the re-rank (echoed from compare_plan_alternatives)."),
 });
 
-/**
- * True when two LLM_RANKED_ALTERNATIVE assumptions encode the same provenance.
- * Used to de-dupe so a re-confirm of the same choice does not stack duplicates.
- */
-function sameRankedAssumption(
-    a: Extract<Assumption, { type: "LLM_RANKED_ALTERNATIVE" }>,
-    b: Extract<Assumption, { type: "LLM_RANKED_ALTERNATIVE" }>,
-): boolean {
-    return (
-        a.studentStatedFactor === b.studentStatedFactor &&
-        a.selectedPlanIndex === b.selectedPlanIndex &&
-        a.reasoning === b.reasoning &&
-        a.dimensionsConsidered.length === b.dimensionsConsidered.length &&
-        a.dimensionsConsidered.every((d, i) => d === b.dimensionsConsidered[i])
-    );
-}
-
 // ---------------------------------------------------------------------------
 // Output type
 // ---------------------------------------------------------------------------
@@ -226,7 +209,11 @@ export const confirmPlanChangeTool = buildTool({
         // parallel-Assumption channel (Risk #6 default): it persists AND
         // survives the P3.1 hydration path, so the rationale is re-explainable
         // on a later turn — no separate per-pref provenance store needed.
-        // De-dupe so a re-confirm of the same choice does not stack duplicates.
+        // `finalizeForwardSchedule` rebuilds `assumptions` FRESH from the solver
+        // on every confirm (the solver only emits IP_COURSE_COMPLETION, never
+        // LLM_RANKED_ALTERNATIVE), so a prior turn's provenance is never carried
+        // into this `newSchedule` — appending here yields EXACTLY ONE provenance
+        // entry, and a re-confirm cannot stack duplicates (no de-dup guard needed).
         if (input.rankedAlternative) {
             const provenance: Extract<Assumption, { type: "LLM_RANKED_ALTERNATIVE" }> = {
                 type: "LLM_RANKED_ALTERNATIVE",
@@ -235,12 +222,7 @@ export const confirmPlanChangeTool = buildTool({
                 reasoning: input.rankedAlternative.reasoning,
                 dimensionsConsidered: input.rankedAlternative.dimensionsConsidered,
             };
-            const alreadyRecorded = newSchedule.assumptions.some(
-                (a) => a.type === "LLM_RANKED_ALTERNATIVE" && sameRankedAssumption(a, provenance),
-            );
-            if (!alreadyRecorded) {
-                newSchedule.assumptions = [...newSchedule.assumptions, provenance];
-            }
+            newSchedule.assumptions = [...newSchedule.assumptions, provenance];
         }
 
         // Step 3: Decision #32 routing — keyed on the VALIDATOR's verdict.
