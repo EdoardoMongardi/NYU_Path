@@ -324,3 +324,30 @@ describe("D6.2 (d) — applyMutationsToPreferences writes/clears softObjectives"
         expect(base.softObjectives).toEqual([diverseObjective]);
     });
 });
+
+// ===========================================================================
+// (e) weight bound — [0, 1] enforced at the schema boundary
+// ===========================================================================
+
+describe("D6.2 (e) — GenericSoftConstraint.weight is bounded to [0, 1] at the schema boundary", () => {
+    // TypeScript can't express a numeric range, so the shared type's
+    // `weight?: number` is intentionally loose; `GenericSoftConstraintSchema`
+    // (z.number().min(0).max(1)) is the SINGLE enforcement point. These cases
+    // pin that bound so a future widening (or a drift between the documented
+    // contract and the schema) can't pass silently.
+    it("accepts in-range weights (0, 0.5, 1) and an omitted weight", () => {
+        for (const w of [0, 0.5, 1]) {
+            const parsed = GenericSoftConstraintSchema.safeParse({ ...diverseObjective, weight: w });
+            expect(parsed.success, `weight ${w} should be accepted`).toBe(true);
+        }
+        // weight is optional — an omitted weight is valid (ranker defaults to 1).
+        expect(GenericSoftConstraintSchema.safeParse(diverseObjective).success).toBe(true);
+    });
+
+    it("rejects out-of-range weights (< 0 and > 1)", () => {
+        for (const w of [-0.1, 1.1, 2, -1]) {
+            const parsed = GenericSoftConstraintSchema.safeParse({ ...diverseObjective, weight: w });
+            expect(parsed.success, `weight ${w} should be rejected`).toBe(false);
+        }
+    });
+});
