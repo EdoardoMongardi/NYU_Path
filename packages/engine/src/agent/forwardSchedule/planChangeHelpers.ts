@@ -27,6 +27,25 @@ import { diffPlanTradeOffs } from "./tradeOffEngine.js";
 // Shared Zod schemas (used by propose_plan_change + confirm_plan_change)
 // ---------------------------------------------------------------------------
 
+/**
+ * D6.2 — zod mirror of `GenericSoftConstraint` from `@nyupath/shared`. Lives in
+ * the engine (not shared) because shared carries no runtime zod dependency; the
+ * TYPE is the source of truth in shared, this schema validates it at the tool /
+ * mutation boundary.
+ *
+ * `framing: z.literal("soft")` is the boundary guard: a HARD-framed instance
+ * fails `safeParse` (runtime) just as it is a TS error against the type
+ * (compile-time). Hard constraints route through Tiers A/C, never this soft
+ * primitive (Decision #42).
+ */
+export const GenericSoftConstraintSchema = z.object({
+    id: z.string(),
+    framing: z.literal("soft"),
+    dimension: z.string(),
+    preference: z.string(),
+    weight: z.number().min(0).max(1).optional(),
+});
+
 /** Mirrors `SchedulingPreferences` from `@nyupath/shared` (Decision #43). */
 export const SchedulingPreferencesSchema = z.object({
     avoidDays: z.array(z.object({ day: z.string(), strict: z.boolean() })).optional(),
@@ -91,6 +110,25 @@ export const PlanMutationSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("bindPoolSlot"), slotId: z.string(), courseId: z.string() }),
     z.object({ kind: z.literal("setSchedulingPreference"), value: SchedulingPreferencesSchema }),
     z.object({ kind: z.literal("clearSchedulingPreference") }),
+    /**
+     * D6.2 — rung-2 SOFT-objective mutation. Sets a generic, structured soft
+     * factor (`GenericSoftConstraint`) into `prefs.softObjectives[]`.
+     * `clearSoftObjectives` is its inverse (empties the array).
+     *
+     * PRECEDENCE / CONTRACT (binding): this grows the mutation union by exactly
+     * ONE *soft* kind (plus its clear-inverse), but the HARD SOLVER CONTRACT
+     * stays CLOSED — because the ONLY reader of `prefs.softObjectives` is the
+     * RANKER (`scorePlan`, constraintModel.ts). The solver's feasibility/validity
+     * logic (`buildRequirementVariables`, `checkPrereqsSatisfied`,
+     * `checkRequirementCoverage`, the validator axes) NEVER reads it. This is the
+     * owner's "contract-preserving" choice: the FROZEN solver contract is the
+     * hard feasibility, which is untouched; a SOFT-only ranking signal is
+     * additive and cannot make a valid plan invalid or vice-versa. The schema's
+     * `framing: z.literal("soft")` rejects any hard-framed instance at this
+     * boundary, so the soft-only invariant cannot be smuggled past parse.
+     */
+    z.object({ kind: z.literal("addSoftObjective"), objective: GenericSoftConstraintSchema }),
+    z.object({ kind: z.literal("clearSoftObjectives") }),
 ]);
 
 /** Top-level input shape: `{ mutations: PlanMutation[] }` with min(1). */
@@ -125,6 +163,7 @@ export function applyMutationsToPreferences(
         exclusions: base.exclusions ? [...base.exclusions] : undefined,
         loadStylePerTerm: base.loadStylePerTerm ? { ...base.loadStylePerTerm } : undefined,
         creditTargetPerTerm: base.creditTargetPerTerm ? { ...base.creditTargetPerTerm } : undefined,
+        softObjectives: base.softObjectives ? [...base.softObjectives] : undefined,
     };
 
     const noOpConsequences: string[] = [];
@@ -282,6 +321,21 @@ export function applyMutationsToPreferences(
             }
             case "clearSchedulingPreference": {
                 delete prefs.schedulingPreferences;
+                break;
+            }
+            case "addSoftObjective": {
+                // D6.2 — append a rung-2 SOFT objective. De-dupe by id so
+                // re-issuing the same objective replaces (not duplicates) it.
+                // SOFT-only: only scorePlan reads prefs.softObjectives; the
+                // solver's hard feasibility logic never does.
+                if (!prefs.softObjectives) prefs.softObjectives = [];
+                prefs.softObjectives = prefs.softObjectives.filter(o => o.id !== m.objective.id);
+                prefs.softObjectives.push(m.objective);
+                break;
+            }
+            case "clearSoftObjectives": {
+                // D6.2 — inverse of addSoftObjective; empties the array.
+                prefs.softObjectives = [];
                 break;
             }
             default: {

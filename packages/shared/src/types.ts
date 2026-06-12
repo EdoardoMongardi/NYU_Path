@@ -1154,6 +1154,44 @@ export interface SchedulingPreferences {
     avoidConsecutiveLongBlocks?: boolean;
 }
 
+// ---- 1b. GenericSoftConstraint (D6.2 — rung-2 generic SOFT-objective primitive) ----
+
+/**
+ * D6.2 — a generic, parameterized SOFT factor read ONLY by the RANKER
+ * (`scorePlan`), the Phase-2 scoring surface that already takes soft inputs
+ * like `loadStyle`. It is the contract-preserving "rung-2" primitive: a soft
+ * preference the agent could not map onto a modeled `SchedulePreferences` field
+ * (rung-1) is recorded as a structured `{ dimension, preference }` instead of a
+ * free-text note.
+ *
+ * THE INVARIANT (owner's contract-preserving choice): this is a RANKING signal
+ * only. `scorePlan` adds a soft cost term so a plan that better-satisfies the
+ * objective scores LOWER (ranks first). It is NEVER read by the SOLVER's hard
+ * feasibility/validity logic (`buildRequirementVariables`,
+ * `checkPrereqsSatisfied`, `checkRequirementCoverage`, the validator axes, …).
+ * Adding one can change which VALID plan ranks first, but can NEVER make a valid
+ * plan invalid or an invalid plan valid.
+ *
+ * `framing` is the literal "soft" precisely so a HARD-framed instance is a TS
+ * error AND fails the matching zod parse (`GenericSoftConstraintSchema`,
+ * engine/planChangeHelpers.ts) — hard constraints route through Tiers A/C, never
+ * this primitive (Decision #42, mirrored in the rung-1 prompt table).
+ *
+ *  - `dimension`  — what the soft factor is about (e.g. "departmentDiversity").
+ *  - `preference` — the desired direction (e.g. "diverse" / "concentrated").
+ *  - `weight`     — optional 0..1 strength multiplier on the soft cost.
+ *
+ * Dimensions the ranker cannot yet evaluate from the plan default to ZERO cost
+ * ("recorded-not-enforced"); D6.5 surfaces that honestly to the student.
+ */
+export interface GenericSoftConstraint {
+    id: string;
+    framing: "soft";
+    dimension: string;
+    preference: string;
+    weight?: number;
+}
+
 // ---- 2. SchedulePreferences (Phase 14 — per-student solver preferences) ----
 
 /**
@@ -1174,6 +1212,11 @@ export interface SchedulePreferences {
      *  this per Decision #43. The shape lands here so the mutation array
      *  doesn't version-skew across phases. */
     schedulingPreferences?: SchedulingPreferences;
+    /** D6.2 — rung-2 generic SOFT objectives. Additive + optional (absent ⇒ no
+     *  change to any plan's score or validity). Read ONLY by the RANKER
+     *  (`scorePlan`); the SOLVER's hard feasibility/validity logic never reads
+     *  it — see `GenericSoftConstraint`. */
+    softObjectives?: GenericSoftConstraint[];
 }
 
 // ---- 3. PlanChangeProposal + PlanChangeOutcome + AlternativeCandidate (Phase 14 literal spec) ----
@@ -1270,7 +1313,16 @@ export type PlanMutation =
     | { kind: "unbindFreeElective"; slotId: string }
     | { kind: "bindPoolSlot"; slotId: string; courseId: string }
     | { kind: "setSchedulingPreference"; value: SchedulingPreferences }
-    | { kind: "clearSchedulingPreference" };
+    | { kind: "clearSchedulingPreference" }
+    /**
+     * D6.2 — rung-2 SOFT-objective mutation. Sets a generic, structured soft
+     * factor (`GenericSoftConstraint`) into `SchedulePreferences.softObjectives[]`;
+     * `clearSoftObjectives` is its inverse. SOFT-only: read solely by the RANKER
+     * (`scorePlan`), NEVER by the solver's hard feasibility/validity logic — so
+     * the frozen hard solver contract stays closed. See `GenericSoftConstraint`.
+     */
+    | { kind: "addSoftObjective"; objective: GenericSoftConstraint }
+    | { kind: "clearSoftObjectives" };
 
 /**
  * Output of `propose_plan_change` per Decision #23. Carries

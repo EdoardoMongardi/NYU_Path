@@ -113,6 +113,30 @@ export type {
     ClarificationResult,
 } from "./clarifier.js";
 
+// D7.1 — proactive elicitation detector (sibling to the REACTIVE
+// clarifier above). Pure deterministic; returns a structured report.
+// D7.2 will consume this AFTER the agent loop as an APPEND (not a
+// substitute — see the route clarifier anti-pattern at route.ts ~428-465
+// and the contract note in proactiveElicitation.ts). It is intentionally
+// UNCALLED in route.ts today.
+// D7.2 — the v2 route consumes `decideElicitationAppend` AFTER the agent
+// loop on the OK terminal path to APPEND ONE bounded question (the topic
+// text from `elicitationQuestionFor`) onto `done.finalText` —
+// append-not-substitute, frequency-bounded via the `ELICITATION_LEAD_IN`
+// marker the guard greps for in history. See route.ts terminal path.
+export {
+    detectElicitationOpportunity,
+    decideElicitationAppend,
+    elicitationQuestionFor,
+    ELICITATION_LEAD_IN,
+} from "./proactiveElicitation.js";
+export type {
+    ElicitationReport,
+    ElicitationSignal,
+    ElicitationAppendInput,
+    ElicitationAppendDecision,
+} from "./proactiveElicitation.js";
+
 export { RecordingLLMClient } from "./recordingClient.js";
 
 // Phase 15 Task 8 — surface the section-materialization domain types

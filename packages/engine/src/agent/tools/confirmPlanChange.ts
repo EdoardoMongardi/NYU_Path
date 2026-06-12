@@ -27,11 +27,40 @@ import { computeDprFingerprint } from "../../dpr/fingerprint.js";
 import { buildDoubleCountAdvisory } from "../forwardSchedule/doubleCountAdvisory.js";
 import { renderEnvelopeMeta, type Disclaimer } from "../toolEnvelope.js";
 import type {
+    Assumption,
     PlanChangeOutcome,
     PlanDiff,
     PlanMutation,
     SchedulePreferences,
 } from "@nyupath/shared";
+
+// ---------------------------------------------------------------------------
+// D6.3 — rung-3 LLM re-rank provenance input
+// ---------------------------------------------------------------------------
+//
+// When the agent re-ranks the ForwardSchedule's `alternativeCandidates`
+// (Tier B, Decision #42) against a student-stated soft factor and applies the
+// chosen alternative via this tool, it passes the re-rank provenance so we can
+// record WHY this plan was chosen as a durable `LLM_RANKED_ALTERNATIVE`
+// Assumption on the confirmed schedule's `assumptions[]`. That Assumption
+// channel persists (persistSchedule) AND survives the P3.1 hydration path, so
+// the rationale is re-explainable on a later turn. Optional — confirms that do
+// not re-rank simply omit it and no provenance Assumption is added.
+const RankedAlternativeSchema = z.object({
+    studentStatedFactor: z
+        .string()
+        .describe("The student's stated soft preference the re-rank optimized for."),
+    selectedPlanIndex: z
+        .number()
+        .int()
+        .describe("planIndex of the chosen AlternativePlanSummary (from compare_plan_alternatives)."),
+    reasoning: z
+        .string()
+        .describe("Why this alternative was chosen over the others (recorded, surfaced to the student)."),
+    dimensionsConsidered: z
+        .array(z.string())
+        .describe("The comparison axes weighed during the re-rank (echoed from compare_plan_alternatives)."),
+});
 
 // ---------------------------------------------------------------------------
 // Output type
@@ -51,6 +80,18 @@ interface ConfirmPlanChangeOutput extends PlanChangeOutcome {
      * `consequences[]`, dropping the citation.)
      */
     disclaimers?: Disclaimer[];
+    /**
+     * D6.3 — when the confirm applied a re-ranked alternative, the recorded
+     * provenance (mirrors the LLM_RANKED_ALTERNATIVE assumption appended to the
+     * confirmed schedule). Surfaced by summarizeResult so the student sees the
+     * recorded rationale. Present ONLY when the agent passed `rankedAlternative`.
+     */
+    rankedAlternative?: {
+        studentStatedFactor: string;
+        selectedPlanIndex: number;
+        reasoning: string;
+        dimensionsConsidered: string[];
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +110,14 @@ export const confirmPlanChangeTool = buildTool({
     inputSchema: z.object({
         mutations: z.array(PlanMutationSchema).min(1)
             .describe("One or more plan mutations to apply (same array as propose_plan_change)."),
+        rankedAlternative: RankedAlternativeSchema
+            .optional()
+            .describe(
+                "D6.3 — re-rank provenance. Pass this ONLY when applying an alternative you " +
+                "chose via compare_plan_alternatives (Tier B). Records WHY this plan was chosen " +
+                "as a durable LLM_RANKED_ALTERNATIVE assumption on the confirmed schedule, so the " +
+                "rationale persists and is re-explainable on a later turn. Omit for ordinary edits.",
+            ),
     }),
     isReadOnly: false,
     maxResultChars: 4000,
@@ -152,6 +201,29 @@ export const confirmPlanChangeTool = buildTool({
             dpr,
             validatorRules,
         );
+
+        // D6.3 — rung-3 re-rank provenance. When the agent applied an
+        // alternative it chose via compare_plan_alternatives (Tier B), record
+        // WHY as a durable LLM_RANKED_ALTERNATIVE assumption on the CONFIRMED
+        // schedule's assumptions[] BEFORE persistSchedule below. This is the
+        // parallel-Assumption channel (Risk #6 default): it persists AND
+        // survives the P3.1 hydration path, so the rationale is re-explainable
+        // on a later turn — no separate per-pref provenance store needed.
+        // `finalizeForwardSchedule` rebuilds `assumptions` FRESH from the solver
+        // on every confirm (the solver only emits IP_COURSE_COMPLETION, never
+        // LLM_RANKED_ALTERNATIVE), so a prior turn's provenance is never carried
+        // into this `newSchedule` — appending here yields EXACTLY ONE provenance
+        // entry, and a re-confirm cannot stack duplicates (no de-dup guard needed).
+        if (input.rankedAlternative) {
+            const provenance: Extract<Assumption, { type: "LLM_RANKED_ALTERNATIVE" }> = {
+                type: "LLM_RANKED_ALTERNATIVE",
+                studentStatedFactor: input.rankedAlternative.studentStatedFactor,
+                selectedPlanIndex: input.rankedAlternative.selectedPlanIndex,
+                reasoning: input.rankedAlternative.reasoning,
+                dimensionsConsidered: input.rankedAlternative.dimensionsConsidered,
+            };
+            newSchedule.assumptions = [...newSchedule.assumptions, provenance];
+        }
 
         // Step 3: Decision #32 routing — keyed on the VALIDATOR's verdict.
         // An edit may be stored to session.forwardSchedule ONLY when the
@@ -239,6 +311,7 @@ export const confirmPlanChangeTool = buildTool({
             planDiff,
             storedIn,
             ...(disclaimers ? { disclaimers } : {}),
+            ...(input.rankedAlternative ? { rankedAlternative: input.rankedAlternative } : {}),
         };
     },
     summarizeResult(output) {
@@ -264,6 +337,15 @@ export const confirmPlanChangeTool = buildTool({
                 const sc = output.planDiff.planStateChange;
                 lines.push(`Plan state: ${sc.from} → ${sc.to}`);
             }
+        }
+        // D6.3 — surface the recorded re-rank rationale so the student sees WHY
+        // this alternative was chosen (now durable on the schedule's assumptions[]).
+        if (output.rankedAlternative) {
+            const ra = output.rankedAlternative;
+            lines.push(
+                `Recorded why this plan was chosen: ${ra.reasoning} ` +
+                `(dimensions: ${ra.dimensionsConsidered.join(", ")})`,
+            );
         }
         // D3.2 — render the advisory disclaimer (reason + bulletinSource cited),
         // mirroring plan_forward_degree. Adds nothing when there is no advisory.

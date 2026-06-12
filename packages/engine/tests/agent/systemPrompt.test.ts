@@ -119,19 +119,43 @@ describe("D4 honesty-rail CORE RULES", () => {
     });
 
     describe("D4.3 — banner count matches reality", () => {
-        it("emits exactly 11 numbered CORE RULES", () => {
-            expect(numberedRuleCount(prompt)).toBe(11);
+        it("emits exactly 13 numbered CORE RULES", () => {
+            expect(numberedRuleCount(prompt)).toBe(13);
         });
 
         it("the file's BANNER states a rule count EQUAL to the actual numbered-rule count", () => {
             const src = readFileSync(SYSTEM_PROMPT_SRC, "utf8");
             const actual = numberedRuleCount(prompt);
             // The banner must NOT claim the stale "25 rules" once the real
-            // numbered list is 11. Derive: assert the actual count's number-word
+            // numbered list is 13. Derive: assert the actual count's number-word
             // appears in the banner and the stale 25 claim is gone.
-            expect(actual).toBe(11);
-            expect(src).toMatch(/\b11\b/);
+            expect(actual).toBe(13);
+            expect(src).toMatch(/\b13\b/);
             expect(src).not.toMatch(/25 rules|25-rule|25 rules verbatim/);
+        });
+    });
+
+    describe("D7.1 — CORE RULE 13 (PROACTIVE ELICITATION)", () => {
+        it("teaches the agent to ANSWER first, then append ONE focused question", () => {
+            const rule13 = prompt.slice(prompt.indexOf("13."), prompt.indexOf("TOOL ROUTING:"));
+            expect(rule13).toMatch(/proactive/i);
+            // Answer-first framing.
+            expect(rule13).toMatch(/answer (the question )?first|answer first/i);
+            // Exactly ONE bounded question.
+            expect(rule13).toMatch(/one (focused |proactive )?question|at most one/i);
+        });
+
+        it("is bounded — never substitute the answer, never stack asks, never interrogate", () => {
+            const rule13 = prompt.slice(prompt.indexOf("13."), prompt.indexOf("TOOL ROUTING:"));
+            expect(rule13).toMatch(/never substitute|not substitute|do not substitute/i);
+            expect(rule13).toMatch(/interrogate|quiz|sparingly/i);
+        });
+
+        it("names the decision-relevant context an adviser would elicit", () => {
+            const rule13 = prompt.slice(prompt.indexOf("13."), prompt.indexOf("TOOL ROUTING:"));
+            // At least the major/direction + a global-campus study-away cue.
+            expect(rule13).toMatch(/major|direction|interest|career/i);
+            expect(rule13).toMatch(/study-?away|Shanghai|Abu Dhabi|global/i);
         });
     });
 });

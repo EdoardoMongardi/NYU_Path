@@ -22,6 +22,22 @@
 // ============================================================
 
 import { describe, expect, it } from "vitest";
+import { PlanMutationSchema } from "../../src/agent/forwardSchedule/planChangeHelpers.js";
+
+// ============================================================
+// Live PlanMutation union — derived from the SINGLE source of truth.
+// `PlanMutationSchema` (planChangeHelpers.ts) is the ONLY thing
+// `propose_plan_change` / `confirm_plan_change` accept. We read the
+// discriminated-union's `kind` literals directly so this test tracks
+// the schema automatically — a fixture using a kind the schema rejects
+// (e.g. the pre-Phase-17 stale `load_style`) fails here, NOT silently
+// at LLM runtime against a 400 from the tool.
+// ============================================================
+const LIVE_MUTATION_KINDS: ReadonlySet<string> = new Set(
+    PlanMutationSchema.options.map(
+        (opt) => (opt.shape.kind as { value: string }).value,
+    ),
+);
 
 // ============================================================
 // Fixture type
@@ -44,6 +60,13 @@ export interface EvalFixture {
 // Covers the full Tier-A mapping table from PREFERENCE_EXTRACTION_RULES.
 // ============================================================
 
+// NOTE (D6.1): every `mutation.kind` below is a member of the LIVE
+// `PlanMutationSchema` union (planChangeHelpers.ts) — the ONLY thing
+// propose_plan_change accepts. The inline test
+// "every Tier-A fixture maps to a kind in the LIVE PlanMutation union"
+// enforces this so the table + fixtures can never silently re-drift to
+// the pre-Phase-17 stale kinds (`load_style`, `include_summer`,
+// `allow_below_floor`, `set_scheduling_preference`).
 const BUCKET_A: EvalFixture[] = [
     {
         id: "A-01",
@@ -52,7 +75,7 @@ const BUCKET_A: EvalFixture[] = [
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "load_style", term: "2027-spring", value: "light" },
+            mutation: { kind: "loadStyleOverride", term: "2027-spring", style: "light" },
         },
     },
     {
@@ -62,7 +85,7 @@ const BUCKET_A: EvalFixture[] = [
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "load_style", value: "light" },
+            mutation: { kind: "loadStyleOverride", term: "2026-fall", style: "light" },
         },
     },
     {
@@ -72,17 +95,18 @@ const BUCKET_A: EvalFixture[] = [
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "load_style", term: "2026-spring", value: "heavy" },
+            mutation: { kind: "loadStyleOverride", term: "2026-spring", style: "heavy" },
         },
     },
     {
         id: "A-04",
-        userMessage: "Make fall 2026 busy and packed",
+        userMessage: "Frontload my whole plan — heavier early, lighter later",
         framing: "soft",
         expectedTier: "A",
+        fixtureNote: "plan-level loadStyleOverride: omit the term; 'frontload' is a plan-level style",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "load_style", term: "2026-fall", value: "heavy" },
+            mutation: { kind: "loadStyleOverride", style: "frontload" },
         },
     },
     {
@@ -97,16 +121,39 @@ const BUCKET_A: EvalFixture[] = [
     },
     {
         id: "A-06",
-        userMessage: "I want to do MATH-UA 123 in spring 2027",
+        userMessage: "Add MATH-UA 123 to spring 2027 but keep it movable",
         framing: "soft",
         expectedTier: "A",
+        fixtureNote: "Phase-17 place-without-lock: pin with freeze:false",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "pin", courseId: "MATH-UA 123", term: "2027-spring" },
+            mutation: { kind: "pin", courseId: "MATH-UA 123", term: "2027-spring", freeze: false },
         },
     },
     {
         id: "A-07",
+        userMessage: "Move CSCI-UA 421 from fall 2026 to spring 2027",
+        framing: "soft",
+        expectedTier: "A",
+        fixtureNote: "Phase-17 drag-to-move primitive (D6.1 named acceptance)",
+        expectedAction: {
+            tool: "propose_plan_change",
+            mutation: { kind: "move", courseId: "CSCI-UA 421", fromTerm: "2026-fall", toTerm: "2027-spring" },
+        },
+    },
+    {
+        id: "A-08",
+        userMessage: "Unlock PHIL-UA 1 in fall 2026 — let the planner move it again",
+        framing: "soft",
+        expectedTier: "A",
+        fixtureNote: "Phase-17 unpin: inverse of a frozen pin (D6.1 named acceptance)",
+        expectedAction: {
+            tool: "propose_plan_change",
+            mutation: { kind: "unpin", courseId: "PHIL-UA 1", term: "2026-fall" },
+        },
+    },
+    {
+        id: "A-09",
         userMessage: "Don't put ECON-UA 1 in spring 2027",
         framing: "soft",
         expectedTier: "A",
@@ -116,63 +163,54 @@ const BUCKET_A: EvalFixture[] = [
         },
     },
     {
-        id: "A-08",
-        userMessage: "Move PHIL-UA 1 away from fall 2026",
-        framing: "soft",
-        expectedTier: "A",
-        expectedAction: {
-            tool: "propose_plan_change",
-            mutation: { kind: "exclude", courseId: "PHIL-UA 1", term: "2026-fall" },
-        },
-    },
-    {
-        id: "A-09",
-        userMessage: "I'll consider summer — I'm OK with a summer term",
-        framing: "soft",
-        expectedTier: "A",
-        expectedAction: {
-            tool: "propose_plan_change",
-            mutation: { kind: "include_summer", value: true },
-        },
-    },
-    {
         id: "A-10",
-        userMessage: "Use J-term if it helps me graduate on time",
+        userMessage: "Swap ECON-UA 1 for ECON-UA 2 in fall 2026",
         framing: "soft",
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "include_jterm", value: true },
+            mutation: { kind: "swap", drop: "ECON-UA 1", add: "ECON-UA 2", term: "2026-fall" },
         },
     },
     {
         id: "A-11",
-        userMessage: "I want to go part-time and drop below 12 credits",
+        userMessage: "I'll consider a summer 2026 term if it helps me graduate on time",
         framing: "soft",
         expectedTier: "A",
+        fixtureNote: "addTerm is the ONLY kind that opens optional terms; it flips includeSummer from the term season",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "allow_below_floor", value: true },
+            mutation: { kind: "addTerm", term: "2026-summer" },
         },
     },
     {
         id: "A-12",
+        userMessage: "Add a January 2027 J-term to my plan",
+        framing: "soft",
+        expectedTier: "A",
+        expectedAction: {
+            tool: "propose_plan_change",
+            mutation: { kind: "addTerm", term: "2027-january" },
+        },
+    },
+    {
+        id: "A-13",
+        userMessage: "Use CSCI-UA 480 for that free-elective slot",
+        framing: "soft",
+        expectedTier: "A",
+        expectedAction: {
+            tool: "propose_plan_change",
+            mutation: { kind: "bindFreeElective", slotId: "free-elective-1", courseId: "CSCI-UA 480" },
+        },
+    },
+    {
+        id: "A-14",
         userMessage: "No Tuesday classes please",
         framing: "soft",
         expectedTier: "A",
         expectedAction: {
             tool: "propose_plan_change",
-            mutation: { kind: "set_scheduling_preference", value: { avoidDays: [{ day: "Tu", strict: false }] } },
-        },
-    },
-    {
-        id: "A-13",
-        userMessage: "I'd prefer afternoon classes — nothing before noon",
-        framing: "soft",
-        expectedTier: "A",
-        expectedAction: {
-            tool: "propose_plan_change",
-            mutation: { kind: "set_scheduling_preference", value: { preferAfternoon: true } },
+            mutation: { kind: "setSchedulingPreference", value: { avoidDays: [{ day: "Tu", strict: false }] } },
         },
     },
 ];
@@ -575,8 +613,28 @@ const BUCKET_DPOS: EvalFixture[] = [
             type: "HEURISTIC_MAPPING",
             studentConstraintFraming: "soft",
             confidenceFloor: "low",
+            // D6.4 — rung-4 → rung-2 enablement. This genuinely-new SOFT
+            // factor has no modeled SchedulePreferences field (rung-1) and
+            // no axis-aligned compare_plan_alternatives dimension, so it
+            // reaches Tier D. BEFORE D6.2 it could only be recorded with
+            // mappedToMutation: null. NOW it is ACTIONABLE via the rung-2
+            // generic SOFT-objective primitive: a structured
+            // GenericSoftConstraint recorded into prefs.softObjectives[],
+            // read ONLY by the ranker (scorePlan) — never by the hard
+            // solver. studentConstraintFraming stays "soft" and the
+            // objective's own framing is the literal "soft", so the
+            // SOFT-only invariant holds end to end.
+            mappedToMutation: {
+                kind: "addSoftObjective",
+                objective: {
+                    id: "meeting-frequency",
+                    framing: "soft",
+                    dimension: "meetingFrequency",
+                    preference: "fewerLongerSessions",
+                },
+            },
         },
-        fixtureNote: "meeting-frequency preference has no modeled axis; soft framing → Tier D acceptable",
+        fixtureNote: "meeting-frequency preference has no modeled axis; soft framing → Tier D, now ACTIONABLE via addSoftObjective (rung-2). Recorded/ranker-read; never changes validity.",
     },
 ];
 
@@ -741,6 +799,41 @@ describe("preferenceExtraction eval suite — fixture invariants", () => {
         }
     });
 
+    // ----------------------------------------------------------------
+    // D6.1 — the rung-1 table + Tier-A fixtures must reflect the LIVE
+    // PlanMutation union. Before D6.1 the table taught stale kinds
+    // (`load_style`, `include_summer`, `allow_below_floor`,
+    // `set_scheduling_preference`) that `PlanMutationSchema` rejects, so
+    // the prompt was teaching the LLM to emit invalid proposals. These
+    // tests pin every Tier-A fixture to a kind the schema actually
+    // accepts AND require coverage for the Phase-17 kinds `move`/`unpin`.
+    // ----------------------------------------------------------------
+    it("every Tier-A fixture maps to a kind in the LIVE PlanMutation union (no stale kinds)", () => {
+        for (const fixture of EVAL_BUCKETS.A) {
+            const mutation = (fixture.expectedAction as { mutation?: { kind?: string } }).mutation;
+            expect(
+                mutation,
+                `Tier-A fixture ${fixture.id} must carry expectedAction.mutation`,
+            ).toBeDefined();
+            const kind = mutation!.kind;
+            expect(
+                kind && LIVE_MUTATION_KINDS.has(kind),
+                `Tier-A fixture ${fixture.id} kind "${kind}" is not in the live PlanMutation union ` +
+                `[${[...LIVE_MUTATION_KINDS].join(", ")}] — propose_plan_change would reject it`,
+            ).toBe(true);
+        }
+    });
+
+    it("Tier-A bucket covers the Phase-17 move + unpin kinds (D6.1 acceptance)", () => {
+        const kinds = new Set(
+            EVAL_BUCKETS.A.map(
+                (f) => (f.expectedAction as { mutation?: { kind?: string } }).mutation?.kind,
+            ),
+        );
+        expect(kinds.has("move"), "Tier-A bucket must contain a `move` fixture").toBe(true);
+        expect(kinds.has("unpin"), "Tier-A bucket must contain an `unpin` fixture").toBe(true);
+    });
+
     it("Dneg bucket fixtures all have framing='hard' AND expectedTier='C' (asymmetric-stakes invariant — Layer 3)", () => {
         for (const fixture of EVAL_BUCKETS.Dneg) {
             expect(
@@ -753,6 +846,100 @@ describe("preferenceExtraction eval suite — fixture invariants", () => {
             ).toBe("C");
         }
     });
+
+    // ----------------------------------------------------------------
+    // D6.4 — rung-4 → rung-2 enablement. Before D6.2 a genuinely-new
+    // SOFT factor reached via HEURISTIC_MAPPING (Tier D) could only map
+    // to an EXISTING PlanMutation kind or `null` (recorded-but-not-
+    // actionable). Now `addSoftObjective` (the rung-2 SOFT, ranker-read
+    // primitive) exists, so at least one Dpos fixture must demonstrate a
+    // brand-new soft factor becoming ACTIONABLE while staying strictly
+    // SOFT-only: studentConstraintFraming stays "soft" (Layer 2) AND the
+    // mapped objective's framing is the literal "soft".
+    // ----------------------------------------------------------------
+    it("at least one Dpos fixture maps a genuinely-new SOFT factor to addSoftObjective (D6.4 rung-4→rung-2 enablement)", () => {
+        const actionable = EVAL_BUCKETS.Dpos.filter((f) => {
+            const m = (f.expectedAction as {
+                mappedToMutation?: { kind?: string };
+            }).mappedToMutation;
+            return m?.kind === "addSoftObjective";
+        });
+        expect(
+            actionable.length,
+            "≥1 Dpos fixture must carry expectedAction.mappedToMutation.kind === 'addSoftObjective'",
+        ).toBeGreaterThanOrEqual(1);
+
+        for (const f of actionable) {
+            const action = f.expectedAction as {
+                studentConstraintFraming?: string;
+                mappedToMutation?: {
+                    kind?: string;
+                    objective?: { framing?: string; dimension?: string; preference?: string };
+                };
+            };
+            // SOFT-only invariant holds end to end:
+            expect(
+                action.studentConstraintFraming,
+                `Dpos fixture ${f.id} HEURISTIC_MAPPING must stay studentConstraintFraming='soft'`,
+            ).toBe("soft");
+            expect(
+                action.mappedToMutation?.kind,
+                `Dpos fixture ${f.id} mappedToMutation must be addSoftObjective`,
+            ).toBe("addSoftObjective");
+            expect(
+                action.mappedToMutation?.objective?.framing,
+                `Dpos fixture ${f.id} addSoftObjective objective.framing must be the literal 'soft'`,
+            ).toBe("soft");
+            // The objective is a real GenericSoftConstraint shape (dimension + preference):
+            expect(
+                action.mappedToMutation?.objective?.dimension,
+                `Dpos fixture ${f.id} addSoftObjective objective must carry a dimension`,
+            ).toBeTruthy();
+            expect(
+                action.mappedToMutation?.objective?.preference,
+                `Dpos fixture ${f.id} addSoftObjective objective must carry a preference`,
+            ).toBeTruthy();
+        }
+    });
+});
+
+// ============================================================
+// D6.6 — operator-gated per-bucket ≥85% accuracy assertion.
+// Same gating idiom as explainWhy.eval.ts / honestyInterlock.test.ts:
+// the describe early-returns with a single it.skip when no key is set,
+// so under keyless CI the test is COLLECTED + SKIPPED (never errors and
+// never makes a network call). With a key (CI-with-key or a local run)
+// it drives the full 59-fixture suite through evalSuite() and asserts
+// the ≥85% bar PER BUCKET — a regression below 85% on any one of
+// A/B/C/Dpos/Dneg now fails this test (previously the bar was only
+// logged by the import-side-effect, never asserted).
+//
+// `evalSuite` is a hoisted `function` declaration further down this
+// file, so referencing it here (before its textual definition) is safe.
+// The 600s per-test timeout (3rd it() arg) covers ~59 sequential real
+// API calls; the global vitest timeout is intentionally left untouched.
+// ============================================================
+describe("preferenceExtraction eval — per-bucket ≥85% bar (gated on ANTHROPIC_API_KEY)", () => {
+    if (!process.env.ANTHROPIC_API_KEY) {
+        it.skip("requires ANTHROPIC_API_KEY — per-bucket ≥85% accuracy on A/B/C/Dpos/Dneg", () => {
+            /* gated: no API key in this environment */
+        });
+        return;
+    }
+
+    it("every bucket (A/B/C/Dpos/Dneg) meets the ≥85% accuracy bar", async () => {
+        const result = await evalSuite();
+        // Operator visibility: print the full per-bucket breakdown
+        // (incl. which fixtures failed) before asserting.
+        printEvalSummary(result);
+
+        for (const b of result.buckets) {
+            expect(
+                b.accuracy,
+                `bucket ${b.bucket}: ${b.passed}/${b.total} — ${b.failed.map((f) => f.id).join(",")}`,
+            ).toBeGreaterThanOrEqual(0.85);
+        }
+    }, 600_000);
 });
 
 // ============================================================
@@ -886,10 +1073,13 @@ export async function evalSuite(): Promise<EvalRunResult> {
             input_schema: {
                 type: "object",
                 properties: {
-                    kind: { type: "string", description: "Mutation kind (load_style, pin, exclude, include_summer, include_jterm, allow_below_floor, set_scheduling_preference)" },
-                    payload: { type: "object", description: "Kind-specific payload" },
+                    mutations: {
+                        type: "array",
+                        description: "One or more plan mutations. Each kind is one of the LIVE PlanMutation kinds: pin, exclude, swap, move, unpin, addTerm, loadStyleOverride, bindFreeElective, unbindFreeElective, bindPoolSlot, setSchedulingPreference, clearSchedulingPreference.",
+                        items: { type: "object" },
+                    },
                 },
-                required: ["kind", "payload"],
+                required: ["mutations"],
             },
         },
         {
@@ -988,12 +1178,15 @@ export async function evalSuite(): Promise<EvalRunResult> {
         meetsBar,
     };
 
-    // The summary is printed by the top-level direct-invocation block
-    // below (lines 1010+) when the file is run via `tsx` with the
-    // ANTHROPIC_API_KEY env var. The package is ESM ("type": "module"),
-    // so `require.main === module` is never defined at runtime — the
-    // print-on-direct-call path lives entirely in the import.meta.url
-    // check below.
+    // The summary is printed by:
+    //   (1) the gated vitest test above (printEvalSummary(result)), and
+    //   (2) the standalone direct-invocation block at the bottom of this
+    //       file when run via `tsx` with ANTHROPIC_API_KEY set.
+    // The package is ESM ("type": "module"), so `require.main === module`
+    // is never defined at runtime; the standalone path is therefore gated
+    // on `ANTHROPIC_API_KEY && !VITEST` (see the bottom block) so it fires
+    // ONLY for the direct `tsx` invocation and never as an import
+    // side-effect under vitest.
     return summary;
 }
 
@@ -1013,9 +1206,18 @@ export function printEvalSummary(result: EvalRunResult): void {
     }
 }
 
-// Allow direct invocation via tsx:
+// Standalone direct-invocation entry (tsx ONLY — never under vitest):
 //   ANTHROPIC_API_KEY=sk-... pnpm tsx packages/engine/tests/agent/preferenceExtraction.eval.ts
-if (process.env.ANTHROPIC_API_KEY) {
+//
+// vitest sets VITEST / VITEST_WORKER_ID in the worker env, so the
+// `!process.env.VITEST` guard prevents this block from firing as an
+// import side-effect during vitest collection (which — with a key set —
+// would otherwise launch ~59 real API calls during collection and could
+// `process.exit(1)` and crash the whole vitest process). Under vitest the
+// ≥85%-per-bucket bar is instead asserted by the gated `it(...)` above.
+// For the standalone `tsx` run this still prints the summary and exits
+// non-zero on failure.
+if (process.env.ANTHROPIC_API_KEY && !process.env.VITEST) {
     evalSuite()
         .then(printEvalSummary)
         .catch((err) => {

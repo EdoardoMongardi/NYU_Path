@@ -56,6 +56,14 @@ export {
     renderMultiIntentBriefing,
     detectAmbiguity,
     askClarification,
+    // D7.1/D7.2 — proactive elicitation detector + the append decision
+    // the v2 route consumes AFTER the agent loop (append-not-substitute,
+    // frequency-bounded). Surfaced on the top-level barrel so the route's
+    // `@nyupath/engine` import resolves them.
+    detectElicitationOpportunity,
+    decideElicitationAppend,
+    elicitationQuestionFor,
+    ELICITATION_LEAD_IN,
     extractClaimNumbers,
     RecordingLLMClient,
     OpenAIEngineClient,
@@ -97,6 +105,11 @@ export type {
     ValidatorVerdict,
     ValidatorContext,
     SystemPromptOptions,
+    // D7.1/D7.2 — proactive elicitation detector + append-decision types.
+    ElicitationReport,
+    ElicitationSignal,
+    ElicitationAppendInput,
+    ElicitationAppendDecision,
     // Phase 15 Task 8 — section-materialization types surfaced for
     // the apps/web sidebar (forward_materialization_update payload).
     AvailabilityState,

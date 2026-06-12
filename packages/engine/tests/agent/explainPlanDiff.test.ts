@@ -277,6 +277,23 @@ describe("explainPlanDiff — schedulingPreference set/clear", () => {
         expect(out).toMatch(/scheduling preferences/i);
     });
 
+    it("setSchedulingPreference is recorded-not-enforced: plan unchanged, applied at section selection (D6.5)", () => {
+        const m: PlanMutation = {
+            kind: "setSchedulingPreference",
+            value: { avoidDays: [{ day: "Tu", strict: true }] },
+        };
+        const out = explainPlanDiff(emptyDiff(), m);
+        // RECORDED, not a (visible) plan edit.
+        expect(out).toMatch(/recorded/i);
+        // The course-level plan does NOT change here.
+        expect(out).toMatch(/plan is unchanged|course-level plan/i);
+        // Applied downstream at section selection, distinguishing strict vs soft.
+        expect(out).toMatch(/section/i);
+        expect(out).toMatch(/strict/i);
+        expect(out).toMatch(/eliminat/i);
+        expect(out).toMatch(/deprioriti[sz]e/i);
+    });
+
     it("clearSchedulingPreference says clearing", () => {
         const m: PlanMutation = { kind: "clearSchedulingPreference" };
         const out = explainPlanDiff(emptyDiff(), m);
