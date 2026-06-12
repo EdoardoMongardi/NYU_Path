@@ -82,7 +82,7 @@ A frozen, immutable bundle passed into the solver. It carries student state (`co
 - **`infeasible-draft`** — at least one axis returned `fail`.
 - **`student-preferred-invalid-draft`** — set UPSTREAM when a student persists a knowingly invalid plan; the validator never emits it.
 
-> The `SchedulePreferences` and `PlanMutation` shapes (pins, exclusions, load styles, summer/J-term opt-in, the 12 mutation kinds) live in `@nyupath/shared` and are consumed by `planChangeHelpers.ts`. They are documented with the plan-change tools rather than here.
+> The `SchedulePreferences` and `PlanMutation` shapes (pins, exclusions, load styles, summer/J-term opt-in, the 14 mutation kinds) live in `@nyupath/shared` and are consumed by `planChangeHelpers.ts`. They are documented with the plan-change tools rather than here. `SchedulePreferences` also carries the optional `softObjectives?: GenericSoftConstraint[]` array (D6.2), read only by the ranker (§3.4) — it does NOT widen the frozen solver-read surface.
 
 ---
 
@@ -114,10 +114,13 @@ A pool whose members are **chain-linked** (some member is a prereq-provider of a
 
 ### 3.4 Soft objective — `scorePlan` (LOWER is better)
 
-`scorePlan = weights.balance × balanceCost + weights.timeToDegree × timeToDegreeIndex`, with `DEFAULT_OBJECTIVE_WEIGHTS = { balance: 1, timeToDegree: 0.5 }`.
+`scorePlan = weights.balance × balanceCost + weights.timeToDegree × timeToDegreeIndex + weights.softObjective × softObjectiveCost`, with `DEFAULT_OBJECTIVE_WEIGHTS = { balance: 1, timeToDegree: 0.5, softObjective: 0.25 }`.
 
 - `balanceCost` = `computeBalanceScore` over per-term aggregates, using the student's `preferences.loadStyle` (default `"balanced"`). Only NON-optional (fall/spring) terms contribute, so opting into summer never inflates variance.
 - `timeToDegreeIndex` = the 0-based index in `futureTerms` (optional included) of the first term where running credits reach the degree minimum; earlier completion ⇒ lower cost.
+- `softObjectiveCost` (D6.2 — rung-2 generic SOFT-objective primitive) = `computeSoftObjectiveCost(plan, preferences.softObjectives ?? [])`. This reads ONLY `plan.placed[]` (course ids/terms) and the `preferences.softObjectives` array — **never any solver/validity surface** — so it is a pure RANKING signal: it can change which already-VALID plan ranks first, but can never make a valid plan invalid (or vice versa). The `softObjective` weight is `0.25` — deliberately *below* `balance`/`timeToDegree` so a recorded soft preference biases ranking among already-balanced valid plans rather than overriding the core objectives. The term is **default-off**: `computeSoftObjectiveCost(plan, [])` returns `0`, so when no `softObjectives` are recorded every plan's score is byte-identical to the pre-D6.2 formula (every existing scorePlan/solver/search/ranking test is unchanged). Each objective is a `GenericSoftConstraint` (`{ id, framing: "soft", dimension, preference, weight? }`, weight default `1`) carried on `SchedulePreferences.softObjectives[]`. Dispatch is on `dimension`; the one implemented dimension is `"departmentDiversity"` (preference `"diverse"` ⇒ cost = placedCount − distinctDeptCount, fully diverse ⇒ 0; preference `"concentrated"` ⇒ cost = distinctDeptCount − 1, single dept ⇒ 0). A dimension the ranker cannot evaluate from the plan returns `0` cost — **recorded-not-enforced** (D6.5 surfaces this honestly).
+
+**Precedence (the invariant):** the soft objective is read by the RANKER (`scorePlan`) only. The **hard solver contract — `buildRequirementVariables`, the 12 hard predicates, feasibility/validity — is byte-identical with vs without `softObjectives`** (none of them read the array). `softObjectives` enters the model exclusively through `scorePlan`, so it can re-rank valid plans but adds no solver-read capability.
 
 The objective is **non-monotonic** in placements (balance variance can drop as courses are added, e.g. `[16,0]` scores worse than `[8,8]`), which is why the search cannot prune on score (§4.1).
 
@@ -221,7 +224,7 @@ The ONE shared `SolverInput` builder for BOTH the build path and the edit path (
 
 ### 9.5 tradeOffEngine.ts (181 ln) + planChangeHelpers.ts (659 ln)
 
-`tradeOffEngine.diffPlanTradeOffs` fills 5 consequence fields (`newRequiresPetition`, `removedRequiresPetition`, `newUnmetRequirements`, `cascadedShifts`, `newAssumptions`) by diffing two `ForwardSchedule`s directly. `planChangeHelpers.buildPlanDiff` assembles the full ~12-field `PlanDiff`: per-term credit / weighted-credit deltas, `workloadTierShifts`, `graduationTermShift`, `balanceImpact` (also using a hard-coded `"balanced"` load style), `planStateChange`, the 5 trade-off fields from `tradeOffEngine`, and `validationResultsChanges` (per-axis transitions, only when the caller passes validator axes). `planChangeHelpers` also owns the Zod `PlanMutationSchema` (12 kinds) and the pure `applyMutationsToPreferences` reducer.
+`tradeOffEngine.diffPlanTradeOffs` fills 5 consequence fields (`newRequiresPetition`, `removedRequiresPetition`, `newUnmetRequirements`, `cascadedShifts`, `newAssumptions`) by diffing two `ForwardSchedule`s directly. `planChangeHelpers.buildPlanDiff` assembles the full ~12-field `PlanDiff`: per-term credit / weighted-credit deltas, `workloadTierShifts`, `graduationTermShift`, `balanceImpact` (also using a hard-coded `"balanced"` load style), `planStateChange`, the 5 trade-off fields from `tradeOffEngine`, and `validationResultsChanges` (per-axis transitions, only when the caller passes validator axes). `planChangeHelpers` also owns the Zod `PlanMutationSchema` (14 kinds) and the pure `applyMutationsToPreferences` reducer. D6.2 added two *soft* kinds — `addSoftObjective` (writes a `GenericSoftConstraint` into `prefs.softObjectives[]`, de-duplicating on `id`) and `clearSoftObjectives` (empties the array) — handled by `applyMutationsToPreferences`. These bias ranking only; **no solver-read capability was added** (the union grew, the frozen hard contract did not).
 
 ### 9.6 doubleCountAdvisory.ts (118 ln)
 

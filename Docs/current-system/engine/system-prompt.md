@@ -1,6 +1,6 @@
 # System Prompt
 
-> Last verified against code: 2026-06-11 (D6.1 — rung-1 preference table + Tier-A eval reconciled to the live `PlanMutation` union, incl. Phase-17 `move`/`unpin`/`freeze`; D4 honesty-rail CORE RULES 9–11 + banner count fix; post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (D6.2 — rung-1 table now carries the rung-2 `addSoftObjective`/`clearSoftObjectives` SOFT-only mapping, recorded + ranker-read, never changes validity; D6.1 — rung-1 preference table + Tier-A eval reconciled to the live `PlanMutation` union, incl. Phase-17 `move`/`unpin`/`freeze`; D4 honesty-rail CORE RULES 9–11 + banner count fix; post planning-engine rebuild, PRs #35-#41).
 
 > **Source file:** `packages/engine/src/agent/systemPrompt.ts`
 
@@ -101,6 +101,7 @@ A table of preference → mutation mappings is included. Every `kind` is a membe
 | "I'll consider summer" / "Use J-term" / "Add a summer term" | `addTerm` | `{ term }` (the ONLY kind that opens optional terms — `applyMutationsToPreferences` flips `includeSummer` / `includeJTerm` from the term's season; there is no `include_summer` kind) |
 | "Use `<courseId>` for that free-elective slot" | `bindFreeElective` | `{ slotId, courseId }` (inverse `unbindFreeElective`; `bindPoolSlot` for requirement-pool slots) |
 | "No Tuesday classes" / "I'd prefer afternoon classes" | `setSchedulingPreference` | `{ value: <SchedulingPreferences fragment> }` (inverse `clearSchedulingPreference`) |
+| "I'd like variety across departments" / "spread my CS courses out" — a SOFT factor with NO modeled field | `addSoftObjective` | `{ objective: { framing: "soft", dimension: "<dimension>", preference: "<preference>" } }` (D6.2 rung-2 SOFT-only path: RECORDED + biases ranking among already-VALID plans, never changes validity; `framing` is the literal `"soft"` — a hard-framed instance is rejected at the schema boundary. Inverse `clearSoftObjectives`) |
 
 **"I want to be part-time / drop below 12 credits" has no live mutation kind.** `allowBelowF1Floor` IS a real `SchedulePreferences` field (consumed by `visaValidator.ts`), but **no `PlanMutation` kind writes it** — so `propose_plan_change` cannot set it. The reconciled table routes this to a **Tier-C clarification** (surface the OGS RCL requirement for F-1 students and ask them to confirm with OGS / their adviser) rather than instructing the LLM to emit a non-existent `allow_below_floor` kind.
 
