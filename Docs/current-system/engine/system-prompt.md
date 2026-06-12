@@ -22,7 +22,7 @@ flowchart LR
 
 This module builds the **system prompt** — the long instruction block the LLM sees before every turn. It is constructed fresh per request from a `SystemPromptOptions` bag.
 
-> **Banner corrected (D4.3, 2026-06-11; count bumped to 12 in D6.5).** The file's top-of-module banner (`systemPrompt.ts:1-27`) previously called this an "Appendix A (25 rules verbatim)" prompt. It now honestly describes the current spine: **12** numbered CORE RULES, listed by name in the banner. The banner count is load-bearing — `systemPrompt.test.ts` derives the actual number of `N. <text>` lines in the CORE RULES block and asserts the banner agrees, so a future added/removed rule that doesn't update the banner FAILS that test. There is no 25-rule list in the emitted prompt; read the function body, not training-data memory of the old Appendix A.
+> **Banner corrected (D4.3, 2026-06-11; count bumped to 12 in D6.5, then to 13 in D7.1).** The file's top-of-module banner (`systemPrompt.ts:1-28`) previously called this an "Appendix A (25 rules verbatim)" prompt. It now honestly describes the current spine: **13** numbered CORE RULES, listed by name in the banner. The banner count is load-bearing — `systemPrompt.test.ts` derives the actual number of `N. <text>` lines in the CORE RULES block and asserts the banner agrees, so a future added/removed rule that doesn't update the banner FAILS that test. There is no 25-rule list in the emitted prompt; read the function body, not training-data memory of the old Appendix A.
 
 > **Fixed (improvement plan, Phase E) — the ROLE line is now school-aware.** The prompt previously opened with a hardcoded `"...an AI academic adviser for NYU College of Arts & Science."` that did not interpolate `homeSchool`, so a Stern or Tandon student was told the adviser was "for CAS." Phase E interpolates the student's school via `schoolDisplayName(opts.student.homeSchool)` (`data/schoolDefaults.ts`): a Stern student now reads "...for NYU Stern School of Business," and with no student loaded it falls back to a generic "...for NYU." (never asserting a school it can't confirm). The prompt also adds an explicit "never assume CAS — advise per THIS student's school/catalog/DPR" instruction.
 
@@ -41,9 +41,9 @@ The prompt has three sections, assembled in order:
 
 ---
 
-## 1. The twelve core static rules (always present)
+## 1. The thirteen core static rules (always present)
 
-These appear verbatim under the `CORE RULES (mandatory — non-negotiable):` header. Rules 9–11 are the **D4 honesty-rail** additions (2026-06-11); rule 12 is the **D6.5 honesty interlock** addition.
+These appear verbatim under the `CORE RULES (mandatory — non-negotiable):` header. Rules 9–11 are the **D4 honesty-rail** additions (2026-06-11); rule 12 is the **D6.5 honesty interlock** addition; rule 13 is the **D7.1 proactive-elicitation** addition.
 
 1. **Cardinal Rule.** Every number, course code, requirement status, credit count, GPA, deadline, or rule citation must come from a tool result this turn. Never write a number from training data. Never round. Never paraphrase. If the model catches itself writing a number it can't trace, it must stop and call the tool. (This rule is what the response validator's `checkGrounding` enforces.)
 
@@ -70,6 +70,8 @@ These appear verbatim under the `CORE RULES (mandatory — non-negotiable):` hea
 12. **Honesty on recorded-not-enforced preferences (D6.5).** When the agent RECORDS a scheduling preference (`setSchedulingPreference`) or a soft objective (`addSoftObjective`), it must **not** claim the visible **course-level plan** changed — never *"I've made Tuesday free"* / *"Tuesday is now clear."* Nothing on the course-by-term plan the student sees moves. The agent states the preference is **recorded** (it persists and rides into the downstream step) and names **WHEN/HOW** it applies:
     - **scheduling preference** → *"recorded; it applies when we pick specific **sections** (meeting times), not the course-level plan you see now."* It distinguishes honestly: a **strict** preference will **eliminate** conflicting sections at materialization; a **soft** one will only **deprioritize** (deboost ~0.7×) them, never drop them. This matches `applySchedulingPreferences.ts` exactly — the strict pass drops sections; the soft pass reweights them; the course-level forward plan is untouched.
     - **soft objective** → *"recorded; it biases which equally-valid plan I show first — it never changes whether a plan is valid."* This matches D6.2: the objective is read only by the ranker (`scorePlan`), never by the hard solver's feasibility/validity logic. The tie is also enforced in the deterministic confirm-bubble templates (`explainPlanDiff.ts`): `renderSetSchedulingPreference` now says the course-level plan is unchanged and the prefs apply at section selection (strict eliminate / soft deprioritize); `renderAddSoftObjective` already says "Recorded a soft scheduling preference (applies when ranking equally-valid plans)."
+
+13. **Proactive elicitation (D7.1).** When a planning/decision question depends on decision-relevant context the student hasn't supplied — their intended **major/direction**, a **career interest/goal**, a **graduation timeline**, or (for a global-campus student — NYU Shanghai / NYU Abu Dhabi) **study-away intent** — the agent ANSWERS the question first with what it has, THEN appends **ONE** focused follow-up to gather the single missing fact, the way a professional adviser would. **Bounded:** at most one proactive question, sparingly; never substitute the question for the answer, never stack multiple asks, never interrogate/quiz; if the context is already known (program declared, interest stated, study-away chosen), do not ask. Framed as helping the student make a better decision, not a quiz. The directive is fed by a **pure deterministic detector** — `detectElicitationOpportunity` in [`proactiveElicitation.ts`](../../../packages/engine/src/agent/proactiveElicitation.ts) — the **proactive sibling** of the reactive clarifier's `detectAmbiguity` ([clarifier.md](clarifier.md)). The detector fires on three high-value/low-frequency signals (`planning_without_declared_program`, `major_exploration_without_interest`, `global_campus_planning_without_away_intent`), suppresses overlap with `detectAmbiguity` (the reactive clarifier owns ambiguous messages; this owns clear-but-context-thin ones), pure factual lookups, and continuations of a prior assistant question, and is **append-not-substitute**: it is consumed AFTER the agent loop completes (by D7.2), never streamed in place of the answer like the route clarifier. As of D7.1 the detector is exported and unit-tested but **not yet wired into `route.ts`** (D7.2 owns the route wiring + frequency guard).
 
 Followed by a one-paragraph **TOOL ROUTING** block: each tool's description tells the model when to use it; the validator + each tool's `validateInput` will reject misroutes, so a wrong call is recoverable, but trying to answer without calling a tool when one is needed is not.
 
@@ -242,7 +244,7 @@ The block ends with three behavior rules:
 ```mermaid
 flowchart TD
     OPTS[SystemPromptOptions] --> ROLE["ROLE block:<br/>You are NYU Path…<br/>(school name interpolated from<br/>homeSchool — Phase E, de-CAS)"]
-    ROLE --> CORE[12 core static rules]
+    ROLE --> CORE[13 core static rules]
     CORE --> ROUT[TOOL ROUTING paragraph]
     ROUT --> PREF[PREFERENCE EXTRACTION:<br/>Tier-A mappings]
     PREF --> TIER[PREFERENCE EXTRACTION:<br/>4-tier fallback]

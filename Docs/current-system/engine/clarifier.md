@@ -1,12 +1,14 @@
 # Clarifier — Ambiguity Gate + Clarification Sub-Agent
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-11 (D7.1 — added the proactive sibling `detectElicitationOpportunity` / `proactiveElicitation.ts`, append-not-substitute, suppresses overlap with this reactive `detectAmbiguity` gate; not yet route-wired — D7.2 owns that).
 
 > **Source file:** `packages/engine/src/agent/clarifier.ts`. Wired in `apps/web/app/api/chat/v2/route.ts:380-411`.
 
 ## Purpose
 
 When a student types something vague — "math", "what about that?", "is this enough?" — the system shouldn't guess. Before the agent loop runs, a deterministic gate (`detectAmbiguity`, `clarifier.ts:60-140`) scans for ambiguity signals (too short, dangling pronoun, bare noun-phrase, fragment). If any fire, a constrained no-tools completion (`askClarification`) writes **one** clarifying question back to the student — or returns `"CLEAR"` to overrule the gate and let the message through. This is **reactive-only elicitation**: the system asks for clarification only in response to a genuinely ambiguous message; it never proactively quizzes the student about preferences.
+
+> **Proactive sibling (D7.1).** A second, *proactive* deterministic detector — `detectElicitationOpportunity` in [`proactiveElicitation.ts`](../../../packages/engine/src/agent/proactiveElicitation.ts) (see [CORE RULE 13 in system-prompt.md](system-prompt.md)) — handles the opposite case: a **clear but context-thin** planning question, where a professional adviser would answer first and then append ONE focused follow-up. It deliberately **suppresses overlap** with `detectAmbiguity` (the reactive clarifier owns ambiguous messages) and is **append-not-substitute** — consumed AFTER the agent loop (by D7.2), never streamed in place of the answer the way this reactive gate is.
 
 ## TL;DR
 
