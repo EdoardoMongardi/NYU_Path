@@ -13,6 +13,9 @@
 import { describe, expect, it } from "vitest";
 import {
     detectElicitationOpportunity,
+    decideElicitationAppend,
+    elicitationQuestionFor,
+    ELICITATION_LEAD_IN,
     type ElicitationReport,
 } from "../../src/agent/proactiveElicitation.js";
 import type { LLMMessage } from "../../src/agent/llmClient.js";
@@ -185,6 +188,177 @@ describe("detectElicitationOpportunity — does NOT fire (bounded/conservative)"
         for (const msg of ordinary) {
             const r = detectElicitationOpportunity(msg, [], WITH_PROGRAM);
             expect(r.shouldElicit, `expected no elicitation for: ${msg}`).toBe(false);
+        }
+    });
+});
+
+// ============================================================
+// D7.2 — pure decision function (decideElicitationAppend) + question text
+// ============================================================
+// These are the LOAD-BEARING tests for the append-not-substitute
+// guarantee: the route is a thin caller, but the structural invariant —
+// the decision only ever returns text to APPEND, never a replacement —
+// is enforced here in pure code. The frequency guard + the
+// agent-already-elicited guard are likewise pinned deterministically.
+// ============================================================
+
+const FIRES: ElicitationReport = {
+    shouldElicit: true,
+    signals: ["planning_without_declared_program"],
+    topic: "intended_major",
+};
+const NO_FIRE: ElicitationReport = { shouldElicit: false, signals: [] };
+const CLEAN_ANSWER =
+    "Here is a solid plan for next semester: CSCI-UA 101, MATH-UA 121, and a writing seminar.";
+
+describe("elicitationQuestionFor — bounded, lead-in-prefixed question per topic", () => {
+    it("returns a lead-in-prefixed, bounded string for each known topic", () => {
+        for (const topic of ["intended_major", "career_interest", "study_away_intent"]) {
+            const q = elicitationQuestionFor(topic);
+            expect(typeof q).toBe("string");
+            expect(q.length).toBeGreaterThan(0);
+            // Begins with the stable detectable lead-in marker.
+            expect(q.startsWith(ELICITATION_LEAD_IN)).toBe(true);
+            // Bounded: one focused question, not a paragraph (≤ ~30 words).
+            const wordCount = q.trim().split(/\s+/).length;
+            expect(wordCount).toBeLessThanOrEqual(30);
+            // It is a question.
+            expect(q.trim().endsWith("?")).toBe(true);
+        }
+    });
+
+    it("names the campus generically for study_away_intent (never a specific site only)", () => {
+        const q = elicitationQuestionFor("study_away_intent");
+        expect(q.toLowerCase()).toContain("study away");
+    });
+});
+
+describe("decideElicitationAppend — append-not-substitute, structural", () => {
+    it("appends when shouldElicit + clean finalText + no prior elicitation", () => {
+        const decision = decideElicitationAppend({
+            report: FIRES,
+            finalText: CLEAN_ANSWER,
+            priorMessages: [],
+        });
+        expect(decision.append).toBe(true);
+        expect(decision.reason).toBe("append");
+        expect(decision.text).not.toBeNull();
+        expect(decision.text!.startsWith(ELICITATION_LEAD_IN)).toBe(true);
+        // The append-not-substitute invariant: the decision text is
+        // ADDITIVE. Simulate the route's concatenation and assert the
+        // ORIGINAL answer is still fully present (a prefix), never replaced.
+        const combined = `${CLEAN_ANSWER}\n\n${decision.text}`;
+        expect(combined.startsWith(CLEAN_ANSWER)).toBe(true);
+        expect(combined).toContain(CLEAN_ANSWER);
+        expect(combined).toContain(decision.text!);
+        // And the decision NEVER carries a replacement for the answer:
+        // its text does not contain the original answer body.
+        expect(decision.text!).not.toContain(CLEAN_ANSWER);
+    });
+
+    it("uses the topic's question text verbatim as the append", () => {
+        const decision = decideElicitationAppend({
+            report: FIRES,
+            finalText: CLEAN_ANSWER,
+            priorMessages: [],
+        });
+        expect(decision.text).toBe(elicitationQuestionFor("intended_major"));
+    });
+
+    it("does NOT append when there is no opportunity (shouldElicit:false)", () => {
+        const decision = decideElicitationAppend({
+            report: NO_FIRE,
+            finalText: CLEAN_ANSWER,
+            priorMessages: [],
+        });
+        expect(decision.append).toBe(false);
+        expect(decision.text).toBeNull();
+        expect(decision.reason).toBe("no-opportunity");
+    });
+
+    it("does NOT append when the report fired but carries no topic", () => {
+        const decision = decideElicitationAppend({
+            report: { shouldElicit: true, signals: ["planning_without_declared_program"] },
+            finalText: CLEAN_ANSWER,
+            priorMessages: [],
+        });
+        expect(decision.append).toBe(false);
+        expect(decision.reason).toBe("no-opportunity");
+    });
+
+    it("agent-already-elicited: finalText already ends with a question mark", () => {
+        const decision = decideElicitationAppend({
+            report: FIRES,
+            finalText: "Happy to plan that — what direction are you aiming for?",
+            priorMessages: [],
+        });
+        expect(decision.append).toBe(false);
+        expect(decision.text).toBeNull();
+        expect(decision.reason).toBe("agent-already-elicited");
+    });
+
+    it("agent-already-elicited: finalText already contains the lead-in marker", () => {
+        const decision = decideElicitationAppend({
+            report: FIRES,
+            finalText: `${CLEAN_ANSWER}\n\n${elicitationQuestionFor("intended_major")}`,
+            priorMessages: [],
+        });
+        expect(decision.append).toBe(false);
+        expect(decision.text).toBeNull();
+        expect(decision.reason).toBe("agent-already-elicited");
+    });
+
+    it("frequency-bounded: the LAST assistant message already contains the lead-in", () => {
+        const priorMessages: LLMMessage[] = [
+            { role: "user", content: "What should I take next semester?" },
+            {
+                role: "assistant",
+                content: `Here's a plan.\n\n${elicitationQuestionFor("intended_major")}`,
+            },
+        ];
+        const decision = decideElicitationAppend({
+            report: FIRES,
+            finalText: CLEAN_ANSWER,
+            priorMessages,
+        });
+        expect(decision.append).toBe(false);
+        expect(decision.text).toBeNull();
+        expect(decision.reason).toBe("frequency-bounded");
+    });
+
+    it("frequency-bounded reads the LAST assistant turn, not an older one", () => {
+        // An OLD assistant turn elicited; the MOST-RECENT one did not.
+        // We may elicit again — the bound is only consecutive turns.
+        const priorMessages: LLMMessage[] = [
+            { role: "user", content: "earlier question" },
+            { role: "assistant", content: `older answer\n\n${ELICITATION_LEAD_IN} what's your goal?` },
+            { role: "user", content: "follow up" },
+            { role: "assistant", content: "a plain answer with no elicitation here." },
+        ];
+        const decision = decideElicitationAppend({
+            report: FIRES,
+            finalText: CLEAN_ANSWER,
+            priorMessages,
+        });
+        expect(decision.append).toBe(true);
+        expect(decision.reason).toBe("append");
+    });
+
+    it("never returns a replacement: append:false always pairs with text:null", () => {
+        const cases: Array<{ report: ElicitationReport; finalText: string; priorMessages: LLMMessage[] }> = [
+            { report: NO_FIRE, finalText: CLEAN_ANSWER, priorMessages: [] },
+            { report: FIRES, finalText: "ends with a question?", priorMessages: [] },
+            {
+                report: FIRES,
+                finalText: CLEAN_ANSWER,
+                priorMessages: [
+                    { role: "assistant", content: `x\n\n${ELICITATION_LEAD_IN} y?` },
+                ],
+            },
+        ];
+        for (const c of cases) {
+            const d = decideElicitationAppend(c);
+            if (!d.append) expect(d.text).toBeNull();
         }
     });
 });

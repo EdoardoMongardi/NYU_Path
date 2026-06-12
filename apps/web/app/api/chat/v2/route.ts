@@ -49,6 +49,8 @@ import {
     renderMultiIntentBriefing,
     detectAmbiguity,
     askClarification,
+    detectElicitationOpportunity,
+    decideElicitationAppend,
     type DegreeProgressReport,
 } from "@nyupath/engine";
 import type { ForwardSchedule, SchedulePreferences } from "@nyupath/shared";
@@ -810,6 +812,46 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                 kind: "validator_block",
                 violations: allViolations,
             });
+        }
+
+        // D7.2 — proactive elicitation APPEND (append-not-substitute).
+        // ONLY on the OK terminal path (allOk): a professional adviser
+        // answers FIRST, then asks ONE focused follow-up. We append a
+        // single bounded question to `finalTextOut` — we never substitute
+        // it for the answer (contrast the reactive clarifier ~428-465,
+        // which streams a question and `return`s before the agent loop).
+        // Because we mutate `finalTextOut` BEFORE the `done` write below,
+        // the appended question rides into `done.finalText` (the client
+        // reconciles the rendered message to `ev.finalText`) AND into the
+        // durable transcript (persisted as `finalTextOut` below) — so the
+        // bounded-frequency guard sees the `ELICITATION_LEAD_IN` marker in
+        // next turn's `history` and won't elicit twice in a row.
+        // A detector failure must NEVER break the live turn.
+        if (allOk) {
+            try {
+                const student = session.student;
+                const elicitationReport = detectElicitationOpportunity(
+                    userMessage,
+                    priorMessages,
+                    {
+                        ...(student?.homeSchool ? { homeSchool: student.homeSchool } : {}),
+                        declaredPrograms: student?.declaredPrograms?.map((p) => p.programId) ?? [],
+                        ...(student?.visaStatus ? { visaStatus: student.visaStatus } : {}),
+                    },
+                );
+                const elicitationDecision = decideElicitationAppend({
+                    report: elicitationReport,
+                    finalText: finalTextOut,
+                    priorMessages,
+                });
+                if (elicitationDecision.append && elicitationDecision.text) {
+                    finalTextOut = `${finalTextOut}\n\n${elicitationDecision.text}`;
+                }
+            } catch (err) {
+                // Purely additive feature — swallow and proceed with the
+                // un-appended answer rather than breaking the turn.
+                console.error("[proactive-elicitation] append skipped", err);
+            }
         }
 
         writer.write({
