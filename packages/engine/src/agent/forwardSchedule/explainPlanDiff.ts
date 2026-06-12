@@ -186,7 +186,11 @@ function renderBindPoolSlot(_diff: PlanDiff, m: Extract<PlanMutation, { kind: "b
 }
 
 function renderSetSchedulingPreference(_diff: PlanDiff): string {
-    return "Updating scheduling preferences (time/day filters). Section selection in the immediate term will respect the new filters.";
+    // D6.5 — recorded-not-(visibly)-enforced. The course-level plan does
+    // not change here; the preference is RECORDED and applied downstream
+    // at section selection (strict entries eliminate conflicting sections;
+    // soft entries only deprioritize them).
+    return "Recorded scheduling preferences (time/day filters) — the course-level plan is unchanged. They apply when sections are selected: strict entries eliminate conflicting sections; soft entries deprioritize them.";
 }
 
 function renderClearSchedulingPreference(_diff: PlanDiff): string {

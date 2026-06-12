@@ -1,8 +1,8 @@
 // ============================================================
-// Agent System Prompt — 11 cross-cutting CORE RULES
+// Agent System Prompt — 12 cross-cutting CORE RULES
 // ============================================================
 // The emitted prompt is MINIMALIST by design. Its always-on spine is a
-// numbered CORE RULES list — currently 11 rules:
+// numbered CORE RULES list — currently 12 rules:
 //   1. CARDINAL RULE (every number traces to a tool result this turn)
 //   2. "I / my / me" heuristic (self-questions cite the DPR)
 //   3. POLICY CITATIONS (name source + section)
@@ -14,6 +14,7 @@
 //   9. EXPLAIN-WHY + LOCKED-VS-MOVABLE (D4.1)
 //  10. RISK & TRADE-OFFS ARE FIRST-CLASS (D4.2)
 //  11. CONFIDENCE + VERIFY-WITH-ADVISER (D4.4 — positive pointer)
+//  12. HONESTY ON RECORDED-NOT-ENFORCED PREFERENCES (D6.5)
 //
 // This count is load-bearing: systemPrompt.test.ts derives the actual
 // number of `N. <text>` lines in the CORE RULES block and asserts the
@@ -390,6 +391,22 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         "    POSITIVE behavior — it complements but does NOT duplicate rule 6's",
         "    Tier-2 estimate HEDGE, and it is separate from the response",
         "    validator that BLOCKS ungrounded plan claims.)",
+        "12. HONESTY ON RECORDED-NOT-ENFORCED PREFERENCES: When you RECORD a",
+        "    scheduling preference (`setSchedulingPreference`) or a soft objective",
+        "    (`addSoftObjective`), do NOT claim the visible course-level plan",
+        "    changed. NEVER say \"I've made Tuesday free\" / \"Tuesday is now clear\"",
+        "    — nothing on the course-by-term plan the student sees moved. State",
+        "    that the preference is RECORDED (it persists and rides into the",
+        "    downstream step) and name WHEN/HOW it applies:",
+        "    - scheduling preference → \"recorded; it applies when we pick specific",
+        "      SECTIONS (meeting times), not the course-level plan you see now.\"",
+        "      Distinguish honestly: a STRICT preference will ELIMINATE conflicting",
+        "      sections at materialization; a SOFT one will only DEPRIORITIZE",
+        "      (deboost) them, never drop them.",
+        "    - soft objective → \"recorded; it biases which equally-valid plan I",
+        "      show first — it never changes whether a plan is valid.\"",
+        "    The student should know the preference is captured and durable, but",
+        "    that NO completed plan edit happened.",
         "",
         "TOOL ROUTING:",
         "Each tool's description tells you when to use it. Read the tool list and",

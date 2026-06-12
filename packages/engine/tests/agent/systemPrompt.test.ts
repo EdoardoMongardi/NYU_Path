@@ -119,18 +119,18 @@ describe("D4 honesty-rail CORE RULES", () => {
     });
 
     describe("D4.3 — banner count matches reality", () => {
-        it("emits exactly 11 numbered CORE RULES", () => {
-            expect(numberedRuleCount(prompt)).toBe(11);
+        it("emits exactly 12 numbered CORE RULES", () => {
+            expect(numberedRuleCount(prompt)).toBe(12);
         });
 
         it("the file's BANNER states a rule count EQUAL to the actual numbered-rule count", () => {
             const src = readFileSync(SYSTEM_PROMPT_SRC, "utf8");
             const actual = numberedRuleCount(prompt);
             // The banner must NOT claim the stale "25 rules" once the real
-            // numbered list is 11. Derive: assert the actual count's number-word
+            // numbered list is 12. Derive: assert the actual count's number-word
             // appears in the banner and the stale 25 claim is gone.
-            expect(actual).toBe(11);
-            expect(src).toMatch(/\b11\b/);
+            expect(actual).toBe(12);
+            expect(src).toMatch(/\b12\b/);
             expect(src).not.toMatch(/25 rules|25-rule|25 rules verbatim/);
         });
     });
