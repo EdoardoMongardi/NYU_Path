@@ -1,6 +1,6 @@
 # Chat Route — `/api/chat/v2` (SSE Streaming Endpoint)
 
-> Last verified against code: 2026-06-11 (D7.2 — added the post-loop proactive-elicitation append: on the OK terminal path the route appends one bounded question to `done.finalText`, append-not-substitute + frequency-bounded; see §11).
+> Last verified against code: 2026-06-13 (doc-sync pass: refreshed `route.ts` line citations after the file grew to 999 lines — D7.2 — added the post-loop proactive-elicitation append: on the OK terminal path the route appends one bounded question to `done.finalText`, append-not-substitute + frequency-bounded; see §11).
 
 ## Purpose
 
@@ -24,34 +24,34 @@ flowchart LR
 
 ## 1. Overview
 
-`/api/chat/v2` (`apps/web/app/api/chat/v2/route.ts`, ~915 lines) is the production streaming chat endpoint that drives every post-onboarding turn in NYU Path. It accepts a single user message plus a **client-posted, parsed Albert Degree Progress Report (DPR)** — the sole accepted onboarding artifact post-pivot — rebuilds a `StudentProfile`, assembles a `ToolSession` inline, runs the engine's streaming agent loop, and streams tool invocations, reasoning chunks, plan updates, and the final reply back to the browser as Server-Sent Events. A valid DPR payload is **required**: if `parsedData` is missing or isn't a DPR payload, the route returns HTTP 400 asking the student to upload their DPR before reaching the agent.
+`/api/chat/v2` (`apps/web/app/api/chat/v2/route.ts`, ~999 lines) is the production streaming chat endpoint that drives every post-onboarding turn in NYU Path. It accepts a single user message plus a **client-posted, parsed Albert Degree Progress Report (DPR)** — the sole accepted onboarding artifact post-pivot — rebuilds a `StudentProfile`, assembles a `ToolSession` inline, runs the engine's streaming agent loop, and streams tool invocations, reasoning chunks, plan updates, and the final reply back to the browser as Server-Sent Events. A valid DPR payload is **required**: if `parsedData` is missing or isn't a DPR payload, the route returns HTTP 400 asking the student to upload their DPR before reaching the agent.
 
-The route is a Node.js (not Edge) runtime handler (`route.ts:69`, `export const runtime = "nodejs"`) because the engine's LLM clients use Node streams the Edge runtime does not support. The legacy `/api/chat` (`apps/web/app/api/chat/route.ts`) still exists but only handles onboarding state-machine steps and pre-onboarding chitchat — once `onboardingStep === "complete"` and `parsedData` is present it returns HTTP 410 Gone with a redirect pointer at `/api/chat/v2` (`apps/web/app/api/chat/route.ts:58-66`).
+The route is a Node.js (not Edge) runtime handler (`route.ts:71`, `export const runtime = "nodejs"`) because the engine's LLM clients use Node streams the Edge runtime does not support. The legacy `/api/chat` (`apps/web/app/api/chat/route.ts`) still exists but only handles onboarding state-machine steps and pre-onboarding chitchat — once `onboardingStep === "complete"` and `parsedData` is present it returns HTTP 410 Gone with a redirect pointer at `/api/chat/v2` (`apps/web/app/api/chat/route.ts:58-66`).
 
-In short: every real "answer-the-student" turn flows through v2. The route does not block on the LLM — it opens the SSE stream synchronously and runs the agent loop in the background via `void runV2Turn({...})` (`route.ts:415-429`), so the browser sees event flow from `t=0`.
+In short: every real "answer-the-student" turn flows through v2. The route does not block on the LLM — it opens the SSE stream synchronously and runs the agent loop in the background via `void runV2Turn({...})` (`route.ts:471-485`), so the browser sees event flow from `t=0`.
 
 ## 2. Request Shape
 
-The client POSTs a JSON body of type `V2RequestBody` (`route.ts:95-115`):
+The client POSTs a JSON body of type `V2RequestBody` (`route.ts:97-115`):
 
-- `message` — required string; the user's chat turn. Missing/non-string → HTTP 400 (`route.ts:124-126`).
-- `parsedData` — required; DPR-only. The single accepted shape is `{ kind: "dpr"; report }`. The route checks the payload is a DPR payload (kind `"dpr"`) via the inline `isDprPayload` guard; if it isn't (or `parsedData` is absent) it returns HTTP 400 with an "I need your Albert Degree Progress Report (DPR)…" message and `onboardingStep: "awaiting_dpr"` (`route.ts:136-146`). When the kind matches, the route runs the engine's `degreeProgressReportSchema.safeParse` against `report` and rejects malformed payloads with a separate HTTP 400 listing the first three failing paths (`route.ts:151-161`).
-- `visaStatus` — optional string. Only `"f1"` or `"domestic"` are threaded into the profile builder (`route.ts:223-225`).
-- `graduationTarget` — optional, free-form (e.g., `"Spring 2027"` or `"spring2027"`). Normalized into `graduationTerm` for the system prompt by `normalizeGraduationTarget` (`route.ts:320`).
+- `message` — required string; the user's chat turn. Missing/non-string → HTTP 400 (`route.ts:126-128`).
+- `parsedData` — required; DPR-only. The single accepted shape is `{ kind: "dpr"; report }`. The route checks the payload is a DPR payload (kind `"dpr"`) via the inline `isDprPayload` guard; if it isn't (or `parsedData` is absent) it returns HTTP 400 with an "I need your Albert Degree Progress Report (DPR)…" message and `onboardingStep: "awaiting_dpr"` (`route.ts:138-148`). When the kind matches, the route runs the engine's `degreeProgressReportSchema.safeParse` against `report` and rejects malformed payloads with a separate HTTP 400 listing the first three failing paths (`route.ts:153-162`).
+- `visaStatus` — optional string. Only `"f1"` or `"domestic"` are threaded into the profile builder (`route.ts:225-227`).
+- `graduationTarget` — optional, free-form (e.g., `"Spring 2027"` or `"spring2027"`). Normalized into `graduationTerm` for the system prompt by `normalizeGraduationTarget` (`route.ts:376`).
 - `history` — optional array of prior `{ role: "user" | "assistant"; content }` items. The route forwards them into the loop as `priorMessages` (the page's client policy sends the last 10).
 - `correlationId` — optional. Passed through to the agent loop for log tracing.
 - `userId` — optional fallback identity. Only honored when the auth cookie is absent.
-- `homeSchool` — optional. When a non-empty string, threaded through as `homeSchoolOverride` so `deriveHomeSchool` is bypassed (`route.ts:228-230`). **No production client currently sends this** — see [§5.2](#52-home-school-derivation-and-the-unknown-fallback).
+- `homeSchool` — optional. When a non-empty string, threaded through as `homeSchoolOverride` so `deriveHomeSchool` is bypassed (`route.ts:230-232`). **No production client currently sends this** — see [§5.2](#52-home-school-derivation-and-the-unknown-fallback).
 
 ## 3. Authentication / Authorization
 
-`readSessionFromRequest(req)` (`route.ts:183`) extracts the auth subject from the session cookie. The cookie-derived `sub` always wins; the request body's `userId` is the fallback, and the literal string `"anonymous"` is the last-resort identity when neither is present (`route.ts:184`).
+`readSessionFromRequest(req)` (`route.ts:185`) extracts the auth subject from the session cookie. The cookie-derived `sub` always wins; the request body's `userId` is the fallback, and the literal string `"anonymous"` is the last-resort identity when neither is present (`route.ts:186`).
 
-The route itself does **not** redirect or reject unauthenticated requests — that gate lives one layer above at `apps/web/app/chat/layout.tsx`, a Server Component that calls `readSessionFromCookies()` and `redirect("/login")` before any chat-page client JS runs. So `/api/chat/v2` only sees requests from users who already passed the layout gate (or direct curl traffic). Authenticated-only side-effects (bootstrap profile upsert, chat-history append, session-summary append) are explicitly gated on `userId !== "anonymous"` (`route.ts:289`, `785`, `846`).
+The route itself does **not** redirect or reject unauthenticated requests — that gate lives one layer above at `apps/web/app/chat/layout.tsx`, a Server Component that calls `readSessionFromCookies()` and `redirect("/login")` before any chat-page client JS runs. So `/api/chat/v2` only sees requests from users who already passed the layout gate (or direct curl traffic). Authenticated-only side-effects (plan/prefs hydration, bootstrap profile upsert, chat-history append, session-summary append) are explicitly gated on `userId !== "anonymous"` (`route.ts:270`, `341`, `870`, `931`).
 
 ## 4. Rate Limiting
 
-`consumeRequest(userId)` (`route.ts:191`) enforces a per-student daily quota (default 30 messages / UTC day). When the bucket is empty the route returns HTTP 429 with diagnostic headers: `Retry-After` (seconds), `X-RateLimit-Limit`, `X-RateLimit-Remaining` (`"0"`), and `X-RateLimit-Reset` (ISO timestamp). The body carries a polite "Daily message limit reached, resets at … reach out to your adviser" message (`route.ts:192-210`).
+`consumeRequest(userId)` (`route.ts:193`) enforces a per-student daily quota (default 30 messages / UTC day). When the bucket is empty the route returns HTTP 429 with diagnostic headers: `Retry-After` (seconds), `X-RateLimit-Limit`, `X-RateLimit-Remaining` (`"0"`), and `X-RateLimit-Reset` (ISO timestamp). The body carries a polite "Daily message limit reached, resets at … reach out to your adviser" message (`route.ts:195-211`).
 
 Bucketing follows the resolved id:
 - Authenticated users get a per-NetID bucket.
@@ -60,16 +60,16 @@ Bucketing follows the resolved id:
 
 ## 5. Session Bootstrap
 
-The route loads the `stores` registry (`route.ts:212`, `getStores()`) and rebuilds the `StudentProfile` from the **client-posted** DPR via `buildStudentProfileFromDpr(parsedDpr, { studentIdOverride: userId, visaStatus?, homeSchoolOverride? })` (`route.ts:215-231`). The `studentIdOverride` is critical: every persistence write must key on the SAME id the restore route reads from. Without it, writes land under a slugified DPR-name id while restore reads from `auth.sub`, splitting rows across `students`, `forward_schedules`, and `chat_messages` (the May 2026 DB-split post-mortem). See [build-session.md](build-session.md) for the builder's internals.
+The route loads the `stores` registry (`route.ts:214`, `getStores()`) and rebuilds the `StudentProfile` from the **client-posted** DPR via `buildStudentProfileFromDpr(parsedDpr, { studentIdOverride: userId, visaStatus?, homeSchoolOverride? })` (`route.ts:217-233`). The `studentIdOverride` is critical: every persistence write must key on the SAME id the restore route reads from. Without it, writes land under a slugified DPR-name id while restore reads from `auth.sub`, splitting rows across `students`, `forward_schedules`, and `chat_messages` (the May 2026 DB-split post-mortem). See [build-session.md](build-session.md) for the builder's internals.
 
-The `ToolSession` is assembled **inline** at `route.ts:289-315` with:
+The `ToolSession` is assembled **inline** at `route.ts:291-317` with:
 - `student` — the freshly built profile.
 - `profileStore`, `scheduleStore`, `chatHistoryStore` — wired durable store handles.
 - `lastUserMessage` — the current message (so tool `validateInput` hooks can apply scope guards).
-- `schoolConfig` — `loadSchoolConfig(student.homeSchool)`, wrapped in try/catch → `null` on failure (`route.ts:238-244`).
-- `courses` / `prereqs` — from the module-cached `getCatalog()`; file-read failure degrades to no catalog (`route.ts:249-255`, `272`).
-- `rag` — the policy-RAG bundle from `getPolicyRagBundle()` (`route.ts:233`); `null` when the corpus/keys are missing (see [build-session.md §3](build-session.md#3-boot-time-rag-setup-policyragsetup)).
-- `searchCoursesFn` — the semantic course-catalog search function from `getCourseSearchFn()` (`route.ts:232`); spread in only when present.
+- `schoolConfig` — `loadSchoolConfig(student.homeSchool)`, wrapped in try/catch → `null` on failure (`route.ts:240-246`).
+- `courses` / `prereqs` — from the module-cached `getCatalog()`; file-read failure degrades to no catalog (`route.ts:251-257`, spread in at `307`).
+- `rag` — the policy-RAG bundle from `getPolicyRagBundle()` (`route.ts:235`); `null` when the corpus/keys are missing (see [build-session.md §3](build-session.md#3-boot-time-rag-setup-policyragsetup)).
+- `searchCoursesFn` — the semantic course-catalog search function from `getCourseSearchFn()` (`route.ts:234`); spread in only when present.
 - `degreeProgressReport` — the parsed DPR (always present here).
 - `forwardSchedule` / `studentDraftPlan` / `schedulePreferences` — **P3.1**: hydrated from Postgres before the session literal is built (see [§5.1](#51-per-turn-plan--prefs-hydration)). Spread in only when the load returns a value.
 
@@ -84,8 +84,8 @@ Tools never write to `chatHistoryStore` directly — the route handles that AFTE
 **Each turn now hydrates:**
 - the **client-resent** DPR (re-validated, rebuilt into a profile every turn),
 - the **client-supplied** `history` (last ~10 messages),
-- the rolling **session summaries** read from `sessionStore.get(userId)` (`route.ts:364-370`),
-- the **cohort flag** from `stores.cohortLookup(userId)` (`route.ts:358`), and
+- the rolling **session summaries** read from `sessionStore.get(userId)` (`route.ts:420-422`),
+- the **cohort flag** from `stores.cohortLookup(userId)` (`route.ts:414`), and
 - **(P3.1)** the persisted `forwardSchedule` / `studentDraftPlan` / `schedulePreferences` via `scheduleStore.loadLatestSchedule` + `loadPreferences`.
 
 **Profile write-clobber — fixed in P3.2.** This is READ-hydration of the plan + prefs only; the route still rebuilds `StudentProfile` from the **client-resent** DPR every turn (it does **not** yet read the persisted profile via `profileStore.get` into the session — that read-hydration is Phase 4). But the *write* side is fixed: the bootstrap upsert below (§5.3) is now **gated to initial onboarding** (`profileStore.get(userId) === null`), so it no longer rewrites `students.profile` on every message and no longer **clobbers confirmed profile mutations** a prior `confirm_profile_update` wrote, nor appends a synthetic audit row per message. The related preferences-from-`{}` wipe is also resolved: a chat-driven `confirm_plan_change` now reads the P3.1-hydrated `session.schedulePreferences` (not `{}`), so existing pins survive.
@@ -102,7 +102,7 @@ The route performs a no-throw bootstrap upsert: when `userId !== "anonymous"` **
 
 ### 5.4 Temporal context + system prompt
 
-`deriveTemporalContext(parsedDpr, { now })` (`route.ts:317-319`) computes `currentTerm`/`nextTerm` from the wall clock + NYU calendar and `enrolledNowTerm`/`preRegisteredTerms` from the DPR. The normalized `graduationTerm` is stashed on the session (`route.ts:329-331`) so `plan_forward_degree` can default `graduationTermOverride` when the LLM omits it. The final prompt is assembled by `buildSystemPrompt({ student, dprLoaded, today, currentTerm?, nextTerm?, enrolledNowTerm?, preRegisteredTerms?, graduationTerm? })` (`route.ts:333-343`).
+`deriveTemporalContext(parsedDpr, { now })` (`route.ts:372-375`) computes `currentTerm`/`nextTerm` from the wall clock + NYU calendar and `enrolledNowTerm`/`preRegisteredTerms` from the DPR. The normalized `graduationTerm` is stashed on the session (`route.ts:385-387`) so `plan_forward_degree` can default `graduationTermOverride` when the LLM omits it. The final prompt is assembled by `buildSystemPrompt({ student, dprLoaded, today, currentTerm?, nextTerm?, enrolledNowTerm?, preRegisteredTerms?, graduationTerm? })` (`route.ts:389-399`).
 
 ## 6. Pre-Loop Dispatch (removed)
 
@@ -110,33 +110,33 @@ There is no longer a keyword/template short-circuit at the start of a turn. The 
 
 ## 7. Clarifier Gate
 
-Before the loop, the route calls `detectAmbiguity(body.message, body.history ?? [])` (`route.ts:380`) — a deterministic, regex-style check, no LLM call. If `ambiguity.ambiguous` is true, it invokes `askClarification(primary, message, history, contextHints)` (`route.ts:383-395`), a one-shot on the **primary** client (`claude-sonnet-4-6` by default) with no tools. Context hints carry `homeSchool`, `declaredPrograms`, and `visaStatus` when known. Failures are caught and the route falls through to the main loop.
+Before the loop, the route calls `detectAmbiguity(body.message, body.history ?? [])` (`route.ts:436`) — a deterministic, regex-style check, no LLM call. If `ambiguity.ambiguous` is true, it invokes `askClarification(primary, message, history, contextHints)` (`route.ts:439-451`), a one-shot on the **primary** client (`claude-sonnet-4-6` by default) with no tools. Context hints carry `homeSchool`, `declaredPrograms`, and `visaStatus` when known. Failures are caught and the route falls through to the main loop.
 
-When the clarifier returns `!isClear && output.length > 0`, the route streams the clarifying question as this turn's reply (`route.ts:396-410`):
+When the clarifier returns `!isClear && output.length > 0`, the route streams the clarifying question as this turn's reply (`route.ts:452-465`):
 1. Chunks the output into 40-char segments, one `token` event per chunk.
 2. Emits a `done` event with `finalText` = the clarifying question and `modelUsedId = primary.id`.
 3. Closes the stream and returns immediately. The main loop is skipped; the student's next turn flows through the agent normally.
 
 ## 8. Multi-Intent Detection
 
-`detectMultiIntent(body.message)` (`route.ts:349`) is a deterministic detector for messages with multiple distinct requests. `renderMultiIntentBriefing(multiIntent)` (`route.ts:350`) produces a system-prompt suffix telling the agent to enumerate and address each sub-question. The result is appended to the base system prompt with `\n\n` to form `finalSystemPrompt` (`route.ts:351-353`). Pure string assembly — no extra LLM call.
+`detectMultiIntent(body.message)` (`route.ts:405`) is a deterministic detector for messages with multiple distinct requests. `renderMultiIntentBriefing(multiIntent)` (`route.ts:406`) produces a system-prompt suffix telling the agent to enumerate and address each sub-question. The result is appended to the base system prompt with `\n\n` to form `finalSystemPrompt` (`route.ts:407-409`). Pure string assembly — no extra LLM call.
 
 ## 9. Agent Loop Invocation
 
-The loop is `runAgentTurnStreaming(primary, buildDefaultRegistry(), session, userMessage, opts)` (`route.ts:554-609`). `buildDefaultRegistry()` returns the 21 live tools (see the agent/tools docs). The options object carries:
+The loop is `runAgentTurnStreaming(primary, buildDefaultRegistry(), session, userMessage, opts)` (`route.ts:610-668`). `buildDefaultRegistry()` returns the 21 live tools (see the agent/tools docs). The options object carries:
 
 - `systemPrompt` — the final system prompt (with multi-intent briefing if any).
-- `priorMessages` — the cross-session session-summary string as a leading system message (when present) plus the client-sent history as `LLMMessage`s (`route.ts:512-520`).
+- `priorMessages` — the cross-session session-summary string as a leading system message (when present) plus the client-sent history as `LLMMessage`s (`route.ts:568-576`).
 - `fallbackClient` — the secondary provider client (when configured); the loop tolerates its absence.
 - `correlationId` — passed through when present.
 - `maxTurns` — 10 (headroom for multi-tool "audit → search_policy → synthesize" flows).
 - `maxTokens` — 4096 (the streaming path has no output-truncation recovery, so a final answer over the cap is simply cut off).
 - `fallbackSink` — a `JsonlFileSink` (see [§12](#12-telemetry)).
-- `validatorReplayLimit` — 1. The loop calls the route's inline `validateResponse` hook (`route.ts:590-607`) when it has a candidate final reply; if the verdict is not ok and budget remains, it appends a system message describing violations and runs one more pass. **D5.2** — this in-loop closure passes the hydrated plan through as `forwardSchedule: s.forwardSchedule`, so the D5.1 plan-claim check (`checkPlanClaims`) runs on the replay gate. Without it an ungrounded plan claim the replay loop "passes" would never be caught.
+- `validatorReplayLimit` — 1. The loop calls the route's inline `validateResponse` hook (`route.ts:646-667`) when it has a candidate final reply; if the verdict is not ok and budget remains, it appends a system message describing violations and runs one more pass. **D5.2** — this in-loop closure passes the hydrated plan through as `forwardSchedule: s.forwardSchedule`, so the D5.1 plan-claim check (`checkPlanClaims`) runs on the replay gate. Without it an ungrounded plan claim the replay loop "passes" would never be caught.
 
-The primary client is `createPrimaryClient()` (`route.ts:164`). The default primary model is **`claude-sonnet-4-6`** (override via `NYUPATH_PRIMARY_MODEL`); the default fallback is `gpt-4.1-mini`. When the primary returns `null` (no API key for the configured primary provider — default `anthropic` per `NYUPATH_PRIMARY_PROVIDER`), the route returns HTTP 503 with a `<PROVIDER>_API_KEY not configured` message (`route.ts:164-174`). The fallback (`createFallbackClient()`, `route.ts:175`) may be null with no liveness impact.
+The primary client is `createPrimaryClient()` (`route.ts:166`). The default primary model is **`claude-sonnet-4-6`** (override via `NYUPATH_PRIMARY_MODEL`); the default fallback is `gpt-4.1-mini`. When the primary returns `null` (no API key for the configured primary provider — default `anthropic` per `NYUPATH_PRIMARY_PROVIDER`), the route returns HTTP 503 with a `<PROVIDER>_API_KEY not configured` message (`route.ts:166-176`). The fallback (`createFallbackClient()`, `route.ts:177`) may be null with no liveness impact.
 
-Before the loop runs, the route snapshots three side-channel timestamps to detect plan/schedule/materialization writes during the turn (`route.ts:538`, `546`, `552`):
+Before the loop runs, the route snapshots three side-channel timestamps to detect plan/schedule/materialization writes during the turn (`route.ts:594`, `602`, `608`):
 - `beforeComputedAt` = `session.forwardSchedule?.computedAt`
 - `beforeDraftComputedAt` = `session.studentDraftPlan?.computedAt`
 - `beforeMaterializationComputedAt` = `session.lastMaterializationResult?.computedAt`
@@ -160,15 +160,15 @@ The full event union (`sseStream.ts:13-29`) is:
 
 | Event `kind` | Payload fields | When emitted |
 |---|---|---|
-| `tool_invocation_start` | `toolName`, `args` (object) | Each time the loop starts a tool (`route.ts:611-617`). |
-| `tool_invocation_done` | `toolName`, `summary?`, `error?` | Each time a tool finishes (`route.ts:618-626`). `summary` is the tool's human-readable string; `error` is set when the tool threw. |
-| `token` | `text` | Each `text_delta` from the loop, plus the chunked clarifier reply and the recovery-mode reply (`route.ts:631-633`, `398-401`, `480-481`). |
-| `thinking` | `text` | Each `thinking_delta` from the loop (`route.ts:627-630`). The route also joins these into a string for chat-history persistence. |
-| `validator_block` | `violations[]` (each `{ kind, detail, caveatId?, number? }`) | When the post-loop validator finds any violations (`route.ts:802-805`). Advisory, not fatal — `done` still fires. |
-| `forward_schedule_update` | `schedule` (full `ForwardSchedule`) | When `session.forwardSchedule.computedAt` changed, OR (only if the valid slot didn't change) when `session.studentDraftPlan.computedAt` changed. The valid plan wins when both changed (`route.ts:715-725`). |
-| `forward_materialization_update` | `result` (full `ForwardMaterializationPayload`) | When `session.lastMaterializationResult.computedAt` changed during the turn (`route.ts:680-690`). |
-| `done` | `finalText`, `modelUsedId` | The last event of a successful turn (`route.ts:772-776`, plus the clarifier and recovery and context-limit paths). `modelUsedId` may carry suffixes like `:context_limit` or `cohort:<name>:limited`. |
-| `error` | `message` | Emitted when the loop ends in a non-ok kind, throws, or finds the primary client missing (`route.ts:468`, `706-709`, `865-868`). |
+| `tool_invocation_start` | `toolName`, `args` (object) | Each time the loop starts a tool (`route.ts:671-677`). |
+| `tool_invocation_done` | `toolName`, `summary?`, `error?` | Each time a tool finishes (`route.ts:678-686`). `summary` is the tool's human-readable string; `error` is set when the tool threw. |
+| `token` | `text` | Each `text_delta` from the loop, plus the chunked clarifier reply and the recovery-mode reply (`route.ts:691-692`, `454-456`, `536`). |
+| `thinking` | `text` | Each `thinking_delta` from the loop (`route.ts:687-690`). The route also joins these into a string for chat-history persistence. |
+| `validator_block` | `violations[]` (each `{ kind, detail, caveatId?, number? }`) | When the post-loop validator finds any violations (`route.ts:811-814`). Advisory, not fatal — `done` still fires. |
+| `forward_schedule_update` | `schedule` (full `ForwardSchedule`) | When `session.forwardSchedule.computedAt` changed, OR (only if the valid slot didn't change) when `session.studentDraftPlan.computedAt` changed. The valid plan wins when both changed (`route.ts:713-730`). |
+| `forward_materialization_update` | `result` (full `ForwardMaterializationPayload`) | When `session.lastMaterializationResult.computedAt` changed during the turn (`route.ts:745-750`). |
+| `done` | `finalText`, `modelUsedId` | The last event of a successful turn (`route.ts:857-861`, plus the clarifier and recovery and context-limit paths). `modelUsedId` may carry suffixes like `:context_limit` or `cohort:<name>:limited`. |
+| `error` | `message` | Emitted when the loop ends in a non-ok kind, throws, or finds the primary client missing (`route.ts:524`, `765-771`, `950-953`). |
 
 > **Correction from the prior doc:** there is **no `template_match` event kind**. The SSE union has never carried one in the current code; recovery mode emits only `token` + `done` ([§11](#11-recovery-mode-cohort-gate-failing)).
 
@@ -176,7 +176,7 @@ The encoder coalesces one event into one SSE block. It uses a `ReadableStream` w
 
 ## 11. Plan / Schedule / Materialization Update Detection
 
-The route uses snapshot-and-compare to detect side-effect writes by tools during the turn (`route.ts:653-690`):
+The route uses snapshot-and-compare to detect side-effect writes by tools during the turn (`route.ts:700-750`):
 
 - **Valid schedule** — `session.forwardSchedule` is written by `plan_forward_degree`, `confirm_plan_change`, and reconciler tools. After the loop, the route compares `afterComputedAt` to `beforeComputedAt` and emits `forward_schedule_update` carrying the full schedule when changed.
 - **Infeasible / student-preferred-invalid draft** — when the solver produces a plan that fails the validator it lands in `session.studentDraftPlan`, not `session.forwardSchedule` (Decision #32). The route emits `forward_schedule_update` carrying the draft when only the draft slot changed. The sidebar's 4-state banner (`valid-clean` / `valid-with-trade-offs` / `infeasible-draft` / `student-preferred-invalid-draft`) keys off `schedule.state`, so one event shape serves both slots.
@@ -195,17 +195,17 @@ Because `finalTextOut` is mutated **before** the `done` write, the appended ques
 
 ### Recovery mode (cohort-gate failing)
 
-When the user's cohort has `evalGateFailing: true` (passed in as `cohortGateFailing`, computed at `route.ts:359` from `getCohortConfig(cohort)`), the agent loop is bypassed entirely (`route.ts:478-484`). The route calls `runRecoveryMode(userMessage, session)`.
+When the user's cohort has `evalGateFailing: true` (passed in as `cohortGateFailing`, computed from `getCohortConfig(cohort)` at `route.ts:415` and threaded into `runV2Turn` at `route.ts:480`), the agent loop is bypassed entirely (`route.ts:534-539`). The route calls `runRecoveryMode(userMessage, session)`.
 
 **Important:** `runRecoveryMode` (`packages/engine/src/cohort/gate.ts:136-144`) does **no template matching** — the curated template corpus was removed in the "nothing hardcoded" pass. It unconditionally returns a transparent "limited availability" message (`kind: "no_match"`). The route streams that reply as one `token` event, then a `done` event with `modelUsedId = cohort:<name>:limited`, then closes. There is no `template_match` event and no `:template-only` suffix.
 
 ### Context-limit graceful termination
 
-When the loop returns `finalResult.kind === "context_limit"`, the route emits a `done` event with `finalText` = the polite "start a new session" reply and `modelUsedId` suffixed `:context_limit` (`route.ts:695-703`).
+When the loop returns `finalResult.kind === "context_limit"`, the route emits a `done` event with `finalText` = the polite "start a new session" reply and `modelUsedId` suffixed `:context_limit` (`route.ts:755-762`).
 
 ## 12. Telemetry
 
-`getFallbackSink()` (`route.ts:79-87`) lazily constructs a `JsonlFileSink` the loop writes transition events to (`model_error_no_fallback`, `validator_replay`, `context_limit_terminate`, and other fallback transitions). Path resolution:
+`getFallbackSink()` (`route.ts:81-89`) lazily constructs a `JsonlFileSink` the loop writes transition events to (`model_error_no_fallback`, `validator_replay`, `context_limit_terminate`, and other fallback transitions). Path resolution:
 1. `NYUPATH_FALLBACK_LOG_PATH` env var (operator override).
 2. `<cwd>/data/fallback_log.jsonl` (the dashboard's default scan target).
 
@@ -215,24 +215,24 @@ The `/admin/observability` dashboard reads the same file. Without this sink, fal
 
 After the `done` event is written but before the stream closes, the route performs best-effort writes — all gated on `userId !== "anonymous"`:
 
-1. **Chat history append** (`route.ts:820-870`):
+1. **Chat history append** (`route.ts:870-922`):
    - User message first (preserves user → assistant ordering on restore).
    - Assistant record with the resolved final text, ISO timestamp, and optional fields: `thinkingText` (joined `thinking_delta` chunks, when non-empty), `toolInvocations` (when non-empty), `validatorViolations` (validator violations, when any), and `pendingMutationId` extracted via `extractPendingMutationId(updateProfileInvocation.summary)` (the same extractor the client uses in `chatV2Client.ts`).
-2. **Session summary append** (`route.ts:885-891`): a heuristic, NOT an extra LLM call. The route writes `Asked: "<first 140 chars>". Tools called: <names>.` via `sessionStore.appendSummary(userId, { date, summary })`. The next turn picks it up via `summariesAsPriorMessage(record, 3)` (top-3 recency window) as a leading priorMessage (`route.ts:365-366`).
+2. **Session summary append** (`route.ts:931-948`): a heuristic, NOT an extra LLM call. The route writes `Asked: "<first 140 chars>". Tools called: <names>.` via `sessionStore.appendSummary(userId, { date, summary })`. The next turn picks it up via `summariesAsPriorMessage(record, 3)` (top-3 recency window) as a leading priorMessage (`route.ts:422`).
 3. **Profile / DPR bootstrap** — happens at session bootstrap ([§5.3](#53-bootstrap-profile-persistence)), not end-of-turn.
 
 All writes are wrapped in try/catch with `console.error` on failure; persistence problems do not break the live turn.
 
 ## 14. Error Handling
 
-1. **Request validation** — invalid JSON (`route.ts:122`), missing `message` (`route.ts:124-126`), missing/non-DPR `parsedData` → the "upload your DPR" 400 with `onboardingStep: "awaiting_dpr"` (`route.ts:136-146`), DPR schema failure (`route.ts:151-161`): all return HTTP 4xx synchronously, no SSE stream opened.
-2. **Environment errors** — primary client not configured → HTTP 503 (`route.ts:164-174`); rate-limit exceeded → HTTP 429 (`route.ts:191-210`). Both before the stream opens.
-3. **Runtime errors during the turn** — `runV2Turn`'s body is wrapped in try/catch that emits a final `error` SSE event and closes (`route.ts:864-871`). Unconditional — any throw in the loop, validator, or persistence path lands here.
-4. **Non-ok loop termination** — when `finalResult` is null or `finalResult.kind !== "ok"` (and not `context_limit`), the route emits `error` with `Agent loop ended in non-ok state: <kind>` or `Agent loop did not yield a final result.` and closes (`route.ts:705-712`).
-5. **Validator block** — when `validateResponse` (`route.ts:714-722`) produces any violations, the route emits `validator_block` with those violations BEFORE `done` (`route.ts:747`). The `done` event still fires — violations are advisory. **D5.2** — this post-loop terminal call passes `forwardSchedule: session.forwardSchedule`, so the D5.1 plan-claim check fires here too. Both `validateResponse` call sites — the in-loop replay closure (§9, `validatorReplayLimit`) and this post-loop terminal call — now thread the hydrated `forwardSchedule` into `ValidatorContext`, so the D5.1 plan-claim check is live on both paths (it no-ops when no plan is hydrated).
-6. **Fabricated-attribution scrubbing** — when the validator catches `fabricated_attribution` violations after the replay budget is exhausted, the route runs `stripFabricatedBlockquotes(finalText)` (`route.ts:760-765`, helper at `route.ts:886-914`). This regex scrubber drops every blockquote (`> …`) and the immediately preceding attribution line, then appends a substitution note advising the student to confirm the policy with an adviser. The scrubbed text flows into the `done` event's `finalText`.
+1. **Request validation** — invalid JSON (`route.ts:124`), missing `message` (`route.ts:126-128`), missing/non-DPR `parsedData` → the "upload your DPR" 400 with `onboardingStep: "awaiting_dpr"` (`route.ts:138-148`), DPR schema failure (`route.ts:153-162`): all return HTTP 4xx synchronously, no SSE stream opened.
+2. **Environment errors** — primary client not configured → HTTP 503 (`route.ts:166-176`); rate-limit exceeded → HTTP 429 (`route.ts:194-211`). Both before the stream opens.
+3. **Runtime errors during the turn** — `runV2Turn`'s body is wrapped in try/catch that emits a final `error` SSE event and closes (`route.ts:949-956`). Unconditional — any throw in the loop, validator, or persistence path lands here.
+4. **Non-ok loop termination** — when `finalResult` is null or `finalResult.kind !== "ok"` (and not `context_limit`), the route emits `error` with `Agent loop ended in non-ok state: <kind>` or `Agent loop did not yield a final result.` and closes (`route.ts:765-772`).
+5. **Validator block** — when `validateResponse` (`route.ts:775-786`) produces any violations, the route emits `validator_block` with those violations BEFORE `done` (`route.ts:811-814`). The `done` event still fires — violations are advisory. **D5.2** — this post-loop terminal call passes `forwardSchedule: session.forwardSchedule`, so the D5.1 plan-claim check fires here too. Both `validateResponse` call sites — the in-loop replay closure (§9, `validatorReplayLimit`) and this post-loop terminal call — now thread the hydrated `forwardSchedule` into `ValidatorContext`, so the D5.1 plan-claim check is live on both paths (it no-ops when no plan is hydrated).
+6. **Fabricated-attribution scrubbing** — when the validator catches `fabricated_attribution` violations after the replay budget is exhausted, the route runs `stripFabricatedBlockquotes(finalText)` (`route.ts:809`, helper at `route.ts:971-998`). This regex scrubber drops every blockquote (`> …`) and the immediately preceding attribution line, then appends a substitution note advising the student to confirm the policy with an adviser. The scrubbed text flows into the `done` event's `finalText`.
 
-The route always closes the SSE stream in a `finally` block (`route.ts:869-871`) regardless of branch.
+The route always closes the SSE stream in a `finally` block (`route.ts:954-956`) regardless of branch.
 
 ## 15. Mermaid Sequence Diagram
 

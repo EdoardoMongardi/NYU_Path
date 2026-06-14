@@ -1,6 +1,6 @@
 # Session State (`ToolSession`)
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: P3.1 per-turn plan/prefs hydration, confirm_plan_change as a forwardSchedule writer, drifted route.ts line numbers).
 
 > **Source file:** `packages/engine/src/agent/tool.ts` (the `ToolSession` interface).
 
@@ -21,7 +21,7 @@ flowchart LR
 
 ---
 
-The `ToolSession` is the **shared state object** that flows through every tool invocation in a turn. It is built by the web layer per request (the chat route's session literal, `apps/web/app/api/chat/v2/route.ts:256-278`), passed into the agent loop, and read (and sometimes mutated) by tools. It is in-memory only — persistence is a separate concern owned by the route layer.
+The `ToolSession` is the **shared state object** that flows through every tool invocation in a turn. It is built by the web layer per request (the chat route's session literal, `apps/web/app/api/chat/v2/route.ts:291-317`), passed into the agent loop, and read (and sometimes mutated) by tools. It is in-memory only — persistence is a separate concern owned by the route layer.
 
 ---
 
@@ -38,22 +38,22 @@ The interface is defined at `agent/tool.ts:39-187`. Every field is optional.
 > The old unofficial-transcript upload path is gone — the DPR is the only source of the student's coursework.
 
 ### Catalog data
-- **`courses?: Course[]`** (tool.ts:43) — full course catalog. **The production chat route DOES set this** — `apps/web/app/api/chat/v2/route.ts:272` attaches `catalog.courses` from `getCatalog()` (module-cached `loadCourses()`, `apps/web/lib/loadCatalog.ts`). The forward planner reads course titles/credits from it.
-- **`prereqs?: Prerequisite[]`** (tool.ts:44) — prereq + coreq groups per course. **Also set** by the chat route at line 272 (`catalog.prereqs`).
-- **`schoolConfig?: SchoolConfig | null`** (tool.ts:45) — per-school numeric config. Loaded from `data/schools/<school>.json` via `loadSchoolConfig(student.homeSchool)` (route.ts:238-244, attached at 271). All **11 school configs** exist today (`cas`, `gallatin`, `liberal_studies`, `nursing`, `nyuad`, `shanghai`, `sps`, `steinhardt`, `stern`, `tandon`, `tisch`) — a student in any of them gets a real config; an unrecognized school gets `null` and tools fall back to the shared defaults in `data/schoolDefaults.ts`. See [data-loaders.md](./data-loaders.md) §3a.
+- **`courses?: Course[]`** (tool.ts:43) — full course catalog. **The production chat route DOES set this** — `apps/web/app/api/chat/v2/route.ts:307` attaches `catalog.courses` from `getCatalog()` (module-cached `loadCourses()`, `apps/web/lib/loadCatalog.ts`). The forward planner reads course titles/credits from it.
+- **`prereqs?: Prerequisite[]`** (tool.ts:44) — prereq + coreq groups per course. **Also set** by the chat route at line 307 (`catalog.prereqs`).
+- **`schoolConfig?: SchoolConfig | null`** (tool.ts:45) — per-school numeric config. Loaded from `data/schools/<school>.json` via `loadSchoolConfig(student.homeSchool)` (route.ts:240-246, spread into the session literal at 306). All **11 school configs** exist today (`cas`, `gallatin`, `liberal_studies`, `nursing`, `nyuad`, `shanghai`, `sps`, `steinhardt`, `stern`, `tandon`, `tisch`) — a student in any of them gets a real config; an unrecognized school gets `null` and tools fall back to the shared defaults in `packages/engine/src/data/schoolDefaults.ts`. See [data-loaders.md](./data-loaders.md) §3a.
 
 > **There is no `programs` field anymore.** The pre-rebuild `ToolSession` carried `programs?: Map<string, Program>` for a deterministic per-program rule engine. That field and the rule engine are **gone**. The planner and audit now read program requirements from the DPR (`degreeProgressReport`) and the bulletin RAG corpus. Any older doc describing a `programs`-not-wired "data gap" is describing a field that no longer exists.
 
 ### User intent
 - **`transferIntent?: boolean`** (tool.ts:47) — true when the user is exploring a transfer. Toggles a system-prompt line and some template applicability checks. (Note: the `check_transfer_eligibility` tool that once consumed this is removed; the flag survives as a prompt signal.)
-- **`lastUserMessage?: string`** (tool.ts:55) — the latest user message text. Threaded by the route (`route.ts:270`) so tools' `validateInput` can apply scope guards. When unset, scope guards no-op.
+- **`lastUserMessage?: string`** (tool.ts:55) — the latest user message text. Threaded by the route (`route.ts:305`) so tools' `validateInput` can apply scope guards. When unset, scope guards no-op.
 
 ### Mutation staging
 - **`pendingMutations?: Map<string, PendingProfileMutation>`** (tool.ts:62) — keyed by stable id. Written by `update_profile.call`; read + applied + cleared by `confirm_profile_update`. Two-step contract: `update_profile` never mutates the profile directly. A `PendingProfileMutation` (tool.ts:29-37) carries `id`, `field` (one of `homeSchool`, `catalogYear`, `declaredPrograms`, `visaStatus`), `before`, `after`, and a free-form `impacts` array.
 - **`pendingMaterializations?: Map<string, { termCode, sections }>`** (tool.ts:153-159) — keyed by `proposalId`. Written by `materialize_sections.call` (one entry per conflict-free combination); read + applied by `confirm_section_combination`. Same two-step contract.
 
 ### RAG
-- **`rag?: { store, embedder, reranker, confidenceBands? }`** (tool.ts:64-72) — the policy retrieval stack. The chat route builds it once at boot (`getPolicyRagBundle()` from `policyRagSetup.ts`) and attaches it (`route.ts:273`). `search_policy` is the only tool that reads it; if `rag` is absent, `search_policy` fails its `validateInput`.
+- **`rag?: { store, embedder, reranker, confidenceBands? }`** (tool.ts:64-72) — the policy retrieval stack. The chat route builds it once at boot (`getPolicyRagBundle()` from `policyRagSetup.ts`) and attaches it (`route.ts:308`). `search_policy` is the only tool that reads it; if `rag` is absent, `search_policy` fails its `validateInput`.
 
 ### Persistence handles (optional)
 - **`profileStore?: ProfileStore`** (tool.ts:90) — when present, `confirm_profile_update` writes the post-mutation profile + an audit row. The chat route also writes a bootstrap row here so the DPR/profile survive a refresh. Failures are swallowed.
@@ -61,7 +61,7 @@ The interface is defined at `agent/tool.ts:39-187`. Every field is optional.
 - **`chatHistoryStore?: ChatHistoryStore`** (tool.ts:111) — the route owns writes (it has the assistant's final text after the loop). Tools never write here; the field exists so future tools can read prior turns via `loadRecentMessages`.
 
 ### Temporal
-- **`graduationTarget?: string`** (tool.ts:123) — onboarding-stated target term in display form (e.g. `"Spring 2027"`). Set by the route after normalizing the free-form input (`route.ts:320-331`). `plan_forward_degree` reads it as the default for `graduationTermOverride` when the LLM doesn't pass one.
+- **`graduationTarget?: string`** (tool.ts:123) — onboarding-stated target term in display form (e.g. `"Spring 2027"`). Set by the route after normalizing the free-form input (`route.ts:385-387`). `plan_forward_degree` reads it as the default for `graduationTermOverride` when the LLM doesn't pass one.
 
 ### Forward-schedule outputs
 - **`forwardSchedule?: ForwardSchedule`** (tool.ts:128) — the solved forward plan. Written only when the result state is `"valid-clean"` or `"valid-with-trade-offs"`. Read by `view_forward_plan`, the SSE chat route (sidebar updates), and the forward-schedule subsystem.
@@ -71,7 +71,7 @@ The interface is defined at `agent/tool.ts:39-187`. Every field is optional.
 ### Section materialization side channel
 - **`lastMaterializationResult?`** (tool.ts:176-186) — populated by `materialize_sections.call` as a side effect of staging proposals. Carries the full `MaterializationResult`, `targetTerm`, `proposals` (one `{ proposalId, sections, weeklyHours }` per conflict-free combination), and `computedAt` (epoch ms). The SSE route snapshots `computedAt` before the turn and compares afterward to fire the `forward_materialization_update` event.
 
-> **`searchCoursesFn` is attached as a route-side extension, not an interface field.** The chat route appends `searchCoursesFn` to the session object via an intersection type (`route.ts:274-278: ... as ToolSession & { searchCoursesFn?: ... }`). It is the semantic course-search function injected for `search_courses`. It is not a declared member of the `ToolSession` interface in `tool.ts`.
+> **`searchCoursesFn` is attached as a route-side extension, not an interface field.** The chat route attaches `searchCoursesFn` in the session literal (`route.ts:309`) and widens the literal's type via an intersection (`route.ts:315-317: ... as ToolSession & { searchCoursesFn?: ... }`). It is the semantic course-search function injected for `search_courses`. It is not a declared member of the `ToolSession` interface in `tool.ts`.
 
 ---
 
@@ -110,7 +110,7 @@ graph LR
     CSC -->|apply + clear pendingMaterializations<br/>+ pin CRNs into forwardSchedule| ToolSession
 ```
 
-The chat route builds a **fresh** session each turn. It does not restore `forwardSchedule` / `schedulePreferences` from the store into the chat session itself — that restore happens in `/api/session/restore` and `planActionOrchestrator.ts` for the sidebar/plan-action paths.
+The chat route builds a **fresh** session each turn, but it **does** hydrate the student's persisted plan + prefs into it (P3.1, `route.ts:258-289`): `scheduleStore.loadLatestSchedule` classifies a draft state into `studentDraftPlan`, otherwise into `forwardSchedule`, and `loadPreferences` carries `schedulePreferences` — all spread into the session literal at `route.ts:312-314` (guarded for `userId === "anonymous"`, best-effort: a load failure warns and leaves the slot unset). This mirrors `/api/session/restore` and `planActionOrchestrator.ts`, so the chat agent sees the plan the student built (e.g. via the sidebar) and the plan-claim validator has a plan to verify against.
 
 ---
 
@@ -155,7 +155,7 @@ The session is **not serialized between turns**. The route holds it in memory fo
 
 The interface is not frozen. Tools mutate `session.*` freely. The two-step staging (`pendingMutations`, `pendingMaterializations`) is a **convention**, not a runtime guard — the validator does not police mutations. What the system DOES guarantee by convention:
 
-- `forwardSchedule` is written only by `plan_forward_degree` and `confirm_section_combination` (pin), and only on success.
+- `forwardSchedule` is written only by `plan_forward_degree`, `confirm_plan_change` (the re-solved plan, when the validator deems it feasible — `confirmPlanChange.ts:235`), and `confirm_section_combination` (pin), and only on success.
 - `studentDraftPlan` is written only by `plan_forward_degree`, only when the plan is infeasible/draft.
 - `schedulePreferences` is mutated only via `confirm_plan_change`.
 - `student` is mutated only via `confirm_profile_update`.

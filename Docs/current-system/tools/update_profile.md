@@ -1,6 +1,6 @@
 # `update_profile`
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: fixed the drifted `extractPendingMutationId` call-site line cite in the SSE chat route).
 
 A technical audit of the staging half of the two-step profile-mutation contract. This tool was not touched by the Phase 0-2 solver rebuild — it is a Phase-5 profile tool and remains one of the 21 live tools in `packages/engine/src/agent/registry.ts`.
 
@@ -268,7 +268,7 @@ The id is not returned to the web client as a structured field on the tool invoc
 summary.match(/pendingMutationId:\s*(pm_[a-zA-Z0-9_]+)/)
 ```
 
-Both the SSE chat route (`apps/web/app/api/chat/v2/route.ts:799-804`, for transcript persistence) and the client restore path call this extractor. The coupling is fragile: if `summarizeResult`'s wording ever changes — e.g. the `pendingMutationId:` label is renamed or the `pm_` id prefix changes — the regex silently returns `null` and the confirm button never renders. There is no shared constant tying the producer (`updateProfile.ts:summarizeResult`) to the consumer regex; they are kept in sync only by the comment at `chatV2Client.ts:182-187`. Treat the summary line's exact shape as a load-bearing contract.
+Both the SSE chat route (`apps/web/app/api/chat/v2/route.ts:884-888`, for transcript persistence — it finds the `update_profile` invocation at 884-886 and scrapes the id at 887-888; imported at `route.ts:67`) and the client restore path call this extractor. The coupling is fragile: if `summarizeResult`'s wording ever changes — e.g. the `pendingMutationId:` label is renamed or the `pm_` id prefix changes — the regex silently returns `null` and the confirm button never renders. There is no shared constant tying the producer (`updateProfile.ts:summarizeResult`) to the consumer regex; they are kept in sync only by the comment at `chatV2Client.ts:182-187`. Treat the summary line's exact shape as a load-bearing contract.
 
 ---
 

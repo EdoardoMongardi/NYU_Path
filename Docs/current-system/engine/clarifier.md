@@ -1,8 +1,8 @@
 # Clarifier — Ambiguity Gate + Clarification Sub-Agent
 
-> Last verified against code: 2026-06-11 (D7.2 — the proactive sibling `detectElicitationOpportunity` / `proactiveElicitation.ts` is now ROUTE-WIRED: on the OK terminal path the v2 route calls `decideElicitationAppend` to APPEND one bounded question to `done.finalText` — append-not-substitute, frequency-bounded via the `ELICITATION_LEAD_IN` marker. Still suppresses overlap with this reactive `detectAmbiguity` gate).
+> Last verified against code: 2026-06-13 (doc-sync pass: refreshed the drifted `route.ts` clarifier-wiring line citations — header, primary-client arg, stream/close-SSE block). Prior: 2026-06-11 (D7.2 — the proactive sibling `detectElicitationOpportunity` / `proactiveElicitation.ts` is now ROUTE-WIRED: on the OK terminal path the v2 route calls `decideElicitationAppend` to APPEND one bounded question to `done.finalText` — append-not-substitute, frequency-bounded via the `ELICITATION_LEAD_IN` marker. Still suppresses overlap with this reactive `detectAmbiguity` gate).
 
-> **Source file:** `packages/engine/src/agent/clarifier.ts`. Wired in `apps/web/app/api/chat/v2/route.ts:380-411`.
+> **Source file:** `packages/engine/src/agent/clarifier.ts`. Wired in `apps/web/app/api/chat/v2/route.ts:430-465`.
 
 ## Purpose
 
@@ -119,7 +119,7 @@ ambiguous = signals.length > 0
 
 When the gate fires, the route calls `askClarification(primary, userMessage, history, studentContext)`. It is a single no-tools chat completion — constrained to ask one question or emit `"CLEAR"`.
 
-> **Runs on the PRIMARY client.** The production route passes the **primary** client (`createPrimaryClient`, default `claude-sonnet-4-6`) as the `client` argument (`route.ts:383-384`), and the `clarifier.ts` source comments now correctly say so. There is no separate cheaper-tier client wired for the clarifier today; per-call cost/latency therefore tracks the primary model (Sonnet by default), not a cheaper tier.
+> **Runs on the PRIMARY client.** The production route passes the **primary** client (`createPrimaryClient`, default `claude-sonnet-4-6`) as the `client` argument (`route.ts:439-440`), and the `clarifier.ts` source comments now correctly say so. There is no separate cheaper-tier client wired for the clarifier today; per-call cost/latency therefore tracks the primary model (Sonnet by default), not a cheaper tier.
 
 - **System prompt (≤ ~15 lines, verbatim from the source):**
   ```
@@ -186,7 +186,7 @@ The gate fires on at most ~10–15% of incoming traffic (per the source-level no
 
 - **Gate**: 0 ms (regex + token split).
 - **Sub-agent**: one LLM call **on the primary client** (`claude-sonnet-4-6` by default — see §2), `maxTokens` 80, `temperature` 0.1. No separate cheaper-tier client is wired today, so real per-call cost/latency tracks the primary model.
-- The clarifier output is **not persisted** to the agent's tool history. It's a route-level event; the main agent loop has no awareness of it. (The route does, however, stream the question to the user and close the SSE for the turn — `route.ts:396-409`.)
+- The clarifier output is **not persisted** to the agent's tool history. It's a route-level event; the main agent loop has no awareness of it. (The route does, however, stream the question to the user and close the SSE for the turn — `route.ts:454-458`.)
 
 ---
 

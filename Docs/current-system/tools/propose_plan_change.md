@@ -1,6 +1,6 @@
 # propose_plan_change — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: PlanMutation now 14 kinds — added D6.2 addSoftObjective/clearSoftObjectives — and refreshed planChangeHelpers.ts / proposePlanChange.ts line citations).
 
 ## Purpose
 
@@ -42,19 +42,19 @@ Source files:
 - a deterministic English `explanation` string for the first mutation,
 - the simulated post-mutation `ForwardSchedule` (`proposedSchedule`) so the route layer can render the preview without re-solving.
 
-It writes **nothing** to `session` — `isReadOnly: true` (`proposePlanChange.ts:88`). The companion `confirm_plan_change` is the writer.
+It writes **nothing** to `session` — `isReadOnly: true` (`proposePlanChange.ts:99`). The companion `confirm_plan_change` is the writer.
 
 The contract: **call `propose_plan_change` first, show the student the preview, then call `confirm_plan_change` with the same `mutations[]` to persist.**
 
 ---
 
-## 2. Input schema — the 12-kind PlanMutation vocabulary
+## 2. Input schema — the 14-kind PlanMutation vocabulary
 
 ```
 { mutations: PlanMutation[] }   // min length 1
 ```
 
-`PlanMutationSchema` is the discriminated union at `planChangeHelpers.ts:55-93`, keyed on `kind`. There are **12 kinds**, shared verbatim with `confirm_plan_change`:
+`PlanMutationSchema` is the discriminated union at `planChangeHelpers.ts:74-132`, keyed on `kind`. There are **14 kinds**, shared verbatim with `confirm_plan_change`:
 
 | `kind` | Required | Optional | Semantics |
 |---|---|---|---|
@@ -70,14 +70,16 @@ The contract: **call `propose_plan_change` first, show the student the preview, 
 | `bindPoolSlot` | `slotId`, `courseId` | — | **No-op.** Consequence string only (real binding lives in `bind_pool_slot`). |
 | `setSchedulingPreference` | `value: SchedulingPreferencesSchema` | — | Replaces `prefs.schedulingPreferences` with `value` (admits `avoidDays`, `avoidTimeWindows`, `preferTimeWindows`, `desiredFreeDay`, `avoidConsecutiveLongBlocks`, plus passthrough extras). |
 | `clearSchedulingPreference` | — | — | Deletes `prefs.schedulingPreferences`. |
+| `addSoftObjective` | `objective: GenericSoftConstraint` | — | **D6.2 rung-2 SOFT objective.** Appends a generic `{ id, framing: "soft", weight? }` factor to `prefs.softObjectives[]` (de-duped by `id`). SOFT-only: read only by the ranker (`scorePlan`); the hard solver/validator never reads it, so it cannot make a valid plan invalid or vice-versa. |
+| `clearSoftObjectives` | — | — | **D6.2** — inverse of `addSoftObjective`; empties `prefs.softObjectives[]`. |
 
-Mutations apply **left-to-right** in `applyMutationsToPreferences` (`planChangeHelpers.ts:117`); later mutations override earlier ones for the same field. A `default: never` branch enforces exhaustiveness at compile time.
+Mutations apply **left-to-right** in `applyMutationsToPreferences` (`planChangeHelpers.ts:155`); later mutations override earlier ones for the same field. A `default: never` branch enforces exhaustiveness at compile time.
 
 ---
 
 ## 3. Session prerequisites — hard-refuse without a DPR
 
-`validateInput` (`proposePlanChange.ts:90`) rejects when:
+`validateInput` (`proposePlanChange.ts:101`) rejects when:
 
 1. **No prior plan**: neither `session.forwardSchedule` nor `session.studentDraftPlan` is set → `"No forward plan exists in this session. Call plan_forward_degree first, then propose changes."`
 2. **No DPR**: `session.degreeProgressReport` is absent → `"No Degree Progress Report loaded. Cannot simulate plan changes without DPR data."`
@@ -88,15 +90,15 @@ Both short-circuit with `{ ok: false, userMessage }`. The DPR refusal is the sam
 
 ## 4. What it reads from session
 
-Inside `call` (`proposePlanChange.ts:112`):
+Inside `call` (`proposePlanChange.ts:123`):
 
 - `session.degreeProgressReport` — non-null after validation.
-- `session.forwardSchedule` first, falling back to `session.studentDraftPlan` (`proposePlanChange.ts:114`) — the **baseline** plan for the diff.
+- `session.forwardSchedule` first, falling back to `session.studentDraftPlan` (`proposePlanChange.ts:125`) — the **baseline** plan for the diff.
 - `session.schedulePreferences` — base preferences the mutations layer onto. Defaults to `{}` when undefined.
 - `session.schoolConfig` — for the double-count advisory.
 - `session.student`, `session.prereqs`, `session.courses`, etc. — consumed indirectly via `buildSolverInputWithRulesFromSession`.
 
-If — after validation — both schedule fields are somehow missing at `call` time (defensive guard, lines 116-124), the tool returns an early infeasible outcome with conflict kind `"no_plan"` and skips the solver.
+If — after validation — both schedule fields are somehow missing at `call` time (defensive guard, lines 127-135), the tool returns an early infeasible outcome with conflict kind `"no_plan"` and skips the solver.
 
 ---
 
@@ -129,7 +131,7 @@ flowchart TD
 
 **Step 3 — Re-solve.** `solveForwardSchedule(solverInput)` runs the rebuilt feasibility-first search + materialize. (The old greedy solver is gone; see [forward-schedule audit](../engine/forward-schedule.md).)
 
-**Step 4 — Route through the AUTHORITATIVE 7-axis validator.** `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`proposePlanChange.ts:153`) assembles the `ForwardSchedule` AND runs `runGraduationPathValidator`, returning `{ schedule: proposedSchedule, validatorResult }`. **This is the key post-rebuild change:** the tool no longer trusts the solver's coarse `feasibility`/`state`. `feasible` in the output reflects the full 7-axis verdict (`validatorResult.feasible`), closing the PLAN-3 hole where an edit could preview as feasible while a 7-axis check would have failed.
+**Step 4 — Route through the AUTHORITATIVE 7-axis validator.** `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`proposePlanChange.ts:164`) assembles the `ForwardSchedule` AND runs `runGraduationPathValidator`, returning `{ schedule: proposedSchedule, validatorResult }`. **This is the key post-rebuild change:** the tool no longer trusts the solver's coarse `feasibility`/`state`. `feasible` in the output reflects the full 7-axis verdict (`validatorResult.feasible`), closing the PLAN-3 hole where an edit could preview as feasible while a 7-axis check would have failed.
 
 **Step 5 — Validate the BEFORE plan.** `runGraduationPathValidator({ plan: currentPlan, dpr, programRules: validatorRules })` produces `beforeAxes`, so the `planDiff` can report per-axis transitions.
 
@@ -137,7 +139,7 @@ flowchart TD
 
 **Step 7 — Consequences + the cited double-count advisory (D3.2).** `deriveConsequences(diff, proposedSchedule, noOpConsequences)` concatenates: the no-op messages; a feasibility verdict line (+ up to 3 conflict lines); an `"Added: …"` line; a `"Removed: …"` line. Separately, `proposePlanChange.ts` derives the double-count advisory via `buildDoubleCountAdvisory(dpr, session.schoolConfig)` and — when non-null — attaches the **whole structured `Disclaimer`** (id + `reason` + `bulletinSource`) to the output's `disclaimers[]` envelope field, mirroring `plan_forward_degree`. The advisory is **no longer** pushed bare into `consequences` (D3.2 fix; previously the citation was dropped). `summarizeResult` renders it via `renderEnvelopeMeta` so the `reason:` / `source:` citation surfaces.
 
-**Step 8 — Rich `PlanDiff`.** `buildPlanDiff(currentPlan, proposedSchedule, { before: beforeAxes, after: validatorResult.axisResults })` (`planChangeHelpers.ts:481`) computes:
+**Step 8 — Rich `PlanDiff`.** `buildPlanDiff(currentPlan, proposedSchedule, { before: beforeAxes, after: validatorResult.axisResults })` (`planChangeHelpers.ts:535`) computes:
 - `creditsByTermDelta` / `weightedCreditsByTermDelta` — non-zero per-term deltas.
 - `workloadTierShifts` — emitted when both sides have a `loadRationale` and any of `{hardCount, easyCount, weightedCredits}` changed.
 - `graduationTermShift` — signed semester distance (year × 4 + season ord; spring=0, summer=1, fall=2, january=3).
@@ -154,7 +156,7 @@ flowchart TD
 
 ## 6. What it returns
 
-`ProposePlanChangeOutput` (`proposePlanChange.ts:39`) extends `PlanChangeOutcome`:
+`ProposePlanChangeOutput` (`proposePlanChange.ts:40`) extends `PlanChangeOutcome`:
 
 ```
 {
@@ -210,7 +212,7 @@ sequenceDiagram
 
 ## 8. What it writes to session
 
-**Nothing.** `isReadOnly: true` (`proposePlanChange.ts:88`). The tool reads `session.schedulePreferences`, clones it locally, mutates the clone, and discards it after returning. No persistence call is made; `forwardSchedule`, `studentDraftPlan`, `schedulePreferences`, and `scheduleStore` are all untouched. The agent loop relies on this `isReadOnly` flag to permit speculative re-runs.
+**Nothing.** `isReadOnly: true` (`proposePlanChange.ts:99`). The tool reads `session.schedulePreferences`, clones it locally, mutates the clone, and discards it after returning. No persistence call is made; `forwardSchedule`, `studentDraftPlan`, `schedulePreferences`, and `scheduleStore` are all untouched. The agent loop relies on this `isReadOnly` flag to permit speculative re-runs.
 
 ---
 
@@ -221,7 +223,7 @@ sequenceDiagram
 - `maxResultChars: 4000`; `summarizeResult` is truncated with `"…"` above the cap.
 - `outputMode`: defaults to `"synthesis"`; no `extractVerbatim`. The validator pins no specific text.
 
-`summarizeResult` (`proposePlanChange.ts:207`) emits, in fixed order:
+`summarizeResult` (`proposePlanChange.ts:222`) emits, in fixed order:
 
 1. `PROPOSE PLAN CHANGE — feasible: <true|false>`
 2. If conflicts: `Conflicts (<n>):` then up to 3 `  [<kind>] <detail>` lines.

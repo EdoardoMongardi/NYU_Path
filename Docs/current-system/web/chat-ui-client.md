@@ -1,6 +1,6 @@
 # Chat UI Client — React Page & SSE Consumer
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: removed non-existent `onboardingStep` `"unsupported_major"` member; corrected the bouncing-dots loader citation to `page.tsx:1398-1407`).
 
 ## TL;DR
 
@@ -100,7 +100,7 @@ The page (`apps/web/app/chat/page.tsx:148-174`) holds:
 - `messages` — array of `Message` records (see below).
 - `input` — the textarea value.
 - `isLoading` — true between `handleSend` invoke and finalize.
-- `onboardingStep` — discriminated union of onboarding stages plus `"complete"` and `"unsupported_major"`.
+- `onboardingStep` — discriminated union of onboarding stages (`"awaiting_dpr" | "confirming_data" | "correcting_data" | "asking_visa" | "asking_graduation"`) plus `"complete"`.
 - `isDragOver` — for the drag-drop file overlay.
 - `parsedData` — the discriminated DPR/transcript payload (used in every v2 turn body).
 - `visaStatus`, `graduationTarget` — collected during onboarding, threaded into each v2 body.
@@ -199,7 +199,7 @@ The render loop (`page.tsx:1161-1399`) walks `messages` and branches early when 
 
 ### Loading indicator (v1 only)
 
-The legacy bouncing-dots typing indicator (`page.tsx:1426-1435`) only renders when `isLoading && !(onboardingStep === "complete" && parsedData)` — v2 turns have the streaming reasoning block as their own progress indicator.
+The legacy bouncing-dots typing indicator (`page.tsx:1398-1407`) only renders when `isLoading && !(onboardingStep === "complete" && parsedData)` — v2 turns have the streaming reasoning block as their own progress indicator.
 
 ### Mermaid render-flow diagram
 
@@ -426,7 +426,7 @@ The agent-status reasoning block IS the per-message loading indicator for v2 tur
 - Settled: `"Reasoned for Xs"` (collapsible button).
 - Failed: `"Failed after Xs"` (also collapsible, only if `hasAnyThought`).
 
-The legacy bouncing-dots indicator (`page.tsx:1405-1414`) only renders for v1 turns (`isLoading && !(onboardingStep === "complete" && parsedData)`).
+The legacy bouncing-dots indicator (`page.tsx:1398-1407`) only renders for v1 turns (`isLoading && !(onboardingStep === "complete" && parsedData)`).
 
 ### Page-level loading
 

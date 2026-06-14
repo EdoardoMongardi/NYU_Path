@@ -1,6 +1,6 @@
 # Tool Registry & Tool Contract
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: refreshed drifted registry.ts/route.ts/agentLoop.ts line citations in §5–§6).
 
 > **Source files:** `packages/engine/src/agent/tool.ts`, `packages/engine/src/agent/registry.ts`
 
@@ -104,7 +104,7 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 
 ## 5. `ALL_NYUPATH_TOOLS` — the wired set
 
-`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:67-88`), containing exactly **21** tools in this fixed order:
+`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:72-94`), containing exactly **21** tools in this fixed order:
 
 ```
 1.  run_full_audit
@@ -130,7 +130,7 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 21. confirm_section_combination
 ```
 
-`buildDefaultRegistry()` (`registry.ts:94-96`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts:556`).
+`buildDefaultRegistry()` (`registry.ts:100-102`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts:612`).
 
 ### Removed tools (do not document as live)
 
@@ -140,7 +140,7 @@ Three tools the old doc listed are **gone** from the registry:
 - **`check_overlap`** — the authored cross-program double-count audit (`crossProgramAudit` over `programs.json`) was removed in the same decommission. Double-count policy now comes from `search_policy`; per-program requirement satisfaction comes from `run_full_audit` (the DPR).
 - **`plan_semester`** — the Phase 5 single-term planner and its `planFeasibility` verifier were deleted. It had been unregistered since May 2026 and is fully superseded by `plan_forward_degree`, which plans every remaining term, writes `session.forwardSchedule`, and cooperates with `propose_plan_change`. There is now one way to plan.
 
-(The header comment in `registry.ts:1-42` is the authoritative record of these removals.)
+(The header comment in `registry.ts:1-46` is the authoritative record of these removals.)
 
 ---
 
@@ -191,7 +191,7 @@ sequenceDiagram
     end
 ```
 
-`toLLMToolDefs` (`agentLoop.ts:727-731`) builds the model-facing tool list: each entry is `name`, `description + "\n\n" + prompt({ session })`, and the JSON-Schema form of `inputSchema`. The per-call execution (validate → call with a single transient-error retry → summarize → extract verbatim) lives in the `executeTool` helper around `agentLoop.ts:540-625`.
+`toLLMToolDefs` (`agentLoop.ts:727-731`) builds the model-facing tool list: each entry is `name`, `description + "\n\n" + prompt({ session })`, and the JSON-Schema form of `inputSchema`. The per-call execution (validate → call with a single transient-error retry → summarize → extract verbatim) lives in the `executeTool` helper around `agentLoop.ts:515-625`.
 
 ---
 

@@ -1,6 +1,6 @@
 # `tools/` — The Build-Time Data Pipeline
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: dropped non-existent `validateCurated.ts` + `diagnoseInfeasible.ts`; documented the real `verifyForwardDegreeFix.ts` repro harness). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## Purpose
 
@@ -50,7 +50,7 @@ The current tool inventory:
 | `live-rag-test.ts` | TypeScript | Dev rig: run the real agent loop over policy questions end-to-end. |
 | `retrieval-probe.ts` | TypeScript | Dev rig: show exactly what `search_policy` retrieves for a query set. |
 
-> Note: `tools/live-rag-test.ts` and `tools/retrieval-probe.ts` are loose top-level scripts (not subdirectories). A third no-LLM repro harness lives outside `tools/`, at `packages/engine/scripts/diagnoseInfeasible.ts` — see §3.
+> Note: `tools/live-rag-test.ts` and `tools/retrieval-probe.ts` are loose top-level scripts (not subdirectories). A third end-to-end repro harness lives outside `tools/`, at `packages/engine/scripts/verifyForwardDegreeFix.ts` — see §3.
 
 ## 2. Per-Tool Summary
 
@@ -73,7 +73,6 @@ A folder of focused extractors that read `data/bulletin-raw/courses/<dept>_<suff
 - `extractCoreqs.ts` — LLM-assisted coreq extractor; runs a cheap regex pre-filter and only calls the LLM for chunks containing coreq language; skips courses already having non-empty coreqs; extends the `coreqs` field on existing `prereqs.json` entries.
 - `syntheticCourseIds.ts` — mints synthetic course IDs for AP / IB exam-with-score equivalencies referenced inside prereq strings (`AP-<SUBJECT>-<SCORE>`, `IB-<SUBJECT>-<LEVEL>-<SCORE>`).
 - `validatePrereqs.ts` — the strict canary; asserts the 16-course curated "ground truth" prereq set is byte-equivalent (under normalization) to a snapshot, so any drift in `prereqs.json` fails CI.
-- `validateCurated.ts` — **NEW, untracked** (added during the rebuild). An LLM-assisted curated-prereq validator using the Anthropic SDK directly: it re-parses the curated courses with Claude and compares against the curated ground truth, as a softer companion to the strict `validatePrereqs.ts`.
 
 - **Inputs:** `data/bulletin-raw/courses/*/_index.md`.
 - **Outputs:** `packages/engine/src/data/courses.json`, `prereqs.json`, `courses-offerings.json`, `off-catalog-credits.json`.
@@ -140,7 +139,7 @@ Three scripts are developer-only inspection rigs rather than data producers:
 
 - `tools/live-rag-test.ts` — loads the OpenAI-embedded policy corpus + the real Claude agent loop and runs multi-section policy questions (OGS visa, school transfer, add/drop major-minor) end-to-end, printing each answer + the tools called, for comparison against an independently-reasoned ground truth.
 - `tools/retrieval-probe.ts` — retrieval-only probe: for a fixed query set, dumps exactly what `search_policy` surfaces (top reranked hits + the full reassembled section), so a failure can be diagnosed as retrieval-side vs LLM-side.
-- `packages/engine/scripts/diagnoseInfeasible.ts` — **NEW, untracked** no-LLM repro harness. Reproduces the live forward-schedule for the `SAA_STD_DS.pdf` DPR fixture without going through the LLM: parses the DPR, builds the `StudentProfile`, runs `buildForwardSchedule` + `runGraduationPathValidator`, and dumps the temporal context, solver input summary, `ForwardSchedule.state`, feasibility violations, and per-term slots. Used to debug infeasible-plan reports against the live DPR fixture.
+- `packages/engine/scripts/verifyForwardDegreeFix.ts` — end-to-end self-test repro harness (tracked). Parses the `SAA_STD_DS.pdf` DPR fixture, builds a `StudentProfile`, and drives `runAgentTurnStreaming` with a **real Anthropic LLM** client (~$0.10–0.30/run), then reports which tools fired and whether `session.forwardSchedule` (or `studentDraftPlan`) ended up populated — the key invariant the schedule-sidebar SSE depends on. Also asserts `plan_semester` stays deregistered. Used to verify the forward-planner routing/storage fixes against the live DPR fixture.
 
 ## 4. Pipeline Map — Raw Bulletin to Runtime JSON
 

@@ -1,6 +1,6 @@
 # Data Loader Subsystem
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected §7 ToolSession/catalog/schoolConfig route.ts line citations).
 
 ## Purpose
 
@@ -189,7 +189,7 @@ Static lookup tables plus `classifyCourseAccessibility(courseId, homeSchool?)`. 
 The engine loaders are stateless; the wiring into a live session happens in the web app.
 
 1. `apps/web/lib/loadCatalog.ts` calls `loadCourses()` + `loadPrereqs()` once at module scope and caches the result (`getCatalog()`).
-2. The chat route (`apps/web/app/api/chat/v2/route.ts:256-278`) attaches `{ courses, prereqs }` from `getCatalog()` and `schoolConfig` from `loadSchoolConfig(student.homeSchool)` onto the `ToolSession` (see [session-state.md](./session-state.md)).
+2. The chat route builds the `ToolSession` at `apps/web/app/api/chat/v2/route.ts:291`, attaching `{ courses, prereqs }` from `getCatalog()` (route.ts:307) and `schoolConfig` from `loadSchoolConfig(student.homeSchool)` (route.ts:306) onto it. `schoolConfig` is resolved at route.ts:240-246 and `getCatalog()` at route.ts:251-257 (see [session-state.md](./session-state.md)).
 3. `loadOfferings()` and `loadOffCatalogCredits()` feed the forward solver's input (`buildSolverInput`), not the session bag.
 
 Because the engine loaders don't cache, all request-lifetime caching lives at the web layer. The school config is loaded per request (cheap — one small file); the catalog is module-cached because it is large.

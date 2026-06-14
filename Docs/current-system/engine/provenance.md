@@ -1,6 +1,6 @@
 # Data Provenance
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected the consumer story — only schoolConfigLoader consumes the validators; no `data/transfers/`·`data/departments/` dirs; four body validators are exported-but-unused).
 
 > **Source files:** `packages/engine/src/provenance/schema.ts`, `packages/engine/src/provenance/configSchema.ts`
 
@@ -156,7 +156,7 @@ All five body validators follow the same pattern: `safeParse`, then either retur
 - Both modules import `zod`. They have no other engine-package imports.
 - `configSchema.ts` does not import from `schema.ts`; the two modules are independent but share the `ValidateBodyResult` / `ValidateResult` pattern.
 
-What depends on these modules: the data loader layer that reads `data/schools/`, `data/programs/`, `data/transfers/`, and `data/departments/` JSON files. The loader is expected to call both a `validateFileWithMeta` and the appropriate body validator before handing a parsed file to the engine.
+What depends on these modules: the only consumer in the engine package is `packages/engine/src/data/schoolConfigLoader.ts`, which reads the `data/schools/` JSON files. It calls `validateFileWithMeta` (schoolConfigLoader.ts:81) for the metadata gate, then `validateSchoolConfigBody` (schoolConfigLoader.ts:98) for the body. There is no `data/transfers/` or `data/departments/` directory (the authored CAS→Stern transfer route under `data/transfers/*.json` was removed — internal-transfer questions are answered by `search_policy` over the bulletin, per registry.ts:16-19), and `data/programs/` is no longer loaded through a body validator (the programs.json rule engine was decommissioned). The remaining four body validators are exported but currently unused (see "Where it's consumed" below).
 
 ## Edge cases / failure modes
 
@@ -173,7 +173,7 @@ What depends on these modules: the data loader layer that reads `data/schools/`,
 
 ## Where it's consumed
 
-- The data loader for `data/schools/`, `data/programs/`, `data/transfers/`, and `data/departments/` is the primary consumer: it calls `validateFileWithMeta` for the metadata gate, then routes to the right body validator based on file type.
+- `packages/engine/src/data/schoolConfigLoader.ts` is the only consumer in the engine package: it calls `validateFileWithMeta` (schoolConfigLoader.ts:81) for the metadata gate, then `validateSchoolConfigBody` (schoolConfigLoader.ts:98) for the `data/schools/` body. It validates only the schools family — there is no multi-family loader that routes by file type.
 - `isStale` is consumed by any operator-facing dashboard, eval suite, or loader-time warning that surfaces "this data has not been re-verified in N days."
 - `STALENESS_DAYS` is the single source of truth for the 180-day window.
-- The body validators are imported by the loaders for each respective file family. The `Validate*` functions are pure and return errors instead of throwing, so loaders can aggregate failures across many files in one pass.
+- Of the five body validators, only `validateSchoolConfigBody` has a live consumer (schoolConfigLoader.ts:21,98). `validateProgramBody`, `validateTransferRequirementsBody`, `validateNyuTransferPolicyBody`, and `validatePolicyTemplateBody` are currently exported-but-unused (no engine-package import). The `Validate*` functions are pure and return errors instead of throwing, so a loader can aggregate failures across many files in one pass.

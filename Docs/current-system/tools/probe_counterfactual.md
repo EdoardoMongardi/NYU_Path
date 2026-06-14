@@ -1,6 +1,6 @@
 # probe_counterfactual — Technical Audit
 
-> Last verified against code: 2026-06-11 (Phase 3 advisor — D2.1 + D3.1 + D2.2).
+> Last verified against code: 2026-06-13 (Phase 3 advisor — D2.1 + D3.1 + D2.2; doc-sync pass: §2 mutation vocabulary corrected to 14 kinds + 3 slot-binding no-ops + planChangeHelpers.ts:74).
 
 ## Purpose
 
@@ -65,7 +65,7 @@ The schema is a zod `discriminatedUnion("kind", …)` (`probeCounterfactual.ts`)
 | **A — `future_course`** | `mutations: PlanMutation[]` (min 1) | "what if I drop / swap / pin a FUTURE course?" | a **clone of `schedulePreferences`** with the mutations applied |
 | **B — `fail_completed`** | `courseId: string` | "what if I had FAILED this already-COMPLETED course?" | a **synthetic DPR** (deep copy) with the course failed + its requirement re-opened |
 
-**Arm A reuses the exact same `PlanMutationSchema`** as `propose_plan_change` / `confirm_plan_change` (`planChangeHelpers.ts:55`) — the 12-kind `PlanMutation` vocabulary (`pin`, `unpin`, `exclude`, `swap`, `move`, `addTerm`, `loadStyleOverride`, the four slot-binding no-ops, `setSchedulingPreference`, `clearSchedulingPreference`). See [propose_plan_change §2](propose_plan_change.md) for the full table.
+**Arm A reuses the exact same `PlanMutationSchema`** as `propose_plan_change` / `confirm_plan_change` (`planChangeHelpers.ts:74`) — the 14-kind `PlanMutation` vocabulary (`pin`, `unpin`, `exclude`, `swap`, `move`, `addTerm`, `loadStyleOverride`, the three slot-binding no-ops, `setSchedulingPreference`, `clearSchedulingPreference`, `addSoftObjective`, `clearSoftObjectives`). See [propose_plan_change §2](propose_plan_change.md) for the full table.
 
 **Arm B is NOT part of that closed mutation union.** Failing a completed course is not expressible as a `PlanMutation` — it changes the DPR, not the scheduling preferences. It is handled by the dedicated pure transform `applyFailedCourseToDpr` (see §4).
 

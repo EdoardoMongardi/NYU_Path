@@ -1,6 +1,6 @@
 # Forward-Schedule Subsystem — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (post planning-engine rebuild, PRs #35-#41; doc-sync pass: corrected stale module file count and per-file line counts).
 
 ## Purpose
 
@@ -23,7 +23,7 @@ flowchart LR
 
 ---
 
-This document describes the modules under `packages/engine/src/agent/forwardSchedule/` (23 files, ~8.4k lines). It is separate from the user-facing tool docs (see [tool-registry.md](./tool-registry.md)) — this audit covers the algorithmic core and how its modules cooperate.
+This document describes the modules under `packages/engine/src/agent/forwardSchedule/` (22 files, ~8.4k lines). It is separate from the user-facing tool docs (see [tool-registry.md](./tool-registry.md)) — this audit covers the algorithmic core and how its modules cooperate.
 
 > Source-of-truth note: every claim below is derived from the source files. The module header comments are mostly accurate post-rebuild but a few are stale; where a comment and the code disagreed, the code won.
 
@@ -86,7 +86,7 @@ A frozen, immutable bundle passed into the solver. It carries student state (`co
 
 ---
 
-## 3. The constraint model (`constraintModel.ts`, 805 ln)
+## 3. The constraint model (`constraintModel.ts`, 885 ln)
 
 This module defines the CSP variable model, the hard-constraint predicates, and the soft objective. It is the contract the search and the validator agree on: a complete plan passing every hard predicate here is intended to also pass `runGraduationPathValidator` (each predicate documents — via its `axis` — which validator axis it mirrors).
 
@@ -206,7 +206,7 @@ When the initial plan is validator-infeasible, build can extend the graduation h
 
 ## 9. Supporting modules
 
-### 9.1 buildSolverInput.ts (633 ln)
+### 9.1 buildSolverInput.ts (634 ln)
 
 The ONE shared `SolverInput` builder for BOTH the build path and the edit path (`planChangeHelpers.buildSolverInputFromSession` is a one-line wrapper over it). It resolves the graduation term by precedence **override > stated target > credit-derived** (setting `graduationTermWasDerived` on the last), uses wall-clock `deriveTemporalContext` for the current term, builds the coreq map, extracts candidates and pool members, classifies requirement kinds (`requirementKind.ts`), and applies defaults. A **missing `creditsRequired` defaults to 128 with a build-time warning** surfaced onto `SolverOutput.warnings`. `buildSolverInputWithRules` returns the input plus the `validatorRules` from a single `buildProgramRules` call (so the validator path doesn't re-derive them).
 
@@ -222,7 +222,7 @@ The ONE shared `SolverInput` builder for BOTH the build path and the edit path (
 
 `computeBalanceScore(semesters, loadStyle)` (LOWER = better) = `1.0 × variance(plannedCredits) + 2.0 × variance(hardCount) + 0.5 × loadStyleDeviation`, using **population** variance. `balanced`/`light`/`heavy` → deviation 0; `frontload`/`backload` penalize a credit centroid on the wrong side of the median term index. `classifyBalanceDelta` labels a score change `improved` / `negligible` (<1.5) / `degraded-mild` (<4) / `degraded-significant`.
 
-### 9.5 tradeOffEngine.ts (181 ln) + planChangeHelpers.ts (659 ln)
+### 9.5 tradeOffEngine.ts (181 ln) + planChangeHelpers.ts (713 ln)
 
 `tradeOffEngine.diffPlanTradeOffs` fills 5 consequence fields (`newRequiresPetition`, `removedRequiresPetition`, `newUnmetRequirements`, `cascadedShifts`, `newAssumptions`) by diffing two `ForwardSchedule`s directly. `planChangeHelpers.buildPlanDiff` assembles the full ~12-field `PlanDiff`: per-term credit / weighted-credit deltas, `workloadTierShifts`, `graduationTermShift`, `balanceImpact` (also using a hard-coded `"balanced"` load style), `planStateChange`, the 5 trade-off fields from `tradeOffEngine`, and `validationResultsChanges` (per-axis transitions, only when the caller passes validator axes). `planChangeHelpers` also owns the Zod `PlanMutationSchema` (14 kinds) and the pure `applyMutationsToPreferences` reducer. D6.2 added two *soft* kinds — `addSoftObjective` (writes a `GenericSoftConstraint` into `prefs.softObjectives[]`, de-duplicating on `id`) and `clearSoftObjectives` (empties the array) — handled by `applyMutationsToPreferences`. These bias ranking only; **no solver-read capability was added** (the union grew, the frozen hard contract did not).
 

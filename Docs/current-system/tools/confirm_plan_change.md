@@ -1,6 +1,6 @@
 # confirm_plan_change — Technical Audit
 
-> Last verified against code: 2026-06-11 (D6.3 — re-rank provenance durability; prior pass 2026-06-10 post-rebuild PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: PlanMutationSchema now 14 kinds incl. addSoftObjective/clearSoftObjectives, and all confirmPlanChange.ts line citations re-pinned after D6.3 insertions; prior pass 2026-06-11 re-rank provenance durability).
 
 ## Purpose
 
@@ -38,7 +38,7 @@ The routing rule keys on the **validator's verdict**, not the solver's coarse st
 - `validatorResult.feasible === true` → write `session.forwardSchedule`, delete `session.studentDraftPlan`, `storedIn = "forwardSchedule"`.
 - `validatorResult.feasible === false` → write `session.studentDraftPlan`, **keep** `session.forwardSchedule`, `storedIn = "studentDraftPlan"`.
 
-`isReadOnly: false` (`confirmPlanChange.ts:62`) — the only tool in the pair that mutates session state.
+`isReadOnly: false` (`confirmPlanChange.ts:122`) — the only tool in the pair that mutates session state.
 
 ---
 
@@ -56,7 +56,7 @@ The routing rule keys on the **validator's verdict**, not the solver's coarse st
 }
 ```
 
-The 12-kind `PlanMutationSchema` (`planChangeHelpers.ts:55-93`) is **shared verbatim** between propose and confirm — they import the same Zod schema. Every variant accepted by propose is accepted here. See [propose_plan_change §2](propose_plan_change.md) for the full mutation table; the effects on `session.schedulePreferences` are identical, with the same no-op behavior for `bindFreeElective` / `unbindFreeElective` / `bindPoolSlot` and ill-formed `loadStyleOverride` combinations. Mutations apply left-to-right; a `default: never` branch enforces exhaustiveness.
+The 14-kind `PlanMutationSchema` (`planChangeHelpers.ts:74-132`) is **shared verbatim** between propose and confirm — they import the same Zod schema. The kinds are: `pin`, `exclude`, `swap`, `move`, `unpin`, `addTerm`, `loadStyleOverride`, `bindFreeElective`, `unbindFreeElective`, `bindPoolSlot`, `setSchedulingPreference`, `clearSchedulingPreference`, and the two D6.2 soft-objective kinds `addSoftObjective` / `clearSoftObjectives`. Every variant accepted by propose is accepted here. See [propose_plan_change §2](propose_plan_change.md) for the full mutation table; the effects on `session.schedulePreferences` are identical, with the same no-op behavior for `bindFreeElective` / `unbindFreeElective` / `bindPoolSlot` and ill-formed `loadStyleOverride` combinations. Mutations apply left-to-right; a `default: never` branch enforces exhaustiveness.
 
 **`rankedAlternative` is confirm-only (D6.3) and OPTIONAL.** `propose_plan_change` does NOT accept it. The agent passes it **only** when applying an alternative it chose by re-ranking the schedule's `alternativeCandidates` via [`compare_plan_alternatives`](compare_plan_alternatives.md) (Tier B, Decision #42) — its `selectedPlanIndex` / `dimensionsConsidered` come straight from that read-only comparison. When present, confirm records the choice as a **durable `LLM_RANKED_ALTERNATIVE` Assumption** on the confirmed schedule (see §5a). Ordinary edits omit it and no provenance Assumption is added (it is **not** always-on).
 
@@ -73,7 +73,7 @@ The `compare_plan_alternatives` tool is strictly read-only — it surfaces the s
 
 ## 3. Session prerequisites — hard-refuse without a DPR
 
-`validateInput` (`confirmPlanChange.ts:64`) is identical to propose's:
+`validateInput` (`confirmPlanChange.ts:124`) is identical to propose's:
 
 1. **No prior plan**: neither `forwardSchedule` nor `studentDraftPlan` is set → `"No forward plan exists in this session. Call plan_forward_degree first, then confirm changes."`
 2. **No DPR**: `session.degreeProgressReport` is absent → `"No Degree Progress Report loaded. Cannot apply plan changes without DPR data."`
@@ -85,13 +85,13 @@ Both reject with `{ ok: false, userMessage }`; no write happens before validatio
 ## 4. What it reads from session
 
 - `session.degreeProgressReport` — non-null after validation.
-- `session.forwardSchedule` first, else `session.studentDraftPlan` (`confirmPlanChange.ts:88`) — the diff **baseline**.
+- `session.forwardSchedule` first, else `session.studentDraftPlan` (`confirmPlanChange.ts:148`) — the diff **baseline**.
 - `session.schedulePreferences` — base preferences (defaults to `{}`).
 - `session.schoolConfig` — for the double-count advisory.
 - `session.student`, `session.prereqs`, `session.courses` — via `buildSolverInputWithRulesFromSession`.
 - `session.scheduleStore` and `session.student.id` — checked to decide whether to persist.
 
-The defensive guard (lines 90-98) returns an early infeasible outcome with `storedIn: "studentDraftPlan"` and conflict kind `"no_plan"` if both schedule slots are missing past validation.
+The defensive guard (lines 150-158) returns an early infeasible outcome with `storedIn: "studentDraftPlan"` and conflict kind `"no_plan"` if both schedule slots are missing past validation.
 
 ---
 
@@ -120,17 +120,17 @@ flowchart TD
     P --> Q[Return outcome + storedIn]
 ```
 
-**Step 1 — Apply mutations and write them.** `applyMutationsToPreferences(session.schedulePreferences ?? {}, mutations)` returns `{ prefs: newPrefs, noOpConsequences }`. The tool then writes `session.schedulePreferences = newPrefs` (`confirmPlanChange.ts:106`).
+**Step 1 — Apply mutations and write them.** `applyMutationsToPreferences(session.schedulePreferences ?? {}, mutations)` returns `{ prefs: newPrefs, noOpConsequences }`. The tool then writes `session.schedulePreferences = newPrefs` (`confirmPlanChange.ts:166`).
 
 **Step 2 — Build solver input + validator rules.** `buildSolverInputWithRulesFromSession(session, dpr, newPrefs)` makes ONE `buildProgramRules` call yielding both `solverInput` and `validatorRules`, with `newPrefs` as the override (identical to the just-written session value).
 
 **Step 3 — Re-solve.** `solveForwardSchedule(solverInput)` runs the rebuilt feasibility-first search + materialize. See [forward-schedule audit](../engine/forward-schedule.md).
 
-**Step 4 — Validate BEFORE + finalize AFTER through the 7-axis validator.** `runGraduationPathValidator({ plan: currentPlan, … })` produces `beforeAxes` (for `validationResultsChanges`). `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`confirmPlanChange.ts:138`) assembles `newSchedule` AND runs the validator, returning `{ newSchedule, validatorResult }`. **The routing keys on `validatorResult.feasible`, not on the solver's coarse `state`** — closing the PLAN-3 hole where a confirmed edit could be stored to `forwardSchedule` ("valid") without the 7-axis validator passing.
+**Step 4 — Validate BEFORE + finalize AFTER through the 7-axis validator.** `runGraduationPathValidator({ plan: currentPlan, … })` produces `beforeAxes` (for `validationResultsChanges`). `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`confirmPlanChange.ts:198`) assembles `newSchedule` AND runs the validator, returning `{ newSchedule, validatorResult }`. **The routing keys on `validatorResult.feasible`, not on the solver's coarse `state`** — closing the PLAN-3 hole where a confirmed edit could be stored to `forwardSchedule` ("valid") without the 7-axis validator passing.
 
 **Step 4a — Attach re-rank provenance (D6.3, when `rankedAlternative` was passed).** Immediately after `finalizeForwardSchedule` returns `newSchedule` and **before** the routing/persist below, if `input.rankedAlternative` is present the tool builds an `LLM_RANKED_ALTERNATIVE` Assumption `{ type, studentStatedFactor, selectedPlanIndex, reasoning, dimensionsConsidered }` and appends it to `newSchedule.assumptions[]` (immutably: `newSchedule.assumptions = [...newSchedule.assumptions, provenance]`). Because each `finalizeForwardSchedule` rebuilds `assumptions` fresh from the solver's emitted assumptions (the solver only emits `IP_COURSE_COMPLETION`, never `LLM_RANKED_ALTERNATIVE`), a prior turn's provenance is never carried into `newSchedule` — so this append yields exactly one `LLM_RANKED_ALTERNATIVE` on the live schedule and a re-confirm cannot stack duplicates (no de-dup guard needed). The append lands **before** Step 6's `persistSchedule`, so the provenance is on the row written to the store — and therefore survives `loadLatestSchedule` (P3.1) on a later turn (see §2a).
 
-**Step 5 — Decision #32 routing** (`confirmPlanChange.ts:151`):
+**Step 5 — Decision #32 routing** (`confirmPlanChange.ts:234`):
 
 ```
 if (validatorResult.feasible) {
@@ -146,7 +146,7 @@ if (validatorResult.feasible) {
 
 A student who confirms a mutation that makes the plan infeasible **does not lose** their previous valid `forwardSchedule`. The draft sits in `studentDraftPlan`; the agent can still show the last good plan. The two slots can coexist when the latest confirm produced a draft, but cannot coexist when it produced a valid plan (the valid branch deletes the draft).
 
-**Step 6 — Persist if wired** (`confirmPlanChange.ts:166`). Only when both `scheduleStore` and `student` are present. Two separate calls, each in its own `try/catch`:
+**Step 6 — Persist if wired** (`confirmPlanChange.ts:252`). Only when both `scheduleStore` and `student` are present. Two separate calls, each in its own `try/catch`:
 
 - `scheduleStore.persistSchedule(student.id, newSchedule, computeDprFingerprint(dpr))`.
 - `scheduleStore.persistPreferences(student.id, newPrefs)`.
@@ -161,7 +161,7 @@ Like propose, `buildPlanDiff` here populates the five trade-off fields (`newRequ
 
 ## 6. What it returns
 
-`ConfirmPlanChangeOutput` (`confirmPlanChange.ts:39`) extends `PlanChangeOutcome`:
+`ConfirmPlanChangeOutput` (`confirmPlanChange.ts:69`) extends `PlanChangeOutcome`:
 
 ```
 {
@@ -202,7 +202,7 @@ There is **no** pending-mutation id. `confirm_plan_change` consults no `pendingM
 
 In order, during a successful call:
 
-1. **`session.schedulePreferences`** — replaced with the post-mutation prefs (`confirmPlanChange.ts:106`).
+1. **`session.schedulePreferences`** — replaced with the post-mutation prefs (`confirmPlanChange.ts:166`).
 2. **`newSchedule.assumptions[]`** (D6.3, only when `rankedAlternative` was passed) — gains one `LLM_RANKED_ALTERNATIVE` Assumption, appended **before** the routing/persist below (exactly one — `finalizeForwardSchedule` rebuilds `assumptions` fresh each confirm). This rides on whichever slot `newSchedule` lands in (step 3) and on the persisted row (step 4).
 3. **One of:**
    - `session.forwardSchedule = newSchedule` AND `delete session.studentDraftPlan` (when `validatorResult.feasible`).
@@ -218,7 +218,7 @@ What is NOT written: `studentDraftPlan` is not explicitly cleared on the draft p
 - `name`: `"confirm_plan_change"`; `isReadOnly: false`.
 - `maxResultChars: 4000`; `outputMode` defaults to `"synthesis"`; no `extractVerbatim`.
 
-`summarizeResult` (`confirmPlanChange.ts:229`):
+`summarizeResult` (`confirmPlanChange.ts:317`):
 
 1. `CONFIRM PLAN CHANGE — feasible: <true|false>, stored in: session.<forwardSchedule|studentDraftPlan>`
 2. If conflicts: `Conflicts (<n>):` then up to 3 `  [<kind>] <detail>` lines.
