@@ -1,6 +1,6 @@
 # Cohort Gate
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected stale route.ts `runRecoveryMode` import/call line numbers).
 
 ## TL;DR
 
@@ -124,7 +124,7 @@ For any cohort id other than `limited`, the function returns the generic `I don'
 - Imports only `ToolSession` from `../agent/tool.js`. (The pre-rebuild dependency on `matchTemplate` / `PolicyTemplate` / `TemplateMatchResult` from `../rag/policyTemplate.js` is gone — the matcher was removed.)
 - Holds mutable module state in `CURRENT_ASSIGNMENT`. There is no persistence layer for cohort assignments inside this module — `setCohortAssignment` is the only way to change them at runtime.
 
-What depends on this module: the chat v2 route (`apps/web/app/api/chat/v2/route.ts`) imports `runRecoveryMode` (line 35) and calls it at line 479 when the cohort gate is failing. The `maxTurns` and `evalGateFailing` flags are consumed by the agent-loop runner. `userInCohort` / `getCohortConfig` are re-exported from the engine barrel (`packages/engine/src/index.ts`).
+What depends on this module: the chat v2 route (`apps/web/app/api/chat/v2/route.ts`) imports `runRecoveryMode` (line 34) and calls it at line 535 when the cohort gate is failing. The `maxTurns` and `evalGateFailing` flags are consumed by the agent-loop runner. `userInCohort` / `getCohortConfig` are re-exported from the engine barrel (`packages/engine/src/index.ts`).
 
 ## Known limitations
 

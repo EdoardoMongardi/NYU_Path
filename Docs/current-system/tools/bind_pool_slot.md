@@ -1,6 +1,6 @@
 # bind_pool_slot — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (post planning-engine rebuild, PRs #35-#41; doc-sync pass: corrected the double-count-advisory tool list to the 4 actual `buildDoubleCountAdvisory` callers).
 
 ## Purpose
 
@@ -305,7 +305,7 @@ The choose-n check (Step 8) is *necessary but not sufficient*; the validator at 
 
 ## 11. Known limitations
 
-- **Does NOT surface the double-count advisory.** The double-count advisory (PR #41) is wired into `plan_forward_degree`, `propose_plan_change`, `confirm_plan_change`, `run_full_audit`, and `update_profile` — but NOT the bind tools.
+- **Does NOT surface the double-count advisory.** The double-count advisory (PR #41) is wired into `plan_forward_degree`, `propose_plan_change`, `confirm_plan_change`, and `simulate_alternatives` (`buildDoubleCountAdvisory` call sites) — but NOT the bind tools.
 - **`in_progress` / `completed` are not caught as duplicates.** A course currently in-progress or already completed can be bound into a pool slot without a `duplicate_courseId` refusal (Step 7 asymmetry above). `bind_free_elective` does catch these; `bind_pool_slot` does not.
 - **Pool promotion is inlined.** `bind_pool_slot` builds the concrete `specific_planned` slot inline at Step 10; there is no separate solver-side promotion module. The slot's `reason` is `"Bound from pool: <poolId> / <satisfiesRule>"` and it does not carry `optionalReason` / `approvalAuthority`.
 - **Greedy choose-n screen.** Step 8 is a fast greedy screen, not a complete bipartite-matching oracle; it can reject a binding that a smarter sibling assignment would have allowed.

@@ -1,6 +1,6 @@
 # view_forward_plan — Tool Audit
 
-> Last verified against code: 2026-06-11 (Phase 3 Task D1.1 — `detail: "rich"` mode added; D1.2 — explain-why eval added).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected `call()` line range to viewForwardPlan.ts:64-87).
 
 ## Purpose
 
@@ -70,7 +70,7 @@ Each slot, when present, is a `ForwardSchedule`. The tool reads `state`, `gradua
 
 ## 4. Algorithm
 
-`call()` (`viewForwardPlan.ts:48-70`) runs a three-way precedence check:
+`call()` (`viewForwardPlan.ts:64-87`) runs a three-way precedence check:
 
 ```mermaid
 flowchart TD

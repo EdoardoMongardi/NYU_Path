@@ -1,6 +1,6 @@
 # Tool Envelope
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected the no-dedup behavior of renderEnvelopeMeta and the 7 live envelope callers).
 
 > **Source file:** `packages/engine/src/agent/toolEnvelope.ts`
 
@@ -56,14 +56,14 @@ A tool's `call` returns `EnvelopeAware<T>` and its `summarizeResult` serializes 
 
 ```
 Disclaimer = {
-  id: string                  // stable id used for dedup within a render
+  id: string                  // stable handle for tool authors (NOT consulted by the renderer; no dedup)
   text: string                // verbatim text the agent must surface (no paraphrase)
   reason: string              // why this disclaimer applies (LLM sees this for context)
   bulletinSource?: string     // optional citation pointer (bulletin URL fragment, school config path, template id)
 }
 ```
 
-The system prompt instructs the model to surface these **verbatim**. Note the dedup contract is **per render call**: `renderEnvelopeMeta` dedups disclaimers inside a single envelope; cross-tool dedup across a turn is not performed — there is no turn-level envelope union (see §8).
+The system prompt instructs the model to surface these **verbatim**. Note there is **no dedup at all**: `renderEnvelopeMeta` emits every disclaimer in `meta.disclaimers` unconditionally (it iterates the array and pushes each one — no id-based dedup even within a single envelope), and there is no turn-level envelope union across tools (see §8). The `id` field is a stable handle for tool authors, not a dedup key the renderer consults.
 
 ---
 
@@ -144,7 +144,7 @@ Behavior to note:
 - The disclaimer `(reason; source)` tail line is omitted when both `reason` and `bulletinSource` are absent.
 - The confidence line is emitted **only when `confidence` is set AND not `"high"`**.
 
-Each opting-in tool's `summarizeResult` calls `renderEnvelopeMeta(...)` after rendering the primary payload and concatenates the two strings. Live callers: `runFullAudit.ts`, `searchPolicy.ts`, `getProgramRequirements.ts`, `planForwardDegree.ts`.
+Each opting-in tool's `summarizeResult` calls `renderEnvelopeMeta(...)` after rendering the primary payload and concatenates the two strings. Live callers (7 registered tools): `runFullAudit.ts`, `searchPolicy.ts`, `getProgramRequirements.ts`, `planForwardDegree.ts`, `proposePlanChange.ts`, `confirmPlanChange.ts`, `simulateAlternatives.ts`.
 
 ---
 
@@ -152,7 +152,7 @@ Each opting-in tool's `summarizeResult` calls `renderEnvelopeMeta(...)` after re
 
 ### Known limitations
 
-- **No turn-level envelope union.** Two tools in the same turn that each attach the same disclaimer id will render it twice (once per tool's `summarizeResult`); dedup happens only within a single `renderEnvelopeMeta` call.
+- **No dedup, no turn-level envelope union.** `renderEnvelopeMeta` performs no deduplication — even within a single envelope, two disclaimers sharing the same `id` both render. Across a turn, two tools that each attach the same disclaimer id will likewise render it twice (once per tool's `summarizeResult`).
 - **`EnvelopeMeta.verbatim` is unused** — the hardened-verbatim path runs entirely through `extractVerbatim` / `outputMode === "semi_hardened"` (§6).
 - **No structural validator consumption.** Surfacing is enforced only by the rendered text + system-prompt instruction, not by post-hoc inspection of envelope objects.
 

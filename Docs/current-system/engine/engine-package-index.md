@@ -1,6 +1,6 @@
 # `@nyupath/engine` Package Index
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected §3/§4 index.ts + agent/index.ts export-category line ranges drifted by Phase-3 elicitation exports).
 
 ## Purpose
 
@@ -94,16 +94,16 @@ File ranges refer to `packages/engine/src/index.ts`.
 | NYU API client | `:14-23` | `searchCourses`, `getCourseDetails`, `fetchTermCourses`, `extractAvailableCourseIds`, `extractAllCourseIds`, `generateTermCode`, `getRecentTermOptions` |
 | Provenance | `:25-32` | `metaSchema`, `validateMeta`, `isStale`, `STALENESS_DAYS`, `Meta` |
 | Observability | `:34-46` | `InMemoryFallbackSink`, `JsonlFileSink`, `NULL_SINK`, `defaultProductionSink`, `emitFallback`, plus `FallbackEvent`/`FallbackEventKind`/`FallbackSink` types |
-| Agent loop + clients + tools | `:48-114` | curated re-exports from `./agent/index.js` (see §4) |
-| DPR | `:116-150` | `parseDpr`, `degreeProgressReportSchema`, `walkRequirements`, `notSatisfiedRequirements`, `findRequirementById`, `dprToAuditResults`, `dprToPrimaryAuditResult`, `deriveTemporalContext`, `normalizeGraduationTarget`, and the `DPR*` types |
-| Embedders | `:153-157` | `LocalHashEmbedder`, `OpenAIEmbedder`, `cosineSim`, `Embedder` |
-| RAG (vector store, reranker, search, section retrieval) | `:159-209` | `VectorStore`, `LocalLexicalReranker`, `CohereReranker`, `policySearch`, `CONFIDENCE_HIGH`/`CONFIDENCE_MEDIUM`/`COHERE_CONFIDENCE_BANDS`, `buildCorpus`, `loadPolicyCorpusFromCache`, `locateBestSource`/`reassembleSource`/`reassembleSection`, plus many types |
-| Semantic course search | `:201-209` | `searchCoursesTool`, `createSemanticCourseSearchFn`, `CourseSearchFn`, `SemanticCourseSearchOptions`, `CourseCatalogEntry` |
-| Cohort gate | `:211-225` | `COHORT_CONFIGS`, `setCohortAssignment`, `getCohortAssignment`, `userInCohort`, `getCohortConfig`, `runRecoveryMode`, plus `Cohort`/`CohortConfig`/`CohortAssignment`/`TemplateOnlyResult` |
-| Persistence | `:227-258` | session store (`InMemorySessionStore`, `FileBackedSessionStore`, `defaultSessionStore`, `summariesAsPriorMessage`, `MAX_SESSION_SUMMARIES`), `InMemoryProfileStore`, `InMemoryScheduleStore` + `pruneCompletedPins`, `InMemoryChatHistoryStore`, plus `*Store` types |
-| DPR fingerprint | `:259` | `computeDprFingerprint` |
+| Agent loop + clients + tools | `:48-125` | curated re-exports from `./agent/index.js` (see §4) |
+| DPR | `:132-161` | `parseDpr`, `degreeProgressReportSchema`, `walkRequirements`, `notSatisfiedRequirements`, `findRequirementById`, `dprToAuditResults`, `dprToPrimaryAuditResult`, `deriveTemporalContext`, `normalizeGraduationTarget`, and the `DPR*` types |
+| Embedders | `:167-168` | `LocalHashEmbedder`, `OpenAIEmbedder`, `cosineSim`, `Embedder` |
+| RAG (vector store, reranker, search, section retrieval) | `:170-211` | `VectorStore`, `LocalLexicalReranker`, `CohereReranker`, `policySearch`, `CONFIDENCE_HIGH`/`CONFIDENCE_MEDIUM`/`COHERE_CONFIDENCE_BANDS`, `buildCorpus`, `loadPolicyCorpusFromCache`, `locateBestSource`/`reassembleSource`/`reassembleSection`, plus many types |
+| Semantic course search | `:212-220` | `searchCoursesTool`, `createSemanticCourseSearchFn`, `CourseSearchFn`, `SemanticCourseSearchOptions`, `CourseCatalogEntry` |
+| Cohort gate | `:222-236` | `COHORT_CONFIGS`, `setCohortAssignment`, `getCohortAssignment`, `userInCohort`, `getCohortConfig`, `runRecoveryMode`, plus `Cohort`/`CohortConfig`/`CohortAssignment`/`TemplateOnlyResult` |
+| Persistence | `:238-269` | session store (`InMemorySessionStore`, `FileBackedSessionStore`, `defaultSessionStore`, `summariesAsPriorMessage`, `MAX_SESSION_SUMMARIES`), `InMemoryProfileStore`, `InMemoryScheduleStore` + `pruneCompletedPins`, `InMemoryChatHistoryStore`, plus `*Store` types |
+| DPR fingerprint | `:270` | `computeDprFingerprint` |
 
-The agent group (`index.ts:48-114`) re-exports: the loop (`runAgentTurn`, `runAgentTurnStreaming`), `buildDefaultRegistry`, `buildSystemPrompt`, the validators (`validateResponse`, `detectMultiIntent`, `renderMultiIntentBriefing`, `detectAmbiguity`, `askClarification`, `extractClaimNumbers`), `RecordingLLMClient`, the two live clients (`OpenAIEngineClient`, `AnthropicEngineClient`), the factories (`createPrimaryClient`, `createFallbackClient`) + `DEFAULT_PRIMARY_MODEL` / `DEFAULT_FALLBACK_MODEL`, `materializeSections`, and a curated subset of the tool constants (`runFullAuditTool`, `whatIfAuditTool`, `searchPolicyTool`, `getProgramRequirementsTool`, `updateProfileTool`, `confirmProfileUpdateTool`, `getCreditCapsTool`, `searchAvailabilityTool`, `planForwardDegreeTool`, `proposePlanChangeTool`, `confirmPlanChangeTool`) for routes that invoke a tool programmatically without the loop.
+The agent group (`index.ts:48-125`) re-exports: the loop (`runAgentTurn`, `runAgentTurnStreaming`), `buildDefaultRegistry`, `buildSystemPrompt`, the validators (`validateResponse`, `detectMultiIntent`, `renderMultiIntentBriefing`, `detectAmbiguity`, `askClarification`, `extractClaimNumbers`), `RecordingLLMClient`, the two live clients (`OpenAIEngineClient`, `AnthropicEngineClient`), the factories (`createPrimaryClient`, `createFallbackClient`) + `DEFAULT_PRIMARY_MODEL` / `DEFAULT_FALLBACK_MODEL`, `materializeSections`, and a curated subset of the tool constants (`runFullAuditTool`, `whatIfAuditTool`, `searchPolicyTool`, `getProgramRequirementsTool`, `updateProfileTool`, `confirmProfileUpdateTool`, `getCreditCapsTool`, `searchAvailabilityTool`, `planForwardDegreeTool`, `proposePlanChangeTool`, `confirmPlanChangeTool`) for routes that invoke a tool programmatically without the loop.
 
 ---
 
@@ -138,7 +138,7 @@ Highlights of the agent-barrel re-exports (paths relative to `agent/`):
 | `detectMultiIntent`, `renderMultiIntentBriefing` | `./verifiers/multiIntentDetector.ts` |
 | `detectAmbiguity`, `askClarification` | `./clarifier.ts` |
 | `RecordingLLMClient` | `./recordingClient.ts` |
-| `AvailabilityState`, `MaterializationResult`, `MaterializedSemester`, `SchedulingPreferenceCheck` (note: `SectionView` deliberately NOT re-exported to avoid a name collision with `searchAvailability`'s same-named type — `agent/index.ts:128-141`) | `./sectionMaterialization/types.ts` |
+| `AvailabilityState`, `MaterializationResult`, `MaterializedSemester`, `SchedulingPreferenceCheck` (note: `SectionView` deliberately NOT re-exported to avoid a name collision with `searchAvailability`'s same-named type — `agent/index.ts:142-158`) | `./sectionMaterialization/types.ts` |
 | `materializeSections`, `MaterializeArgs` | `./sectionMaterialization/materialize.ts` |
 | `OpenAIEngineClient`, `toOpenAIMessage`, `OpenAIClientOptions` | `./clients/openaiClient.ts` |
 | `AnthropicEngineClient`, `toAnthropicMessage`, `AnthropicClientOptions` | `./clients/anthropicClient.ts` |

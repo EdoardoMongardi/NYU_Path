@@ -1,6 +1,6 @@
 # Response Validator
 
-> Last verified against code: 2026-06-11 (post planning-engine rebuild + D5.1 plan-claim check).
+> Last verified against code: 2026-06-13 (doc-sync pass: D5.2 route wiring marked done; refreshed TIER2_ESTIMATE_TOOLS + semi_hardened-comment line cites).
 
 > **Source files:** `packages/engine/src/agent/responseValidator.ts`, `agent/verifiers/blockquoteAttribution.ts`, `agent/forwardSchedule/termLabel.ts`
 
@@ -124,7 +124,7 @@ Numbers are extracted with the regex `-?\d+(?:\.\d+)?`, so negatives are include
 ### Tier-2 estimate exemption (improvement plan, Phase D)
 
 A reasoned **integer** count that isn't grounded by the rule above is **exempt** when ALL hold:
-1. a **Tier-2 estimate tool** ran this turn with a non-high-confidence / estimate result — i.e. an invocation of `search_policy`, `get_program_requirements`, or `what_if_audit` (the exact `TIER2_ESTIMATE_TOOLS` set, `responseValidator.ts:192-196`) whose summary matches `confidence[:=](low|medium|uncertain)`, `(low|medium) confidence`, `POLICY UNCERTAINTY`, or `(estimate` (the `TIER2_LOW_CONF_RE`);
+1. a **Tier-2 estimate tool** ran this turn with a non-high-confidence / estimate result — i.e. an invocation of `search_policy`, `get_program_requirements`, or `what_if_audit` (the exact `TIER2_ESTIMATE_TOOLS` set, `responseValidator.ts:206-210`) whose summary matches `confidence[:=](low|medium|uncertain)`, `(low|medium) confidence`, `POLICY UNCERTAINTY`, or `(estimate` (the `TIER2_LOW_CONF_RE`);
 2. the claim is **explicitly hedged** in the reply — immediately preceded by `about` / `approximately` / `roughly` / `around` / `estimated?` / `ballpark` / `on the order of` / `~`;
 3. the claim is an **integer** — decimals (GPAs, percentages) are **never** exempt.
 
@@ -202,7 +202,7 @@ The same negation guard from §4 applies to the reply pattern.
 
 > **Rule:** when a tool result this turn carries `verbatimText` (i.e. the tool's `outputMode === "semi_hardened"`), the reply must include that text — or, if not, must at minimum quote any number from it *with* a nearby attribution noun.
 
-The **semi_hardened** tools — the ones that emit `verbatimText` — are exactly three: `get_credit_caps` (`getCreditCaps.ts:38`), `run_full_audit` (`runFullAudit.ts:172`), and `what_if_audit` (`whatIfAudit.ts:61`). **The source comment at `responseValidator.ts:530-534` claiming "currently get_credit_caps + run_full_audit" is stale — it omits `what_if_audit`.** `verbatimText` is populated in the agent loop only when `tool.outputMode === "semi_hardened"` and the tool defines `extractVerbatim` (`agentLoop.ts:576-584`); this validator just consumes whatever landed on each invocation.
+The **semi_hardened** tools — the ones that emit `verbatimText` — are exactly three: `get_credit_caps` (`getCreditCaps.ts:38`), `run_full_audit` (`runFullAudit.ts:172`), and `what_if_audit` (`whatIfAudit.ts:61`). **The source comment at `responseValidator.ts:546-547` claiming "currently get_credit_caps + run_full_audit" is stale — it omits `what_if_audit`.** `verbatimText` is populated in the agent loop only when `tool.outputMode === "semi_hardened"` and the tool defines `extractVerbatim` (`agentLoop.ts:576-584`); this validator just consumes whatever landed on each invocation.
 
 ### Algorithm
 
@@ -319,7 +319,7 @@ unable to (fill|reach) the (requested )?(target|amount)
 
 > **Rule:** when the session has a stored forward plan (`ctx.forwardSchedule`), every **course-placement**, **graduation-term**, and **lock-status** claim in the reply must agree with that plan. Plan claims are **Tier-1** (engine-grounded) — there is **no hedging exemption** (opposite the Tier-2 estimate exemption in §3). "Verify with your adviser" does **not** excuse an ungrounded placement / grad-term claim.
 
-`checkPlanClaims(ctx)` is **pure / deterministic / no-LLM** — it diffs the reply's prose against the stored schedule. It is a **no-op when `ctx.forwardSchedule` is absent** (it never invents a plan to diff against; the route populates the field — task D5.2).
+`checkPlanClaims(ctx)` is **pure / deterministic / no-LLM** — it diffs the reply's prose against the stored schedule. It is a **no-op when `ctx.forwardSchedule` is absent** (it never invents a plan to diff against; the route populates the field at both `validateResponse` call sites — task D5.2, done).
 
 ### What it catches
 
@@ -376,11 +376,11 @@ ValidatorContext = {
   student?: StudentProfile,         // gates the F-1 caveat rule
   transferIntent?: boolean,         // currently unread by any rule; kept for forward use
   userQuestion?: string,            // last user message, used by verbatim's F4c skip + shortfall check
-  forwardSchedule?: ForwardSchedule,// D5.1 — stored forward plan; gates checkPlanClaims (no-op when absent)
+  forwardSchedule?: ForwardSchedule,// D5.1 — stored forward plan; gates checkPlanClaims (no-op when absent). Populated by the route (D5.2, done).
 }
 ```
 
-The agent loop wires this in via the `validateResponse` callback passed to `runAgentTurnStreaming`. The web chat route in `apps/web/app/api/chat/v2/route.ts` constructs the context per turn. The `forwardSchedule` field is populated by the route in task D5.2; until then `checkPlanClaims` no-ops.
+The agent loop wires this in via the `validateResponse` callback passed to `runAgentTurnStreaming`. The web chat route in `apps/web/app/api/chat/v2/route.ts` constructs the context per turn. The `forwardSchedule` field is populated by the route (task D5.2, done) at **both** `validateResponse` call sites — the in-loop replay gate (`route.ts:658`, `forwardSchedule: s.forwardSchedule`) and the post-turn gate (`route.ts:785`, `forwardSchedule: session.forwardSchedule`) — so `checkPlanClaims` runs against the hydrated plan whenever the session has one.
 
 ---
 
@@ -397,7 +397,7 @@ The agent loop wires this in via the `validateResponse` callback passed to `runA
 > Historical note: this section previously documented a Phase-3 gap — plan-shaped claims ("CSCI-UA 310 in Fall 2026") were *not* cross-checked against the stored schedule, because course codes and term labels are strings, not "claim numbers". **That gap is closed by Validator 8 (`checkPlanClaims`, §9.5)**, which diffs the reply's course-placement / graduation-term / lock-status claims against `ctx.forwardSchedule` deterministically.
 
 Residual bounds of the check (by design, not bugs):
-- It only acts when `ctx.forwardSchedule` is present (no-op otherwise — the route wires the field in D5.2).
+- It only acts when `ctx.forwardSchedule` is present (no-op otherwise — the route wires the field at both `validateResponse` sites, `route.ts:658` + `route.ts:785`; D5.2, done).
 - It only resolves placement claims with a *deterministically parseable* term label co-occurring within ±60 chars of an explicit course code; paraphrased terms ("next fall") are out of scope and never block.
 - Attribution is **nearest-course / clause-scoped** (see §9.5, primitive 2): a neighbour course's term, a second course's term in the same sentence, or a term across a sentence boundary does **not** bind to this course; lock/movable assertions and graduation terms are likewise attributed to their nearest course / to the `graduat…` token, not to a whole comma-spanning clause. This kills the cross-clause / cross-course term-bleed that would otherwise false-block a grounded reply, **without** dropping detection of a genuinely ungrounded claim.
 - It skips claims inside a conditional / hypothetical frame (the counterfactual carve-out), so probe / what-if replies aren't flagged against the current plan.

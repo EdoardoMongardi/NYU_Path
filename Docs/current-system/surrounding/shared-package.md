@@ -1,6 +1,6 @@
 # `packages/shared` — The Type Contract
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: removed deleted `PlanChangeProposal`; added D6.2 `GenericSoftConstraint` + `softObjectives` + the two soft-objective `PlanMutation` kinds; refreshed §3.10 line anchors + `types.ts` line count).
 
 ## Purpose
 
@@ -30,7 +30,7 @@ The package contents (`packages/shared/src/`):
 | File | Lines | Purpose |
 | --- | --- | --- |
 | `index.ts` | 2 | Barrel: re-exports `./types.js` and `./grades.js`. |
-| `types.ts` | 1310 | Every shared TypeScript type / interface / discriminated union. |
+| `types.ts` | 1366 | Every shared TypeScript type / interface / discriminated union. |
 | `grades.ts` | 74 | Letter-grade ordering, `gradesAtOrAbove`, `canonicalSchoolId`. |
 | `types.heuristicMappingGuard.compile.test.ts` | 36 | A compile-time guard ensuring the `HEURISTIC_MAPPING` assumption stays soft-only. |
 
@@ -231,17 +231,17 @@ The largest cohort. The forward planner emits a multi-term schedule, and `@nyupa
 
 **`SchedulingPreferences`** — `types.ts:1149-1155`. Time/day filters: `avoidDays?`, `avoidTimeWindows?`, `preferTimeWindows?`, `desiredFreeDay?` (with `"any"` sentinel), `avoidConsecutiveLongBlocks?`. Each `avoid*` entry carries a `strict` flag (hard filter vs soft deboost), independent from Decision #42's hard-vs-soft constraint framing.
 
-**`SchedulePreferences`** — `types.ts:1164-1177`. Solver-level preferences: `loadStyle?`, `loadStylePerTerm?`, `creditTargetPerTerm?`, `pins?`, `exclusions?`, `includeSummer?`, `includeJTerm?`, `allowBelowF1Floor?`, nested `schedulingPreferences?`.
+**`GenericSoftConstraint`** — `types.ts:1193-1202` (NEW, D6.2). The rung-2 generic SOFT-objective primitive: `id`, `framing: "soft"` (literal — a HARD-framed instance is a TS error), `dimension`, `preference`, and `weight?` (bounded to `[0, 1]` at the schema boundary, not by the structural type). Read ONLY by the RANKER (`scorePlan`), never by the solver's hard feasibility/validity logic, so adding one can change which valid plan ranks first but can never make a valid plan invalid (or vice-versa).
 
-**`PlanChangeProposal`** — `types.ts:1181-1184`. `{ kind, payload }` — a flat shape (`kind` is one of `pin | exclude | load_style | credit_target | include_summer | include_jterm | allow_below_floor`).
+**`SchedulePreferences`** — `types.ts:1211-1229`. Solver-level preferences: `loadStyle?`, `loadStylePerTerm?`, `creditTargetPerTerm?`, `pins?`, `exclusions?`, `includeSummer?`, `includeJTerm?`, `allowBelowF1Floor?`, nested `schedulingPreferences?`, and (D6.2) `softObjectives?: GenericSoftConstraint[]` — additive + optional (absent ⇒ no change to any plan's score or validity).
 
-**`PlanChangeOutcome`** — `types.ts:1186-1194`. `feasible`, `diff` (`added`/`removed` slots), `consequences[]`, `conflicts?[]`.
+**`PlanChangeOutcome`** — `types.ts:1233-1241`. `feasible`, `diff` (`added`/`removed` slots), `consequences[]`, `conflicts?[]`.
 
-**`AlternativeCandidate`** — `types.ts:1196-1201`. `summary`, `relaxation`, `schedule` (nullable), `stillInfeasibleReason?`.
+**`AlternativeCandidate`** — `types.ts:1243-1248`. `summary`, `relaxation`, `schedule` (nullable), `stillInfeasibleReason?`.
 
-**`PlanMutation`** — `types.ts:1216-1273`. Discriminated union of mutation kinds: `pin` (with `freeze?`), `exclude`, `swap`, `move`, `unpin`, `addTerm`, `loadStyleOverride`, `bindFreeElective`, `unbindFreeElective`, `bindPoolSlot`, `setSchedulingPreference`, `clearSchedulingPreference`.
+**`PlanMutation`** — `types.ts:1263-1329`. Discriminated union of 14 mutation kinds: `pin` (with `freeze?`), `exclude`, `swap`, `move`, `unpin`, `addTerm`, `loadStyleOverride`, `bindFreeElective`, `unbindFreeElective`, `bindPoolSlot`, `setSchedulingPreference`, `clearSchedulingPreference`, and (D6.2) `addSoftObjective` (carries a `GenericSoftConstraint`), `clearSoftObjectives`.
 
-**`PlanDiff`** — `types.ts:1281-1310`. The structured delta returned by `propose_plan_change`: `creditsByTermDelta`, `graduationTermShift`, `newRequiresPetition[]`, `removedRequiresPetition[]`, `newUnmetRequirements[]`, `cascadedShifts[]`, `weightedCreditsByTermDelta`, `workloadTierShifts[]`, `balanceImpact`, `newAssumptions[]`, `validationResultsChanges`, `planStateChange?`.
+**`PlanDiff`** — `types.ts:1337-1366`. The structured delta returned by `propose_plan_change`: `creditsByTermDelta`, `graduationTermShift`, `newRequiresPetition[]`, `removedRequiresPetition[]`, `newUnmetRequirements[]`, `cascadedShifts[]`, `weightedCreditsByTermDelta`, `workloadTierShifts[]`, `balanceImpact`, `newAssumptions[]`, `validationResultsChanges`, `planStateChange?`.
 
 ## 4. The `grades.ts` Utility
 

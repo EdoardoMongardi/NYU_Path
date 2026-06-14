@@ -1,6 +1,6 @@
 # Agent Loop
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected the §11 maxTokens code-comment citation to route.ts:627-635).
 
 > **Source files:** `packages/engine/src/agent/agentLoop.ts`, `packages/engine/src/agent/loopState.ts`. Production caller: `apps/web/app/api/chat/v2/route.ts`.
 
@@ -295,7 +295,7 @@ The two entry points are **not** feature-identical, and production (`apps/web/ap
 | **Output-truncation recovery** (`finishReason === "length"` → double `maxTokens`, continue, stitch) | Yes — `agentLoop.ts:287-340`, default 3 retries | **No.** A reply that hits `maxTokens` is cut off mid-sentence. |
 | **Reactive-compact-on-413** (primary throws a context-length error → Tier-2 compact + retry primary once) | Yes — `agentLoop.ts:245-282` | **No.** A 413 from the primary just falls through to the fallback client via `runOneTurn`. |
 
-How the streaming path compensates: the route sets `maxTokens: 4096` (vs the loop's 1024 default) specifically because, without output-truncation recovery, a long Sonnet reply would otherwise be truncated. The code comment at `route.ts:571-578` documents this directly. Both paths still share Tier-2 (proactive, at 80%) and Tier-3 (terminate, at 95%) compaction, so context pressure is handled equivalently — it is only the *reactive* (mid-call 413) and *output-length* recovery loops that the stream lacks.
+How the streaming path compensates: the route sets `maxTokens: 4096` (vs the loop's 1024 default) specifically because, without output-truncation recovery, a long Sonnet reply would otherwise be truncated. The code comment at `route.ts:627-635` documents this directly. Both paths still share Tier-2 (proactive, at 80%) and Tier-3 (terminate, at 95%) compaction, so context pressure is handled equivalently — it is only the *reactive* (mid-call 413) and *output-length* recovery loops that the stream lacks.
 
 > **Known limitation.** Because production uses the streaming path, neither the output-truncation-recovery budget (`outputTruncationRecoveryLimit`, default 3) nor the reactive-compact path is exercised in production. Those budgets and the `output_truncation_recovery` / `reactive_compact` transitions only ever appear in block-path callers (e.g. tests and scripts). Treat them as block-path-only behavior.
 

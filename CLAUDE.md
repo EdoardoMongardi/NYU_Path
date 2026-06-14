@@ -11,13 +11,13 @@
 - All documentation lives under [`Docs/`](Docs/) — start at [`Docs/README.md`](Docs/README.md).
   - `Docs/current-system/` — how the system works **today** (`engine/` · `tools/` · `web/` · `surrounding/`), kept in sync with code.
   - `Docs/specs/2026-06-05-planning-engine-rebuild-design.md` — the canonical architecture.
-  - `Docs/plans/` — implementation plans in planned order. **Next phase:** `32-2026-06-10-planning-engine-phase3-advisor.md`.
+  - `Docs/plans/` — implementation plans in planned order. **Latest implemented:** `32-2026-06-10-planning-engine-phase3-advisor.md` (Phase 3, merged via PRs #43–#48).
   - `Docs/audits/` · `Docs/reports/` · `Docs/reference/` · `Docs/deprecated/`.
-- Code: `apps/web` (Next.js), `packages/engine` (agent loop + 20 tools + constraint-search planner + 7-axis validator), `packages/shared`, `data/`, `tools/`, `evals/`.
+- Code: `apps/web` (Next.js), `packages/engine` (agent loop + 21 tools + constraint-search planner + 7-axis validator), `packages/shared`, `data/`, `tools/`, `evals/`.
 
 ## Current status
 
-Planning-engine rebuild **Phases 0–2 are DONE + merged** — feasibility-first constraint search + the 7-axis graduation-path validator (the single definition of "valid") + 20 tools; DPR-first (authoritative), bulletin RAG as cited/hedged tier-2. **Phase 3 — the advisor layer** — is planned (see the plan above), not yet built.
+Planning-engine rebuild **Phases 0–3 are DONE + merged** — feasibility-first constraint search + the 7-axis graduation-path validator (the single definition of "valid") + 21 tools; DPR-first (authoritative), bulletin RAG as cited/hedged tier-2. **Phase 3 — the advisor layer** — is DONE + merged to main (PRs #43–#48): `probe_counterfactual` (introspection/counterfactual), the plan-claim response-validator check, the soft-objective preference primitive, and proactive elicitation (CORE RULES 12/13) are all live.
 
 ## Conventions
 

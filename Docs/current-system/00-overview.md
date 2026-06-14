@@ -1,6 +1,6 @@
 # NYU Path — Project Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: added probe_counterfactual to the tool catalog, corrected the response validator to 8 checks, marked the Phase-3 advisor layer shipped, fixed the engine-docs count to 23).
 
 > **About this document set.** This is a code-truth audit of the NYU Path codebase. Every claim was derived from reading the actual source files. No code comments, no existing documentation, and no narrative prose were used as evidence. Where code and surrounding writing disagreed, the code won.
 
@@ -84,9 +84,9 @@ What makes a plan "valid" is defined in exactly one place: the **7-axis graduati
 
 ### The safety check (response validator)
 
-Before the advisor's draft answer reaches the student, **seven deterministic rules** inspect it (`packages/engine/src/agent/responseValidator.ts`: `checkGrounding`, `checkInvocations`, `checkCompleteness`, `checkVerbatim`, `checkAttribution`, `checkIdentityDrift`, `checkQuantitativeShortfall`). The most important rule: **every number in the answer must come from a tool result that ran this turn.** If the advisor wrote "your GPA is 3.4", and no tool returned 3.4 this turn, the safety check rejects the draft. The advisor gets one chance to fix it before the answer ships anyway (the system never blocks the student with a blank screen).
+Before the advisor's draft answer reaches the student, **eight deterministic rules** inspect it (`packages/engine/src/agent/responseValidator.ts`: `checkGrounding`, `checkInvocations`, `checkCompleteness`, `checkVerbatim`, `checkAttribution`, `checkIdentityDrift`, `checkQuantitativeShortfall`, `checkPlanClaims`). The most important rule: **every number in the answer must come from a tool result that ran this turn.** If the advisor wrote "your GPA is 3.4", and no tool returned 3.4 this turn, the safety check rejects the draft. The advisor gets one chance to fix it before the answer ships anyway (the system never blocks the student with a blank screen).
 
-> Note: this response validator (which guards the *chat reply*) is a different mechanism from the 7-axis graduation-path validator (which guards the *plan*). Both happen to have seven checks; they are unrelated.
+> Note: this response validator (which guards the *chat reply*) is a different mechanism from the 7-axis graduation-path validator (which guards the *plan*). The response validator has eight checks, the graduation-path validator has seven axes; they are unrelated.
 
 ---
 
@@ -140,7 +140,7 @@ graph TB
 
     subgraph Engine["The brain + tools (packages/engine)"]
         AGENT[Agent loop<br/>orchestrates LLM + tools]
-        VALIDATOR[Response validator<br/>7 safety checks]
+        VALIDATOR[Response validator<br/>8 safety checks]
         TOOLS[21 tools]
         ALGOS[Audit, constraint-search planner,<br/>7-axis graduation-path validator,<br/>section materializer,<br/>RAG retriever, DPR parser]
         SESSION[Session state<br/>the shared bag every<br/>tool reads from]
@@ -195,11 +195,11 @@ graph TB
 
 The live docs live under `Docs/current-system/`, split into four folders; superseded/dead-code docs are segregated under `Docs/deprecated/`.
 
-### `current-system/engine/` — 24 documents
+### `current-system/engine/` — 23 documents
 Every subsystem of the AI brain. The most important ones:
 - **`agent-loop.md`** — the central orchestrator that runs the AI in a loop with the tools
 - **`system-prompt.md`** — the instructions the AI is given before every turn
-- **`response-validator.md`** — the seven safety checks
+- **`response-validator.md`** — the eight safety checks
 - **`tool-registry.md`** — how tools are organized and dispatched
 - **`session-state.md`** — the shared data bag every tool reads from
 - **`dpr.md`** — how the official transcript (Albert DPR) is parsed
@@ -234,6 +234,7 @@ Segregated so the live docs stay clean. These describe tools and subsystems that
 | `plan_forward_degree` | Builds a term-by-term plan from now until graduation |
 | `view_forward_plan` | Shows the most recently built plan, no recompute |
 | `propose_plan_change` | "What would happen if I changed the plan in this way?" — shows impact |
+| `probe_counterfactual` | Read-only what-if: re-solves a hypothetical and narrates whether it stays valid or is "INFEASIBLE because <failing axis + reason>" |
 | `confirm_plan_change` | Applies a previously proposed change |
 | `simulate_alternatives` | Tries 2–3 plan variants (summer, J-term, extend graduation) |
 | `compare_plan_alternatives` | Side-by-side comparison of alternatives the planner already produced |
@@ -292,7 +293,7 @@ sequenceDiagram
 Two limitations are worth knowing before you trust the system end-to-end:
 
 - **Chat hydrates the persisted plan + preferences each turn; the profile write-clobber is fixed; full profile read-hydration is Phase 4.** As of **P3.1**, each chat turn loads the previously-saved `forward_schedules` / `schedule_preferences` rows back into `session.forwardSchedule` / `session.studentDraftPlan` / `session.schedulePreferences` at the start of the turn (`scheduleStore.loadLatestSchedule` + `loadPreferences` in `apps/web/app/api/chat/v2/route.ts`), so a plan built in an earlier turn — or via the sidebar — is in scope for later turns and the agent no longer runs blind to it. **P3.2** then gated the bootstrap profile upsert to fire **only on initial onboarding** (when `profileStore.get` is null), so a confirmed profile mutation is no longer clobbered by the body-DPR-derived profile on every message (and there is no per-message audit-row spam); the related preferences-from-`{}` wipe on chat-driven confirms is also resolved, because confirm now builds on the P3.1-hydrated `session.schedulePreferences` rather than `{}`. What remains deferred to **Phase 4** is reading the persisted profile *into* the live session each turn — the session still uses the body-DPR-derived `StudentProfile` for the turn (a continuity nicety, not a data-loss bug; the stored profile is intact and `/api/session/restore` reads it).
-- **The advisor layer is the next phase.** Today the planner can tell you *what* a valid plan is and *whether* a change is feasible, but there are no "explain-why" / counterfactual tools that narrate the planner's reasoning (e.g. "you can't graduate in Spring because requirement X has no offered section"). Surfacing the validator's per-axis verdicts as student-facing explanations is deferred work.
+- **Counterfactual "why-not" framing is axis-level, not course-causal.** The advisor layer (Phase 3) is **built and merged**: the `probe_counterfactual` tool re-solves a hypothetical and narrates whether it stays valid or is "INFEASIBLE because <failing axis + reason>", surfacing the validator's per-axis verdicts as student-facing explanations. The honest limit is that the infeasibility "why" is the validator's *axis-level* reason (e.g. "the graduation-target axis failed"), not a course-causal sentence like "you can't graduate in Spring because requirement X has no offered section" — emitting that finer-grained causal binding constraint is optional future engine work.
 
 ---
 

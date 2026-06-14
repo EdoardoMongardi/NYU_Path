@@ -1,6 +1,6 @@
 # `confirm_profile_update`
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected the `tool.ts` synthesis-default line cite 260 → 258).
 
 A technical audit of the apply half of the two-step profile-mutation contract. This tool was not touched by the Phase 0-2 solver rebuild — it is a Phase-5 profile tool and remains one of the 21 live tools in `packages/engine/src/agent/registry.ts`. It is the ONLY tool in the system that mutates the student profile through the agent loop.
 
@@ -237,7 +237,7 @@ Persistence failure does NOT change the return — it is logged via `console.war
 
 `confirm_profile_update` does NOT call `renderEnvelopeMeta`. It does NOT produce `Disclaimer` objects. It does NOT participate in the Phase 10 envelope-rendering posture.
 
-`outputMode` is unset (defaults to `"synthesis"` per `tool.ts:260`). No verbatim-text contract.
+`outputMode` is unset (defaults to `"synthesis"` per `tool.ts:258`). No verbatim-text contract.
 
 ---
 

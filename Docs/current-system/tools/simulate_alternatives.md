@@ -1,6 +1,6 @@
 # `simulate_alternatives` — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected drifted `simulateAlternatives.ts` + `types.ts` line citations).
 
 ## Purpose
 
@@ -43,7 +43,7 @@ The three relaxation strategies are fixed and applied in this order (`alternativ
 
 When the current plan is already feasible, the tool short-circuits and returns an empty list plus a note. The tool writes nothing to session (`isReadOnly: true`).
 
-> **Note (post-rebuild):** `AlternativeCandidate["relaxation"]` is typed in `@nyupath/shared` (`types.ts:1196-1201`) as a five-value union: `"include_summer" | "include_jterm" | "extend_grad_one_term" | "extend_grad_one_year" | "lower_credit_target"`. **This tool only ever emits the first three** — the other two are declared-but-unused in `simulate_alternatives`.
+> **Note (post-rebuild):** `AlternativeCandidate["relaxation"]` is typed in `@nyupath/shared` (`types.ts:1243-1248`, the union literal on line 1245) as a five-value union: `"include_summer" | "include_jterm" | "extend_grad_one_term" | "extend_grad_one_year" | "lower_credit_target"`. **This tool only ever emits the first three** — the other two are declared-but-unused in `simulate_alternatives`.
 
 ---
 
@@ -55,7 +55,7 @@ The tool takes **no** input parameters:
 {}   // empty object
 ```
 
-(`simulateAlternatives.ts:44`: `inputSchema: z.object({})`.)
+(`simulateAlternatives.ts:55`: `inputSchema: z.object({})`.)
 
 All decision-making is read from session state. The agent cannot pass mutations or hints; the three relaxation strategies are hard-coded inside `alternatives.ts`.
 
@@ -65,7 +65,7 @@ Contrast with [`propose_plan_change`](./propose_plan_change.md) / [`confirm_plan
 
 ## 3. Session prerequisites and `validateInput` behavior
 
-`validateInput` (`simulateAlternatives.ts:47-64`) is the same two-gate pattern as the plan-change tools:
+`validateInput` (`simulateAlternatives.ts:58-75`) is the same two-gate pattern as the plan-change tools:
 
 1. **No prior plan**: neither `session.forwardSchedule` nor `session.studentDraftPlan` is set →
    `"No forward plan exists in this session. Call plan_forward_degree first, then simulate alternatives."`
@@ -117,10 +117,10 @@ If `currentPlan.feasibility.feasible === true`, return:
 No solver run, no work. This is the happy path.
 
 **Step 2 — Build the solver input.**
-`simulateAlternatives.ts:82-86`: `buildSolverInputFromSession(session, dpr, session.schedulePreferences)`. This builds the exact same `SolverInput` that `plan_forward_degree` would have used — all derived fields (`currentTerm`, `graduationTerm`, `coursesTaken`, `coursesInProgress`, `unmetRequirements`, `programRules`, `dprCourseHistoryHash`, etc.) are identical to what the latest plan was solved against.
+`simulateAlternatives.ts:101-105`: `buildSolverInputFromSession(session, dpr, session.schedulePreferences)`. This builds the exact same `SolverInput` that `plan_forward_degree` would have used — all derived fields (`currentTerm`, `graduationTerm`, `coursesTaken`, `coursesInProgress`, `unmetRequirements`, `programRules`, `dprCourseHistoryHash`, etc.) are identical to what the latest plan was solved against.
 
 **Step 3 — Delegate to core generator.**
-`simulateAlternatives.ts:88`: `coreSimulateAlternatives(solverInput)`. This is `simulateAlternatives` from `alternatives.ts:46-109`. Returns `AlternativeCandidate[]`.
+`simulateAlternatives.ts:107`: `coreSimulateAlternatives(solverInput)`. This is `simulateAlternatives` from `alternatives.ts:46-109`. Returns `AlternativeCandidate[]`.
 
 ### Step-by-step inside `alternatives.ts:simulateAlternatives`
 
@@ -216,7 +216,7 @@ The old docs warned that strategies 1 and 2 "may not actually produce different 
 
 ## 6. What it returns
 
-Output type `SimulateAlternativesOutput` (`simulateAlternatives.ts:23-27`):
+Output type `SimulateAlternativesOutput` (`simulateAlternatives.ts:25-38`):
 
 ```
 {
@@ -226,7 +226,7 @@ Output type `SimulateAlternativesOutput` (`simulateAlternatives.ts:23-27`):
 }
 ```
 
-Where `AlternativeCandidate` (`types.ts:1196-1201`) is one of:
+Where `AlternativeCandidate` (`types.ts:1243-1248`) is one of:
 
 ```
 // feasible variant
@@ -261,7 +261,7 @@ The `extend_grad_one_term` relaxation does NOT have a corresponding `PlanMutatio
 
 ## 8. What it writes to session
 
-**Nothing.** `isReadOnly: true` (`simulateAlternatives.ts:45`). The tool reads session state, calls the solver up to three times against clones of the `SolverInput`, and returns the results. `session.forwardSchedule`, `session.studentDraftPlan`, `session.schedulePreferences`, `session.scheduleStore` — all untouched. The cloned `SolverInput` objects use spread syntax and never mutate the original input's `preferences` object.
+**Nothing.** `isReadOnly: true` (`simulateAlternatives.ts:56`). The tool reads session state, calls the solver up to three times against clones of the `SolverInput`, and returns the results. `session.forwardSchedule`, `session.studentDraftPlan`, `session.schedulePreferences`, `session.scheduleStore` — all untouched. The cloned `SolverInput` objects use spread syntax and never mutate the original input's `preferences` object.
 
 ---
 
@@ -270,19 +270,19 @@ The `extend_grad_one_term` relaxation does NOT have a corresponding `PlanMutatio
 From `buildTool`:
 
 - `name`: `"simulate_alternatives"`
-- `description`: the up-to-3-relaxation summary plus "Returns an empty list when the current plan is already feasible" and "isReadOnly: true" (`simulateAlternatives.ts:35-43`).
+- `description`: the up-to-3-relaxation summary plus "Returns an empty list when the current plan is already feasible" and "isReadOnly: true" (`simulateAlternatives.ts:46-54`).
 - `inputSchema`: `z.object({})` — empty.
 - `isReadOnly`: `true`.
 - `maxResultChars`: `3000`.
 - `outputMode`: defaults to `"synthesis"` (no explicit setting). No `extractVerbatim`.
 - `validateInput`: as described in §3.
-- `prompt`: `simulateAlternatives.ts:65-68`.
+- `prompt`: `simulateAlternatives.ts:76-79`.
 
 ---
 
 ## 10. Summary text format
 
-`summarizeResult` (`simulateAlternatives.ts:92-107`) branches on three cases:
+`summarizeResult` (`simulateAlternatives.ts:111-131`) branches on three cases:
 
 1. **`note` present** → return `note` verbatim (e.g., `"Current plan is feasible; no alternatives needed."`).
 2. **`candidates.length === 0` and no `note`** → return `"No alternative candidates generated."` (all three strategies were skipped).

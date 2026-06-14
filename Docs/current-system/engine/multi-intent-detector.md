@@ -1,8 +1,8 @@
 # Multi-Intent Detector
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: refreshed drifted route.ts wiring line numbers).
 
-> **Source file:** `packages/engine/src/agent/verifiers/multiIntentDetector.ts`. Wired in `apps/web/app/api/chat/v2/route.ts:349-353`.
+> **Source file:** `packages/engine/src/agent/verifiers/multiIntentDetector.ts`. Wired in `apps/web/app/api/chat/v2/route.ts:405-409`.
 
 ## Purpose
 
@@ -119,7 +119,7 @@ flowchart TD
     AS --> AL
 ```
 
-The briefing is **appended to the system prompt**, not injected as a separate message: the route computes `finalSystemPrompt = briefing ? \`${systemPrompt}\n\n${briefing}\` : systemPrompt` (`route.ts:351-353`) and passes that as the agent loop's `systemPrompt`. The model therefore sees the enumeration as part of its standing instructions for the turn. (Note: the clarifier gate, §[clarifier.md](./clarifier.md), runs *after* this in the route — but on a different code path; both are pre-loop checks.)
+The briefing is **appended to the system prompt**, not injected as a separate message: the route computes `finalSystemPrompt = briefing ? \`${systemPrompt}\n\n${briefing}\` : systemPrompt` (`route.ts:407-409`) and passes that as the agent loop's `systemPrompt`. The model therefore sees the enumeration as part of its standing instructions for the turn. (Note: the clarifier gate, §[clarifier.md](./clarifier.md), runs *after* this in the route — but on a different code path; both are pre-loop checks.)
 
 ---
 

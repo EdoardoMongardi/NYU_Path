@@ -1,6 +1,6 @@
 # LLM Clients
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-13 (doc-sync pass: corrected the barrel re-export claim — only `DEFAULT_PRIMARY_MODEL` + `DEFAULT_FALLBACK_MODEL` are re-exported, not all four `DEFAULT_*`).
 
 > **Source files:** `packages/engine/src/agent/llmClient.ts`, `agent/clients/index.ts`, `clients/openaiClient.ts`, `clients/anthropicClient.ts`, `agent/recordingClient.ts`.
 
@@ -97,7 +97,7 @@ The default primary is **`claude-sonnet-4-6`** on the `anthropic` provider. The 
 
 If the configured provider's API key is absent, the factory returns `null`. Callers use that signal to fall back to a recording client or refuse to run live. Unknown provider strings throw `Unknown LLM provider: "X"`.
 
-`createPrimaryClient`, `createFallbackClient`, and the four `DEFAULT_*` constants are re-exported from `@nyupath/engine`.
+`createPrimaryClient`, `createFallbackClient`, and two of the four `DEFAULT_*` constants — `DEFAULT_PRIMARY_MODEL` and `DEFAULT_FALLBACK_MODEL` — are re-exported from `@nyupath/engine` (`src/index.ts:71-74`). The two `DEFAULT_*_PROVIDER` constants are **not** re-exported from the barrel (they live only in `clients/index.ts:65-68`).
 
 ---
 

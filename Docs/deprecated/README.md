@@ -10,7 +10,7 @@ If you are looking for the live system instead:
 
 - **Planning / scheduling** — the forward-schedule subsystem: [`../current-system/engine/forward-schedule.md`](../current-system/engine/forward-schedule.md). The greedy single-term planner this folder documents is gone; planning is now feasibility-first backtracking search (`solveForwardSchedule` → `buildConstraintContext` → `findFirstValidPlan` → `localImprove` → `materializePlan`) gated by the 7-axis `runGraduationPathValidator`.
 - **Student record of truth** — the DPR: [`../current-system/engine/dpr.md`](../current-system/engine/dpr.md). The unofficial-transcript upload path is gone; onboarding accepts only the Albert Degree Progress Report (DPR).
-- **Live agent tools** — the tool registry (20 live tools): [`../current-system/engine/tool-registry.md`](../current-system/engine/tool-registry.md).
+- **Live agent tools** — the tool registry (21 live tools): [`../current-system/engine/tool-registry.md`](../current-system/engine/tool-registry.md).
 - **Policy / requirements answers** — pure bulletin RAG: [`../current-system/engine/rag.md`](../current-system/engine/rag.md). The curated/template policy layer this folder documents is gone.
 
 Where a removed module's *functionality* survived in a new place, the table below names that successor.
