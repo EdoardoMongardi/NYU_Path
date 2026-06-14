@@ -1,5 +1,7 @@
 # NYU Path — Privacy & Data Handling
 
+> **RETIRED / OBSOLETE (2026-06-14).** This described the **cohort-A pilot** privacy posture, which is no longer executed and no longer reflects the project's goal. It is preserved for historical record only and **must NOT be relied on as the current privacy posture**. It is also factually contradicted by the current code in several places (e.g. it describes a fully-ephemeral no-database pilot, a transcript-PDF upload path, and `gpt-4.1-mini` as the primary model — none of which match the code today). A current privacy doc should be written fresh against the project's current goal + deployment before being treated as authoritative.
+
 **Status**: cohort-A pilot version (Phase 7-E W10.1). FERPA-aware, conservative defaults. Updated whenever data-handling behavior changes.
 
 This document describes exactly what data NYU Path receives from a student, what it does with that data, where the data lives, who can see it, and how the student gets it deleted. It is the single source of truth for the privacy posture and is reviewable by anyone (NYU IT, advisers, students themselves) before opting in.
