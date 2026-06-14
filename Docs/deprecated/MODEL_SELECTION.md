@@ -1,5 +1,7 @@
 # NYU Path — Model Selection & Cohort A Composite Measurement
 
+> **RETIRED / OBSOLETE (2026-06-14).** This is a **cohort-A pilot** artifact — the cohort-A pilot is no longer executed and no longer reflects the project's goal. The body below is preserved verbatim for historical record only; **do not rely on it as current**. In particular the "primary = `claude-haiku-4-5`" claim is stale: the current default primary is **`claude-sonnet-4-6`** (fallback `gpt-4.1-mini`) — see `CLAUDE.md` and `packages/engine/src/agent/clients/index.ts` (`DEFAULT_PRIMARY_MODEL`).
+
 > **Phase 8 B5 update — 2026-04-28:** Production primary swapped to **`anthropic:claude-haiku-4-5-20251001`** based on the Phase-8 25-question bake-off (post-architectural-cleanup). Fallback stays `openai:gpt-4.1-mini`. Full bake-off comparison at [tools/cohort-eval/results/bakeoff_phase8_summary.md](tools/cohort-eval/results/bakeoff_phase8_summary.md). See "Phase 8 bake-off" section below.
 
 > **Phase 7-E W8 update — 2026-04-28:** Cohort A surrogate composite **0.936**, §12.6.5 0.90 gate **PASSED** (surrogate, upper-bound). See "Phase 7-E W8" section below. The Phase-5-prep bakeoff content from 2026-04-26 is preserved for archival reference; W9 (re-validation against the 84-case bakeoff post-DPR-pivot) is pending.

@@ -43,6 +43,13 @@ Two waves of deletion produced everything in this folder:
 
 For completeness, the same wave also deleted, with no dedicated deprecated doc: the `search/availabilityPredictor.ts` module and the `agent/recorderClient.ts` (both in `605978af`); the legacy tool barrel + dead exports (`f3fdc2a9`); and the per-major `programs.json` + dead fact-resolution layer (`f14549f8`). All on 2026-06-05.
 
+## Retired cohort-A pilot reference docs (2026-06-14)
+
+Unlike the removed-code docs above, these two are **reference docs** retired here because the **cohort-A pilot** they describe is no longer executed and no longer reflects the project's goal. The underlying cohort *code* still exists (the gate, stores, recovery-mode path) — these docs are retired because their *posture/measurements* are obsolete and factually contradicted by current code. Each carries a `> RETIRED / OBSOLETE` banner at its top.
+
+- [`PRIVACY.md`](PRIVACY.md) — the cohort-A privacy posture (was `reference/PRIVACY.md`). Obsolete + contradicted by code (described a fully-ephemeral no-DB pilot, a transcript-PDF upload path, and `gpt-4.1-mini` primary). A current privacy doc should be written fresh against the project's current goal/deployment.
+- [`MODEL_SELECTION.md`](MODEL_SELECTION.md) — the cohort-A model bake-off + composite measurement (was `reference/MODEL_SELECTION.md`). Stale on the primary model (claimed `claude-haiku-4-5`; current default is `claude-sonnet-4-6` — see `CLAUDE.md`).
+
 ## Known limitations of these docs
 
 - Each doc below this README still contains its **original 2026-06-03 prose**, describing code as if it were live. Only a one-line `> DEPRECATED …` banner has been added at the top of each. Do not read the body as current behavior — it is preserved verbatim for historical accuracy.
