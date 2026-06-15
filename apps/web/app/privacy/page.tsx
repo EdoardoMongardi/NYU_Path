@@ -59,7 +59,9 @@ export default function PrivacyPage() {
                 <li>
                     The <strong>parsed contents</strong> of the Degree Progress Report (DPR) you
                     upload — courses, requirements, GPA, credits. We extract the data and{" "}
-                    <strong>do not keep the PDF file</strong> itself.
+                    <strong>do not keep the PDF file</strong> itself. The Albert DPR is the{" "}
+                    <strong>only</strong> document NYU Path accepts — we do not take or process
+                    unofficial transcripts anywhere in the system.
                 </li>
                 <li>Your profile: declared programs, home school, catalog year, visa status, and related flags.</li>
                 <li>Your degree plan and its revision history.</li>
