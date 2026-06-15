@@ -596,6 +596,54 @@ button.reasoningHeader:focus-visible {
     margin-bottom: 12px;
 }
 
+/* ------------------------------------------------------------------
+   Phase 4 Task E2.1 — plan-level badge row.
+   Basic readable styling only; E2.3 themes these classes with the
+   NYU-violet light/dark palette via CSS variables. Avoid hardcoded
+   brand hex here — use neutral, semantic state colors that E2.3 can
+   override.
+   ------------------------------------------------------------------ */
+.planBadgeRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.planBadgeRow span {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    line-height: 1.4;
+    border: 1px solid var(--border-light);
+}
+.planBadgeValid {
+    background: #d1e7dd;
+    border-color: #a3cfbb;
+    color: #0f5132;
+}
+.planBadgeInvalid {
+    background: #f8d7da;
+    border-color: #f5c2c7;
+    color: #842029;
+}
+.planBadgeGrounded {
+    background: #d1e7dd;
+    border-color: #a3cfbb;
+    color: #0f5132;
+}
+.planBadgeHedged {
+    background: #fff3cd;
+    border-color: #ffe69c;
+    color: #664d03;
+}
+.planBadgeNeutral {
+    background: rgba(108, 117, 125, 0.08);
+    color: var(--text-secondary, #495057);
+}
+
 .semesterCard {
     margin-bottom: 16px;
     padding: 12px;

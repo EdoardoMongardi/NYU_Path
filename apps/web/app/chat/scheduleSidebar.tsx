@@ -5,6 +5,7 @@ import type { ForwardSchedule, ScheduleSlot, SchedulePreferences, StudentProfile
 import type { DegreeProgressReport } from "@nyupath/engine";
 import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import { groupCoursesByTerm } from "../../lib/groupCoursesByTerm";
+import { computePlanBadges } from "../../lib/planBadges";
 import {
     planAdd,
     planSwap,
@@ -70,6 +71,63 @@ type LegacySlotAction = "lock" | "replace" | "drop" | "pin";
 interface DragSlotRef {
     courseId: string;
     term: string;
+}
+
+/**
+ * Phase 4 Task E2.1 — plan-level badge row.
+ *
+ * Thin consumer of the pure `computePlanBadges` helper: it renders the
+ * four plan-level badges (validity · confidence · graduation term ·
+ * trade-off count) derived from the live `ForwardSchedule`. ALL the
+ * derivation logic — including the binding §11 confidence hedge — lives
+ * in `apps/web/lib/planBadges.ts` (node-unit-tested in
+ * planBadges.test.ts); this component holds no decision logic of its own.
+ *
+ * Styling is deliberately minimal here (semantic class names only);
+ * E2.3 applies the NYU-violet light/dark theme to these classes next.
+ *
+ * `consequences` is the latest plan-action diff's `consequences[]`,
+ * threaded down for the trade-off count. At rest (no pending diff) it is
+ * absent → count 0. (Live consequences wiring is E3's job.)
+ */
+function PlanBadges({
+    schedule,
+    consequences,
+}: {
+    schedule: ForwardSchedule;
+    consequences?: string[];
+}) {
+    const badges = computePlanBadges(schedule, consequences);
+    return (
+        <div className={styles.planBadgeRow} role="status" aria-label="Plan summary badges">
+            <span
+                className={
+                    badges.validity.valid
+                        ? styles.planBadgeValid
+                        : styles.planBadgeInvalid
+                }
+                title={badges.validity.valid ? "Plan satisfies all hard requirements" : "Draft plan with unmet requirements"}
+            >
+                {badges.validity.label}
+            </span>
+            <span
+                className={
+                    badges.confidence.hedged
+                        ? styles.planBadgeHedged
+                        : styles.planBadgeGrounded
+                }
+                title={badges.confidence.label}
+            >
+                {badges.confidence.label}
+            </span>
+            <span className={styles.planBadgeNeutral} title="Targeted graduation term">
+                🎓 {badges.graduationTerm}
+            </span>
+            <span className={styles.planBadgeNeutral} title="Trade-offs in the latest change">
+                {badges.tradeOffCount} trade-off{badges.tradeOffCount === 1 ? "" : "s"}
+            </span>
+        </div>
+    );
 }
 
 interface ScheduleSidebarProps {
@@ -624,6 +682,9 @@ export default function ScheduleSidebar({
                             ⚠ Student-confirmed plan despite warnings
                         </div>
                     )}
+
+                    {/* Phase 4 Task E2.1 — plan-level badge row above the term cards. */}
+                    {schedule && <PlanBadges schedule={schedule} />}
 
                     {(() => {
                         const grouped = groupCoursesByTerm({
