@@ -42,13 +42,12 @@ export async function POST(req: NextRequest) {
         }
 
         // Onboarding state-machine steps. Phase 7-E pivoted onboarding
-        // from "upload transcript" to "upload DPR"; both states route
+        // to "upload DPR": the awaiting-DPR / pre-message states route
         // here as no-ops so the chat page's drag-drop / button-click
         // upload UI handles the actual ingestion (the legacy LLM-based
         // text → state-transition flow is gone).
         const waitingForUpload =
             onboardingStep === "awaiting_dpr"
-            || onboardingStep === "awaiting_transcript"
             || !onboardingStep; // initial chat-page state pre-message
         if (onboardingStep && onboardingStep !== "complete" && !waitingForUpload) {
             return handleOnboardingStep(message, onboardingStep);
@@ -110,7 +109,7 @@ function handleOnboardingStep(message: string, step: string) {
         }
 
         case "correcting_data": {
-            const isReupload = lower.includes("upload") || lower.includes("new dpr") || lower.includes("new transcript") || lower.includes("try again");
+            const isReupload = lower.includes("upload") || lower.includes("new dpr") || lower.includes("try again");
             if (isReupload) {
                 return NextResponse.json({
                     message: "Sure! Go ahead and upload the corrected DPR using the 📎 button.",
@@ -165,10 +164,9 @@ function handleOnboardingStep(message: string, step: string) {
         }
 
         default:
-            // Phase 7-E: do NOT downgrade the chat page's onboardingStep
-            // to a stale "awaiting_transcript" — the chat page already
-            // tells the student to upload a DPR via the welcome message
-            // + drag-and-drop UI. Pass through to chitchat.
+            // Phase 7-E: the chat page tells the student to upload a DPR
+            // via the welcome message + drag-and-drop UI; unrecognized
+            // steps just pass through to chitchat.
             return handleBasicChat(message, step);
     }
 }
