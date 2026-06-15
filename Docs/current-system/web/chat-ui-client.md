@@ -1,6 +1,6 @@
 # Chat UI Client — React Page & SSE Consumer
 
-> Last verified against code: 2026-06-15 (Phase 4 E1: shared plan-state store + profile read-back — §3 now documents the `createPlanStore` / `useSyncExternalStore` binding; the two "Known limitations" bullets revised for the in-session shared store + the E1.2 server-side profile read-back). Prior 2026-06-13 pass: removed non-existent `onboardingStep` `"unsupported_major"` member; corrected the bouncing-dots loader citation to `page.tsx:1398-1407`.
+> Last verified against code: 2026-06-15 (Phase 4 E2: badge row + slot-state glyphs + violet light/dark — §7 cross-refs the new render-only sidebar surfaces in ui-components.md). Prior 2026-06-15 pass: Phase 4 E1 (shared plan-state store + profile read-back) — §3 documents the `createPlanStore` / `useSyncExternalStore` binding; the two "Known limitations" bullets revised for the in-session shared store + the E1.2 server-side profile read-back. Prior 2026-06-13 pass: removed non-existent `onboardingStep` `"unsupported_major"` member; corrected the bouncing-dots loader citation to `page.tsx:1398-1407`.
 
 ## TL;DR
 
@@ -423,6 +423,12 @@ The sidebar drives back into the page via four callbacks:
 - `onConfirmCombination(proposalId)` (`page.tsx:673-687`) — for the materialization picker. Injects `"Yes, please apply section combination <id> — call confirm_section_combination with proposalId="<id>"."` and runs v2.
 
 The sidebar toggle button (`page.tsx:1115-1123`) is always visible in the header (no longer gated on `forwardSchedule !== null`), so students can inspect their DPR-derived term cards even before computing a forward plan.
+
+**Phase 4 E2 workspace surfaces (render-only, no page wiring).** The sidebar now renders two additional surfaces derived purely from the `schedule` prop, with no new page-side state or callback:
+- A **plan-level badge row** above the term cards — validity · confidence · graduation term · trade-off count (the confidence badge derives a "verify with your adviser" hedge only from real engine fields, never a fabricated CAS number).
+- Per-slot **state glyphs** (🔒 locked/final · ◐ in-progress · planned-movable) on each slot pill.
+
+Both are documented in full in [ui-components.md](./ui-components.md) ("Plan-level badge row" / "Slot-state glyphs" / "NYU-violet light/dark theme"); the page passes nothing new to drive them.
 
 Two sidebar utility paths talk to non-chat routes:
 - `handleRefreshDpr(file)` (`page.tsx:955-989`) — POSTs the new PDF to `/api/onboard/refresh-dpr` as multipart form-data. The route fingerprint-compares with the stored DPR. On match → `window.alert("No changes detected …")`. On mismatch → updates `forwardSchedule` directly and alerts the user. Failures surface via `window.alert`.

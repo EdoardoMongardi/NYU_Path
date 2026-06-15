@@ -1,6 +1,6 @@
 # UI Components
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41). Updated 2026-06-15 (Phase 4 E2: badge row + slot-state glyphs + violet light/dark).
 
 ## TL;DR
 
@@ -35,7 +35,7 @@ This doc focuses on the sidebar tree, which is the densest and most stateful par
 
 The single live component that owns sidebar state. It is rendered by the chat page when the user opens the sidebar.
 
-### Props received (`scheduleSidebar.tsx:75`)
+### Props received (`scheduleSidebar.tsx:133`)
 
 | Prop | Source | Purpose |
 |---|---|---|
@@ -68,7 +68,7 @@ The schedule preferences arrive separately via the per-mount restore call.
 - `openSubmenu: { key, verb } \| null` — which submenu inside that popover (Swap candidates or Move targets) is open.
 - `pendingSlots: Set<string>` — keys of slots with an in-flight plan-action round-trip. Drives per-row spinners.
 - `pendingSince: number \| null` — first-spinner-on timestamp. Used to gate a sidebar-bottom "Validating plan change..." toast.
-- `showToast: boolean` — whether the sidebar-bottom toast is currently rendered. Becomes true 600ms after `pendingSince` is set (constant `SIDEBAR_TOAST_THRESHOLD_MS = 600` at `scheduleSidebar.tsx:55`); becomes false the instant `pendingSlots` drains.
+- `showToast: boolean` — whether the sidebar-bottom toast is currently rendered. Becomes true 600ms after `pendingSince` is set (constant `SIDEBAR_TOAST_THRESHOLD_MS = 600` at `scheduleSidebar.tsx:56`); becomes false the instant `pendingSlots` drains.
 - `addCourseDraft: Map<term, string>` — the open Add-course inputs per term and their current draft text.
 - `dragSourceRef: ref<{ courseId, term }>` — the slot the user started dragging.
 - `dropTargetTerm: string \| null` — the term card currently highlighted as a drop target.
@@ -77,21 +77,21 @@ The schedule preferences arrive separately via the per-mount restore call.
 
 ### Slot key derivation
 
-A slot's stable identity key is `${term}::${courseId}` for concrete slots; placeholders use `${term}::placeholder(${category})` so a swap on a placeholder still surfaces a spinner (`scheduleSidebar.tsx:222`).
+A slot's stable identity key is `${term}::${courseId}` for concrete slots; placeholders use `${term}::placeholder(${category})` so a swap on a placeholder still surfaces a spinner (`scheduleSidebar.tsx:280`).
 
 ### Frozen keys
 
-A `frozenKeys` set is derived via `useMemo` from `schedulePreferences.pins[]` — each pin contributes `${pin.term}::${pin.courseId}` (`scheduleSidebar.tsx:193`). This set is passed to every TermCard and is what makes the Lock/Unlock label inside a popover bidirectional.
+A `frozenKeys` set is derived via `useMemo` from `schedulePreferences.pins[]` — each pin contributes `${pin.term}::${pin.courseId}` (`scheduleSidebar.tsx:251`). This set is passed to every TermCard and is what makes the Lock/Unlock label inside a popover bidirectional.
 
 ### Plan-action handlers
 
 Every verb is wired to a deterministic POST endpoint via the `planActionClient`:
 
-- `handleLockToggle` → `planLock` with `locked: !wasFrozen` (`scheduleSidebar.tsx:280`).
-- `handleDrop` → `planDrop` (`scheduleSidebar.tsx:300`).
-- `handleSwap` → `planSwap` with `{ drop, add, term }` (`scheduleSidebar.tsx:319`).
-- `handleMove` → `planMove` with `{ courseId, fromTerm, toTerm }` (`scheduleSidebar.tsx:344`).
-- `handleAddCourseSubmit` → `planAdd` with `{ courseId, term }` (`scheduleSidebar.tsx:367`).
+- `handleLockToggle` → `planLock` with `locked: !wasFrozen` (`scheduleSidebar.tsx:338`).
+- `handleDrop` → `planDrop` (`scheduleSidebar.tsx:358`).
+- `handleSwap` → `planSwap` with `{ drop, add, term }` (`scheduleSidebar.tsx:377`).
+- `handleMove` → `planMove` with `{ courseId, fromTerm, toTerm }` (`scheduleSidebar.tsx:402`).
+- `handleAddCourseSubmit` → `planAdd` with `{ courseId, term }` (`scheduleSidebar.tsx:425`).
 
 Each handler does the same shape of work: derive a slot key, mark it pending (which lights up the spinner and may start the toast timer), call the deterministic route, then announce the result. The result is announced via a small helper that logs by category (clean / trade-offs / refusal / error) and bubbles up through `onPlanActionResult` so the chat page can render an inline confirm bubble. Always clears the pending flag and closes the popover in `finally`.
 
@@ -99,23 +99,23 @@ Each handler does the same shape of work: derive a slot key, mark it pending (wh
 
 The sidebar implements three drag interactions:
 
-- **Slot pill `onDragStart`** — captures `{ courseId, term }` into a ref and sets `application/x-nyupath-slot` dataTransfer with effect "move" (`scheduleSidebar.tsx:408`).
-- **Term card `onDragOver/onDrop`** — when the drop target term differs from the source term, calls `planMove` (`scheduleSidebar.tsx:440`).
-- **Slot `onDragOver/onDrop`** — when the drop target is another slot, calls `planSwap` (same-term drops use the `{ drop, add, term }` form; cross-term drops use the `exchanges: [...]` form with both ends specified) (`scheduleSidebar.tsx:470`).
+- **Slot pill `onDragStart`** — captures `{ courseId, term }` into a ref and sets `application/x-nyupath-slot` dataTransfer with effect "move" (`scheduleSidebar.tsx:466`).
+- **Term card `onDragOver/onDrop`** — when the drop target term differs from the source term, calls `planMove` (`scheduleSidebar.tsx:486`).
+- **Slot `onDragOver/onDrop`** — when the drop target is another slot, calls `planSwap` (same-term drops use the `{ drop, add, term }` form; cross-term drops use the `exchanges: [...]` form with both ends specified) (`scheduleSidebar.tsx:528`).
 
 ### Top-level chrome
 
-- Header with title and close button (`scheduleSidebar.tsx:542`).
-- Optional toolbar with an "Update DPR" file picker that triggers `onRefreshDpr` (`scheduleSidebar.tsx:546`).
-- Empty state ("No plan yet...") when neither a student nor a schedule is loaded (`scheduleSidebar.tsx:570`).
-- Otherwise the body: `SummaryCard`, schedule meta line ("Targeting graduation in ... · N credits per semester"), load-style pills (Balanced / Frontload / Backload), state banners (trade-offs / infeasibility / student-preferred-invalid), `PriorCreditsCard`, and one `TermCard` per term bucket.
+- Header with title and close button (`scheduleSidebar.tsx:600`).
+- Optional toolbar with an "Update DPR" file picker that triggers `onRefreshDpr` (`scheduleSidebar.tsx:604`).
+- Empty state ("No plan yet...") when neither a student nor a schedule is loaded (`scheduleSidebar.tsx:629`).
+- Otherwise the body: `SummaryCard`, schedule meta line ("Targeting graduation in ... · N credits per semester"), load-style pills (Balanced / Frontload / Backload), state banners (trade-offs / infeasibility / student-preferred-invalid), the **plan-level badge row** (`<PlanBadges>`, mounted directly above the term cards — `scheduleSidebar.tsx:687`; see "Plan-level badge row" below), `PriorCreditsCard`, and one `TermCard` per term bucket.
 - The body invokes `groupCoursesByTerm` (from `lib/groupCoursesByTerm`) to produce `{ priorCredits, terms }` from the student + schedule + DPR.
-- Sidebar-bottom toast (`scheduleSidebar.tsx:691`) — renders only when `showToast && pendingSlots.size > 0`. Includes a spinner and "Validating plan change…" copy.
-- Test-only Clear button at the bottom when `NEXT_PUBLIC_ENABLE_TEST_CLEAR === "1"` (`scheduleSidebar.tsx:700`).
+- Sidebar-bottom toast (`scheduleSidebar.tsx:752`) — renders only when `showToast && pendingSlots.size > 0`. Includes a spinner and "Validating plan change…" copy.
+- Test-only Clear button at the bottom when `NEXT_PUBLIC_ENABLE_TEST_CLEAR === "1"` (`scheduleSidebar.tsx:761`).
 
 ### Load-style pills
 
-Three constants at `scheduleSidebar.tsx:41`:
+Three constants at `scheduleSidebar.tsx:42`:
 - Balanced — propose a balanced credit load across all semesters.
 - Frontload — heavier early, lighter later.
 - Backload — lighter early, heavier later.
@@ -124,16 +124,58 @@ Clicking a pill calls `onProposeLoadStyle` with the value.
 
 ### State banners
 
-Three banners stack above the term cards depending on `schedule.state`:
-- `valid-with-trade-offs` + at least one assumption → trade-offs banner, listing the first five assumptions via `assumptionLabel` (`scheduleSidebar.tsx:602`).
-- `infeasible-draft` → infeasibility banner, listing the first five constraint violations from `feasibility.constraintViolations` (`scheduleSidebar.tsx:612`).
-- `student-preferred-invalid-draft` → student-preferred banner (`scheduleSidebar.tsx:622`).
+Three banners stack above the term cards (and above the plan-level badge row) depending on `schedule.state`:
+- `valid-with-trade-offs` + at least one assumption → trade-offs banner, listing the first five assumptions via `assumptionLabel` (`scheduleSidebar.tsx:660`).
+- `infeasible-draft` → infeasibility banner, listing the first five constraint violations from `feasibility.constraintViolations` (`scheduleSidebar.tsx:670`).
+- `student-preferred-invalid-draft` → student-preferred banner (`scheduleSidebar.tsx:680`).
 
 ### Env flags
 
-Two helpers (`scheduleSidebar.tsx:28`, `scheduleSidebar.tsx:36`):
+Two helpers (`scheduleSidebar.tsx:29`, `scheduleSidebar.tsx:37`):
 - `isTestClearEnabled()` reads `NEXT_PUBLIC_ENABLE_TEST_CLEAR === "1"` — surfaces the bottom Clear-all-data button.
 - `isLlmPolishEnabled()` reads `NEXT_PUBLIC_PLAN_CHANGE_LLM_POLISH === "1"` — kept here as the single source of the env-flag check, even though the page is the actual consumer. The sidebar references it via `void` so the import isn't pruned.
+
+### Plan-level badge row — `lib/planBadges.ts` + `PlanBadges` (Phase 4 E2.1)
+
+A four-badge summary row mounted directly above the term-card list (after the state banners) — `<PlanBadges>` at `scheduleSidebar.tsx:687`, defined inline at `scheduleSidebar.tsx:93`. The component is a **thin consumer**: it holds no decision logic and renders whatever the pure helper returns.
+
+All derivation lives in `apps/web/lib/planBadges.ts` — `computePlanBadges(schedule, consequences?)` (`planBadges.ts:61`) — a pure, framework-agnostic function unit-tested directly in node (`apps/web/tests/planBadges.test.ts`), since `apps/web` ships no DOM render harness. It returns four badges:
+
+| Badge | Source | Detail |
+|---|---|---|
+| **Validity** | `schedule.state` | ✓ for `valid-clean` / `valid-with-trade-offs`; a clearly-marked "✗ Invalid draft" for the two draft states (`infeasible-draft`, `student-preferred-invalid-draft`). |
+| **Confidence** | derived (see below) | "✓ Grounded" when not hedged; otherwise "Confidence: hedged — verify with your adviser". |
+| **Graduation term** | `schedule.graduationTerm` | Formatted via the sidebar's deterministic `formatTermLabel` (e.g. `2027-spring` → "Spring 2027"); unrecognized shapes pass through verbatim — no invention. Rendered with a 🎓 prefix. |
+| **Trade-off count** | `consequences?.length ?? 0` | The latest plan-action diff's `consequences[]`, threaded down as a param. At rest (no pending diff) it is absent → count 0. (Live consequences wiring is E3's job; the component currently mounts `<PlanBadges>` without it.) |
+
+**Confidence hedge — no-invention derivation (binding §11 / philosophy #3).** There is **no** structured "CAS-approximated" / confidence field on `ForwardSchedule` (the D4.4 hedge lives in the agent's narration, not on the plan object). So the confidence badge **derives** its hedge only from real engine-produced fields (`planBadges.ts:80-86`): it is hedged when `schedule.optimality` is `"best-effort"` or `"feasibility-unconfirmed"`, OR `schedule.assumptions[]` is non-empty, OR the state is an invalid draft. It computes **no new number** and fabricates **no CAS-coupling claim** — when any of those markers holds, the label carries a "verify with your adviser" hedge.
+
+### Slot-state glyphs — `sidebar/slotState.ts` (Phase 4 E2.2)
+
+Each slot pill renders a design-§8 state glyph (🔒 / ◐ / none) sourced from a pure helper. `computeSlotState(slot, { isFrozen, semesterLocked })` (`apps/web/app/chat/sidebar/slotState.ts:98`) is the **single source of truth** for the glyph + human label + aria-label + an `editable` flag; `SlotRow` consumes it (`SlotRow.tsx:75`) and holds no slot-state decision logic of its own. It is unit-tested directly in node (`apps/web/tests/slotStates.test.ts`).
+
+The helper resolves by precedence (highest first — `slotState.ts:98-152`):
+
+| Glyph | State | Label | Editable |
+|---|---|---|---|
+| 🔒 | `kind === "completed"` (checked **kind-first**) | "Taken (final)" | false |
+| 🔒 | `semesterLocked` (the bucket's `ForwardSemester.locked` — DPR history / in-progress term) | "Locked — past or in-progress term" | false |
+| 🔒 | `isFrozen` (student-pinned via `SchedulePreferences.pins[]`) | "Locked by you" | true (unlock / drag-to-move; the lock travels with it) |
+| ◐ | `kind === "in_progress"` | "In progress (fixed in its term)" | true (see open question below) |
+| _(none)_ | `specific_planned` / `placeholder` | "Planned (movable)" | true |
+
+Notes worth flagging:
+- **The ◐ in-progress glyph is NEW** — before E2.2 an in-progress slot showed no state glyph. This makes the `core_philosophy.md` IP rule visible on the canvas.
+- **`completed` is checked kind-first**, BEFORE the generic `semesterLocked` branch, so a completed course shows the design-§8 "Taken (final)" label even though it always renders inside a `locked: true` history bucket — otherwise the generic term-lock label would mask it.
+- **Open question — in_progress movability (deferred to the owner).** `editable` mirrors the component's *actual* gating today, where an in-progress slot is still clickable + draggable, so `editable` for `in_progress` is `true`. The design labels IP "fixed in its term"; E2.2 deliberately only makes the ◐ state **visible** and does NOT strip IP's move verb (a non-obvious behavior change). Whether IP should lose its move verb is left for the owner — this doc does **not** claim IP is non-movable.
+
+### NYU-violet light/dark theme — `globals.css` + `chat.module.css` (Phase 4 E2.3)
+
+E2.3 was a CSS-only pass: it lifted E2.1's hardcoded badge hex into semantic tokens and added a token-override dark theme. **There is no toggle UI** — the dark variant resolves from an explicit `data-theme="dark"` opt-in or the OS-level preference.
+
+- **New tokens in `globals.css :root`** (`globals.css:40-61`, light values): `--badge-valid-*`, `--badge-invalid-*`, `--badge-hedged-*`, `--badge-neutral-*`, `--badge-grounded-*` (the validity-positive "grounded" badge folds in the NYU-violet brand — `--badge-grounded-bg/-border/-text` resolve to `--nyu-violet-faint`/`--nyu-violet`), and `--slot-glyph-color` (the 🔒/◐ glyph accent, `--nyu-violet`). They live in `globals.css` rather than `chat.module.css` because Next 16's CSS-Modules loader rejects a bare `:root` block inside `*.module.css`.
+- **`chat.module.css` references the vars** (no hardcoded hex remains in the `.planBadge*` / `.slotLockIcon` rules — `chat.module.css:606-651`, `:1019`): the badge row gets an on-brand NYU-violet left accent (`border-left: 3px solid var(--nyu-violet)`), the grounded badge folds in the violet brand, and the slot glyph reads in `var(--slot-glyph-color)`.
+- **Dark layer** (`globals.css:111-148`): a `[data-theme="dark"]` block re-points the neutral (`--bg-*`/`--text-*`/`--border-*`) and `--badge-*` tokens to dark values while keeping the NYU-violet brand. A mirrored `@media (prefers-color-scheme: dark) :root:not([data-theme="light"])` gate (`globals.css:152-181`) applies the same overrides for an OS-level dark preference, while an explicit `data-theme="light"` opt-out wins. The light `:root` values are untouched, so light mode does not regress. Because every component already styles through these tokens, flipping `data-theme="dark"` re-themes the shell app-wide with no markup change.
 
 ## TermCard — `app/chat/sidebar/TermCard.tsx`
 
@@ -204,11 +246,12 @@ The `<li>` accumulates classes for: the slot kind, the optional flag (placeholde
 
 - Locked → "Completed — locked".
 - Frozen → "Locked — click to unlock or drag to move (the lock will travel with it)".
+- In progress → the slot-state label ("In progress (fixed in its term)") from `computeSlotState` (`SlotRow.tsx:98-99`).
 - Otherwise → "Click to open verbs · drag to move".
 
 ### Inner content
 
-`renderSlotInner(slot)` from `slotRenderHelpers.tsx` does the rendering — see below. Then either a spinner (when `isPending`) or the grade cell (via `slotGradeText(slot)`). Then an optional lock-icon span (🔒 for locked or frozen).
+`renderSlotInner(slot)` from `slotRenderHelpers.tsx` does the rendering — see below. Then either a spinner (when `isPending`) or the grade cell (via `slotGradeText(slot)`). Then the **slot-state glyph span** (`SlotRow.tsx:119-126`): the glyph + label + aria-label come straight from the pure `computeSlotState` helper (🔒 for taken/final, locked-by-you, or a term-locked slot; ◐ for an in-progress slot; empty for a planned/movable slot, whose `aria-hidden` is set when the glyph is empty). See "Slot-state glyphs" under the scheduleSidebar section above for the full state table and the precedence rules.
 
 ### Popover trigger
 
