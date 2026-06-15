@@ -1117,7 +1117,7 @@ export default function ChatPage() {
             </header>
 
             {/* Phase 7-E W10.3 — persistent disclaimer banner.
-                Required by §5 of PRIVACY.md. Reminds the student that
+                Per the privacy notice (/privacy). Reminds the student that
                 this is an unofficial tool and they should verify with
                 an NYU adviser before acting on any output. Stays
                 visible at all times in the chat view. */}

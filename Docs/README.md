@@ -11,7 +11,7 @@ All project documentation lives in this folder. Organized 2026-06-10 (full repo 
 | [`plans/`](plans/) | Implementation plans, **all executed/historical** | `NN-` prefix = the order the work was planned |
 | [`audits/`](audits/) | Point-in-time audits, QA reports, adversarial spot-checks | date prefix (creation) |
 | [`reports/`](reports/) | Eval / benchmark / calibration run reports | date prefix (run date) |
-| [`reference/`](reference/) | Reference data (undergrad schools, eval-set provenance, prereq sources) | n/a |
+| [`reference/`](reference/) | Reference (privacy/data-handling, undergrad schools, eval-set provenance, prereq sources) | n/a |
 | [`deprecated/`](deprecated/) | Docs for **removed** code, kept for history — do not trust as current | n/a |
 
 ## current-system/ — the living docs

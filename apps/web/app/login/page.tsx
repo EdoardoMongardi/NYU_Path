@@ -8,8 +8,8 @@
 // router.push("/chat").
 //
 // No account distinction: every successful verify upserts a
-// students row, so login = signup. Cohort A docs explain this
-// (one-pager + privacy-doc).
+// students row, so login = signup. The user-facing privacy notice
+// is served at /privacy (app/privacy/page.tsx).
 // ============================================================
 
 "use client";
@@ -144,8 +144,9 @@ export default function LoginPage() {
 
                 <p className={styles.privacy}>
                     By signing in you accept our{" "}
-                    <a href="/PRIVACY.md" target="_blank" rel="noopener noreferrer">privacy posture</a>
-                    {" "}— ephemeral DPR processing, no cross-session memory in cohort A.
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a>
+                    {" "}— we save your degree plan, preferences, and chat history to your NYU-email
+                    account so you can pick up where you left off.
                 </p>
             </div>
         </div>
