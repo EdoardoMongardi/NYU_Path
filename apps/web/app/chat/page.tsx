@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import styles from "./chat.module.css";
 import {
     streamChatV2,
@@ -33,6 +33,7 @@ import {
     type PlanActionResult,
     type PlanActionRouteResponse,
 } from "../../lib/planActionClient";
+import { createPlanStore } from "./planState";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -155,20 +156,27 @@ export default function ChatPage() {
     const [parsedData, setParsedData] = useState<ParsedTranscript | null>(null);
     const [visaStatus, setVisaStatus] = useState<string | null>(null);
     const [graduationTarget, setGraduationTarget] = useState<string | null>(null);
-    const [forwardSchedule, setForwardSchedule] = useState<ForwardSchedule | null>(null);
-    // Phase 17 Task D — restored SchedulePreferences row drives the
-    // sidebar's freeze-flag plumb-through (so the Lock popover label
-    // flips to "Unlock" when a slot is in pins[]). Hydrated from
-    // /api/session/restore on mount; refreshed after each successful
-    // /api/plan/confirm round-trip when the route returns updated prefs.
-    const [schedulePreferences, setSchedulePreferences] =
-        useState<SchedulePreferences | null>(null);
-    // Phase 15 Task 8 — captured from the `forward_materialization_update`
-    // SSE event when the agent runs `materialize_sections`. Drives the
-    // sidebar's IMMEDIATE-term render: full → Sections view with
-    // combination picker; partial / unavailable → structural slots +
-    // explanatory banner. Reset on any flow that resets the schedule.
-    const [forwardMaterialization, setForwardMaterialization] = useState<ForwardMaterializationPayload | null>(null);
+    // Phase 4 Task E1.1 — single source of truth for plan state.
+    // forwardSchedule + schedulePreferences + forwardMaterialization
+    // used to be three independent server-push-only `useState`s. They
+    // are now one shared, subscribable store (`./planState`) so
+    // chat-driven SSE updates AND sidebar-driven edits write to the
+    // SAME state and every consumer re-renders from it. The store is
+    // created once per page mount; setters dispatch into it; reads come
+    // from the `useSyncExternalStore` snapshot below.
+    //   - forwardSchedule: hydrated from /api/session/restore on mount;
+    //     pushed live by the `forward_schedule_update` SSE event;
+    //     refreshed after each successful /api/plan/confirm round-trip.
+    //   - schedulePreferences (Phase 17 Task D): drives the sidebar's
+    //     freeze-flag plumb-through (Lock popover label flips to
+    //     "Unlock" when a slot is in pins[]).
+    //   - forwardMaterialization (Phase 15 Task 8): captured from the
+    //     `forward_materialization_update` SSE event when the agent runs
+    //     `materialize_sections`; drives the sidebar's IMMEDIATE-term
+    //     render (full → Sections view; partial/unavailable → banner).
+    const planStore = useMemo(() => createPlanStore(), []);
+    const { forwardSchedule, schedulePreferences, forwardMaterialization } =
+        useSyncExternalStore(planStore.subscribe, planStore.getSnapshot, planStore.getSnapshot);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -291,15 +299,15 @@ export default function ChatPage() {
                 // `forwardSchedule` for the live render; surface either
                 // (the sidebar's 4-state banner keys off `state`).
                 if (data.forwardSchedule) {
-                    setForwardSchedule(data.forwardSchedule);
+                    planStore.setForwardSchedule(data.forwardSchedule);
                 } else if (data.studentDraftPlan) {
-                    setForwardSchedule(data.studentDraftPlan);
+                    planStore.setForwardSchedule(data.studentDraftPlan);
                 }
                 // Hydrate restored preferences so the sidebar can
                 // render freeze indicators on Lock-toggle UI without
                 // waiting for the next /api/plan/confirm round-trip.
                 if (data.schedulePreferences) {
-                    setSchedulePreferences(data.schedulePreferences as SchedulePreferences);
+                    planStore.setSchedulePreferences(data.schedulePreferences as SchedulePreferences);
                 }
                 // ---- Replay chat history ----
                 if (data.chatMessages.length > 0) {
@@ -493,7 +501,7 @@ export default function ChatPage() {
                 }));
                 break;
             case "forward_schedule_update":
-                setForwardSchedule(ev.schedule);
+                planStore.setForwardSchedule(ev.schedule);
                 break;
             case "forward_materialization_update":
                 // Phase 15 Task 8 — `materialize_sections` produced a
@@ -501,7 +509,7 @@ export default function ChatPage() {
                 // can switch the IMMEDIATE term to the Sections view
                 // (or render a partial/unavailable banner). Cleared
                 // alongside `forwardSchedule` when a new chat starts.
-                setForwardMaterialization(ev.result);
+                planStore.setForwardMaterialization(ev.result);
                 break;
             case "validator_block":
                 updateMessage(assistantId, {
@@ -893,7 +901,7 @@ export default function ChatPage() {
             // next render. Keep the bubble in the resolved state so the
             // chat shows what just happened (buttons hidden).
             if (result.data.forwardSchedule) {
-                setForwardSchedule(result.data.forwardSchedule);
+                planStore.setForwardSchedule(result.data.forwardSchedule);
             }
             patchMessage(messageId, {
                 bubbleResolved: true,
@@ -930,7 +938,7 @@ export default function ChatPage() {
                 return;
             }
             if (result.data.forwardSchedule) {
-                setForwardSchedule(result.data.forwardSchedule);
+                planStore.setForwardSchedule(result.data.forwardSchedule);
             }
             patchMessage(messageId, {
                 bubbleResolved: true,
@@ -981,7 +989,7 @@ export default function ChatPage() {
                 return;
             }
             if (data.schedule) {
-                setForwardSchedule(data.schedule);
+                planStore.setForwardSchedule(data.schedule);
             }
             window.alert("Schedule updated to reflect your new DPR.");
         } catch (err) {
