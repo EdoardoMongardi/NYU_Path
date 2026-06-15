@@ -32,7 +32,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { setCohortAssignment, parseDpr, type ChatTurnResult, type ToolSession } from "@nyupath/engine";
+import { parseDpr, type ChatTurnResult, type ToolSession } from "@nyupath/engine";
 import { getStores, resetStoresForTests } from "../lib/db/store";
 import {
     makeFeasibleScheduleWithSemesters,
@@ -162,10 +162,6 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         // is mocked so no real provider call is made.
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-validator";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-validator";
-        // Default cohort `alpha` runs the full agent loop (evalGateFailing
-        // false) so the turn reaches runAgentTurnStreaming + the terminal
-        // validator.
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
         holder.validate = undefined;
         holder.session = undefined;
@@ -181,7 +177,6 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -195,7 +190,6 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
             { term: "2027-fall", slots: [specificSlot(SEEDED_COURSE)] },
         ]);
         await seedStudentState(userId, schedule);
-        setCohortAssignment({ overrides: { [userId]: "alpha" }, default: "alpha" });
     }
 
     // NON-ambiguous message so the clarifier gate doesn't early-return
@@ -280,9 +274,7 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         // A userId with NO plan persisted → P3.1 leaves forwardSchedule
         // undefined → checkPlanClaims no-ops even for a contradicting reply.
         const userId = "validator-inloop-noplan";
-        // No seedPlanFor — nothing persisted. Assign the cohort so the
-        // turn runs the agent loop.
-        setCohortAssignment({ overrides: { [userId]: "alpha" }, default: "alpha" });
+        // No seedPlanFor — nothing persisted.
 
         const res = await POST(fakeRequest({
             message: CLEAR_MESSAGE,

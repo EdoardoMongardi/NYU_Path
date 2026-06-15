@@ -1,6 +1,6 @@
 # Session and Onboarding Routes
 
-> Last verified against code: 2026-06-13 (doc-sync pass: corrected the §Purpose hydration framing for P3.1 per-turn plan+prefs hydration + fixed the dead chat-route-sse.md §5.1 anchor).
+> Last verified against code: 2026-06-15 (cohort gate subsystem removed: §1 no longer lists the dropped `cohort_assignments` table in the wipe order).
 
 ## Purpose
 
@@ -64,8 +64,7 @@ With a real DB, all deletes run inside a single `db.transaction` so the wipe is 
 3. `schedule_preferences WHERE studentId = $1`
 4. `audit_log WHERE studentId = $1`
 5. `session_summaries WHERE studentId = $1`
-6. `cohort_assignments WHERE userId = $1` — note this table keys on `userId` (which equals the JWT sub in this auth model), not `studentId`.
-7. `students WHERE studentId = $1` — parent row last.
+6. `students WHERE studentId = $1` — parent row last.
 
 The first five tables also have `ON DELETE CASCADE` foreign keys to `students`, so dropping the parent alone would technically handle them — but the route deletes them explicitly first so the wipe stays legible and survives any future FK drift.
 

@@ -29,12 +29,6 @@ describe("getStores fallback (Phase 7-B Step 7)", () => {
         const stores = getStores({ NYUPATH_SESSION_STORE_PATH: "/tmp/nyupath-test-sessions" });
         expect(stores.sessionStore).toBeInstanceOf(FileBackedSessionStore);
     });
-
-    it("cohortLookup falls back to engine in-memory userInCohort when DB is absent", async () => {
-        const stores = getStores({});
-        // Default cohort is "alpha" per gate.ts
-        expect(await stores.cohortLookup("anonymous")).toBe("alpha");
-    });
 });
 
 describe("issueOtp / verifyOtp input validation (Phase 7-B Step 11)", () => {

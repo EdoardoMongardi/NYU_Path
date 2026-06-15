@@ -219,22 +219,6 @@ export type {
     CourseCatalogEntry,
 } from "./agent/index.js";
 
-// Phase 6.5 P-4: cohort gate + template-only recovery mode (§12.6.5)
-export {
-    COHORT_CONFIGS,
-    setCohortAssignment,
-    getCohortAssignment,
-    userInCohort,
-    getCohortConfig,
-    runRecoveryMode,
-} from "./cohort/gate.js";
-export type {
-    Cohort,
-    CohortConfig,
-    CohortAssignment,
-    TemplateOnlyResult,
-} from "./cohort/gate.js";
-
 // Phase 7-A P-9: §7.3 session-summary persistence (rolling window of 5)
 export {
     InMemorySessionStore,

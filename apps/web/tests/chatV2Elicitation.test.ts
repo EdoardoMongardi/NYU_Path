@@ -21,7 +21,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { POST } from "../app/api/chat/v2/route";
 import {
-    setCohortAssignment,
     parseDpr,
     ELICITATION_LEAD_IN,
     type ChatTurnResult,
@@ -37,7 +36,7 @@ const AGENT_ANSWER = "You can plan your courses for next semester.";
 // Mock ONLY the streaming agent loop + force the proactive detector to
 // fire. importOriginal keeps `decideElicitationAppend`,
 // `elicitationQuestionFor`, `ELICITATION_LEAD_IN`, `validateResponse`,
-// cohort logic, etc. all REAL.
+// etc. all REAL.
 vi.mock("@nyupath/engine", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@nyupath/engine")>();
     return {
@@ -121,7 +120,6 @@ describe("v2 route proactive elicitation — append-not-substitute (D7.2)", () =
         delete process.env.NYUPATH_SESSION_STORE_PATH;
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-elicitation-test";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-elicitation-test";
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
     });
 
@@ -134,7 +132,6 @@ describe("v2 route proactive elicitation — append-not-substitute (D7.2)", () =
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
         vi.restoreAllMocks();
     });

@@ -1,6 +1,6 @@
 # Chat Route — `/api/chat/v2` (SSE Streaming Endpoint)
 
-> Last verified against code: 2026-06-13 (doc-sync pass: refreshed `route.ts` line citations after the file grew to 999 lines — D7.2 — added the post-loop proactive-elicitation append: on the OK terminal path the route appends one bounded question to `done.finalText`, append-not-substitute + frequency-bounded; see §11).
+> Last verified against code: 2026-06-15 (cohort gate subsystem removed — the per-turn cohort lookup, the `cohortLookup` store field, and the recovery/limited-availability path are all gone; the agent loop now runs unconditionally every turn. Prior 2026-06-13 pass: refreshed `route.ts` line citations and added the post-loop proactive-elicitation append on the OK terminal path; see §11).
 
 ## Purpose
 
@@ -84,8 +84,7 @@ Tools never write to `chatHistoryStore` directly — the route handles that AFTE
 **Each turn now hydrates:**
 - the **client-resent** DPR (re-validated, rebuilt into a profile every turn),
 - the **client-supplied** `history` (last ~10 messages),
-- the rolling **session summaries** read from `sessionStore.get(userId)` (`route.ts:420-422`),
-- the **cohort flag** from `stores.cohortLookup(userId)` (`route.ts:414`), and
+- the rolling **session summaries** read from `sessionStore.get(userId)`, and
 - **(P3.1)** the persisted `forwardSchedule` / `studentDraftPlan` / `schedulePreferences` via `scheduleStore.loadLatestSchedule` + `loadPreferences`.
 
 **Profile write-clobber — fixed in P3.2.** This is READ-hydration of the plan + prefs only; the route still rebuilds `StudentProfile` from the **client-resent** DPR every turn (it does **not** yet read the persisted profile via `profileStore.get` into the session — that read-hydration is Phase 4). But the *write* side is fixed: the bootstrap upsert below (§5.3) is now **gated to initial onboarding** (`profileStore.get(userId) === null`), so it no longer rewrites `students.profile` on every message and no longer **clobbers confirmed profile mutations** a prior `confirm_profile_update` wrote, nor appends a synthetic audit row per message. The related preferences-from-`{}` wipe is also resolved: a chat-driven `confirm_plan_change` now reads the P3.1-hydrated `session.schedulePreferences` (not `{}`), so existing pins survive.
@@ -106,7 +105,7 @@ The route performs a no-throw bootstrap upsert: when `userId !== "anonymous"` **
 
 ## 6. Pre-Loop Dispatch (removed)
 
-There is no longer a keyword/template short-circuit at the start of a turn. The old `preLoopDispatch` keyword router was removed; every question enters the agent loop directly, where `search_policy` (pure RAG over the bulletin corpus) is consulted only when the agent decides it's relevant. The **only** non-loop path is recovery mode ([§11](#11-recovery-mode-cohort-gate-failing)), and that no longer matches templates either — the curated template corpus was deleted.
+There is no longer a keyword/template short-circuit at the start of a turn. The old `preLoopDispatch` keyword router was removed; every question enters the agent loop directly, where `search_policy` (pure RAG over the bulletin corpus) is consulted only when the agent decides it's relevant. The agent loop now runs **unconditionally** on every turn — the only pre-loop short-circuit that can replace it is the reactive clarifier gate ([§7](#7-clarifier-gate)), which streams a clarifying question and returns before the loop.
 
 ## 7. Clarifier Gate
 
@@ -162,15 +161,15 @@ The full event union (`sseStream.ts:13-29`) is:
 |---|---|---|
 | `tool_invocation_start` | `toolName`, `args` (object) | Each time the loop starts a tool (`route.ts:671-677`). |
 | `tool_invocation_done` | `toolName`, `summary?`, `error?` | Each time a tool finishes (`route.ts:678-686`). `summary` is the tool's human-readable string; `error` is set when the tool threw. |
-| `token` | `text` | Each `text_delta` from the loop, plus the chunked clarifier reply and the recovery-mode reply (`route.ts:691-692`, `454-456`, `536`). |
+| `token` | `text` | Each `text_delta` from the loop, plus the chunked clarifier reply. |
 | `thinking` | `text` | Each `thinking_delta` from the loop (`route.ts:687-690`). The route also joins these into a string for chat-history persistence. |
 | `validator_block` | `violations[]` (each `{ kind, detail, caveatId?, number? }`) | When the post-loop validator finds any violations (`route.ts:811-814`). Advisory, not fatal — `done` still fires. |
 | `forward_schedule_update` | `schedule` (full `ForwardSchedule`) | When `session.forwardSchedule.computedAt` changed, OR (only if the valid slot didn't change) when `session.studentDraftPlan.computedAt` changed. The valid plan wins when both changed (`route.ts:713-730`). |
 | `forward_materialization_update` | `result` (full `ForwardMaterializationPayload`) | When `session.lastMaterializationResult.computedAt` changed during the turn (`route.ts:745-750`). |
-| `done` | `finalText`, `modelUsedId` | The last event of a successful turn (`route.ts:857-861`, plus the clarifier and recovery and context-limit paths). `modelUsedId` may carry suffixes like `:context_limit` or `cohort:<name>:limited`. |
+| `done` | `finalText`, `modelUsedId` | The last event of a successful turn (plus the clarifier and context-limit paths). `modelUsedId` may carry a suffix like `:context_limit`. |
 | `error` | `message` | Emitted when the loop ends in a non-ok kind, throws, or finds the primary client missing (`route.ts:524`, `765-771`, `950-953`). |
 
-> **Correction from the prior doc:** there is **no `template_match` event kind**. The SSE union has never carried one in the current code; recovery mode emits only `token` + `done` ([§11](#11-recovery-mode-cohort-gate-failing)).
+> **Correction from the prior doc:** there is **no `template_match` event kind**. The SSE union has never carried one in the current code.
 
 The encoder coalesces one event into one SSE block. It uses a `ReadableStream` with a queued-writes buffer: if `writer.write` is called before the stream controller exists, the encoded bytes are buffered and flushed on `start` (`sseStream.ts:39-83`).
 
@@ -192,12 +191,6 @@ After the post-loop validator runs and `stripFabricatedBlockquotes` has (conditi
 2. Calls the pure `decideElicitationAppend({ report, finalText: finalTextOut, priorMessages })`. When it returns `{ append: true, text }`, the route does `finalTextOut = `${finalTextOut}\n\n${text}``.
 
 Because `finalTextOut` is mutated **before** the `done` write, the appended question rides into `done.finalText` (the client reconciles the rendered bubble to `ev.finalText`) **and** into the durable transcript (§13 persists `finalTextOut`). That self-propagation is what makes the **bounded-frequency guard** work: `decideElicitationAppend` greps the LAST assistant message in `priorMessages` for the stable `ELICITATION_LEAD_IN` marker and stays silent when we elicited on the immediately-prior turn — so no two proactive asks land back-to-back. It also stays silent when the agent's own reply already asks (ends with `?` or already carries the lead-in). The whole block is wrapped in try/catch — a detector failure logs and proceeds with the un-appended answer, never breaking the turn. The append-not-substitute guarantee is **structural** in the engine: `decideElicitationAppend` only ever returns text to APPEND (or `null`).
-
-### Recovery mode (cohort-gate failing)
-
-When the user's cohort has `evalGateFailing: true` (passed in as `cohortGateFailing`, computed from `getCohortConfig(cohort)` at `route.ts:415` and threaded into `runV2Turn` at `route.ts:480`), the agent loop is bypassed entirely (`route.ts:534-539`). The route calls `runRecoveryMode(userMessage, session)`.
-
-**Important:** `runRecoveryMode` (`packages/engine/src/cohort/gate.ts:136-144`) does **no template matching** — the curated template corpus was removed in the "nothing hardcoded" pass. It unconditionally returns a transparent "limited availability" message (`kind: "no_match"`). The route streams that reply as one `token` event, then a `done` event with `modelUsedId = cohort:<name>:limited`, then closes. There is no `template_match` event and no `:template-only` suffix.
 
 ### Context-limit graceful termination
 
@@ -264,13 +257,13 @@ sequenceDiagram
     alt Bucket empty
         Route-->>Client: 429 + Retry-After
     end
-    Route->>Stores: profileStore, scheduleStore, chatHistoryStore, sessionStore, cohortLookup
+    Route->>Stores: profileStore, scheduleStore, chatHistoryStore, sessionStore
     Route->>Stores: scheduleStore.loadLatestSchedule + loadPreferences (P3.1 hydration)
     Route->>Session: buildStudentProfileFromDpr + assemble ToolSession inline (schedule/prefs hydrated)
     Note over Route,Session: P3.1 reads persisted schedule + prefs; P3.2 gates the profile upsert to initial onboarding (live session still uses the body-DPR profile this turn)
     Route->>Persist: bootstrap persistMutation — gated: only when no persisted profile exists
     Route->>Route: deriveTemporalContext + buildSystemPrompt + detectMultiIntent
-    Route->>Stores: cohortLookup(userId) + getCohortConfig + sessionStore.get → summaries
+    Route->>Stores: sessionStore.get → summaries
     Route-->>Client: 200 text/event-stream (opened)
     Note over Route,Client: Stream live; runV2Turn runs in background
 
@@ -281,36 +274,31 @@ sequenceDiagram
         Route-->>Client: token (chunked) + done; close
     end
 
-    alt cohortGateFailing
-        Route->>Route: runRecoveryMode (no templates; "limited availability")
-        Route-->>Client: token + done (cohort:<name>:limited)
-    else Normal path
-        Route->>Route: snapshot computedAt timestamps (3x)
-        Route->>Loop: runAgentTurnStreaming(primary, registry, session, ...)
-        loop For each yielded event
-            Loop-->>Route: tool_invocation_start / _done
-            Route-->>Client: tool_invocation_start / _done
-            Loop-->>Route: thinking_delta / text_delta
-            Route-->>Client: thinking / token
-            Loop-->>Route: done (ChatTurnResult)
-        end
-        Route->>Session: compare computedAt (schedule / draft / materialization)
-        Route-->>Client: forward_schedule_update / forward_materialization_update (if changed)
+    Route->>Route: snapshot computedAt timestamps (3x)
+    Route->>Loop: runAgentTurnStreaming(primary, registry, session, ...)
+    loop For each yielded event
+        Loop-->>Route: tool_invocation_start / _done
+        Route-->>Client: tool_invocation_start / _done
+        Loop-->>Route: thinking_delta / text_delta
+        Route-->>Client: thinking / token
+        Loop-->>Route: done (ChatTurnResult)
+    end
+    Route->>Session: compare computedAt (schedule / draft / materialization)
+    Route-->>Client: forward_schedule_update / forward_materialization_update (if changed)
 
-        alt context_limit
-            Route-->>Client: done with :context_limit suffix
-        else non-ok / no result
-            Route-->>Client: error
-        else ok
-            Route->>Route: validateResponse
-            alt violations
-                Route->>Route: stripFabricatedBlockquotes
-                Route-->>Client: validator_block
-            end
-            Route-->>Client: done
-            Route->>Persist: chatHistoryStore.appendMessage (user, then assistant)
-            Route->>Persist: sessionStore.appendSummary
+    alt context_limit
+        Route-->>Client: done with :context_limit suffix
+    else non-ok / no result
+        Route-->>Client: error
+    else ok
+        Route->>Route: validateResponse
+        alt violations
+            Route->>Route: stripFabricatedBlockquotes
+            Route-->>Client: validator_block
         end
+        Route-->>Client: done
+        Route->>Persist: chatHistoryStore.appendMessage (user, then assistant)
+        Route->>Persist: sessionStore.appendSummary
     end
 
     Route->>Route: finally → writer.close()
@@ -324,4 +312,3 @@ sequenceDiagram
 - `apps/web/lib/buildSession.ts` — the profile builder ([build-session.md](build-session.md)).
 - `apps/web/lib/policyRagSetup.ts` — the boot-time RAG hydrator ([build-session.md §3](build-session.md#3-boot-time-rag-setup-policyragsetup)).
 - `apps/web/app/api/chat/route.ts` — the legacy v1 route (onboarding + chitchat only; 410 Gone post-onboarding) — see [session-and-onboarding-routes.md](session-and-onboarding-routes.md).
-- `packages/engine/src/cohort/gate.ts` — `runRecoveryMode` (no-template "limited availability" path).
