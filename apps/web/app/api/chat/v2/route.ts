@@ -228,6 +228,77 @@ export async function POST(req: NextRequest): Promise<Response> {
             ? { homeSchoolOverride: body.homeSchool }
             : {}),
     });
+
+    // E1.2 (Phase 4) — read the student's CONFIRMED profile back into
+    // `session.student`. `student` is rebuilt fresh from the re-sent body
+    // DPR every turn, so a confirmed `confirm_profile_update` edit (a
+    // corrected homeSchool, declared programs, catalogYear, or visa
+    // status) was invisible to the agent until now — P3.2 wired the WRITE
+    // path and explicitly deferred this READ-back (route.ts P3.2 comment
+    // below). We merge ONLY the four fields `confirm_profile_update` can
+    // mutate (the `PendingProfileMutation["field"]` union); the fresh body
+    // DPR stays authoritative for course history / standing / credits, so
+    // we do NOT blindly assign the whole persisted profile (it may carry a
+    // stale DPR snapshot).
+    //
+    // Precedence (freshest explicit signal wins): an explicit value the
+    // CLIENT sent THIS turn beats the persisted value, which beats the DPR
+    // derivation. For homeSchool/visaStatus the body already wrote
+    // `student` via the constructor overrides above, so persisted applies
+    // ONLY when the body did NOT send a usable value. catalogYear and
+    // declaredPrograms are never sent by the body, so persisted (when
+    // present/non-empty) always overrides the DPR-derived value.
+    //
+    // CRITICAL ORDERING: this runs BEFORE schoolConfig is loaded (below) —
+    // schoolConfig keys on `student.homeSchool`, so a confirmed home school
+    // MUST land here or every school-scoped tool would silently use the
+    // wrong school (a binding "never silently CAS" concern).
+    //
+    // Guarded for userId === "anonymous" (no durable store row) exactly
+    // like the bootstrap persist. Best-effort: a load failure must NOT
+    // break the live turn — warn and continue with the DPR-derived values.
+    // This is a SEPARATE single-PK read from the P3.2 write-gate's
+    // existence check below (correctness + scope-safety over the micro-opt).
+    if (userId !== "anonymous") {
+        try {
+            const persistedProfile = await stores.profileStore.get(userId);
+            if (persistedProfile) {
+                // homeSchool: persisted wins only when the body did NOT
+                // send an explicit homeSchool this turn (the constructor
+                // override already reflects the body value when it did).
+                const bodySentHomeSchool =
+                    typeof body.homeSchool === "string" && body.homeSchool.length > 0;
+                if (!bodySentHomeSchool && persistedProfile.homeSchool) {
+                    student.homeSchool = persistedProfile.homeSchool;
+                }
+                // visaStatus: persisted wins only when the body did NOT
+                // send a valid f1/domestic this turn.
+                const bodySentVisa =
+                    body.visaStatus === "f1" || body.visaStatus === "domestic";
+                if (!bodySentVisa && persistedProfile.visaStatus) {
+                    student.visaStatus = persistedProfile.visaStatus;
+                }
+                // catalogYear: body never sends this — persisted (when
+                // present) overrides the DPR-derived value.
+                if (persistedProfile.catalogYear) {
+                    student.catalogYear = persistedProfile.catalogYear;
+                }
+                // declaredPrograms: body never sends this — persisted (when
+                // non-empty) overrides the DPR-derived value.
+                if (
+                    Array.isArray(persistedProfile.declaredPrograms) &&
+                    persistedProfile.declaredPrograms.length > 0
+                ) {
+                    student.declaredPrograms = persistedProfile.declaredPrograms;
+                }
+            }
+        } catch (err) {
+            console.warn(
+                `[v2 route] confirmed-profile read-back failed for ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+
     const searchCoursesFn = getCourseSearchFn();
     const ragBundle = getPolicyRagBundle();
     // Phase 7-E reviewer-followup — load the home-school's config so
