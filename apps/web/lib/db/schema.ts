@@ -5,7 +5,6 @@
 //   - students          (current canonical profile per studentId)
 //   - sessionSummaries  (rolling window of last 5 per student)
 //   - auditLog          (immutable record of confirmed profile mutations)
-//   - cohortAssignments (userId → cohort, replaces in-memory setCohortAssignment)
 //
 // Running on Neon Postgres in production. Drizzle migrations live in
 // apps/web/drizzle/. Schema is intentionally narrow — we only persist
@@ -18,12 +17,9 @@ import {
     timestamp,
     jsonb,
     serial,
-    pgEnum,
     primaryKey,
     index,
 } from "drizzle-orm/pg-core";
-
-export const cohortEnum = pgEnum("cohort", ["alpha", "beta", "invite", "public", "limited"]);
 
 export const students = pgTable("students", {
     studentId: text("student_id").primaryKey(),
@@ -71,13 +67,6 @@ export const auditLog = pgTable("audit_log", {
 }, (t) => ({
     byStudent: index("audit_log_student_idx").on(t.studentId, t.confirmedAt),
 }));
-
-export const cohortAssignments = pgTable("cohort_assignments", {
-    userId: text("user_id").primaryKey(),
-    cohort: cohortEnum("cohort").notNull(),
-    assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
-    assignedBy: text("assigned_by"),
-});
 
 /**
  * Email-OTP auth (Phase 7-B Step 11). One row per outstanding OTP;

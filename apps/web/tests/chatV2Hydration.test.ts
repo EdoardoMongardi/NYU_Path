@@ -17,7 +17,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { setCohortAssignment, parseDpr, type ChatTurnResult } from "@nyupath/engine";
+import { parseDpr, type ChatTurnResult } from "@nyupath/engine";
 import { getStores, resetStoresForTests } from "../lib/db/store";
 import type { SchedulePreferences } from "@nyupath/shared";
 import {
@@ -36,7 +36,7 @@ const holder = vi.hoisted(() => ({
 }));
 
 // Mock ONLY the streaming agent loop. `importOriginal` keeps every other
-// engine export real (validator / cohort / DPR parse / clarifier all run
+// engine export real (validator / DPR parse / clarifier all run
 // for real). The stub records the session it's called with (3rd arg) and
 // yields a minimal `ok` ChatTurnResult so the route reaches `done`.
 vi.mock("@nyupath/engine", async (importOriginal) => {
@@ -103,9 +103,6 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         // loop is mocked so no real provider call is made.
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-hydration";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-hydration";
-        // Default cohort `alpha` runs the full agent loop (evalGateFailing
-        // false) so the turn reaches runAgentTurnStreaming.
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
         holder.session = undefined;
     });
@@ -119,7 +116,6 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -140,8 +136,6 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         };
         const stores = getStores({});
         await stores.scheduleStore.persistPreferences(userId, prefs);
-
-        setCohortAssignment({ overrides: { [userId]: "alpha" }, default: "alpha" });
 
         const res = await POST(fakeRequest({
             // NON-ambiguous message — an ambiguous one would trip the
@@ -170,8 +164,6 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         const userId = "hydration-no-schedule";
         // Persist NOTHING to any store. The profile/DPR are supplied by the
         // request body, so the schedule + prefs slots must hydrate to undefined.
-
-        setCohortAssignment({ overrides: { [userId]: "alpha" }, default: "alpha" });
 
         const res = await POST(fakeRequest({
             message: "What courses should I take next semester for my computer science major?",

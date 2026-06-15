@@ -26,19 +26,16 @@ import {
     buildSystemPrompt,
     // Phase 8 A1: preLoopDispatch (the keyword/template router) was
     // removed from the active path — every question enters the agent
-    // loop. runRecoveryMode handles the cohort-gate-failing path.
+    // loop.
     validateResponse,
     createPrimaryClient,
     createFallbackClient,
-    getCohortConfig,
-    runRecoveryMode,
     summariesAsPriorMessage,
     JsonlFileSink,
     type FallbackSink,
     type ToolSession,
     type LLMMessage,
     type ToolInvocation,
-    type Cohort,
 } from "@nyupath/engine";
 import {
     loadSchoolConfig,
@@ -104,9 +101,9 @@ interface V2RequestBody {
     graduationTarget?: string | null;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     correlationId?: string;
-    /** Phase 7-A: stable user id used for cohort lookup. When omitted,
-     *  the cohort gate falls through to the configured default
-     *  (`alpha` until ops sets otherwise). */
+    /** Phase 7-A: stable user id (cookie-derived when authenticated,
+     *  per-browser UUID otherwise). Used for the per-student daily
+     *  rate limit, session-summary persistence, and end-of-turn writes. */
     userId?: string;
     /** CAS-1 (Task 1.5): onboarding-confirmed home school for this student
      *  (e.g. "cas", "stern", "tandon", "shanghai", "nyuad", …).
@@ -408,12 +405,6 @@ export async function POST(req: NextRequest): Promise<Response> {
         ? `${systemPrompt}\n\n${briefing}`
         : systemPrompt;
 
-    // Phase 7-A P-1 + Phase 7-B Step 8b: cohort gate. The store factory
-    // checks Postgres first (when DATABASE_URL is set) and falls back
-    // to the engine's in-memory `userInCohort()` otherwise.
-    const cohort: Cohort = await stores.cohortLookup(userId);
-    const cohortConfig = getCohortConfig(cohort);
-
     // Phase 7-B Step 9: read sessionSummaries and prepend as a system
     // priorMessage so the agent has cross-session continuity.
     let sessionSummaryContext: string | null = null;
@@ -476,8 +467,6 @@ export async function POST(req: NextRequest): Promise<Response> {
         userMessage: body.message,
         history: body.history,
         correlationId: body.correlationId,
-        cohort,
-        cohortGateFailing: cohortConfig.evalGateFailing,
         sessionSummaryContext,
         userId,
         sessionStore: stores.sessionStore,
@@ -501,8 +490,6 @@ interface V2TurnArgs {
     userMessage: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     correlationId?: string;
-    cohort: Cohort;
-    cohortGateFailing: boolean;
     /** Phase 7-B Step 9 — formatted sessionSummaries prefix or null. */
     sessionSummaryContext: string | null;
     /** Phase 7-E W12.5 — canonical student id (cookie-derived when
@@ -519,26 +506,13 @@ interface V2TurnArgs {
 }
 
 async function runV2Turn(args: V2TurnArgs): Promise<void> {
-    const { primary, fallback, session, systemPrompt, userMessage, history, correlationId, cohort, cohortGateFailing, sessionSummaryContext, userId, sessionStore, writer } = args;
+    const { primary, fallback, session, systemPrompt, userMessage, history, correlationId, sessionSummaryContext, userId, sessionStore, writer } = args;
     if (!primary) {
         writer.write({ kind: "error", message: "primary LLM client not configured" });
         writer.close();
         return;
     }
     try {
-        // §12.6.5 — recovery mode. When the user's cohort has
-        // `evalGateFailing: true` (e.g., the production composite dropped
-        // below 0.90), the agent loop is disabled. The curated template
-        // corpus was removed, so there's no degraded answer path — we
-        // surface a transparent "limited availability" reply.
-        if (cohortGateFailing) {
-            const recovery = runRecoveryMode(userMessage, session);
-            writer.write({ kind: "token", text: recovery.reply });
-            writer.write({ kind: "done", finalText: recovery.reply, modelUsedId: `cohort:${cohort}:limited` });
-            writer.close();
-            return;
-        }
-
         // Phase 8 Stage A1 — preLoopDispatch DEMOTED.
         // Pre-Phase-8 we ran a keyword/similarity matcher BEFORE the
         // agent loop and short-circuited with template.body when it
@@ -556,10 +530,6 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
         // curated template registry was removed) — the AGENT decides
         // when to call it and whether to quote, blend with DPR data,
         // or skip.
-        //
-        // Recovery mode (cohortConfig.evalGateFailing, above) keeps
-        // template-only routing because in that mode we deliberately
-        // disable LLM behavior.
 
         // Convert prior history (from the client) into LLMMessages.
         // Phase 7-B Step 9: prepend the formatted sessionSummaries

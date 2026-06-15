@@ -1,24 +1,22 @@
 # Database and Stores
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-15 (cohort gate subsystem removed).
 
 ## Purpose
 
-This is the long-term memory of the app — the Postgres database where everything that needs to survive a refresh lives. When a student logs in for the first time, a row is created for them; from then on, every plan they generate, every preference they set, every chat message they send, and every confirmed change to their profile gets stored under their NetID. The code is organized into five "store" classes, each owning one slice (profile, schedule, chat history, session summaries, cohort assignment) and each speaking a clean interface so the rest of the app doesn't have to know about SQL. If no database is configured (local dev without setup), everything quietly falls back to in-memory storage that disappears on restart. Migrations are managed separately and applied during deploys.
+This is the long-term memory of the app — the Postgres database where everything that needs to survive a refresh lives. When a student logs in for the first time, a row is created for them; from then on, every plan they generate, every preference they set, every chat message they send, and every confirmed change to their profile gets stored under their NetID. The code is organized into four "store" classes, each owning one slice (profile, schedule, chat history, session summaries) and each speaking a clean interface so the rest of the app doesn't have to know about SQL. If no database is configured (local dev without setup), everything quietly falls back to in-memory storage that disappears on restart. Migrations are managed separately and applied during deploys.
 
 ```mermaid
 flowchart LR
-    App[App code] --> Stores[Five store classes]
+    App[App code] --> Stores[Four store classes]
     Stores --> Profile[Profile + audit]
     Stores --> Schedule[Plans + preferences]
     Stores --> Chat[Chat history]
     Stores --> Sessions[Session summaries]
-    Stores --> Cohort[Cohort assignments]
     Profile --> Postgres[(Postgres database)]
     Schedule --> Postgres
     Chat --> Postgres
     Sessions --> Postgres
-    Cohort --> Postgres
     Stores -.no DB configured.-> Memory[(In-memory fallback)]
 ```
 
@@ -26,7 +24,7 @@ flowchart LR
 
 ## Overview
 
-The web app persists everything to a Postgres database accessed through Drizzle ORM. Five concrete store classes — ProfileStore, ScheduleStore, ChatHistoryStore, SessionStore, and CohortStore — sit on top of the same Drizzle client. Four of them implement persistence interfaces that the engine package (`@nyupath/engine`) defines; the fifth (CohortStore) is a web-layer addition that overlays the engine's in-memory cohort map.
+The web app persists everything to a Postgres database accessed through Drizzle ORM. Four concrete store classes — ProfileStore, ScheduleStore, ChatHistoryStore, and SessionStore — sit on top of the same Drizzle client. Each implements a persistence interface that the engine package (`@nyupath/engine`) defines.
 
 When no `DATABASE_URL` is configured, every store falls back to an in-memory implementation that the engine package already exports (`SessionStore` may instead be the engine's `FileBackedSessionStore` if `NYUPATH_SESSION_STORE_PATH` is set). This means the data-access layer still works locally without Postgres — only durability is lost.
 
@@ -37,10 +35,6 @@ A single factory (`getStores`) wires the bundle together and caches it at module
 ## Drizzle schema
 
 All tables are declared in `apps/web/lib/db/schema.ts`. They are intentionally narrow — only what the engine actively reads and writes.
-
-### Enum: cohort
-
-Defined at `schema.ts:26`. Five legal cohort values: `alpha`, `beta`, `invite`, `public`, `limited`. This is the type used by the `cohort_assignments` table.
 
 ### Table: students
 
@@ -90,17 +84,6 @@ An immutable append-only history of confirmed profile mutations. Defined at `sch
 | confirmed_at | timestamptz, not null, default now | When the confirm happened |
 
 Index `audit_log_student_idx` on `(student_id, confirmed_at)`.
-
-### Table: cohort_assignments
-
-Per-user cohort overrides. Defined at `schema.ts:76`.
-
-| Column | Type | Purpose |
-|---|---|---|
-| user_id | text, primary key | Identifier of the user the cohort applies to |
-| cohort | cohort enum, not null | One of `alpha`/`beta`/`invite`/`public`/`limited` |
-| assigned_at | timestamptz, not null, default now | When the assignment was made |
-| assigned_by | text | Optional actor identifier |
 
 ### Table: email_otps
 
@@ -210,16 +193,6 @@ Implements the engine's `SessionStore` interface. Owns `session_summaries` and a
 
 **trim(studentId)** (private) — Selects the IDs of the latest `MAX_SESSION_SUMMARIES` rows for the student, then issues `DELETE FROM session_summaries WHERE student_id = X AND id NOT IN (those IDs)`. Survives concurrent inserts because the delete is a single statement. (`sessionStorePostgres.ts:86`)
 
-### CohortStore — `cohortStorePostgres.ts`
-
-This one is web-layer-specific; the engine has no `CohortStore` interface, so this class implements its own two-method surface.
-
-**lookup(userId)** — Selects `cohort` from `cohort_assignments` keyed on `userId`. Returns the cohort or null. (`cohortStorePostgres.ts:22`)
-
-**assign(userId, cohort, assignedBy?)** — Upserts a row with `cohort`, fresh `assignedAt`, and optional `assignedBy`. (`cohortStorePostgres.ts:31`)
-
-In the factory bundle, the cohort lookup is wired through an overlay: the database row wins; if there is no row, the engine's in-memory `userInCohort` helper supplies a default (which itself respects any process-wide `setCohortAssignment` overrides).
-
 ## The DB client — `client.ts`
 
 A lazy module-level singleton over Neon's serverless driver.
@@ -244,17 +217,15 @@ This is the standard drizzle-kit setup: editing `schema.ts` and running the kit'
 
 ## The store factory — `store.ts`
 
-`getStores(env)` returns a `StoreBundle` containing the four engine-required stores plus a `cohortLookup` callback. It is memoized at module scope so subsequent calls reuse the same bundle (and the same connection pool).
+`getStores(env)` returns a `StoreBundle` containing the four engine-required stores. It is memoized at module scope so subsequent calls reuse the same bundle (and the same connection pool).
 
 The branching logic is:
 
 1. Call `getDb(env)`. If a Drizzle handle comes back:
-   - Construct a `PostgresCohortStore`.
-   - Build the bundle with `PostgresSessionStore`, `PostgresProfileStore`, `PostgresScheduleStore`, `PostgresChatHistoryStore`, and a `cohortLookup` that prefers the DB row and falls through to `userInCohort` (the engine's in-memory map) when the DB has nothing.
+   - Build the bundle with `PostgresSessionStore`, `PostgresProfileStore`, `PostgresScheduleStore`, and `PostgresChatHistoryStore`.
 2. Otherwise, build an in-memory bundle:
    - `sessionStore` is either `FileBackedSessionStore` (if `NYUPATH_SESSION_STORE_PATH` is set) or `InMemorySessionStore`.
    - The others are the engine's `InMemoryProfileStore`, `InMemoryScheduleStore`, `InMemoryChatHistoryStore`.
-   - `cohortLookup` calls the engine's `userInCohort` directly.
 
 `resetStoresForTests()` clears the cache so the next call rebuilds. (`store.ts:79`)
 
@@ -272,10 +243,8 @@ flowchart TD
     PG --> Schedule[PostgresScheduleStore]
     PG --> Chat[PostgresChatHistoryStore]
     PG --> Session[PostgresSessionStore]
-    PG --> Cohort[PostgresCohortStore + engine overlay]
     Profile --> Tables[(students + audit_log)]
     Schedule --> SchedT[(forward_schedules + schedule_preferences)]
     Chat --> ChatT[(chat_messages)]
     Session --> SessT[(session_summaries + students.last_session_date)]
-    Cohort --> CohortT[(cohort_assignments)]
 ```

@@ -82,7 +82,7 @@ Public methods:
 |---|---|---|
 | `get(studentId)` | returns `StudentSessionRecord` | If none exists, returns an empty record (the studentId plus an empty `sessionSummaries` array). |
 | `appendSummary(studentId, summary)` | returns the updated record | Appends one `SessionSummary`, trims to `MAX_SESSION_SUMMARIES`, persists. |
-| `replace(record)` | returns void | Replace the whole record (used by tests and cohort imports). |
+| `replace(record)` | returns void | Replace the whole record (used by tests and by `appendSummary` internally). |
 
 `SessionSummary` carries `date` and a `summary` string. `StudentSessionRecord` carries `studentId`, `sessionSummaries`, and optional `lastSessionDate`.
 
@@ -160,7 +160,7 @@ What depends on these modules: any code that reads or mutates persistent student
 
 ### Postgres-backed implementations
 
-The engine ships only in-memory and file-backed defaults. The web layer supplies Postgres-backed implementations that satisfy each of the four interfaces — one adapter per store under `apps/web/lib/db/`: `profileStorePostgres.ts`, `scheduleStorePostgres.ts`, `chatHistoryStorePostgres.ts`, `sessionStorePostgres.ts` (plus `cohortStorePostgres.ts`). The engine cares only about the interface contract; the engine itself never imports from `apps/web`. See [web/db-and-stores.md](../web/db-and-stores.md) for the adapter details and the `forward_schedules` / `chat_messages` / `students` table mapping.
+The engine ships only in-memory and file-backed defaults. The web layer supplies Postgres-backed implementations that satisfy each of the four interfaces — one adapter per store under `apps/web/lib/db/`: `profileStorePostgres.ts`, `scheduleStorePostgres.ts`, `chatHistoryStorePostgres.ts`, `sessionStorePostgres.ts`. The engine cares only about the interface contract; the engine itself never imports from `apps/web`. See [web/db-and-stores.md](../web/db-and-stores.md) for the adapter details and the `forward_schedules` / `chat_messages` / `students` table mapping.
 
 ## Edge cases / failure modes
 

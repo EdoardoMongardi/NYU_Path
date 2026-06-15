@@ -18,7 +18,6 @@ import {
     chatMessages,
     auditLog,
     sessionSummaries,
-    cohortAssignments,
 } from "../lib/db/schema";
 import { SESSION_COOKIE } from "../lib/auth/session";
 import { resetStoresForTests } from "../lib/db/store";
@@ -156,7 +155,6 @@ describe("/api/session/clear (Phase 16 Task B)", () => {
         expect(deletedTables).toContain(schemaFresh.schedulePreferences);
         expect(deletedTables).toContain(schemaFresh.auditLog);
         expect(deletedTables).toContain(schemaFresh.sessionSummaries);
-        expect(deletedTables).toContain(schemaFresh.cohortAssignments);
         expect(deletedTables).toContain(schemaFresh.students);
         expect(deletedTables[deletedTables.length - 1]).toBe(schemaFresh.students);
 

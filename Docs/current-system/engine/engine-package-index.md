@@ -1,6 +1,6 @@
 # `@nyupath/engine` Package Index
 
-> Last verified against code: 2026-06-13 (doc-sync pass: corrected §3/§4 index.ts + agent/index.ts export-category line ranges drifted by Phase-3 elicitation exports).
+> Last verified against code: 2026-06-15 (cohort gate subsystem removed).
 
 ## Purpose
 
@@ -62,8 +62,6 @@ dpr/
 rag/
   index.ts chunker.ts corpus.ts embedder.ts vectorStore.ts reranker.ts
   policySearch.ts policyCorpusCache.ts sectionRetrieval.ts ragScopeFilter.ts retry.ts
-cohort/
-  gate.ts                     ← COHORT_CONFIGS, cohort assignment, runRecoveryMode
 persistence/
   sessionStore.ts profileStore.ts scheduleStore.ts chatHistoryStore.ts
 agent/
@@ -98,10 +96,9 @@ File ranges refer to `packages/engine/src/index.ts`.
 | DPR | `:132-161` | `parseDpr`, `degreeProgressReportSchema`, `walkRequirements`, `notSatisfiedRequirements`, `findRequirementById`, `dprToAuditResults`, `dprToPrimaryAuditResult`, `deriveTemporalContext`, `normalizeGraduationTarget`, and the `DPR*` types |
 | Embedders | `:167-168` | `LocalHashEmbedder`, `OpenAIEmbedder`, `cosineSim`, `Embedder` |
 | RAG (vector store, reranker, search, section retrieval) | `:170-211` | `VectorStore`, `LocalLexicalReranker`, `CohereReranker`, `policySearch`, `CONFIDENCE_HIGH`/`CONFIDENCE_MEDIUM`/`COHERE_CONFIDENCE_BANDS`, `buildCorpus`, `loadPolicyCorpusFromCache`, `locateBestSource`/`reassembleSource`/`reassembleSection`, plus many types |
-| Semantic course search | `:212-220` | `searchCoursesTool`, `createSemanticCourseSearchFn`, `CourseSearchFn`, `SemanticCourseSearchOptions`, `CourseCatalogEntry` |
-| Cohort gate | `:222-236` | `COHORT_CONFIGS`, `setCohortAssignment`, `getCohortAssignment`, `userInCohort`, `getCohortConfig`, `runRecoveryMode`, plus `Cohort`/`CohortConfig`/`CohortAssignment`/`TemplateOnlyResult` |
-| Persistence | `:238-269` | session store (`InMemorySessionStore`, `FileBackedSessionStore`, `defaultSessionStore`, `summariesAsPriorMessage`, `MAX_SESSION_SUMMARIES`), `InMemoryProfileStore`, `InMemoryScheduleStore` + `pruneCompletedPins`, `InMemoryChatHistoryStore`, plus `*Store` types |
-| DPR fingerprint | `:270` | `computeDprFingerprint` |
+| Semantic course search | `:212-221` | `searchCoursesTool`, `createSemanticCourseSearchFn`, `CourseSearchFn`, `SemanticCourseSearchOptions`, `CourseCatalogEntry` |
+| Persistence | `:222-253` | session store (`InMemorySessionStore`, `FileBackedSessionStore`, `defaultSessionStore`, `summariesAsPriorMessage`, `MAX_SESSION_SUMMARIES`), `InMemoryProfileStore`, `InMemoryScheduleStore` + `pruneCompletedPins`, `InMemoryChatHistoryStore`, plus `*Store` types |
+| DPR fingerprint | `:254` | `computeDprFingerprint` |
 
 The agent group (`index.ts:48-125`) re-exports: the loop (`runAgentTurn`, `runAgentTurnStreaming`), `buildDefaultRegistry`, `buildSystemPrompt`, the validators (`validateResponse`, `detectMultiIntent`, `renderMultiIntentBriefing`, `detectAmbiguity`, `askClarification`, `extractClaimNumbers`), `RecordingLLMClient`, the two live clients (`OpenAIEngineClient`, `AnthropicEngineClient`), the factories (`createPrimaryClient`, `createFallbackClient`) + `DEFAULT_PRIMARY_MODEL` / `DEFAULT_FALLBACK_MODEL`, `materializeSections`, and a curated subset of the tool constants (`runFullAuditTool`, `whatIfAuditTool`, `searchPolicyTool`, `getProgramRequirementsTool`, `updateProfileTool`, `confirmProfileUpdateTool`, `getCreditCapsTool`, `searchAvailabilityTool`, `planForwardDegreeTool`, `proposePlanChangeTool`, `confirmPlanChangeTool`) for routes that invoke a tool programmatically without the loop.
 

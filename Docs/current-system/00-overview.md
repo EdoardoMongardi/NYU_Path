@@ -1,6 +1,6 @@
 # NYU Path — Project Audit
 
-> Last verified against code: 2026-06-13 (doc-sync pass: added probe_counterfactual to the tool catalog, corrected the response validator to 8 checks, marked the Phase-3 advisor layer shipped, fixed the engine-docs count to 23).
+> Last verified against code: 2026-06-15 (cohort gate subsystem removed). Prior pass 2026-06-13: added probe_counterfactual to the tool catalog, corrected the response validator to 8 checks, marked the Phase-3 advisor layer shipped, fixed the engine-docs count to 23.
 
 > **About this document set.** This is a code-truth audit of the NYU Path codebase. Every claim was derived from reading the actual source files. No code comments, no existing documentation, and no narrative prose were used as evidence. Where code and surrounding writing disagreed, the code won.
 
@@ -135,7 +135,7 @@ graph TB
         PLANAPI[Plan-edit endpoints<br/>/api/plan/{add,move,swap,...}]
         ONBOARD[Onboarding<br/>/api/onboard]
         AUTH[Email OTP login<br/>/api/auth/*]
-        DB[(Postgres database<br/>via Drizzle ORM:<br/>chat history,<br/>saved schedules,<br/>profiles,<br/>cohort assignments)]
+        DB[(Postgres database<br/>via Drizzle ORM:<br/>chat history,<br/>saved schedules,<br/>profiles)]
     end
 
     subgraph Engine["The brain + tools (packages/engine)"]

@@ -11,8 +11,6 @@
 // `schedule_preferences`, `chat_messages`, `audit_log`,
 // `session_summaries`) all `ON DELETE CASCADE` on `students`,
 // so deleting the `students` row alone is sufficient for those.
-// `cohort_assignments` keys on `userId` (not `studentId`) and
-// has no cascade, so we delete it explicitly.
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -27,7 +25,6 @@ import {
     chatMessages,
     auditLog,
     sessionSummaries,
-    cohortAssignments,
 } from "../../../../lib/db/schema";
 
 export const runtime = "nodejs";
@@ -58,8 +55,8 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
 
     // Single transaction so a partial wipe never leaves the student
     // in an inconsistent half-deleted state. Order matters only for
-    // tables that don't have cascade FKs (cohort_assignments keys on
-    // userId, not studentId — separate path).
+    // the explicit deletes below; the `students` parent row is
+    // deleted last.
     try {
         await db.transaction(async (tx) => {
             // Explicit deletes mirror the docstring's contract — even
@@ -82,11 +79,6 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
             await tx
                 .delete(sessionSummaries)
                 .where(eq(sessionSummaries.studentId, studentId));
-            // cohort_assignments keys on userId; same value as
-            // studentId in our auth model (JWT sub IS the studentId).
-            await tx
-                .delete(cohortAssignments)
-                .where(eq(cohortAssignments.userId, studentId));
             // Delete the parent row last so the cascade-target rows
             // are explicitly gone before the parent disappears.
             await tx

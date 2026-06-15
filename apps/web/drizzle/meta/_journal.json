@@ -15,6 +15,13 @@
       "when": 1777935301503,
       "tag": "0001_phase16_persistence",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781511818516,
+      "tag": "0002_drop_cohort",
+      "breakpoints": true
     }
   ]
 }

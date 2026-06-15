@@ -22,7 +22,7 @@
 //
 // Harness mirrors chatV2Hydration.test.ts: resetStoresForTests() in
 // beforeEach, vi.mock("@nyupath/engine", importOriginal) stubbing
-// runAgentTurnStreaming (no real LLM), fake API keys, alpha cohort,
+// runAgentTurnStreaming (no real LLM), fake API keys,
 // validDprPayload() parse, NON-ambiguous message, userId in the body,
 // drain the SSE.
 // ============================================================
@@ -31,7 +31,6 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-    setCohortAssignment,
     parseDpr,
     type ChatTurnResult,
 } from "@nyupath/engine";
@@ -106,7 +105,6 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         delete process.env.NYUPATH_SESSION_STORE_PATH;
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-bootstrap-gate";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-bootstrap-gate";
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
     });
 
@@ -119,14 +117,12 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
         vi.restoreAllMocks();
     });
 
     it("does NOT clobber a confirmed profile edit on a subsequent message", async () => {
         const userId = "bootstrap-gate-confirmed-edit";
-        setCohortAssignment({ overrides: { [userId]: "alpha" }, default: "alpha" });
 
         const stores = getStores({});
 
@@ -185,7 +181,6 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         // A userId with NO persisted profile must still get one written
         // so a refresh / login can restore via /api/session/restore.
         const userId = "bootstrap-gate-first-onboarding";
-        setCohortAssignment({ overrides: { [userId]: "alpha" }, default: "alpha" });
 
         const stores = getStores({});
         // Nothing persisted yet.
@@ -210,7 +205,6 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         // message. After the gate, an already-onboarded user's second
         // message must not grow the audit log.
         const userId = "bootstrap-gate-no-audit-spam";
-        setCohortAssignment({ overrides: { [userId]: "alpha" }, default: "alpha" });
 
         const stores = getStores({});
         // In-memory store exposes a test-only audit log.

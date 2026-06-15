@@ -11,14 +11,14 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { POST } from "../app/api/chat/v2/route";
-import { setCohortAssignment, parseDpr, type ChatTurnResult } from "@nyupath/engine";
+import { parseDpr, type ChatTurnResult } from "@nyupath/engine";
 import { getStores, resetStoresForTests } from "../lib/db/store";
 
 // ------------------------------------------------------------
 // Mock ONLY the streaming agent loop. The post-loop session-summary
 // append (exercised by the last describe block) needs a completed turn
 // but must NOT make a real LLM call. `importOriginal` keeps every other
-// engine export real, so the validator / completeness / cohort logic the
+// engine export real, so the validator / completeness logic the
 // other suites in this file depend on is untouched.
 // ------------------------------------------------------------
 vi.mock("@nyupath/engine", async (importOriginal) => {
@@ -125,56 +125,6 @@ describe("v2 route input validation (Phase 6.1 WS2)", () => {
     });
 });
 
-describe("v2 route cohort gating (Phase 7-A P-1)", () => {
-    const ORIGINAL_KEY = process.env.OPENAI_API_KEY;
-    afterEach(() => {
-        if (ORIGINAL_KEY === undefined) delete process.env.OPENAI_API_KEY;
-        else process.env.OPENAI_API_KEY = ORIGINAL_KEY;
-        // Reset cohort assignment to default after each test.
-        setCohortAssignment({ default: "alpha" });
-    });
-
-    it("serves a 200 SSE stream from a `limited` cohort user without calling the agent loop", async () => {
-        // Even with NO API key configured, a `limited` cohort user
-        // must get a 200 SSE response (template-only / limited
-        // availability). This is the §12.6.5 cohort-D recovery
-        // contract: the agent loop is disabled but the route still
-        // serves curated answers + a graceful fallback.
-        delete process.env.OPENAI_API_KEY;
-        // Without an API key the route returns 503 BEFORE checking
-        // cohort. With a key it serves via runTemplateMatcherOnly.
-        // Phase 8 B5: primary swapped to anthropic; fallback is openai.
-        // Set BOTH so createPrimaryClient succeeds regardless of which
-        // provider is the configured default.
-        process.env.OPENAI_API_KEY = "sk-test-fake-key-for-cohort-test";
-        process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-cohort-test";
-        setCohortAssignment({
-            overrides: { "u-limited": "limited" },
-            default: "alpha",
-        });
-        const res = await POST(fakeRequest({
-            message: "Can I take a major course P/F?",
-            parsedData: validDprPayload(),
-            userId: "u-limited",
-        }) as never);
-        expect(res.status).toBe(200);
-        expect(res.headers.get("content-type")).toMatch(/text\/event-stream/);
-        // Drain the SSE stream and assert it contains a `done` event.
-        const reader = res.body!.getReader();
-        const decoder = new TextDecoder();
-        let body = "";
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            body += decoder.decode(value, { stream: true });
-        }
-        expect(body).toMatch(/event: done/);
-        // The recovery path tags modelUsedId so we can verify the
-        // agent loop did NOT run (no real model would have that id).
-        expect(body).toMatch(/cohort:limited:(?:template-only|limited)/);
-    });
-});
-
 // ============================================================
 // Session-summary persistence (post-loop appendSummary)
 // ============================================================
@@ -205,10 +155,6 @@ describe("v2 route session-summary persistence (post-loop append)", () => {
         // provider call is ever made with it.
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-summary-test";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-summary-test";
-        // Default cohort `alpha` runs the full agent loop (evalGateFailing
-        // is false), so the turn reaches the post-loop append rather than
-        // short-circuiting into recovery mode.
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
     });
 
@@ -221,7 +167,6 @@ describe("v2 route session-summary persistence (post-loop append)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
-        setCohortAssignment({ default: "alpha" });
         resetStoresForTests();
         vi.restoreAllMocks();
     });
