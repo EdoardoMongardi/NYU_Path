@@ -1,6 +1,6 @@
 # Chat UI Client — React Page & SSE Consumer
 
-> Last verified against code: 2026-06-13 (doc-sync pass: removed non-existent `onboardingStep` `"unsupported_major"` member; corrected the bouncing-dots loader citation to `page.tsx:1398-1407`).
+> Last verified against code: 2026-06-15 (Phase 4 E1: shared plan-state store + profile read-back — §3 now documents the `createPlanStore` / `useSyncExternalStore` binding; the two "Known limitations" bullets revised for the in-session shared store + the E1.2 server-side profile read-back). Prior 2026-06-13 pass: removed non-existent `onboardingStep` `"unsupported_major"` member; corrected the bouncing-dots loader citation to `page.tsx:1398-1407`.
 
 ## TL;DR
 
@@ -27,7 +27,7 @@ The chat UI is a single React Client Component (`apps/web/app/chat/page.tsx`) th
 The component manages four kinds of state in parallel:
 - The conversation thread (`messages[]` — a discriminated array of user / assistant / `plan_action_bubble` records).
 - The onboarding state machine (`onboardingStep` — drives whether v1 or v2 endpoint is used for a turn).
-- The forward-schedule sidebar inputs (`forwardSchedule`, `schedulePreferences`, `forwardMaterialization`, plus a memoized `sidebarDpr` + `sidebarStudent`).
+- The forward-schedule sidebar inputs (`forwardSchedule`, `schedulePreferences`, `forwardMaterialization` — now held in one shared `createPlanStore` snapshot read via `useSyncExternalStore`, Phase 4 E1.1 — plus a memoized `sidebarDpr` + `sidebarStudent`).
 - The plan-action bubble lifecycle (per-bubble polish + Stage 2 streams, plus an AbortController registry).
 
 Two streaming mechanics are layered on top:
@@ -96,7 +96,7 @@ The regex matches `pendingMutationId: pm_<alphanumeric_underscores>` in the tool
 
 ### Page-level state
 
-The page (`apps/web/app/chat/page.tsx:148-174`) holds:
+The page (`apps/web/app/chat/page.tsx:150-181`) holds:
 - `messages` — array of `Message` records (see below).
 - `input` — the textarea value.
 - `isLoading` — true between `handleSend` invoke and finalize.
@@ -104,9 +104,20 @@ The page (`apps/web/app/chat/page.tsx:148-174`) holds:
 - `isDragOver` — for the drag-drop file overlay.
 - `parsedData` — the discriminated DPR/transcript payload (used in every v2 turn body).
 - `visaStatus`, `graduationTarget` — collected during onboarding, threaded into each v2 body.
-- `forwardSchedule`, `schedulePreferences`, `forwardMaterialization` — sidebar inputs hydrated from `/api/session/restore` and updated by SSE events.
+- `forwardSchedule`, `schedulePreferences`, `forwardMaterialization` — the live plan-state triple. **Phase 4 Task E1.1**: these are no longer three independent `useState`s. They now live in **one shared, subscribable store** — `createPlanStore()` from `apps/web/app/chat/planState.ts`, created once per mount via `useMemo`, and read through a single `useSyncExternalStore(planStore.subscribe, planStore.getSnapshot, planStore.getSnapshot)` that destructures the three fields off the snapshot (`page.tsx:176-180`). See [Page-level plan-state store](#page-level-plan-state-store) below.
 - `sidebarOpen` — sidebar visibility toggle.
 - Refs: `fileInputRef`, `messagesEndRef`, `inputRef`, `bubbleAbortersRef` (a `Map<messageId, AbortController>`).
+
+### Page-level plan-state store
+
+**Phase 4 Task E1.1** lifted `forwardSchedule` + `schedulePreferences` + `forwardMaterialization` out of three independent server-push-only `useState`s into one shared, subscribable store (`apps/web/app/chat/planState.ts`). The store is **pure TypeScript with no React import** (so it is unit-testable in the node-env vitest harness without a DOM render — see `apps/web/tests/sharedPlanState.test.ts`); the `useSyncExternalStore` binding lives in `page.tsx`.
+
+`createPlanStore(initial?)` (`planState.ts:62-113`) returns a `PlanStore` exposing the React-19 external-store surface plus three typed setters:
+- `getSnapshot()` — returns the current `PlanState` **by reference** on a no-op read (React 19 caches it; allocating per read would log "getSnapshot should be cached" and risk an infinite loop).
+- `subscribe(listener)` — registers a listener; returns an unsubscribe fn.
+- `setForwardSchedule(s)` / `setSchedulePreferences(p)` / `setForwardMaterialization(m)` — each swaps the snapshot for a **new** object (never mutates in place) so React's referential-equality check fires and every consumer re-renders.
+
+Why it matters: chat-driven updates (SSE events + `/api/plan/*` HTTP responses) and sidebar-driven edits now write to the **same** in-page state, and every consumer — including `<ScheduleSidebar>` — re-renders from the one snapshot with **no server round-trip for the render**. All ~8 former setter call sites dispatch into the store: session-restore (`page.tsx:302-310`), the `forward_schedule_update` / `forward_materialization_update` SSE cases (`page.tsx:504`, `512`), the two `/api/plan/confirm` success paths (`page.tsx:904`, `941`), and the refresh-DPR handler (`page.tsx:992`). No `useState` setter for these three fields remains.
 
 ### The `Message` shape
 
@@ -154,8 +165,8 @@ The page (`apps/web/app/chat/page.tsx:148-174`) holds:
 - `tool_invocation_done` → patch the matching running status with `state: "done"` or `"error"`, plus `summary` and `error` fields. If the tool was `update_profile`, run `extractPendingMutationId(summary)` and set the message's `pendingMutationId` (`page.tsx:445-461`).
 - `token` → APPEND the text to `content`. The handler comment notes the route emits a single block-streamed token today; the append-rather-than-overwrite pattern is forward-compatible with a future intra-token streaming upgrade (`page.tsx:462-471`).
 - `thinking` → first event sets `hasRealThinking = true` and REPLACES any synthesized sentence narration (resets `thinkingRevealed = 0` so the typewriter restarts on the new text). Subsequent events append (`page.tsx:472-493`).
-- `forward_schedule_update` → call `setForwardSchedule(ev.schedule)` (`page.tsx:494-496`).
-- `forward_materialization_update` → call `setForwardMaterialization(ev.result)` (`page.tsx:497-504`).
+- `forward_schedule_update` → call `planStore.setForwardSchedule(ev.schedule)` (`page.tsx:503-505`).
+- `forward_materialization_update` → call `planStore.setForwardMaterialization(ev.result)` (`page.tsx:506-512`).
 - `validator_block` → set `validatorViolations` on the message (`page.tsx:505-513`).
 - `done` → server's `finalText` is authoritative; set `content = ev.finalText` and `completedAt = Date.now()`. Guards against any future partial-chunk artifact in the accumulated tokens (`page.tsx:514-520`).
 - `error` → don't leak the raw exception to the student. Log `ev.message` to console (for operator correlation), then either keep any partial content that arrived or fall back to a generic "something went wrong, email the operator" copy. Set `failedAt = Date.now()` (`page.tsx:521-536`).
@@ -243,9 +254,9 @@ sequenceDiagram
         else token
             Apply->>Page: append to content
         else forward_schedule_update
-            Apply->>Sidebar: setForwardSchedule
+            Apply->>Sidebar: planStore.setForwardSchedule
         else forward_materialization_update
-            Apply->>Sidebar: setForwardMaterialization
+            Apply->>Sidebar: planStore.setForwardMaterialization
         else validator_block
             Apply->>Page: set validatorViolations
         else done
@@ -391,18 +402,18 @@ The helper performs no LLM synthesis and no fabrication — when upstream data i
 
 The page is **mostly NOT optimistic on the chat side** — the regular chat flow only renders state the server has confirmed. The pre-created assistant `Message` is empty until `token` / `thinking` / `done` events arrive; content is set on `done` (server-authoritative), not optimistically.
 
-There is one explicit optimistic UI affordance: **plan-action bubble button locking**. When the user clicks Confirm / Override-anyway, `handleBubbleConfirm` and `handleBubbleOverrideAnyway` immediately call `patchMessage(messageId, { bubbleResolved: true })` BEFORE awaiting the `/api/plan/confirm` round-trip (`page.tsx:875`, `920`). This locks the buttons so a double-click can't double-submit. If the route fails, the buttons re-enable (`bubbleResolved: false`) and the failure copy lands in `content`.
+There is one explicit optimistic UI affordance: **plan-action bubble button locking**. When the user clicks Confirm / Override-anyway, `handleBubbleConfirm` and `handleBubbleOverrideAnyway` immediately call `patchMessage(messageId, { bubbleResolved: true })` BEFORE awaiting the `/api/plan/confirm` round-trip (`page.tsx:884`, `929`). This locks the buttons so a double-click can't double-submit. If the route fails, the buttons re-enable (`bubbleResolved: false`) and the failure copy lands in `content`.
 
-The schedule sidebar IS optimistic-on-the-server-side: when `/api/plan/confirm` returns a fresh `forwardSchedule`, the page calls `setForwardSchedule(result.data.forwardSchedule)` directly (`page.tsx:894-896`, `931-933`) — no waiting for the next chat-turn `forward_schedule_update` event. This bridges the gap between the route's HTTP-JSON response and the chat-side SSE channel.
+The schedule sidebar IS optimistic-on-the-server-side: when `/api/plan/confirm` returns a fresh `forwardSchedule`, the page calls `planStore.setForwardSchedule(result.data.forwardSchedule)` directly (`page.tsx:904`, `941`) — no waiting for the next chat-turn `forward_schedule_update` event. This bridges the gap between the route's HTTP-JSON response and the chat-side SSE channel; because the sidebar reads the same `createPlanStore` snapshot (E1.1), the edit lands in the sidebar render immediately.
 
 ## 7. Sidebar Interactions
 
 The `<ScheduleSidebar>` is rendered at the bottom of the page (`page.tsx:1465-1479`) with these props:
-- `schedule` ← `forwardSchedule` state (updated by `forward_schedule_update` SSE events AND by `/api/plan/confirm` HTTP responses).
-- `student` ← memoized `sidebarStudent` (rebuilt from `sidebarDpr` and `visaStatus` via `buildStudentProfileFromDpr` whenever either changes; null when no DPR is loaded — `page.tsx:1068-1078`). NOTE: this profile is derived **entirely client-side from the raw DPR** with `visaStatus` defaulting to `"domestic"` whenever the page has not captured `"f1"`; it has no access to the server's authenticated `studentId` / home-school overrides, so the sidebar's identity fields can disagree with the server-side profile. See "Known limitations".
-- `dpr` ← memoized `sidebarDpr` (extracted from `parsedData` when `parsedData.kind === "dpr"`; null otherwise — `page.tsx:1064-1067`).
-- `materialization` ← `forwardMaterialization` state (updated by `forward_materialization_update` SSE events).
-- `schedulePreferences` ← `schedulePreferences` state (hydrated from `/api/session/restore`; updated by plan-action route responses).
+- `schedule` ← `forwardSchedule` from the shared `createPlanStore` snapshot (E1.1) — written by `forward_schedule_update` SSE events AND by `/api/plan/confirm` HTTP responses; the sidebar re-renders directly off the store.
+- `student` ← memoized `sidebarStudent` (rebuilt from `sidebarDpr` and `visaStatus` via `buildStudentProfileFromDpr` whenever either changes; null when no DPR is loaded — `page.tsx:1077-1087`). NOTE: this profile is derived **entirely client-side from the raw DPR** with `visaStatus` defaulting to `"domestic"` whenever the page has not captured `"f1"`; it has no access to the server's authenticated `studentId` / home-school overrides, so the sidebar's identity fields can disagree with the server-side profile. (E1.2 fixed the SERVER/agent view of those fields, not this client-side `sidebarStudent`.) See "Known limitations".
+- `dpr` ← memoized `sidebarDpr` (extracted from `parsedData` when `parsedData.kind === "dpr"`; null otherwise — `page.tsx:1073-1076`).
+- `materialization` ← `forwardMaterialization` from the store snapshot (updated by `forward_materialization_update` SSE events).
+- `schedulePreferences` ← `schedulePreferences` from the store snapshot (hydrated from `/api/session/restore`; updated by plan-action route responses).
 - `open` / `onClose` — visibility.
 
 The sidebar drives back into the page via four callbacks:
@@ -461,13 +472,14 @@ Both `handleRefreshDpr` and `handleClearAll` use `window.alert()` for failure su
 
 ## Known limitations
 
-- **Sidebar profile is client-derived and can disagree with the server.** `sidebarStudent` (`page.tsx:1068-1078`) is built purely from the raw DPR via `buildStudentProfileFromDpr`, with `visaStatus` forced to `"domestic"` whenever the page state is not `"f1"`. It never consults the authenticated `studentId` or any server-side home-school / program overrides, so the sidebar's `SummaryCard` identity fields are a best-effort client reconstruction, not the authoritative server profile.
-- **State flows one way.** The agent never observes sidebar edits mid-conversation: server SSE events and HTTP confirm responses flow `route → page → sidebar`, and sidebar verbs round-trip through their own deterministic `/api/plan/*` routes. A schedule the student edited via the sidebar is only visible to the agent on the next chat turn once the persisted `forwardSchedule` is reloaded into the request body.
+- **Sidebar profile is client-derived and can disagree with the server (narrowed by E1.2, not eliminated).** `sidebarStudent` (`page.tsx:1077-1087`) is still built purely from the raw DPR via `buildStudentProfileFromDpr`, with `visaStatus` forced to `"domestic"` whenever the page state is not `"f1"`. It never consults the authenticated `studentId` or any server-side home-school / program overrides, so the sidebar's `SummaryCard` identity fields remain a best-effort **client** reconstruction. **Phase 4 Task E1.2** fixed the SERVER/agent view of this divergence — the v2 route now reads the four confirmed `confirm_profile_update` fields (`homeSchool` / `catalogYear` / `declaredPrograms` / `visaStatus`) back into the per-turn `session.student` (see [chat-route-sse.md §5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12)) — so a corrected home school no longer gets clobbered by the fresh body-DPR derivation each turn. But that read-back lands on the SERVER session only; the **sidebar's own** `sidebarStudent` is still derived client-side from the raw DPR, so the two can still disagree on the client until the page itself surfaces the confirmed profile.
+- **In-session the plan state is shared; cross-channel AGENT visibility is still next-turn (by design).** **Phase 4 Task E1.1** made the chat page and the sidebar share ONE live state — the `createPlanStore` snapshot. A sidebar-driven edit and a chat-driven update both write the store, and every consumer re-renders from it with **no server round-trip for the render** (so the prior "state flows one way" framing no longer holds in-session). What is **still intentionally next-turn** is the AGENT *seeing* a sidebar edit: the agent does not observe an uncommitted sidebar edit mid-turn. Cross-channel agent visibility comes from the v2 route's per-turn re-hydration — the persisted plan/prefs (P3.1) and the confirmed profile read-back (E1.2) are reloaded into the agent's session at the start of each turn — not from mid-turn awareness of in-flight client state. So it is NOT fully bidirectional: render-state is shared live; agent-state converges on the next turn.
 
 ## Related Files
 
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/lib/chatV2Client.ts` — SSE consumer + plan-action stream consumers.
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/app/chat/page.tsx` — the chat client component.
+- `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/app/chat/planState.ts` — the shared `createPlanStore` plan-state store (Phase 4 E1.1); the `useSyncExternalStore` source of truth for `forwardSchedule` / `schedulePreferences` / `forwardMaterialization`.
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/app/chat/layout.tsx` — server-side auth gate (redirects to `/login`).
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/lib/formatDuration.ts` — duration formatter for the agent-status header.
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/lib/groupCoursesByTerm.ts` — pure sidebar render-plan builder.
