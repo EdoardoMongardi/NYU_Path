@@ -161,6 +161,7 @@ export default function TermCard(props: TermCardProps) {
                                 slotIdx={slotIdx}
                                 bucketTerm={bucket.term}
                                 isLocked={isLocked}
+                                semesterLocked={bucket.locked}
                                 isPending={isPending}
                                 isOpen={isOpen}
                                 isDraggable={isDraggable}

@@ -19,6 +19,7 @@ import styles from "../chat.module.css";
 import { renderSlotPopover, type SlotPopoverHandlers } from "./slotPopover";
 import { renderSlotInner, slotGradeText } from "./slotRenderHelpers";
 import { slotTierClassName } from "./slotTier";
+import { computeSlotState } from "./slotState";
 
 interface SlotRowProps {
     slot: ScheduleSlot;
@@ -29,6 +30,11 @@ interface SlotRowProps {
     /** Whether this slot's row should render the locked-styled (history)
      *  variant. The popover is suppressed when true. */
     isLocked: boolean;
+    /** Phase 4 Task E2.2 — the slot's `ForwardSemester.locked` (a
+     *  DPR-derived history / in-progress term). When true the slot is
+     *  term-locked (🔒 / not editable) regardless of kind. Sourced from
+     *  the render-plan bucket's `locked` flag in TermCard. */
+    semesterLocked: boolean;
     isPending: boolean;
     isOpen: boolean;
     isDraggable: boolean;
@@ -52,12 +58,24 @@ interface SlotRowProps {
 
 export default function SlotRow(props: SlotRowProps) {
     const {
-        slot, slotIdx, isLocked, isPending, isOpen, isDraggable,
+        slot, slotIdx, isLocked, semesterLocked, isPending, isOpen, isDraggable,
         schedule, isFrozen, submenu, onSlotClick, onSubmenuToggle,
         handlers, onDragStart, onDragOverSlot, onDropSlot,
         bucketTerm,
     } = props;
     const tierClass = slotTierClassName(slot);
+
+    // Phase 4 Task E2.2 — the design §8 slot-state view (🔒 / ◐ /
+    // planned-movable). The pure `computeSlotState` helper is the single
+    // source of truth for the glyph + label + aria-label this row
+    // renders; the component holds no slot-state decision logic of its
+    // own. We pass the honest `semesterLocked` (the bucket's
+    // `ForwardSemester.locked`) — `completed` is handled by the helper's
+    // own kind-first branch, so it needs no `|| isLocked` fold.
+    const slotState = computeSlotState(slot, {
+        isFrozen,
+        semesterLocked,
+    });
 
     return (
         <li
@@ -77,7 +95,9 @@ export default function SlotRow(props: SlotRowProps) {
                     ? "Completed — locked"
                     : isFrozen
                         ? "Locked — click to unlock or drag to move (the lock will travel with it)"
-                        : "Click to open verbs · drag to move"
+                        : slot.kind === "in_progress"
+                            ? slotState.label // "In progress (fixed in its term)"
+                            : "Click to open verbs · drag to move"
             }
             draggable={isDraggable}
             onDragStart={isDraggable ? onDragStart : undefined}
@@ -90,13 +110,19 @@ export default function SlotRow(props: SlotRowProps) {
             ) : (
                 <span className={styles.slotGradeCell}>{slotGradeText(slot)}</span>
             )}
+            {/* Phase 4 Task E2.2 — the design §8 slot-state glyph. 🔒 for
+                taken/final, locked-by-you, or a term-locked slot; ◐ for an
+                in-progress slot (the IP rule made visible); empty for a
+                planned/movable slot (its movable state is shown by the row
+                affordances, not a glyph). Glyph + labels come straight from
+                the pure `computeSlotState` helper. */}
             <span
                 className={styles.slotLockIcon}
-                aria-label={isLocked ? "locked" : isFrozen ? "frozen" : ""}
-                title={isLocked ? "Completed — cannot edit" : isFrozen ? "Locked by you" : ""}
-                aria-hidden={!isLocked && !isFrozen}
+                aria-label={slotState.glyph ? slotState.ariaLabel : ""}
+                title={slotState.glyph ? slotState.label : ""}
+                aria-hidden={slotState.glyph === ""}
             >
-                {isLocked ? "🔒" : isFrozen ? "🔒" : ""}
+                {slotState.glyph}
             </span>
             {isOpen && !isLocked && renderSlotPopover({
                 slot,
