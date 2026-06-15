@@ -30,7 +30,7 @@ All child tables `ON DELETE CASCADE` from `students`.
 | `audit_log` | immutable record of confirmed profile mutations (before/after) |
 | `email_otps` | transient OTP hashes (expire 10 min, deleted on consume) |
 
-**DPR handling:** the uploaded PDF is parsed with `unpdf` `extractText` in [`apps/web/app/api/onboard/route.ts`](../../apps/web/app/api/onboard/route.ts); only the **parsed JSON** is persisted (`students.parsed_dpr`). The raw PDF is **not** stored.
+**DPR handling:** the uploaded PDF is parsed with `unpdf` `extractText` in [`apps/web/app/api/onboard/route.ts`](../../apps/web/app/api/onboard/route.ts); only the **parsed JSON** is persisted (`students.parsed_dpr`). The raw PDF is **not** stored. The **Albert DPR is the only document the system accepts** — there is **no unofficial-transcript intake anywhere** (the legacy transcript-upload path was removed; see the headers of `onboard/route.ts` and [`apps/web/lib/buildSession.ts`](../../apps/web/lib/buildSession.ts)).
 
 ## Third-party processing
 
@@ -41,7 +41,7 @@ All child tables `ON DELETE CASCADE` from `students`.
 
 - Account data is retained until deleted (that is the point — cross-session resume).
 - **Deletion path:** `DELETE /api/session/clear` ([route](../../apps/web/app/api/session/clear/route.ts)) deletes every per-student table in one transaction (`students` last). It is **gated server-side on `NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`** (returns 403 otherwise) and requires auth (401 otherwise). The chat UI exposes a "clear my data" control wired to it.
-- ⚠️ **Honest caveat:** because the delete endpoint is env-gated, self-serve deletion is **not guaranteed available** in every deployment. The user-facing notice says to use the in-app control "where the operator has enabled it, otherwise contact the operator." If self-serve deletion is meant to be a standing right, the gate should be lifted (or a separate, always-on user-deletion route added).
+- ⚠️ **Status (2026-06-15):** the delete endpoint is **temporarily enabled** (`NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`) so the operator can wipe all data and start fresh during testing — it is **not** yet a permanent, standing user-deletion right. Because it's env-gated, self-serve deletion is **not guaranteed available** in every deployment, so the user-facing notice uses conditional wording ("where the operator has enabled it, otherwise contact the operator"). If deletion should become a standing user right, lift the gate (or add a separate always-on user-deletion route).
 
 ## Caveats for whoever owns the deployment
 
