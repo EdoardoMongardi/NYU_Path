@@ -7,7 +7,7 @@
 //   1. Onboarding state-machine steps (confirming_data → correcting_data
 //      → asking_visa → asking_graduation → complete).
 //   2. Pre-onboarding chitchat (the user typed a message before
-//      uploading a transcript).
+//      uploading their DPR).
 //
 // Any post-onboarding POST that lands here returns 410 Gone with a
 // pointer at /api/chat/v2. The legacy `handleAIChat` path + the
@@ -172,13 +172,13 @@ function handleOnboardingStep(message: string, step: string) {
 }
 
 // ============================================================
-// Pre-onboarding chitchat (no transcript yet)
+// Pre-onboarding chitchat (no DPR yet)
 // ============================================================
 
 async function handleBasicChat(message: string, onboardingStep?: string) {
     const apiKey = process.env.OPENAI_API_KEY;
     // Phase 7-E: pre-upload onboarding asks for the DPR (Degree Progress
-    // Report) — the legacy "transcript" path is a fallback only.
+    // Report); the DPR is the only accepted artifact.
     const needsDpr = onboardingStep !== "complete";
 
     // If we have an API key, run a 1-shot completion via the engine
@@ -203,7 +203,7 @@ Keep responses concise (2-3 sentences). Be warm, natural, and conversational. Ma
             // CRITICAL: do NOT return an onboardingStep here. The chat
             // page already manages the upload state via the welcome
             // message + drag-drop UI — overriding it would clobber the
-            // DPR-first flow back into the legacy transcript path.
+            // DPR-first upload flow.
             return NextResponse.json({ message: response.text });
         } catch {
             // Fall through to hardcoded responses if LLM fails.
