@@ -597,6 +597,71 @@ button.reasoningHeader:focus-visible {
 }
 
 /* ------------------------------------------------------------------
+   Phase 4 Task E3.1 — PENDING proposal canvas overlay.
+   A staged (not-yet-committed) proposal is shown above the committed
+   plan, clearly marked PENDING with the credit deltas. Colours come
+   from the NYU-violet brand tokens (globals.css, light + dark), so the
+   overlay reads as on-brand "preview" chrome with NO hardcoded hex.
+   ------------------------------------------------------------------ */
+.schedulePreviewOverlay {
+    border: 2px dashed var(--nyu-violet);
+    border-radius: 8px;
+    background: var(--nyu-violet-faint);
+    padding: 12px;
+    margin-bottom: 16px;
+}
+.schedulePreviewBanner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.schedulePreviewBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.74em;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--nyu-violet);
+}
+.schedulePreviewBannerText {
+    font-size: 0.82em;
+    color: var(--nyu-violet);
+    font-weight: 600;
+}
+.schedulePreviewDelta {
+    font-size: 0.82em;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+.schedulePreviewDeltaTotal {
+    font-weight: 700;
+    color: var(--nyu-violet);
+}
+.schedulePreviewDeltaList {
+    margin: 4px 0 0 16px;
+    padding: 0;
+}
+.schedulePreviewConsequences {
+    margin: 0 0 10px 16px;
+    padding: 0;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+.schedulePreviewCommittedLabel {
+    margin: 10px 0 0 0;
+    font-size: 0.78em;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--nyu-violet);
+    padding-top: 8px;
+}
+
+/* ------------------------------------------------------------------
    Phase 4 Task E2.1 / E2.3 — plan-level badge row.
    State colours come from the semantic --badge-* tokens defined in
    globals.css (light + a [data-theme="dark"] override), so light/dark

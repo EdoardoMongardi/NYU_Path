@@ -6,6 +6,8 @@ import type { DegreeProgressReport } from "@nyupath/engine";
 import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import { groupCoursesByTerm } from "../../lib/groupCoursesByTerm";
 import { computePlanBadges } from "../../lib/planBadges";
+import { computePreviewView } from "../../lib/planPreview";
+import type { PendingPreview } from "./planState";
 import {
     planAdd,
     planSwap,
@@ -132,6 +134,16 @@ function PlanBadges({
 
 interface ScheduleSidebarProps {
     schedule: ForwardSchedule | null;
+    /**
+     * Phase 4 Task E3.1 — a STAGED (not-yet-committed) proposal to
+     * overlay on the canvas. When set, the sidebar renders
+     * `pendingPreview.proposedSchedule` marked PENDING (a violet
+     * "preview" banner + the credit deltas) instead of the committed
+     * `schedule`; the committed plan is NOT mutated. Null at rest →
+     * the committed `schedule` renders as today. Cleared by the page on
+     * Confirm / Cancel / Keep-as-is.
+     */
+    pendingPreview?: PendingPreview | null;
     student?: StudentProfile | null;
     dpr?: DegreeProgressReport | null;
     materialization?: ForwardMaterializationPayload | null;
@@ -168,6 +180,7 @@ interface ScheduleSidebarProps {
 
 export default function ScheduleSidebar({
     schedule,
+    pendingPreview,
     student,
     dpr,
     materialization,
@@ -259,7 +272,16 @@ export default function ScheduleSidebar({
 
     if (!open) return null;
 
-    const hasBody = !!student || !!schedule;
+    // Phase 4 Task E3.1 — when a proposal is staged, derive the
+    // render-ready preview view (proposed schedule + credit deltas vs
+    // the committed plan). The committed `schedule` is read ONLY to
+    // compute the delta; it is never mutated. Null when nothing is
+    // staged → the committed plan renders as today.
+    const previewView = pendingPreview
+        ? computePreviewView(schedule, pendingPreview)
+        : null;
+
+    const hasBody = !!student || !!schedule || !!previewView;
 
     const handlePillClick = (style: "balanced" | "frontload" | "backload") => {
         onProposeLoadStyle?.(style);
@@ -631,6 +653,113 @@ export default function ScheduleSidebar({
                 </p>
             ) : (
                 <div className={styles.scheduleSidebarBody}>
+                    {/* Phase 4 Task E3.1 — PENDING proposal overlay. When a
+                        proposal is staged, the proposed plan is shown read-only
+                        above the committed cards, clearly marked PENDING with
+                        the per-term + total credit deltas. The committed plan
+                        below is NOT mutated — it stays until the user Confirms
+                        (which commits + clears) or Cancels (which clears). */}
+                    {previewView && (
+                        <div
+                            className={styles.schedulePreviewOverlay}
+                            role="status"
+                            aria-label="Proposed plan preview (pending confirmation)"
+                        >
+                            <div className={styles.schedulePreviewBanner}>
+                                <span className={styles.schedulePreviewBadge}>◷ Preview</span>
+                                <span className={styles.schedulePreviewBannerText}>
+                                    Proposed change — not applied yet. Confirm in chat to keep it.
+                                </span>
+                            </div>
+
+                            {(() => {
+                                const { total, byTerm } = previewView.creditDelta;
+                                const changedTerms = Object.entries(byTerm)
+                                    .filter(([, d]) => d !== 0)
+                                    .sort((a, b) => a[0].localeCompare(b[0]));
+                                const fmtDelta = (d: number): string => (d > 0 ? `+${d}` : `${d}`);
+                                return (
+                                    <div className={styles.schedulePreviewDelta}>
+                                        <span className={styles.schedulePreviewDeltaTotal}>
+                                            Credit change: {fmtDelta(total)}
+                                        </span>
+                                        {changedTerms.length > 0 && (
+                                            <ul className={styles.schedulePreviewDeltaList}>
+                                                {changedTerms.map(([term, d]) => (
+                                                    <li key={term}>
+                                                        {formatTermLabel(term)}: {fmtDelta(d)} credits
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {previewView.consequences.length > 0 && (
+                                <ul className={styles.schedulePreviewConsequences}>
+                                    {previewView.consequences.slice(0, 5).map((c, i) => (
+                                        <li key={i}>{c}</li>
+                                    ))}
+                                </ul>
+                            )}
+
+                            {/* Proposed term cards rendered read-only (no slot
+                                handlers): this is a preview, not an editable plan. */}
+                            {(() => {
+                                const grouped = groupCoursesByTerm({
+                                    student: student ?? null,
+                                    forwardSchedule: previewView.proposedSchedule,
+                                    dpr: dpr ?? null,
+                                });
+                                const forwardByTerm = new Map(
+                                    previewView.proposedSchedule.semesters.map(s => [s.term, s]),
+                                );
+                                return (
+                                    <>
+                                        {grouped.terms.map((bucket, semIdx) => (
+                                            <TermCard
+                                                key={`preview-${bucket.term}`}
+                                                bucket={bucket}
+                                                semIdx={semIdx}
+                                                forwardSemester={forwardByTerm.get(bucket.term)}
+                                                schedule={previewView.proposedSchedule}
+                                                materialization={null}
+                                                isImmediate={false}
+                                                frozenKeys={frozenKeys}
+                                                pendingSlots={new Set()}
+                                                openPopoverKey={null}
+                                                openSubmenu={null}
+                                                addCourseDraft={undefined}
+                                                dropTargetTerm={null}
+                                                selectedComboIdx={selectedComboIdx}
+                                                setSelectedComboIdx={setSelectedComboIdx}
+                                                onSlotClick={() => { /* read-only preview */ }}
+                                                onSubmenuToggle={() => { /* read-only preview */ }}
+                                                handlers={slotPopoverHandlers}
+                                                onAddCourseOpen={() => { /* read-only preview */ }}
+                                                onAddCourseClose={() => { /* read-only preview */ }}
+                                                onAddCourseChange={() => { /* read-only preview */ }}
+                                                onAddCourseSubmit={() => { /* read-only preview */ }}
+                                                slotKeyOf={slotKey}
+                                                onDragStartSlot={() => { /* read-only preview */ }}
+                                                onTermDragOver={() => { /* read-only preview */ }}
+                                                onTermDragLeave={() => { /* read-only preview */ }}
+                                                onTermDrop={() => { /* read-only preview */ }}
+                                                onSlotDragOver={() => { /* read-only preview */ }}
+                                                onSlotDrop={() => { /* read-only preview */ }}
+                                            />
+                                        ))}
+                                    </>
+                                );
+                            })()}
+
+                            <p className={styles.schedulePreviewCommittedLabel}>
+                                Your current plan (unchanged):
+                            </p>
+                        </div>
+                    )}
+
                     {student && <SummaryCard student={student} dpr={dpr ?? null} schedule={schedule} />}
 
                     {schedule && (

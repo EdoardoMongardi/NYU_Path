@@ -262,5 +262,7 @@ const _typecheck: PlanState = {
     forwardSchedule: null,
     schedulePreferences: null,
     forwardMaterialization: null,
+    // Phase 4 Task E3.1 — the appended staged-proposal overlay slot.
+    pendingPreview: null,
 };
 void _typecheck;

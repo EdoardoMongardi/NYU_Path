@@ -175,7 +175,7 @@ export default function ChatPage() {
     //     `materialize_sections`; drives the sidebar's IMMEDIATE-term
     //     render (full → Sections view; partial/unavailable → banner).
     const planStore = useMemo(() => createPlanStore(), []);
-    const { forwardSchedule, schedulePreferences, forwardMaterialization } =
+    const { forwardSchedule, schedulePreferences, forwardMaterialization, pendingPreview } =
         useSyncExternalStore(planStore.subscribe, planStore.getSnapshot, planStore.getSnapshot);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -857,8 +857,24 @@ export default function ChatPage() {
             // Spec: clean apply ≈ 70% of clicks → silent commit, no
             // bubble. The sidebar's own Stage-1 spinner clears
             // synchronously when the route returns; nothing else to
-            // do here.
+            // do here. (E3.4 will reconcile the clean-result canvas.)
             return;
+        }
+        // Phase 4 Task E3.1 — push a PENDING canvas preview for a
+        // FEASIBLE proposal that carries a proposed schedule. The
+        // committed plan (planStore.forwardSchedule) is left untouched;
+        // the sidebar overlays `pendingPreview.proposedSchedule`
+        // read-only with the credit deltas until the user Confirms or
+        // Cancels. Invalid proposals (feasible === false) NEVER preview
+        // — that path is E3.3's red-card scope, not the canvas overlay.
+        if (result.data.feasible === true && result.data.forwardSchedule) {
+            planStore.setPendingPreview({
+                proposedSchedule: result.data.forwardSchedule,
+                pendingMutationId: result.data.pendingMutationId,
+                consequences: result.data.consequences,
+                ...(result.data.planDiff ? { planDiff: result.data.planDiff } : {}),
+                verb,
+            });
         }
         // Build the bubble Message + insert.
         const bubble = initBubbleState(result.data);
@@ -903,6 +919,11 @@ export default function ChatPage() {
             if (result.data.forwardSchedule) {
                 planStore.setForwardSchedule(result.data.forwardSchedule);
             }
+            // E3.1 — the proposal is now the committed plan; drop the
+            // PENDING canvas overlay so the sidebar shows the committed
+            // schedule (clear AFTER setForwardSchedule so there is no
+            // flash of the pre-confirm plan).
+            planStore.clearPendingPreview();
             patchMessage(messageId, {
                 bubbleResolved: true,
                 content: "✓ Applied.",
@@ -918,6 +939,10 @@ export default function ChatPage() {
     /** Keep-as-is — discard the bubble without applying. */
     const handleBubbleKeepAsIs = useCallback((messageId: string): void => {
         abortBubbleEnrichers(messageId);
+        // E3.1 — Cancel/Keep-as-is drops the PENDING canvas overlay
+        // WITHOUT committing: the sidebar reverts to the (untouched)
+        // committed plan.
+        planStore.clearPendingPreview();
         patchMessage(messageId, {
             bubbleResolved: true,
             content: "Kept the plan as-is.",
@@ -940,6 +965,10 @@ export default function ChatPage() {
             if (result.data.forwardSchedule) {
                 planStore.setForwardSchedule(result.data.forwardSchedule);
             }
+            // E3.1 — the bubble is resolved; drop any PENDING overlay so
+            // the sidebar shows the now-committed (student-preferred)
+            // plan rather than a stale preview.
+            planStore.clearPendingPreview();
             patchMessage(messageId, {
                 bubbleResolved: true,
                 content: "⚠ Override applied — plan saved as student-preferred-invalid-draft.",
@@ -1465,6 +1494,7 @@ export default function ChatPage() {
             </div>
             <ScheduleSidebar
                 schedule={forwardSchedule}
+                pendingPreview={pendingPreview}
                 student={sidebarStudent}
                 dpr={sidebarDpr}
                 materialization={forwardMaterialization}

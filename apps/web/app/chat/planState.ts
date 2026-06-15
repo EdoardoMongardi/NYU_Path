@@ -27,23 +27,53 @@
 //   - each setter replaces the snapshot with a NEW object so React's
 //     referential-equality check fires and consumers re-render.
 //
-// Scope (E1.1 only): the three existing fields + the setters. New
-// slots (e.g. the E3.1 "pending preview") are deliberately NOT added
-// here, but the shape is open for one field to be appended later.
+// Scope: the three E1.1 fields + their setters, PLUS the E3.1
+// "pending preview" slot appended here (the E1.1 doc left room for
+// exactly one such field). The pending preview is a STAGED proposal
+// the canvas overlays read-only; it is NEVER the committed plan and
+// is cleared on Confirm / Cancel / Keep-as-is.
 // ============================================================
 
-import type { ForwardSchedule, SchedulePreferences } from "@nyupath/shared";
+import type { ForwardSchedule, PlanDiff, SchedulePreferences } from "@nyupath/shared";
 import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 
 /**
- * The one live plan snapshot every workspace consumer reads. These
- * are exactly the three values `<ScheduleSidebar>` is fed today
- * (`schedule`, `schedulePreferences`, `materialization`).
+ * Phase 4 Task E3.1 — a STAGED (not-yet-committed) plan proposal the
+ * canvas previews. Pushed when a deterministic plan-action route
+ * returns a feasible proposal (`forwardSchedule` + `pendingMutationId`);
+ * the sidebar overlays `proposedSchedule` read-only, marked PENDING,
+ * with the credit deltas. Cleared on Confirm (after the now-committed
+ * plan is written) and on Cancel / Keep-as-is (without committing).
+ *
+ * Crucially this is a DISTINCT slot from `forwardSchedule` (the
+ * committed plan): pushing a preview NEVER mutates the committed plan.
+ */
+export interface PendingPreview {
+    /** The read-only proposed schedule the student would land on. */
+    proposedSchedule: ForwardSchedule;
+    /** Opaque id the Confirm round-trip hands to /api/plan/confirm. */
+    pendingMutationId: string;
+    /** Human-readable trade-offs / advisories surfaced by the route. */
+    consequences: string[];
+    /** Structured per-axis diff, when the route produced one. */
+    planDiff?: PlanDiff;
+    /** Which verb staged this proposal (add | swap | drop | lock | move). */
+    verb?: string;
+}
+
+/**
+ * The one live plan snapshot every workspace consumer reads. The first
+ * three are exactly the values `<ScheduleSidebar>` is fed today
+ * (`schedule`, `schedulePreferences`, `materialization`); `pendingPreview`
+ * is the E3.1 staged-proposal overlay (null at rest).
  */
 export interface PlanState {
     forwardSchedule: ForwardSchedule | null;
     schedulePreferences: SchedulePreferences | null;
     forwardMaterialization: ForwardMaterializationPayload | null;
+    /** Phase 4 Task E3.1 — staged proposal overlay; null when no
+     *  proposal is pending. NEVER the committed plan. */
+    pendingPreview: PendingPreview | null;
 }
 
 /**
@@ -60,12 +90,17 @@ export interface PlanStore {
     setForwardSchedule(s: ForwardSchedule | null): void;
     setSchedulePreferences(p: SchedulePreferences | null): void;
     setForwardMaterialization(m: ForwardMaterializationPayload | null): void;
+    /** E3.1 — stage a proposal overlay (NEVER touches forwardSchedule). */
+    setPendingPreview(p: PendingPreview | null): void;
+    /** E3.1 — clear the staged overlay (Confirm / Cancel / Keep-as-is). */
+    clearPendingPreview(): void;
 }
 
 const EMPTY_STATE: PlanState = {
     forwardSchedule: null,
     schedulePreferences: null,
     forwardMaterialization: null,
+    pendingPreview: null,
 };
 
 /**
@@ -107,6 +142,17 @@ export function createPlanStore(initial?: Partial<PlanState>): PlanStore {
         },
         setForwardMaterialization(m: ForwardMaterializationPayload | null): void {
             snapshot = { ...snapshot, forwardMaterialization: m };
+            emit();
+        },
+        setPendingPreview(p: PendingPreview | null): void {
+            // Swap ONLY the pendingPreview slot — forwardSchedule (the
+            // committed plan) is carried over by reference, so staging a
+            // preview can never mutate the committed plan.
+            snapshot = { ...snapshot, pendingPreview: p };
+            emit();
+        },
+        clearPendingPreview(): void {
+            snapshot = { ...snapshot, pendingPreview: null };
             emit();
         },
     };
