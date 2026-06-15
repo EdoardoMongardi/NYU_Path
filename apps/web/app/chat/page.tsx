@@ -34,6 +34,7 @@ import {
     type PlanActionRouteResponse,
 } from "../../lib/planActionClient";
 import { createPlanStore } from "./planState";
+import { applyReviewConfirm, applyReviewCancel } from "../../lib/reviewCard";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -981,6 +982,62 @@ export default function ChatPage() {
         }
     }, [patchMessage, abortBubbleEnrichers]);
 
+    // ----------------------------------------------------------------
+    // Phase 4 Task E3.2 — canvas REVIEW-CARD actions. The review card
+    // (rendered alongside the E3.1 preview overlay in the sidebar)
+    // wires its three buttons to these handlers. They share the SAME
+    // commit path as the chat-bubble Confirm (`planConfirm` →
+    // `setForwardSchedule` → `clearPendingPreview`) via the pure
+    // `applyReviewConfirm` / `applyReviewCancel` helpers, so the two
+    // surfaces can never double-commit (each is one confirm + one
+    // clear). The decision logic lives in `apps/web/lib/reviewCard.ts`.
+    // ----------------------------------------------------------------
+
+    /** Review-card Confirm — apply the staged mutation via the shared
+     *  confirm path. Commits + clears the preview on success; leaves
+     *  the preview staged on failure so the user can retry. */
+    const handleReviewConfirm = useCallback(async (pendingMutationId: string): Promise<void> => {
+        const res = await applyReviewConfirm(planStore, planConfirm, pendingMutationId);
+        if (!res.ok) {
+            // Surface a brief assistant note so the failure is visible;
+            // the preview stays staged (handled inside applyReviewConfirm).
+            const msg: Message = {
+                id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+                role: "assistant",
+                content: "Couldn't apply that change — it may have expired or conflicted. Try again from the canvas.",
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, msg]);
+            setTimeout(scrollToBottom, 50);
+        }
+    }, []);
+
+    /** Review-card Cancel — drop the staged proposal + clear the
+     *  preview WITHOUT a confirm round-trip. */
+    const handleReviewCancel = useCallback((): void => {
+        applyReviewCancel(planStore);
+    }, []);
+
+    /** Review-card Ask-why — route a scoped "why" question into the
+     *  grounded chat agent (basic now; E4 builds the full ⋯ Explain).
+     *  Mirrors the existing `handleProposeSlotChange` injection pattern:
+     *  add a user-visible message, then drop into the v2 tool-use loop. */
+    const handleReviewAskWhy = useCallback(async (_pendingMutationId: string, verb?: string): Promise<void> => {
+        if (isLoading) return;
+        const subject = verb ? `the proposed ${verb} change` : "this proposed change";
+        const text = `Why does ${subject} have these trade-offs? Explain the validity verdict and each trade-off, grounded in my plan.`;
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage("assistant", err instanceof Error ? err.message : "Could not explain the change.");
+        } finally {
+            setIsLoading(false);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isLoading]);
+
     /**
      * Phase 16 Task B — Update-DPR sidebar affordance.
      * POSTs the new PDF to /api/onboard/refresh-dpr; the route
@@ -1504,6 +1561,9 @@ export default function ChatPage() {
                 onProposeLoadStyle={handleProposeLoadStyle}
                 onProposeSlotChange={handleProposeSlotChange}
                 onPlanActionResult={handlePlanActionResult}
+                onReviewConfirm={handleReviewConfirm}
+                onReviewCancel={handleReviewCancel}
+                onReviewAskWhy={handleReviewAskWhy}
                 onConfirmCombination={handleConfirmSectionCombination}
                 onRefreshDpr={handleRefreshDpr}
                 onClearAll={handleClearAll}

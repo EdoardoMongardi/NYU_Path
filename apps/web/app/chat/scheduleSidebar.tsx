@@ -7,6 +7,7 @@ import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import { groupCoursesByTerm } from "../../lib/groupCoursesByTerm";
 import { computePlanBadges } from "../../lib/planBadges";
 import { computePreviewView } from "../../lib/planPreview";
+import { computeReviewCard } from "../../lib/reviewCard";
 import type { PendingPreview } from "./planState";
 import {
     planAdd,
@@ -173,6 +174,24 @@ interface ScheduleSidebarProps {
         verb: "add" | "swap" | "drop" | "lock" | "move",
         result: PlanActionResult<PlanActionRouteResponse>,
     ) => void;
+    /**
+     * Phase 4 Task E3.2 — review-card actions. The card renders the
+     * verdict (✓/⚠/✗) + trade-off lines alongside the E3.1 preview
+     * overlay, with three buttons:
+     *   - onReviewConfirm: applies the staged mutation via the shared
+     *     /api/plan/confirm path (commits + clears the preview on
+     *     success; leaves it staged on failure for retry).
+     *   - onReviewCancel: drops the staged proposal + clears the
+     *     preview WITHOUT a confirm round-trip.
+     *   - onReviewAskWhy: routes a scoped "why" question into the
+     *     grounded chat agent (basic now; E4 builds the full ⋯ Explain).
+     * Each is threaded from page.tsx so the sidebar holds NO confirm
+     * logic of its own (the decision logic lives in the pure
+     * `apps/web/lib/reviewCard.ts` helpers).
+     */
+    onReviewConfirm?: (pendingMutationId: string) => void | Promise<void>;
+    onReviewCancel?: () => void;
+    onReviewAskWhy?: (pendingMutationId: string, verb?: string) => void;
     onConfirmCombination?: (proposalId: string) => void;
     onRefreshDpr?: (file: File) => Promise<void>;
     onClearAll?: () => Promise<void>;
@@ -190,6 +209,9 @@ export default function ScheduleSidebar({
     onProposeLoadStyle,
     onProposeSlotChange,
     onPlanActionResult,
+    onReviewConfirm,
+    onReviewCancel,
+    onReviewAskWhy,
     onConfirmCombination,
     onRefreshDpr,
     onClearAll,
@@ -751,6 +773,93 @@ export default function ScheduleSidebar({
                                             />
                                         ))}
                                     </>
+                                );
+                            })()}
+
+                            {/* Phase 4 Task E3.2 — review card: verdict
+                                (✓ valid / ⚠ valid-with-trade-offs) + the
+                                trade-off lines + Confirm / Cancel / Ask-why.
+                                The verdict + lines are computed by the pure
+                                `computeReviewCard` helper from the engine's
+                                own fields (NEVER fabricated). A staged
+                                preview is always feasible (E3.1 gates
+                                feasible:false out of the preview path), so
+                                only the ✓/⚠ cards render here; the ✗ red
+                                card is E3.3's scope. */}
+                            {(() => {
+                                // A staged preview is, by the E3.1 gate,
+                                // always a FEASIBLE proposal. Build the
+                                // minimal PlanActionResponse the pure helper
+                                // reads (feasible + consequences + planDiff +
+                                // pendingMutationId) from the preview's own
+                                // engine-sourced fields — no fabrication.
+                                const card = computeReviewCard({
+                                    feasible: true,
+                                    diff: { added: [], removed: [] },
+                                    consequences: previewView.consequences,
+                                    explanation: "",
+                                    pendingMutationId: previewView.pendingMutationId,
+                                    futureTerms: [],
+                                    ...(previewView.planDiff ? { planDiff: previewView.planDiff } : {}),
+                                });
+                                const verbLabel = pendingPreview?.verb
+                                    ? `Review: ${pendingPreview.verb} change`
+                                    : "Review proposed change";
+                                return (
+                                    <div
+                                        className={styles.reviewCard}
+                                        role="group"
+                                        aria-label="Review proposed plan change"
+                                    >
+                                        <p className={styles.reviewCardHeading}>{verbLabel}</p>
+                                        <p
+                                            className={
+                                                card.verdict === "valid"
+                                                    ? styles.reviewVerdictValid
+                                                    : styles.reviewVerdictTradeOffs
+                                            }
+                                        >
+                                            <span aria-hidden="true">{card.glyph}</span> {card.label}
+                                        </p>
+                                        {card.tradeOffLines.length > 0 && (
+                                            <ul className={styles.reviewTradeOffList}>
+                                                {card.tradeOffLines.slice(0, 6).map((line, i) => (
+                                                    <li key={i}>{line}</li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                        <div className={styles.reviewCardActions}>
+                                            <button
+                                                type="button"
+                                                className={styles.reviewBtnConfirm}
+                                                disabled={!card.canConfirm}
+                                                onClick={() =>
+                                                    void onReviewConfirm?.(card.pendingMutationId)
+                                                }
+                                            >
+                                                Confirm
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={styles.reviewBtnCancel}
+                                                onClick={() => onReviewCancel?.()}
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={styles.reviewBtnAskWhy}
+                                                onClick={() =>
+                                                    onReviewAskWhy?.(
+                                                        card.pendingMutationId,
+                                                        pendingPreview?.verb,
+                                                    )
+                                                }
+                                            >
+                                                Ask why
+                                            </button>
+                                        </div>
+                                    </div>
                                 );
                             })()}
 

@@ -662,6 +662,87 @@ button.reasoningHeader:focus-visible {
 }
 
 /* ------------------------------------------------------------------
+   Phase 4 Task E3.2 — review card (verdict + ✓/⚠ + Confirm / Cancel /
+   Ask-why). Sits inside the E3.1 preview overlay, above the
+   "current plan (unchanged)" divider. Verdict colours come from the
+   semantic --badge-* tokens (light/dark resolve with no hardcoded
+   hex); the brand affordance is the NYU-violet Confirm button.
+   ------------------------------------------------------------------ */
+.reviewCard {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid var(--nyu-violet);
+    border-radius: 8px;
+    background: var(--surface, transparent);
+}
+.reviewCardHeading {
+    margin: 0 0 6px 0;
+    font-size: 0.82em;
+    font-weight: 700;
+    color: var(--nyu-violet);
+    text-transform: capitalize;
+}
+.reviewVerdictValid,
+.reviewVerdictTradeOffs {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 8px 0;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.8em;
+    font-weight: 700;
+    border: 1px solid var(--border-light);
+}
+.reviewVerdictValid {
+    background: var(--badge-valid-bg);
+    border-color: var(--badge-valid-border);
+    color: var(--badge-valid-text);
+}
+.reviewVerdictTradeOffs {
+    background: var(--badge-hedged-bg);
+    border-color: var(--badge-hedged-border);
+    color: var(--badge-hedged-text);
+}
+.reviewTradeOffList {
+    margin: 0 0 10px 16px;
+    padding: 0;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+.reviewCardActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.reviewBtnConfirm,
+.reviewBtnCancel,
+.reviewBtnAskWhy {
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border-light);
+    background: var(--surface, transparent);
+    color: var(--text-primary);
+}
+.reviewBtnConfirm {
+    background: var(--nyu-violet);
+    border-color: var(--nyu-violet);
+    color: #fff;
+}
+.reviewBtnConfirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.reviewBtnAskWhy {
+    color: var(--nyu-violet);
+    border-color: var(--nyu-violet);
+    background: var(--nyu-violet-faint);
+}
+
+/* ------------------------------------------------------------------
    Phase 4 Task E2.1 / E2.3 — plan-level badge row.
    State colours come from the semantic --badge-* tokens defined in
    globals.css (light + a [data-theme="dark"] override), so light/dark
