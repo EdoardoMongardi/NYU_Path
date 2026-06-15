@@ -27,6 +27,39 @@
     --accent-red: #EF4444;
     --accent-blue: #3B82F6;
 
+    /* Phase 4 Task E2.3 — plan-badge state tokens (LIGHT).
+       Semantic colours for the workspace plan-badge row + slot-state
+       glyph, consumed by chat.module.css `.planBadge*` / `.slotLockIcon`
+       via var(--badge-*). Defined here (the global stylesheet) — not in
+       chat.module.css — because Next 16's CSS-Modules loader rejects a
+       bare `:root` block inside *.module.css. The light values below are
+       the same readable green / red / amber / neutral E2.1 used inline;
+       the `[data-theme="dark"]` block further down overrides them for
+       dark mode. The validity-positive ("grounded"/"valid") states fold
+       in the NYU-violet brand via the glyph + slot accents. */
+    --badge-valid-bg: #D1E7DD;
+    --badge-valid-border: #A3CFBB;
+    --badge-valid-text: #0F5132;
+    --badge-invalid-bg: #F8D7DA;
+    --badge-invalid-border: #F5C2C7;
+    --badge-invalid-text: #842029;
+    --badge-hedged-bg: #FFF3CD;
+    --badge-hedged-border: #FFE69C;
+    --badge-hedged-text: #664D03;
+    --badge-neutral-bg: rgba(108, 117, 125, 0.08);
+    --badge-neutral-text: var(--text-secondary);
+    /* "Grounded" (validity-positive) badge — the NYU-violet brand. Light
+       text/border stay the deep brand violet on the faint violet fill;
+       the dark layer lifts the TEXT to a light violet (the brand-anchor
+       --nyu-violet is intentionally not lifted, so the grounded badge
+       needs its own dark-aware text token to stay legible). */
+    --badge-grounded-bg: var(--nyu-violet-faint);
+    --badge-grounded-border: var(--nyu-violet);
+    --badge-grounded-text: var(--nyu-violet);
+    /* Slot-state glyph (🔒 / ◐) accent — the NYU-violet brand at low
+       emphasis so the lock/in-progress signal reads as on-brand. */
+    --slot-glyph-color: var(--nyu-violet);
+
     /* Phase 16 Task D — workload-tier palette consumed by per-slot
        left-border tints in chat.module.css `.slotTier_*`. Defined
        here (the global stylesheet) rather than in chat.module.css
@@ -54,6 +87,98 @@
     --radius-lg: 16px;
     --radius-xl: 24px;
     --radius-full: 9999px;
+}
+
+/* ============================================================
+   Phase 4 Task E2.3 — DARK theme (token-override layer)
+   ------------------------------------------------------------
+   A pure token override, NOT a component redesign: re-point the
+   neutral tokens (--bg-* / --text-* / --border-*) and the new
+   --badge-* state tokens to dark-mode values. The NYU-violet
+   brand (--nyu-violet / -light / -faint / -glow) is preserved —
+   only -faint / -glow are nudged so the brand reads correctly on
+   a dark surface. Because every component already styles through
+   these tokens, flipping `data-theme="dark"` on a workspace
+   ancestor (or <html>) re-themes the whole shell with no markup
+   change. The light `:root` values above are left untouched, so
+   light mode does not regress.
+
+   We apply the SAME override block both for the explicit
+   `[data-theme="dark"]` opt-in and for an OS-level dark
+   preference (gated so an explicit `data-theme="light"` still
+   wins). E2.3 ships no toggle UI (out of scope).
+   ============================================================ */
+[data-theme="dark"] {
+    /* Neutrals */
+    --bg-primary: #14121A;
+    --bg-secondary: #1C1924;
+    --bg-tertiary: #262230;
+    --text-primary: #F4F1F8;
+    --text-secondary: #B8B2C4;
+    --text-tertiary: #8A8398;
+    --border-light: #2E2A38;
+    --border-medium: #3C3748;
+
+    /* NYU-violet brand on a dark surface — hue kept, the faint /
+       glow tints lifted so they stay visible against dark bg. */
+    --nyu-violet-faint: #2A1840;
+    --nyu-violet-glow: rgba(123, 47, 191, 0.22);
+    --shadow-violet: 0 4px 20px rgba(123, 47, 191, 0.28);
+
+    /* Plan-badge state tokens (DARK) — muted, translucent fills so
+       the state colour reads without glaring against dark bg. */
+    --badge-valid-bg: rgba(16, 185, 129, 0.16);
+    --badge-valid-border: rgba(16, 185, 129, 0.40);
+    --badge-valid-text: #6EE7B7;
+    --badge-invalid-bg: rgba(239, 68, 68, 0.16);
+    --badge-invalid-border: rgba(239, 68, 68, 0.40);
+    --badge-invalid-text: #FCA5A5;
+    --badge-hedged-bg: rgba(245, 158, 11, 0.16);
+    --badge-hedged-border: rgba(245, 158, 11, 0.40);
+    --badge-hedged-text: #FCD34D;
+    --badge-neutral-bg: rgba(184, 178, 196, 0.10);
+    --badge-neutral-text: var(--text-secondary);
+    /* Grounded badge: lift TEXT to a light violet for legibility on the
+       dark violet fill (bg auto-follows --nyu-violet-faint → #2A1840;
+       the deep brand --nyu-violet would be invisible on it). */
+    --badge-grounded-border: rgba(168, 130, 224, 0.55);
+    --badge-grounded-text: #D8BFEC;
+    /* Slot glyph reads as the lighter violet on dark. */
+    --slot-glyph-color: var(--nyu-violet-light);
+}
+
+/* OS-level dark preference → same overrides, unless the user (or
+   app) has explicitly opted into light via `data-theme="light"`. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg-primary: #14121A;
+        --bg-secondary: #1C1924;
+        --bg-tertiary: #262230;
+        --text-primary: #F4F1F8;
+        --text-secondary: #B8B2C4;
+        --text-tertiary: #8A8398;
+        --border-light: #2E2A38;
+        --border-medium: #3C3748;
+
+        --nyu-violet-faint: #2A1840;
+        --nyu-violet-glow: rgba(123, 47, 191, 0.22);
+        --shadow-violet: 0 4px 20px rgba(123, 47, 191, 0.28);
+
+        --badge-valid-bg: rgba(16, 185, 129, 0.16);
+        --badge-valid-border: rgba(16, 185, 129, 0.40);
+        --badge-valid-text: #6EE7B7;
+        --badge-invalid-bg: rgba(239, 68, 68, 0.16);
+        --badge-invalid-border: rgba(239, 68, 68, 0.40);
+        --badge-invalid-text: #FCA5A5;
+        --badge-hedged-bg: rgba(245, 158, 11, 0.16);
+        --badge-hedged-border: rgba(245, 158, 11, 0.40);
+        --badge-hedged-text: #FCD34D;
+        --badge-neutral-bg: rgba(184, 178, 196, 0.10);
+        --badge-neutral-text: var(--text-secondary);
+        --badge-grounded-border: rgba(168, 130, 224, 0.55);
+        --badge-grounded-text: #D8BFEC;
+        --slot-glyph-color: var(--nyu-violet-light);
+    }
 }
 
 * {

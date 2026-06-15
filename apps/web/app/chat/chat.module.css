@@ -597,17 +597,20 @@ button.reasoningHeader:focus-visible {
 }
 
 /* ------------------------------------------------------------------
-   Phase 4 Task E2.1 — plan-level badge row.
-   Basic readable styling only; E2.3 themes these classes with the
-   NYU-violet light/dark palette via CSS variables. Avoid hardcoded
-   brand hex here — use neutral, semantic state colors that E2.3 can
-   override.
+   Phase 4 Task E2.1 / E2.3 — plan-level badge row.
+   State colours come from the semantic --badge-* tokens defined in
+   globals.css (light + a [data-theme="dark"] override), so light/dark
+   resolve with no hardcoded hex here. The row carries a low-emphasis
+   NYU-violet left accent so the validity strip reads as on-brand.
    ------------------------------------------------------------------ */
 .planBadgeRow {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     margin-bottom: 12px;
+    /* E2.3 — on-brand NYU-violet accent for the validity strip. */
+    padding-left: 8px;
+    border-left: 3px solid var(--nyu-violet);
 }
 .planBadgeRow span {
     display: inline-flex;
@@ -620,28 +623,31 @@ button.reasoningHeader:focus-visible {
     border: 1px solid var(--border-light);
 }
 .planBadgeValid {
-    background: #d1e7dd;
-    border-color: #a3cfbb;
-    color: #0f5132;
+    background: var(--badge-valid-bg);
+    border-color: var(--badge-valid-border);
+    color: var(--badge-valid-text);
 }
 .planBadgeInvalid {
-    background: #f8d7da;
-    border-color: #f5c2c7;
-    color: #842029;
+    background: var(--badge-invalid-bg);
+    border-color: var(--badge-invalid-border);
+    color: var(--badge-invalid-text);
 }
+/* "Grounded" is a validity-positive state — fold in the NYU-violet
+   brand (violet border + text) so the on-brand affirmative reads
+   distinctly from the green "valid" badge. */
 .planBadgeGrounded {
-    background: #d1e7dd;
-    border-color: #a3cfbb;
-    color: #0f5132;
+    background: var(--badge-grounded-bg);
+    border-color: var(--badge-grounded-border);
+    color: var(--badge-grounded-text);
 }
 .planBadgeHedged {
-    background: #fff3cd;
-    border-color: #ffe69c;
-    color: #664d03;
+    background: var(--badge-hedged-bg);
+    border-color: var(--badge-hedged-border);
+    color: var(--badge-hedged-text);
 }
 .planBadgeNeutral {
-    background: rgba(108, 117, 125, 0.08);
-    color: var(--text-secondary, #495057);
+    background: var(--badge-neutral-bg);
+    color: var(--badge-neutral-text);
 }
 
 .semesterCard {
@@ -1017,7 +1023,11 @@ button.reasoningHeader:focus-visible {
     font-size: 0.78em;
     line-height: 1;
     text-align: center;
-    opacity: 0.6;
+    /* Phase 4 Task E2.3 — the 🔒 / ◐ slot-state glyph reads in the
+       NYU-violet brand (light/dark aware via --slot-glyph-color), at a
+       slightly raised opacity so the on-brand tint is legible. */
+    color: var(--slot-glyph-color);
+    opacity: 0.75;
 }
 
 /* ==========================================================
