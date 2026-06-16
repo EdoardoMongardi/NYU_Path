@@ -1,6 +1,6 @@
 # NYU Path — Privacy & data handling (developer reference)
 
-> Last verified against code: 2026-06-15.
+> Last verified against code: 2026-06-16.
 >
 > This is the **developer-facing** data-handling reference. The **user-facing**
 > privacy notice is served at **`/privacy`** ([`apps/web/app/privacy/page.tsx`](../../apps/web/app/privacy/page.tsx)) and the `/login` page links to it. Keep the two in sync when data handling changes.
@@ -40,8 +40,9 @@ All child tables `ON DELETE CASCADE` from `students`.
 ## Retention & deletion
 
 - Account data is retained until deleted (that is the point — cross-session resume).
-- **Deletion path:** `DELETE /api/session/clear` ([route](../../apps/web/app/api/session/clear/route.ts)) deletes every per-student table in one transaction (`students` last). It is **gated server-side on `NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`** (returns 403 otherwise) and requires auth (401 otherwise). The chat UI exposes a "clear my data" control wired to it.
-- ⚠️ **Status (2026-06-15):** the delete endpoint is **temporarily enabled** (`NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`) so the operator can wipe all data and start fresh during testing — it is **not** yet a permanent, standing user-deletion right. Because it's env-gated, self-serve deletion is **not guaranteed available** in every deployment, so the user-facing notice uses conditional wording ("where the operator has enabled it, otherwise contact the operator"). If deletion should become a standing user right, lift the gate (or add a separate always-on user-deletion route).
+- **Standing self-serve deletion (always-on):** `DELETE /api/session/delete` ([route](../../apps/web/app/api/session/delete/route.ts)) is the permanent user-deletion right. It requires auth (401 otherwise) and is **NOT env-gated** — any signed-in student may delete all of their own data at any time, in every deployment. It deletes every per-student table in one transaction (`chat_messages`, `forward_schedules`, `schedule_preferences`, `audit_log`, `session_summaries`, `pending_mutations`), with the `students` parent row **last**; on failure it rolls back and returns 500.
+- **Operator/test affordance (gated):** `DELETE /api/session/clear` ([route](../../apps/web/app/api/session/clear/route.ts)) performs the same per-student wipe but is **gated server-side on `NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`** (returns 403 otherwise) and requires auth (401 otherwise). It exists so the operator can re-run onboarding during testing; the chat UI's "clear my data" control is wired to it. This is intentionally distinct from the standing `/api/session/delete` right above.
+- ✅ **Status (2026-06-16):** self-serve deletion is now a **standing user right** via the always-on `DELETE /api/session/delete` route, so it is **guaranteed available in every deployment** and the user-facing notice no longer hedges with conditional "where the operator has enabled it" wording. The env-gated `/api/session/clear` remains only as the operator/test affordance described above.
 
 ## Caveats for whoever owns the deployment
 

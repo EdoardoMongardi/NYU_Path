@@ -192,6 +192,10 @@ export default function ChatPage() {
     const { forwardSchedule, schedulePreferences, forwardMaterialization, pendingPreview, invalidProposal } =
         useSyncExternalStore(planStore.subscribe, planStore.getSnapshot, planStore.getSnapshot);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    // Phase 4 Task E6.4 — in-flight guard for the standing
+    // self-serve account-deletion control (disables the button so a
+    // student can't fire DELETE /api/session/delete twice).
+    const [deletingAccount, setDeletingAccount] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1372,6 +1376,44 @@ export default function ChatPage() {
         }
     }, []);
 
+    /**
+     * Phase 4 Task E6.4 — STANDING self-serve account deletion.
+     * Always available to a signed-in student (NOT gated on the
+     * test-clear env flag). Wired to the always-on, authenticated
+     * DELETE /api/session/delete route, which wipes ALL of the
+     * student's data keyed on their session `auth.sub`. On success we
+     * hard-reload back to the onboarding flow; on failure we surface
+     * the error (mirrors handleClearAll). `deletingAccount` guards
+     * against a double-submit while the request is in flight.
+     */
+    const handleDeleteAccount = useCallback(async (): Promise<void> => {
+        const ok = window.confirm(
+            "Permanently delete your account and ALL your data (plan, preferences, chat history)? This cannot be undone.",
+        );
+        if (!ok) return;
+        setDeletingAccount(true);
+        try {
+            const res = await fetch("/api/session/delete", {
+                method: "DELETE",
+                credentials: "same-origin",
+            });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                window.alert(
+                    `Delete failed: ${(j as { error?: string }).error ?? `HTTP ${res.status}`}`,
+                );
+                setDeletingAccount(false);
+                return;
+            }
+            // Hard reload — re-runs the onboarding flow from a blank
+            // /api/session/restore.
+            window.location.reload();
+        } catch (err) {
+            window.alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+            setDeletingAccount(false);
+        }
+    }, []);
+
     const handleFileUpload = useCallback(async (file: File) => {
         if (!file.name.toLowerCase().endsWith(".pdf")) {
             addMessage("assistant", "Please upload a PDF file (your Degree Progress Report).");
@@ -1833,6 +1875,8 @@ export default function ChatPage() {
                 onConfirmCombination={handleConfirmSectionCombination}
                 onRefreshDpr={handleRefreshDpr}
                 onClearAll={handleClearAll}
+                onDeleteAccount={handleDeleteAccount}
+                deletingAccount={deletingAccount}
             />
         </div>
     );

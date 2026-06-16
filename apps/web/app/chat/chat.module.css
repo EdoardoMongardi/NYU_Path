@@ -1079,9 +1079,14 @@ button.reasoningHeader:focus-visible {
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.sidebarClearBtn:hover {
+.sidebarClearBtn:hover:not(:disabled) {
     background: #f8d7da;
     border-color: #842029;
+}
+
+.sidebarClearBtn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
 .sidebarClearBtn:focus-visible {

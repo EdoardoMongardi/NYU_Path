@@ -213,6 +213,14 @@ interface ScheduleSidebarProps {
     onConfirmCombination?: (proposalId: string) => void;
     onRefreshDpr?: (file: File) => Promise<void>;
     onClearAll?: () => Promise<void>;
+    /** Phase 4 Task E6.4 — STANDING, always-on self-serve account
+     *  deletion (DELETE /api/session/delete). Unlike `onClearAll`
+     *  (the env-gated test affordance) this is always shown to a
+     *  signed-in student. */
+    onDeleteAccount?: () => Promise<void>;
+    /** Phase 4 Task E6.4 — in-flight guard from the page; disables the
+     *  delete control while the request is pending. */
+    deletingAccount?: boolean;
 }
 
 export default function ScheduleSidebar({
@@ -237,6 +245,8 @@ export default function ScheduleSidebar({
     onConfirmCombination,
     onRefreshDpr,
     onClearAll,
+    onDeleteAccount,
+    deletingAccount,
 }: ScheduleSidebarProps) {
     const [openPopover, setOpenPopover] = useState<string | null>(null);
     const [openSubmenu, setOpenSubmenu] = useState<{ key: string; verb: "swap" | "move" } | null>(null);
@@ -955,6 +965,26 @@ export default function ScheduleSidebar({
                         <span className={styles.slotSpinner} aria-hidden="true" />
                         <span>Validating plan change…</span>
                     </div>
+                </div>
+            )}
+
+            {/* Phase 4 Task E6.4 — STANDING self-serve account deletion.
+                Always visible to a signed-in student (NOT gated on the
+                test-clear flag below); wired to the always-on DELETE
+                /api/session/delete route so the /privacy promise that
+                "self-serve deletion is always available to signed-in
+                users" is literally true in-app. */}
+            {onDeleteAccount && (
+                <div className={styles.sidebarToolbarBottom}>
+                    <button
+                        type="button"
+                        className={styles.sidebarClearBtn}
+                        onClick={() => void onDeleteAccount()}
+                        disabled={deletingAccount}
+                        title="Permanently delete your account and all your data"
+                    >
+                        {deletingAccount ? "Deleting…" : "Delete my account & data"}
+                    </button>
                 </div>
             )}
 
