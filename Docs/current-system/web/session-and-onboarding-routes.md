@@ -1,10 +1,11 @@
 # Session and Onboarding Routes
 
-> Last verified against code: 2026-06-15 (Phase 4 E1.2: Purpose now notes the v2 chat route reads the four confirmed `confirm_profile_update` fields back into the per-turn `session.student`, cross-ref [chat-route-sse.md §5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12). Same-day prior pass: cohort gate subsystem removed: §1 no longer lists the dropped `cohort_assignments` table in the wipe order).
+> Last verified against code: 2026-06-16 (Phase 4 E5: onboarding/preference wizard — built + tested, mount deferred). New [§6](#6-onboarding--preference-wizard-built--tested-not-yet-mounted) documents the 5-step wizard state machine, the home-school PROPOSE+confirm (never silent CAS; `body.homeSchool` validated + persisted), the preference ladder via chat-turn injection, and the undeclared → intended-major hedged preview. [§5](#5-legacy-apichat--onboarding-state-machine)'s `correcting_data` known-limitation now notes the v2 path DOES persist a `visaStatus`/`homeSchool` correction (the legacy `/api/chat` step is still a no-op).
+> Prior: 2026-06-15 (Phase 4 E1.2: Purpose notes the v2 chat route reads the four confirmed `confirm_profile_update` fields back into the per-turn `session.student`, cross-ref [chat-route-sse.md §5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12). Same-day prior pass: cohort gate subsystem removed: §1 no longer lists the dropped `cohort_assignments` table in the wipe order).
 
 ## Purpose
 
-These endpoints handle the "before and around" of the chat experience — getting a student set up, picking up where they left off, and updating their data when something changes. When a brand-new student lands on the chat page, they upload their degree progress report PDF, and the onboarding endpoint reads it, extracts the courses and programs, and hands back a structured summary. When a returning student reopens the page, the restore endpoint quietly fetches their saved profile, plan, preferences, and recent messages so the page can rehydrate the entire conversation — **this is the route that hydrates the full persisted profile from Postgres** (the live chat turn also hydrates the persisted plan + preferences each turn since P3.1; it rebuilds the *base* `StudentProfile` from the client-resent DPR, and as of **Phase 4 E1.2** it now also reads the persisted profile back and merges the four confirmed `confirm_profile_update` fields — `homeSchool` / `catalogYear` / `declaredPrograms` / `visaStatus` — into the per-turn `session.student`, so a confirmed profile edit survives into the agent's view each turn; see [chat-route-sse.md §5.1](chat-route-sse.md#51-per-turn-plan--prefs-hydration) and [§5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12)). When the student gets a new degree report mid-semester (say, after registering for next term), they hit refresh and the system rebuilds their plan from scratch. There's also a test-only "wipe everything" endpoint, hidden behind an environment flag, used during development. A separate legacy `/api/chat` route still handles the pre-DPR onboarding chitchat state machine; it is covered in [§5](#5-legacy-apichat-onboarding-state-machine).
+These endpoints handle the "before and around" of the chat experience — getting a student set up, picking up where they left off, and updating their data when something changes. When a brand-new student lands on the chat page, they upload their degree progress report PDF, and the onboarding endpoint reads it, extracts the courses and programs, and hands back a structured summary. When a returning student reopens the page, the restore endpoint quietly fetches their saved profile, plan, preferences, and recent messages so the page can rehydrate the entire conversation — **this is the route that hydrates the full persisted profile from Postgres** (the live chat turn also hydrates the persisted plan + preferences each turn since P3.1; it rebuilds the *base* `StudentProfile` from the client-resent DPR, and as of **Phase 4 E1.2** it now also reads the persisted profile back and merges the four confirmed `confirm_profile_update` fields — `homeSchool` / `catalogYear` / `declaredPrograms` / `visaStatus` — into the per-turn `session.student`, so a confirmed profile edit survives into the agent's view each turn; see [chat-route-sse.md §5.1](chat-route-sse.md#51-per-turn-plan--prefs-hydration) and [§5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12)). When the student gets a new degree report mid-semester (say, after registering for next term), they hit refresh and the system rebuilds their plan from scratch. There's also a test-only "wipe everything" endpoint, hidden behind an environment flag, used during development. A separate legacy `/api/chat` route still handles the pre-DPR onboarding chitchat state machine; it is covered in [§5](#5-legacy-apichat--onboarding-state-machine).
 
 ```mermaid
 flowchart LR
@@ -307,6 +308,82 @@ This is the legacy v1 chat route. Post-DPR turns no longer touch it — they go 
 2. **Pre-onboarding chitchat** — when there's no `parsedData` yet, `handleBasicChat` (`route.ts:180-230`) answers warmly. If `OPENAI_API_KEY` is set it runs a single tool-less completion through `new OpenAIEngineClient({ modelId: DEFAULT_PRIMARY_MODEL, ... })`; otherwise it falls back to hardcoded greeting/help strings. (Note: this is the one place in the chat surface that still instantiates an OpenAI client directly, using the engine's `DEFAULT_PRIMARY_MODEL` constant — currently `claude-sonnet-4-6` — as the model id, even though the client class is `OpenAIEngineClient`.)
 3. **Deprecation guard** — any POST with `onboardingStep === "complete"` AND `parsedData` present returns HTTP 410 Gone with `{ error: "…Use POST /api/chat/v2 (SSE).", redirect: "/api/chat/v2" }` (`route.ts:58-66`).
 
-### Known limitation — the `correcting_data` step stores nothing
+### Known limitation — the LEGACY `correcting_data` step stores nothing (the v2 path DOES persist)
 
-When the student replies "no" at `confirming_data`, the route advances to `correcting_data` and, for any free-form correction that isn't a re-upload or a "done" signal, replies `"Got it, I've noted that correction! ✅"` (`route.ts:127-130`). **This is cosmetic — the route persists nothing.** There is no profile mutation, no store write, no record of the stated correction. The acknowledgement is a canned string. A student who corrects "my GPA is 3.7" here is told it was noted, but nothing downstream sees the change unless they re-upload a corrected DPR. This is a known bug, documented here so the friendly copy isn't mistaken for real behavior.
+When the student replies "no" at `confirming_data`, the **legacy** `/api/chat` route advances to `correcting_data` and, for any free-form correction that isn't a re-upload or a "done" signal, replies `"Got it, I've noted that correction! ✅"` (`route.ts:127-130`). **On this legacy route that acknowledgement is still cosmetic — the legacy step persists nothing.** There is no profile mutation, no store write, no record of the stated correction. A student who corrects "my GPA is 3.7" *on the legacy route* is told it was noted, but nothing downstream sees the change unless they re-upload a corrected DPR.
+
+> **Phase 4 E5.3 — the correction-persist gap IS closed on the v2 path.** The wizard / `/api/chat/v2` correction route now persists a returning student's `homeSchool` (E5.2) and `visaStatus` (E5.3) correction via `profileStore.persistMutation`, so the correction survives the next turn and is read back into `session.student` by E1.2. See [§6.3](#63-confirm-profile--homeschool-propose--confirm-e52--visastatus-persist-e53) and [chat-route-sse.md §5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12). This legacy `/api/chat` `correcting_data` step was NOT migrated — the wizard/v2 path is the one that persists. (DPR-2/3/4 synthetic-grade / `advisorNotations` / `repeatCode`, plus `catalogYear` / `declaredPrograms`, are deliberately left as un-closed correction gaps — flagged in the v2 route at `apps/web/app/api/chat/v2/route.ts:577-594`, never invented.)
+
+## 6. Onboarding / preference wizard — BUILT + TESTED, NOT YET MOUNTED
+
+**Status (binding honesty):** the wizard is a complete, unit-tested subsystem (a pure state machine + a thin React shell + the chat-turn transport that feeds it into the existing rails). **It is NOT yet rendered in any production onboarding path** — a full deep-cutover (showing `<OnboardingWizard>` on first visit and handing its collected values + parsed DPR off to the chat after the "Plan" step) is deliberately deferred. The component, its `onReachPlan` / `onPreviewIntendedMajor` callbacks, and the chat-page consumers (`handleWizardReachPlan`, `handleApplyWizardPreferences`, `handleIntendedMajorPreview`) all exist and are wired *to each other in code* — but the only occurrence of `<OnboardingWizard …>` in `apps/web/app/chat/page.tsx` is inside a JSDoc comment showing how a later cutover will mount it (`page.tsx:853-854`). Document accordingly: built + tested, mount/cutover deferred. Do **not** read this section as "the wizard is live in onboarding."
+
+**Files:**
+
+| Piece | File | Nature |
+|-------|------|--------|
+| State machine (pure) | `apps/web/lib/wizard/wizardMachine.ts` | node-tested, no React |
+| Home-school propose+confirm | `apps/web/lib/wizard/homeSchool.ts` | pure helpers |
+| Preference → chat-turn builder | `apps/web/lib/wizard/preferenceTurns.ts` | pure, no engine import |
+| Undeclared → intended-major preview | `apps/web/lib/wizard/intendedMajor.ts` | pure, no engine import |
+| React shell (thin renderer) | `apps/web/app/chat/wizard/OnboardingWizard.tsx` + `wizard.module.css` | drives the machine |
+| Chat-page consumers (the deferred-cutover seam) | `apps/web/app/chat/page.tsx:813-877` | `handleApplyWizardPreferences` / `handleWizardReachPlan` / `handleIntendedMajorPreview` |
+
+### 6.1 The 5-step state machine (`wizardMachine.ts`)
+
+`apps/web/lib/wizard/wizardMachine.ts`. A PURE, framework-agnostic stepper — the established `planState.ts` idiom (logic pure + unit-tested in `apps/web/tests/wizardShell.test.ts`; the component is a thin renderer). The ordered five steps (`WIZARD_STEPS`, `wizardMachine.ts:55-61`):
+
+```
+upload → confirm_profile → goals → preferences → plan
+```
+
+- `upload` — the DPR data source; REUSES the existing `/api/onboard` parse endpoint (same multipart `dpr` field the chat page's upload uses).
+- `confirm_profile` / `goals` / `preferences` — the OPTIONAL, skippable steps (`OPTIONAL_STEPS`, `wizardMachine.ts:64-68`; `isOptionalStep`).
+- `plan` — terminal; hands off to the existing planning surface (the deterministic-on-validity engine — the wizard invents no fact and ships no plan).
+
+**Defaulted + skippable + no-dead-end (the binding contract):** every optional field is defined and defaulted in `DEFAULT_WIZARD_VALUES` (`wizardMachine.ts:149-162`, frozen) so nothing is ever `undefined` at rest, and every optional step has a Skip. The API:
+
+- `initialWizardState()` — `{ step: "upload", values: <fresh defaults> }`.
+- `nextStep(state, patch?)` — advance one step, merging `patch`; a no-op `step` at terminal `plan`; returns a fresh state.
+- `skipStep(state)` — advance WITHOUT changing a value (the skipped field keeps its default).
+- `prevStep(state)` — go back one; no-op at `upload`.
+- `skipAll(state)` — **THE NO-DEAD-END GUARANTEE**: jump straight to `plan` from ANY step, applying defaults for anything the student didn't set (their explicit values are preserved on top). So a student can always reach a Plan having configured nothing.
+
+**NEVER SILENT CAS (core_philosophy.md #1, ALL-NYU):** `DEFAULT_WIZARD_VALUES.homeSchool` is the **empty string**, NOT `"cas"` — "not confirmed yet" — so the engine never silently treats an unknown-school student as CAS. The workload field is the plan-level load-DISTRIBUTION axis (`balanced` / `frontload` / `backload`) — the exact domain the engine's `loadStyleOverride` accepts at the plan level (NOT per-term `light`/`heavy`, which the apply walk rejects as a no-op).
+
+### 6.2 Upload step
+
+The wizard's Upload step POSTs the chosen PDF to the existing `/api/onboard` (see [§3](#3-post-apionboard)) under the `dpr` field — the same deterministic `parseDpr` path, no new route. On success it stows the parsed `DegreeProgressReport` in component state (`parsedDpr`) and advances. The hidden file input is hoisted out of the Upload block so the `confirm_profile` step's "Upload a What-If DPR instead" button (§6.5) can reuse the SAME ref + onChange (one input, one `/api/onboard` parse path).
+
+### 6.3 Confirm-profile — homeSchool PROPOSE + confirm (E5.2) + visaStatus persist (E5.3)
+
+**Module:** `apps/web/lib/wizard/homeSchool.ts`.
+
+- `SCHOOL_OPTIONS` (`homeSchool.ts:46-50`) — ALL 11 selectable home schools, sourced from the engine's `SCHOOL_DISPLAY_NAMES` registry (INCLUDING `shanghai` / NYU Shanghai and `nyuad` / NYU Abu Dhabi) so the list never drifts from the single source of truth — no hardcoded partial list, never CAS-only.
+- `computeHomeSchoolProposal(dpr)` (`homeSchool.ts:82-91`) — PROPOSES the DPR-derived home school by REUSING the real derivation (`buildStudentProfileFromDpr(dpr).homeSchool` → `deriveHomeSchool`). When the derivation degrades to the school-agnostic `"unknown"` (or empty), it returns `{ proposed: null, needsPrompt: true }` — the wizard renders an explicit prompt with **NO default pre-selected**. **`"unknown"` NEVER becomes `"cas"` here.**
+- `isValidSchoolCode(code)` (`homeSchool.ts:94-96`) — membership in `SCHOOL_OPTIONS`.
+
+**Transport + persistence (the v2 route):** the chat page sends the confirmed/overridden code as `body.homeSchool`. The v2 route VALIDATES it via `isValidSchoolCode` BEFORE it threads or persists (`apps/web/app/api/chat/v2/route.ts:232-244`): a forged / unknown code is dropped to `undefined` (falls back to `deriveHomeSchool`) and logged — never silently written. A valid code threads through as `homeSchoolOverride` on the rebuilt profile (`route.ts:261`). When a profile already exists and the validated code DIFFERS from the persisted home school, the route persists the change via `profileStore.persistMutation` with a `field: "homeSchool"` audit row (`route.ts:503-526`). The bootstrap persist owns the no-profile case; this change-persist is idempotent (an unchanged code writes nothing).
+
+**visaStatus correction (E5.3) — same shape.** The Confirm-profile (and Goals) step lets the student correct F-1 / domestic; it is sent as `body.visaStatus`, and the v2 route captures the persisted `visaStatus` alongside `homeSchool` (`route.ts:306-313`) and, when a profile exists AND the body sent a VALID visa value that DIFFERS, persists the correction via `persistMutation` with a `field: "visaStatus"` audit row (`route.ts:551-575`). This generalizes the correction-persist beyond homeSchool. Both corrections are read back into `session.student` next turn by E1.2 ([chat-route-sse.md §5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12)). The LEGACY `/api/chat` `correcting_data` step ([§5](#5-legacy-apichat--onboarding-state-machine)) remains a no-op — the wizard/v2 path is the one that persists.
+
+### 6.4 Goals + Preferences → the Phase-3 ladder via CHAT-TURN injection (E5.4)
+
+**Module:** `apps/web/lib/wizard/preferenceTurns.ts` — a PURE turn-builder (no engine import, no new `/api/preferences/*` route). The wizard reaches the existing Phase-3 preference ladder by INJECTING A CHAT TURN that asks the agent to call `propose_plan_change` / `confirm_plan_change`, EXACTLY mirroring the chat page's `handleProposeLoadStyle` (`addMessage('user', text) → handleSendV2(text)`). The agent loop then compiles + applies the mutation via the engine's existing `applyMutationsToPreferences` and persists via `persistPreferences`.
+
+`buildPreferenceTurns(values)` (`preferenceTurns.ts:84-156`) returns ONE turn per NON-DEFAULT preference (empty array when the student skipped everything):
+
+- **workload** `frontload` / `backload` → a `loadStyleOverride` mutation (the plan-level-valid domain; mirrors `handleProposeLoadStyle`). `balanced` emits nothing.
+- **summer / J-term / study-abroad / honors** toggles → an `addSoftObjective` mutation each, with honest "I'm open to / interested in…" framing — because the engine's `SchedulingPreferences` schema has NO field for any of them (a `setSchedulingPreference` aimed at a non-existent field would be a dead/rejected mutation), so they route through the SAME SOFT-objective rail as free-text.
+- **free-text** → an `addSoftObjective` mutation, the phrase passed VERBATIM to the agent's generic compiler (no keyword rewrite) and explicitly framed as a PREFERENCE / NOT a hard requirement.
+
+Everything stays **SOFT-only (the D6.4 invariant)** — the hard solver / validator are never touched; a hard constraint can never be smuggled into a soft objective. Consumed by `handleApplyWizardPreferences` (`page.tsx:813`), which injects each returned turn sequentially.
+
+### 6.5 Undeclared → intended-major preview, HEDGED (E5.5)
+
+**Module:** `apps/web/lib/wizard/intendedMajor.ts` — pure helpers that WIRE the existing Lane-B / RAG-preview + intended-major substrate into the Confirm-profile step (NO new requirement-model logic, NO engine import, NO new route).
+
+- `isUndeclared(declaredPrograms)` (`intendedMajor.ts:55-57`) — the SAME predicate the proactive-elicitation detector uses (`hasDeclaredProgram` negated): empty or absent `declaredPrograms` ⇒ undeclared. The wizard derives the signal from the parsed DPR via the pre-fallback `deriveDeclaredProgramsFromDpr` (see [build-session.md §2](build-session.md#2-buildstudentprofilefromdpr--the-only-profile-builder)) so it sees the genuine "no Major/Minor/Concentration row" state (the padded `deriveDeclaredPrograms` would make `isUndeclared` always false).
+- `buildIntendedMajorPreviewTurn(intendedMajor)` (`intendedMajor.ts:79-89`) — builds a HEDGED chat turn that asks the agent to PREVIEW an intended major's requirements via its grounded RAG path (`what_if_audit` / `search_policy`), passing the major VERBATIM (school-agnostic — an NYU Shanghai / Abu Dhabi major hedges identically). The turn explicitly says it is a PREVIEW to VERIFY WITH THE ADVISER, NOT a confirmed/finalized plan, and asks the agent to ATTACH ITS CONFIDENCE — so the engine's §11 / D4.4 confidence + "confirm with your adviser" rail fires.
+
+Two affordances on the Confirm-profile step when the student is undeclared: (a) **upload an Albert What-If audit** — reuses the SAME `/api/onboard` upload (a What-If / Career-Simulation report parses end-to-end through `parseDpr` into Lane A); (b) **"Preview by name"** — injects the hedged RAG-preview turn through the agent loop (consumed by `handleIntendedMajorPreview`, `page.tsx:685`). The wizard renders NO fabricated requirement list — the grounded agent answers.

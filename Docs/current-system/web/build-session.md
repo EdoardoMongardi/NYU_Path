@@ -1,6 +1,6 @@
 # Session Builders and Boot-time RAG
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-16 (Phase 4 E5: onboarding/preference wizard — built + tested, mount deferred). `homeSchoolOverride` is now SENT by a client (the wizard / chat page posts `body.homeSchool`, validated via `isValidSchoolCode`), and `deriveDeclaredProgramsFromDpr` is now an EXPORTED pre-fallback classification core the wizard reuses (§2). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## Purpose
 
@@ -63,7 +63,7 @@ The DPR-driven canonical builder. Every field traces back to a parsed DPR field;
 - `opts.visaStatus?` — `"f1"` or `"domestic"` (DPR doesn't expose visa status).
 - `opts.catalogYearOverride?` — overrides the derived `"YYYY-YYYY"` range.
 - `opts.declaredProgramsOverride?` — overrides the programs-table derivation.
-- `opts.homeSchoolOverride?` — overrides the school-label heuristic.
+- `opts.homeSchoolOverride?` — overrides the school-label heuristic. **As of Phase 4 E5.2 a client DOES post this:** the onboarding/preference wizard (and the chat page) send the confirmed home-school code as `body.homeSchool`, which the v2 chat route VALIDATES via `isValidSchoolCode` (a forged / unknown code is dropped and never persisted) and then threads here as `homeSchoolOverride` (`apps/web/app/api/chat/v2/route.ts:232-261`). So the "no production client posts that value" caveat below is now superseded for the wizard/chat path.
 - `opts.studentIdOverride?` — overrides the slugified-name fallback id. The doc comment is explicit that this MUST be set to the authenticated JWT subject when a user is logged in; otherwise persistence splits across two phantom student rows (the May 2026 "schedule disappears on refresh" post-mortem).
 
 ### Course history → `coursesTaken` and `currentSemester`
@@ -90,20 +90,20 @@ The "latest term only" step is the May 2026 post-mortem fix: previously every IP
 - Season ranking: `J-Term`/`January` → 0, `Spr`/`Spring` → 1, `Summer` → 2, `Fall` → 3.
 - Unknown seasons rank as 0.
 
-### `declaredPrograms` derivation
+### `declaredPrograms` derivation — split into a pre-fallback core + the padded wrapper (Phase 4 E5.5)
 
-`deriveDeclaredPrograms`, `buildSession.ts:176-195`. Walks `report.programs`; for each row whose lowercased `programType` contains:
-- `"major"` → `{ programId, programType: "major" }`.
-- `"minor"` → `{ programId, programType: "minor" }`.
-- `"concentration"` → `{ programId, programType: "concentration" }`.
+The classification rule is now **two functions** so the wizard and the session path can each get what they need from a SINGLE source of truth:
 
-Other types (career, administrative) are skipped. If the list ends up empty, the function emits a single placeholder `{ programId: "unknown_major", programType: "major" }` so downstream tools see at least one declared program.
+- **`deriveDeclaredProgramsFromDpr(report)` — the EXPORTED pre-fallback core** (`buildSession.ts:197-212`). Walks `report.programs`; for each row whose lowercased `programType` contains `"major"` / `"minor"` / `"concentration"`, pushes the matching `{ programId, programType }` (career / administrative rows are skipped). Returns the genuine, **UN-padded** set: when the DPR lists no Major/Minor/Concentration row this returns `[]` — the true "undeclared" state. It deliberately does **NOT** append the `unknown_major` placeholder.
+- **`deriveDeclaredPrograms(report)` — the session-path wrapper** (`buildSession.ts:214-224`, private). Calls the core, then, when it returns empty, appends a single placeholder `{ programId: "unknown_major", programType: "major" }` so downstream planning tools always see at least one declared program. Its output is **unchanged for existing callers** — the wrapper is what the profile builder still uses.
 
-`programIdFromLabel` (`buildSession.ts:247-250`) slugifies the label: lowercase, non-alphanumeric runs → `_`, trim leading/trailing underscores.
+**Why the split (the wizard reason):** the onboarding wizard's undeclared-detection (`OnboardingWizard.tsx`, via `isUndeclared`) needs the RAW pre-fallback result — the `unknown_major` padding would make `isUndeclared` ALWAYS false and kill the intended-major-preview feature ([session-and-onboarding-routes.md §6.5](session-and-onboarding-routes.md#65-undeclared--intended-major-preview-hedged-e55)). So the wizard imports and calls `deriveDeclaredProgramsFromDpr` directly (one classification rule, not a hand-rolled second copy); the session path keeps the padded `deriveDeclaredPrograms`. This intentional divergence is documented on the exported function's docstring.
+
+`programIdFromLabel` (`buildSession.ts:276-279`) slugifies the label: lowercase, non-alphanumeric runs → `_`, trim leading/trailing underscores.
 
 ### `homeSchool` derivation
 
-`deriveHomeSchool`, `buildSession.ts:197-223`. Joins all program labels into one lowercased string, then matches substrings **in this order** (order matters because Steinhardt's published name contains "...the Arts" and would false-positive on Tisch):
+`deriveHomeSchool`, `buildSession.ts:226-252`. Joins all program labels into one lowercased string, then matches substrings **in this order** (order matters because Steinhardt's published name contains "...the Arts" and would false-positive on Tisch):
 
 1. `"steinhardt"` → `"steinhardt"`.
 2. `"tisch"` → `"tisch"`.
@@ -115,7 +115,7 @@ Other types (career, administrative) are skipped. If the list ends up empty, the
 8. `"sps"` or `"professional studies"` → `"sps"`.
 9. **No match → logs a `console.warn` and returns `"unknown"`** (NOT `"cas"`).
 
-> **Correction from the prior doc:** the fallback is `"unknown"`, not `"cas"`. When the home school is `"unknown"`, `loadSchoolConfig("unknown")` yields no school-specific config and the planner runs in **school-agnostic mode** (DPR-only caps; falls back to `schoolDefaults` constants — no per-school requirement rules). The home school is meant to be confirmed at onboarding via `homeSchoolOverride`, but no production client currently posts that value (see [chat-route-sse.md §5.2](chat-route-sse.md#52-home-school-derivation-and-the-unknown-fallback)).
+> **Correction from the prior doc:** the fallback is `"unknown"`, not `"cas"`. When the home school is `"unknown"`, `loadSchoolConfig("unknown")` yields no school-specific config and the planner runs in **school-agnostic mode** (DPR-only caps; falls back to `schoolDefaults` constants — no per-school requirement rules). The home school is meant to be confirmed at onboarding via `homeSchoolOverride`. **As of Phase 4 E5.2 the wizard / chat page DOES post a confirmed value** (`body.homeSchool`, validated by the v2 route via `isValidSchoolCode` before it threads here) — so the earlier "no production client posts that value" statement no longer holds for the wizard/chat path. The wizard's Confirm-profile step PROPOSES the derived school via `computeHomeSchoolProposal` (which reuses THIS `deriveHomeSchool`), and an `"unknown"` derivation surfaces as an explicit prompt — **never silently CAS** (see [session-and-onboarding-routes.md §6.3](session-and-onboarding-routes.md#63-confirm-profile--homeschool-propose--confirm-e52--visastatus-persist-e53) and [chat-route-sse.md §5.2](chat-route-sse.md#52-home-school-derivation-and-the-unknown-fallback)).
 
 ### `catalogYear` derivation
 
