@@ -1,6 +1,6 @@
 # Database and Stores
 
-> Last verified against code: 2026-06-15 (cohort gate subsystem removed).
+> Last verified against code: 2026-06-16 (Phase 4 E6 — DB wiring + live exit gates). Prior: 2026-06-15 (cohort gate subsystem removed).
 
 ## Purpose
 
@@ -143,6 +143,22 @@ Append-only chat transcript. Defined at `schema.ts:139`.
 
 Index `chat_messages_student_idx` on `(student_id, id)`.
 
+### Table: pending_mutations (Phase 4 E6.3)
+
+Durable staging for the deterministic plan-action propose→confirm round-trip. Defined at `schema.ts:151`; migration `0003_phase4_pending_mutations.sql`.
+
+| Column | Type | Purpose |
+|---|---|---|
+| pending_mutation_id | text, primary key | The opaque UUID `runProposeStage` mints and the UI hands back to `/api/plan/confirm` |
+| student_id | text, FK to students, **cascade delete** | Owner — powers the cross-tenant guard inside `take` |
+| mutations | jsonb, not null | The exact `PlanMutation[]` the confirm re-applies atomically |
+| created_at | timestamptz, not null | When the proposal was staged |
+| expires_at | timestamptz, not null | `created_at + 10 min` (the TTL); a crashed mid-confirm flow ages out instead of leaking rows |
+
+Indexes `pending_mutations_student_idx` on `student_id` and `pending_mutations_expires_idx` on `expires_at`.
+
+This table **replaces the in-process `Map`** the plan-action orchestrator used pre-E6.3 (`planActionOrchestrator.ts`), so a staged proposal survives a process restart and is visible to a sibling instance in a multi-instance deploy. The single-use delete, the cross-tenant guard, and the TTL all live **inside** the store's `take` (see `PendingMutationStore` below and [plan-action-orchestrator.md](./plan-action-orchestrator.md) §6.6/§6.7). The `ON DELETE cascade` to `students` means a self-serve deletion / test-clear (`/api/session/delete`, `/api/session/clear`) also wipes any staged proposals.
+
 ## Per-store documentation
 
 ### ProfileStore — `profileStorePostgres.ts`
@@ -193,6 +209,23 @@ Implements the engine's `SessionStore` interface. Owns `session_summaries` and a
 
 **trim(studentId)** (private) — Selects the IDs of the latest `MAX_SESSION_SUMMARIES` rows for the student, then issues `DELETE FROM session_summaries WHERE student_id = X AND id NOT IN (those IDs)`. Survives concurrent inserts because the delete is a single statement. (`sessionStorePostgres.ts:86`)
 
+### PendingMutationStore — `pendingMutationStore.ts` (Phase 4 E6.3)
+
+Durable staging for the plan-action propose→confirm round-trip. Two implementations behind one interface, selected by `getStores`: `PostgresPendingMutationStore` (one row per staged proposal in `pending_mutations`) when a DB handle exists, `InMemoryPendingMutationStore` (a single-process `Map`, dev + offline tests) otherwise. `PENDING_MUTATION_TTL_MS` = 10 min mirrors the pre-E6.3 orchestrator Map.
+
+**stage(entry)** — Runs a best-effort TTL sweep, then writes/upserts a row (`pendingMutationId`, `studentId`, the `PlanMutation[]`, `createdAt`, `expiresAt = createdAt + TTL`). (`pendingMutationStore.ts:96`/`:158`)
+
+**take(pendingMutationId, studentId)** — The single security-critical seam. **Atomically** read-validates-tenant-checks-deletes, returning a discriminated `TakeResult`:
+- `{ status: "ok", entry }` — the id exists, is unexpired, AND its `studentId` matches → the row is deleted (**single-use**) and the entry returned. The Postgres path does this as one tenant-scoped `DELETE … RETURNING` so the read and the single-use delete are one statement; a matched-but-expired row is treated as `not_found`.
+- `{ status: "tenant_mismatch" }` — the id exists under a different student → the entry is left **intact** for its rightful owner (the orchestrator maps this to `studentId_mismatch` → 403). The Postgres path disambiguates this from `not_found` with a read-only existence probe after the tenant-scoped delete deletes nothing.
+- `{ status: "not_found" }` — unknown or expired id (orchestrator → `unknown_mutation_id` → 404).
+
+This pulls the cross-tenant guard + single-use delete + TTL out of the orchestrator and makes them atomic with the read (`pendingMutationStore.ts:101`/`:182`).
+
+**sweepExpired(now?)** — Drops entries older than the TTL. Best-effort housekeeping; also runs implicitly on every `stage`. (`pendingMutationStore.ts:113`/`:237`)
+
+The in-memory variant also exposes test-only affordances (`clearForTests`, `sizeForTests`, `expireAllForTests`) used by the orchestrator's `_resetPendingMutationsForTests` / `_pendingMutationsSizeForTests` helpers.
+
 ## The DB client — `client.ts`
 
 A lazy module-level singleton over Neon's serverless driver.
@@ -223,7 +256,9 @@ This is the standard drizzle-kit setup: editing `schema.ts` and running the kit'
 "db:migrate": "drizzle-kit migrate"
 ```
 
-`drizzle-kit migrate` is the **apply** command (not `generate`, which only writes a new SQL file, nor `push`, which diffs the schema straight onto the DB without going through the journal). It reads the `DATABASE_URL` from `drizzle.config.ts`, walks the journal at `apps/web/drizzle/meta/_journal.json`, and applies any not-yet-applied SQL files (`0000_strong_riptide.sql` → `0001_phase16_persistence.sql` → `0002_drop_cohort.sql`) **in journal order**, tracking what it has applied in drizzle's bookkeeping table.
+`drizzle-kit migrate` is the **apply** command (not `generate`, which only writes a new SQL file, nor `push`, which diffs the schema straight onto the DB without going through the journal). It reads the `DATABASE_URL` from `drizzle.config.ts`, walks the journal at `apps/web/drizzle/meta/_journal.json`, and applies any not-yet-applied SQL files (`0000_strong_riptide.sql` → `0001_phase16_persistence.sql` → `0002_drop_cohort.sql` → `0003_phase4_pending_mutations.sql`) **in journal order**, tracking what it has applied in drizzle's bookkeeping table.
+
+`0003_phase4_pending_mutations.sql` (journal idx 3, Phase 4 E6.3) is **additive** — it creates the `pending_mutations` table + its two indexes and adds the `ON DELETE cascade` FK to `students`. Unlike `0002` it drops nothing.
 
 **How an operator runs it** (the live run is gated by E6.1 — provisioning the Neon `DATABASE_URL`):
 
@@ -243,10 +278,23 @@ DATABASE_URL='postgres://…neon…' npm run db:migrate
 
 **Fresh Neon baseline vs. running the `0000→0001→0002` sequence — pick the right path.** These two paths diverge and must not be mixed:
 
-- **A brand-new / empty Neon branch (the supported path):** run the **full journaled sequence** with `db:migrate`. It applies `0000 → 0001 → 0002` in order, leaving the journal and drizzle's applied-migrations table internally consistent. Because `0002` drops a table/column/type that `0000`+`0001` created, the net end-state on a fresh DB is identical to the current `schema.ts`, just reached by build-then-drop. **Do this** — it keeps every environment on the same migration history.
-- **Do NOT hand-apply a squashed baseline.** If you instead let drizzle-kit `generate` a single fresh baseline from the current `schema.ts` and apply only that, the resulting journal will have **one** entry (`0000_*`) rather than three. That database can never again receive the real `0001`/`0002` files (their tags aren't in its journal), so it permanently diverges from every other environment and from the repo's `drizzle/` history. Squashing the migration history is a deliberate, repo-wide decision — not something an operator does ad hoc while provisioning one Neon branch.
+- **A brand-new / empty Neon branch (the supported path):** run the **full journaled sequence** with `db:migrate`. It applies `0000 → 0001 → 0002 → 0003` in order, leaving the journal and drizzle's applied-migrations table internally consistent. Because `0002` drops a table/column/type that `0000`+`0001` created, the net end-state on a fresh DB is identical to the current `schema.ts`, just reached by build-then-drop. **Do this** — it keeps every environment on the same migration history.
+- **Do NOT hand-apply a squashed baseline.** If you instead let drizzle-kit `generate` a single fresh baseline from the current `schema.ts` and apply only that, the resulting journal will have **one** entry (`0000_*`) rather than four. That database can never again receive the real `0001`/`0002`/`0003` files (their tags aren't in its journal), so it permanently diverges from every other environment and from the repo's `drizzle/` history. Squashing the migration history is a deliberate, repo-wide decision — not something an operator does ad hoc while provisioning one Neon branch.
 
-In short: **one history, applied in full via `db:migrate`.** Do not run the live apply until the Neon `DATABASE_URL` is provisioned (E6.1).
+In short: **one history, applied in full via `db:migrate`.**
+
+> ⚠️ **Observed: a DB set up via `push` has an INCONSISTENT drizzle journal.** During the Phase-4 E6 live exit-gate runs (E6.5/E6.6), the provisioned test Neon had been initialized with `drizzle-kit push` (schema diffed straight onto the DB, bypassing the journal). Its `__drizzle_migrations` bookkeeping table held **only 1 row**, not one per applied tag — so `drizzle-kit migrate` tried to **re-run `0000`** and conflicted on already-existing objects. This is exactly the "fresh-baseline vs. sequence divergence" warned about above: a `push`-initialized DB is NOT on the journaled history. To recover, an operator must either **reconcile the journal** (mark `0000`–`0002` as already-applied in `__drizzle_migrations`) before running `db:migrate`, or — as was done for the additive `0003` on the test branch — **apply the additive migration's SQL directly** and record its tag. Provision live environments from an **empty branch via `db:migrate`** (never `push`) so this divergence never arises.
+
+## Live-Neon tests (Phase 4 E6.5 / E6.6 — the EXIT-GATE-#2 pair)
+
+Until Phase 4, **every** DB test ran offline (the offline suites `delete process.env.DATABASE_URL` so they exercise the in-memory / Stub path). Phase 4 added the first two tests that run against a **real Postgres** (a Neon branch), both in `apps/web/tests/`:
+
+- **`e2eConfirmPersist.test.ts` (E6.5 — EXIT GATE #2).** The end-to-end propose→confirm→persist round-trip against live Neon. It is the **first live exercise** of the E6.3 `PostgresPendingMutationStore` (durable `pending_mutations` staging), the supersede-then-insert `PostgresScheduleStore.persistSchedule`, the Decision-#32 restore routing (valid → `forwardSchedule`; draft → `studentDraftPlan`), the `schedule_preferences` upsert, and the `audit_log` append. **PASSED live** against the provisioned Neon branch.
+- **`otpLoginSmoke.test.ts` (E6.6).** The email-OTP login round-trip against live Neon — `issueOtp` writes a `sha256(code)` row into `email_otps` (with `RESEND_API_KEY=__test__` it skips the Resend network and surfaces the code as `debugCode`), `verifyOtp` consumes it single-use, upserts a `students` row, and mints a signed HS256 JWT. **PASSED live**, confirming "leaving the memory fallback" is sound for auth (the companion to E6.5).
+
+Both are **gated INVERTED from the offline suites** — `describe.skipIf(!process.env.DATABASE_URL)` — so they **RUN ONLY when a real `DATABASE_URL` is wired** and **SKIP in the default `npx vitest run`** (the offline suite stays green at the same pass count, adding exactly one SKIPPED test each). Both are **self-cleaning** (fixed, clearly-test-scoped ids; wipe their own rows in `beforeAll` + `afterAll` via a direct `getDb()` transaction — idempotent, no residue) and bake in a **120-second** per-hook/per-test timeout because live Neon round-trips over WebSocket are slow (~20–30 s).
+
+To run them live: provision a Neon branch, apply all of `0000..0003` (so `pending_mutations` + `email_otps` exist — see the runbook caveat above), then `DATABASE_URL=… npx vitest run apps/web/tests/e2eConfirmPersist.test.ts apps/web/tests/otpLoginSmoke.test.ts` from the repo root.
 
 ## The store factory — `store.ts`
 
@@ -255,10 +303,10 @@ In short: **one history, applied in full via `db:migrate`.** Do not run the live
 The branching logic is:
 
 1. Call `getDb(env)`. If a Drizzle handle comes back:
-   - Build the bundle with `PostgresSessionStore`, `PostgresProfileStore`, `PostgresScheduleStore`, and `PostgresChatHistoryStore`.
+   - Build the bundle with `PostgresSessionStore`, `PostgresProfileStore`, `PostgresScheduleStore`, `PostgresChatHistoryStore`, and `PostgresPendingMutationStore` (E6.3).
 2. Otherwise, build an in-memory bundle:
    - `sessionStore` is either `FileBackedSessionStore` (if `NYUPATH_SESSION_STORE_PATH` is set) or `InMemorySessionStore`.
-   - The others are the engine's `InMemoryProfileStore`, `InMemoryScheduleStore`, `InMemoryChatHistoryStore`.
+   - The others are the engine's `InMemoryProfileStore`, `InMemoryScheduleStore`, `InMemoryChatHistoryStore`, plus the web-layer `InMemoryPendingMutationStore`.
 
 `resetStoresForTests()` clears the cache so the next call rebuilds. (`store.ts:79`)
 
