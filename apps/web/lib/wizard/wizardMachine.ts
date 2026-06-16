@@ -73,8 +73,18 @@ const OPTIONAL_STEPS: ReadonlySet<WizardStepId> = new Set<WizardStepId>([
 // rest). E5.2–E5.5 replace these placeholders with the real fields.
 // ---------------------------------------------------------------------------
 
-/** Coarse workload preference (E5.4 wires the real compiled SOFT-objective). */
-export type WizardWorkload = "light" | "balanced" | "heavy";
+/**
+ * Course-load DISTRIBUTION preference (E5.4). This is the load-DISTRIBUTION
+ * axis (`balanced`/`frontload`/`backload`) — NOT a per-term load WEIGHT
+ * (`light`/`heavy`). The distinction is load-bearing: only these three
+ * styles are accepted at the PLAN level by the engine's
+ * `loadStyleOverride` apply walk (planChangeHelpers.ts:281-294). Plan-level
+ * `light`/`heavy` are REJECTED there as no-ops ("light/heavy are per-term
+ * styles; pass a term to apply them"), and the wizard has no per-term UI,
+ * so it can only emit plan-level mutations. Load-WEIGHT nuance ("I prefer
+ * lighter falls") is covered instead by the free-text box → addSoftObjective.
+ */
+export type WizardWorkload = "balanced" | "frontload" | "backload";
 
 export interface WizardValues {
     /**
@@ -110,9 +120,12 @@ export interface WizardValues {
      */
     visa: "f1" | "domestic";
     /**
-     * Coarse workload preference. Default "balanced" — a neutral SOFT
-     * objective (E5.4 compiles the real preference; the hard solver /
-     * validator are never touched — the frozen contract holds).
+     * Course-load DISTRIBUTION preference. Default "balanced" — the
+     * neutral plan-level load style. The non-default values
+     * (`frontload`/`backload`) are the EXACT plan-level-valid domain of
+     * the engine's `loadStyleOverride` mutation; E5.4 maps this onto that
+     * mutation. The hard solver / validator are never touched — the
+     * frozen contract holds.
      */
     workload: WizardWorkload;
     /** Open to summer terms? Default false (opt-in). */

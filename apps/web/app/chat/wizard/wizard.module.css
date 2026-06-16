@@ -138,6 +138,70 @@
     box-shadow: 0 0 0 3px var(--nyu-violet-glow);
 }
 
+/* ---- E5.4 Goals + Preferences inputs ---- */
+.textInput,
+.textArea {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-medium);
+    border-radius: 9px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.textArea {
+    resize: vertical;
+    min-height: 64px;
+    line-height: 1.5;
+}
+
+.textInput:hover,
+.textArea:hover {
+    border-color: var(--nyu-violet);
+}
+
+.textInput:focus,
+.textArea:focus {
+    outline: none;
+    border-color: var(--nyu-violet);
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+}
+
+.toggleGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 6px 0 0;
+    padding: 0;
+    border: none;
+}
+
+.toggleRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.toggleRow input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--nyu-violet);
+    cursor: pointer;
+}
+
+.hint {
+    margin: 2px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
 .error {
     margin: 0;
     padding: 10px 12px;

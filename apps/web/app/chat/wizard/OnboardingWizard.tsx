@@ -129,6 +129,28 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
         setState((s) => ({ ...s, values: { ...s.values, visa } }));
     }, []);
 
+    // E5.4 — Goals + Preferences setters. These set the matching
+    // `WizardValues` fields; the actual ladder application is deferred to
+    // the chat page's `handleApplyWizardPreferences` (wired via
+    // `onReachPlan`), which builds the chat turns with `buildPreferenceTurns`
+    // and injects them through the existing propose_plan_change rail. The
+    // wizard itself imports NO engine internals and adds NO route.
+    const setGradTerm = useCallback((gradTerm: string) => {
+        setState((s) => ({ ...s, values: { ...s.values, gradTerm } }));
+    }, []);
+    const setWorkload = useCallback((workload: WizardValues["workload"]) => {
+        setState((s) => ({ ...s, values: { ...s.values, workload } }));
+    }, []);
+    const setFreeText = useCallback((freeText: string) => {
+        setState((s) => ({ ...s, values: { ...s.values, freeText } }));
+    }, []);
+    const toggle = useCallback(
+        (key: "summer" | "jTerm" | "studyAbroad" | "honors") => {
+            setState((s) => ({ ...s, values: { ...s.values, [key]: !s.values[key] } }));
+        },
+        [],
+    );
+
     // ---- transitions (thin wrappers over the pure machine) ----
     const advance = useCallback(() => {
         setState((s) => {
@@ -315,17 +337,129 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
                     </div>
                 )}
 
-                {state.step !== "upload" &&
-                    state.step !== "plan" &&
-                    state.step !== "confirm_profile" && (
-                    // E5.1 placeholder bodies — E5.4 fleshes these out.
-                    // Every field here is defaulted in the machine and the
-                    // step is Skippable, so this placeholder never blocks
-                    // the path to Plan.
+                {state.step === "goals" && (
+                    // E5.4 — Goals: target graduation term + F-1/domestic.
+                    // Visa is also editable on Confirm-profile (E5.3); Goals
+                    // ECHOES the same `values.visa` (one source of truth, no
+                    // duplicate persistence) so the student can set it here
+                    // too. Grad term is a free-form term box (e.g. "2027
+                    // Spring"); empty = let the engine infer from the DPR.
                     <div className={styles.stepBody}>
-                        <p className={styles.placeholder}>
-                            {STEP_TITLES[state.step]} — coming next. This step is optional; its
-                            sensible defaults already apply.
+                        <label className={styles.fieldLabel} htmlFor="wizard-grad-term">
+                            Target graduation term
+                        </label>
+                        <input
+                            id="wizard-grad-term"
+                            type="text"
+                            className={styles.textInput}
+                            placeholder="e.g. Spring 2027 — leave blank to infer from your DPR"
+                            value={state.values.gradTerm}
+                            onChange={(e) => setGradTerm(e.target.value)}
+                        />
+
+                        {/* Echoes the SAME values.visa as Confirm-profile —
+                            one source of truth, no duplicate persistence. */}
+                        <label className={styles.fieldLabel} htmlFor="wizard-goals-visa">
+                            Visa status
+                        </label>
+                        <select
+                            id="wizard-goals-visa"
+                            className={styles.select}
+                            value={state.values.visa}
+                            onChange={(e) => setVisa(e.target.value as WizardValues["visa"])}
+                        >
+                            <option value="domestic">Domestic / not on an F-1 visa</option>
+                            <option value="f1">F-1 visa (full-time enrollment required)</option>
+                        </select>
+                    </div>
+                )}
+
+                {state.step === "preferences" && (
+                    // E5.4 — Preferences: workload, summer/J-term/study-abroad/
+                    // honors toggles, and a free-text box. Each maps onto the
+                    // EXISTING Phase-3 ladder via a chat-turn injection the
+                    // chat page builds with `buildPreferenceTurns` and runs
+                    // through `propose_plan_change` (NO engine import here, NO
+                    // new route). Every field is defaulted + the step is
+                    // skippable, so this never blocks the path to Plan.
+                    <div className={styles.stepBody}>
+                        <label className={styles.fieldLabel} htmlFor="wizard-workload">
+                            Course-load distribution
+                        </label>
+                        <select
+                            id="wizard-workload"
+                            className={styles.select}
+                            value={state.values.workload}
+                            onChange={(e) =>
+                                setWorkload(e.target.value as WizardValues["workload"])
+                            }
+                        >
+                            {/* Plan-level load-DISTRIBUTION styles — the EXACT
+                                domain the engine's loadStyleOverride accepts
+                                plan-level (balanced/frontload/backload). NOT
+                                light/heavy, which are per-term-only no-ops at
+                                the plan level (see preferenceTurns WORKLOAD
+                                NOTE). Per-term WEIGHT nuance rides the free-text
+                                box → addSoftObjective. */}
+                            <option value="balanced">Balanced (default)</option>
+                            <option value="frontload">Front-load — heavier early terms</option>
+                            <option value="backload">Back-load — heavier later terms</option>
+                        </select>
+
+                        <fieldset className={styles.toggleGroup}>
+                            <legend className={styles.fieldLabel}>I&apos;m open to…</legend>
+                            <label className={styles.toggleRow} htmlFor="wizard-summer">
+                                <input
+                                    id="wizard-summer"
+                                    type="checkbox"
+                                    checked={state.values.summer}
+                                    onChange={() => toggle("summer")}
+                                />
+                                <span>Summer terms</span>
+                            </label>
+                            <label className={styles.toggleRow} htmlFor="wizard-jterm">
+                                <input
+                                    id="wizard-jterm"
+                                    type="checkbox"
+                                    checked={state.values.jTerm}
+                                    onChange={() => toggle("jTerm")}
+                                />
+                                <span>A January (J-term) session</span>
+                            </label>
+                            <label className={styles.toggleRow} htmlFor="wizard-abroad">
+                                <input
+                                    id="wizard-abroad"
+                                    type="checkbox"
+                                    checked={state.values.studyAbroad}
+                                    onChange={() => toggle("studyAbroad")}
+                                />
+                                <span>Study-abroad</span>
+                            </label>
+                            <label className={styles.toggleRow} htmlFor="wizard-honors">
+                                <input
+                                    id="wizard-honors"
+                                    type="checkbox"
+                                    checked={state.values.honors}
+                                    onChange={() => toggle("honors")}
+                                />
+                                <span>Honors</span>
+                            </label>
+                        </fieldset>
+
+                        <label className={styles.fieldLabel} htmlFor="wizard-free-text">
+                            Anything else? (in your own words)
+                        </label>
+                        <textarea
+                            id="wizard-free-text"
+                            className={styles.textArea}
+                            rows={3}
+                            placeholder="e.g. I prefer lighter falls, or no early-morning classes…"
+                            value={state.values.freeText}
+                            onChange={(e) => setFreeText(e.target.value)}
+                        />
+                        <p className={styles.hint}>
+                            We&apos;ll treat this as a preference (a soft objective), not a hard
+                            requirement.
                         </p>
                     </div>
                 )}

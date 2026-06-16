@@ -154,10 +154,10 @@ describe("nextStep advances through the sequence", () => {
 
     it("merges a provided patch into values", () => {
         const s0 = initialWizardState();
-        const patch = { workload: "heavy" } as Partial<typeof DEFAULT_WIZARD_VALUES>;
+        const patch = { workload: "frontload" } as Partial<typeof DEFAULT_WIZARD_VALUES>;
         const s1 = nextStep(s0, patch);
         expect(s1.step).toBe("confirm_profile");
-        expect((s1.values as unknown as Record<string, unknown>).workload).toBe("heavy");
+        expect((s1.values as unknown as Record<string, unknown>).workload).toBe("frontload");
         // Other defaults survive the merge.
         expect(s1.values).toMatchObject(
             // every default key still present
@@ -169,7 +169,7 @@ describe("nextStep advances through the sequence", () => {
 
     it("does not mutate the input state (returns a fresh state)", () => {
         const s0 = initialWizardState();
-        const s1 = nextStep(s0, { workload: "light" } as Partial<typeof DEFAULT_WIZARD_VALUES>);
+        const s1 = nextStep(s0, { workload: "backload" } as Partial<typeof DEFAULT_WIZARD_VALUES>);
         expect(s1).not.toBe(s0);
         expect(s0.step).toBe("upload");
         expect((s0.values as unknown as Record<string, unknown>).workload).toBe(DEFAULT_WIZARD_VALUES.workload);
@@ -242,11 +242,11 @@ describe("skipAll — the no-dead-end guarantee", () => {
     it("preserves values the user DID set while applying defaults for the rest", () => {
         // User sets workload on step 1, then skips everything else.
         const s0 = initialWizardState();
-        const s1 = nextStep(s0, { workload: "heavy" } as Partial<typeof DEFAULT_WIZARD_VALUES>);
+        const s1 = nextStep(s0, { workload: "frontload" } as Partial<typeof DEFAULT_WIZARD_VALUES>);
         const reached = skipAll(s1);
         expect(reached.step).toBe("plan");
         // their explicit value survives…
-        expect(reached.values.workload).toBe("heavy");
+        expect(reached.values.workload).toBe("frontload");
         // …and the untouched fields are still defaulted (never undefined).
         for (const [k, def] of Object.entries(DEFAULT_WIZARD_VALUES)) {
             if (k === "workload") continue;

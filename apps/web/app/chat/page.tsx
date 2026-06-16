@@ -39,6 +39,8 @@ import {
     buildExplainTermQuestion,
     buildExplainProposalQuestion,
 } from "../../lib/explainQuestion";
+import { buildPreferenceTurns } from "../../lib/wizard/preferenceTurns";
+import type { WizardValues } from "../../lib/wizard/wizardMachine";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -410,11 +412,35 @@ export default function ChatPage() {
      * legacy `/api/chat` JSON route per Option B (the agent loop
      * doesn't replicate the onboarding state machine).
      */
-    const handleSendV2 = async (userText: string) => {
+    /**
+     * Optional per-call overrides for the profile fields `handleSendV2`
+     * normally reads from React state. Used by the wizard cutover
+     * (`handleWizardReachPlan`) to defeat the STALE-CLOSURE race (I2):
+     * the wizard calls `setHomeSchool`/`setVisaStatus`/`setGraduationTarget`
+     * and then injects its turns in the SAME tick, but React state is
+     * async, so the injected `handleSendV2` would otherwise read the
+     * PRE-SEED closure values — the first wizard turn would go out WITHOUT
+     * the just-confirmed home school, risking the silent-CAS outcome the
+     * wizard exists to prevent. Threading the seed EXPLICITLY here makes
+     * the very first injected turn carry the confirmed homeSchool.
+     */
+    type SendSeed = {
+        homeSchool?: string | null;
+        visaStatus?: string | null;
+        graduationTarget?: string | null;
+    };
+
+    const handleSendV2 = async (userText: string, seed?: SendSeed) => {
         const recentHistory = messages
             .filter(m => m.id !== "welcome")
             .slice(-10)
             .map(m => ({ role: m.role, content: m.content }));
+
+        // Seed overrides win over the (possibly not-yet-flushed) closure
+        // state so a same-tick wizard injection sends the confirmed values.
+        const effectiveHomeSchool = seed?.homeSchool ?? homeSchool;
+        const effectiveVisaStatus = seed?.visaStatus ?? visaStatus;
+        const effectiveGraduationTarget = seed?.graduationTarget ?? graduationTarget;
 
         // Pre-create the assistant bubble so tokens stream INTO it.
         const assistant = addMessage("assistant", "");
@@ -429,14 +455,14 @@ export default function ChatPage() {
         for await (const ev of streamChatV2({
             message: userText,
             parsedData,
-            visaStatus,
-            graduationTarget,
+            visaStatus: effectiveVisaStatus,
+            graduationTarget: effectiveGraduationTarget,
             history: recentHistory,
             userId: getOrCreateClientId(),
             // E5.2 — thread the onboarding-confirmed home school. Spread in
             // ONLY when set so an unconfirmed student never sends a (silent
             // CAS) value; the v2 route maps this → homeSchoolOverride.
-            ...(homeSchool ? { homeSchool } : {}),
+            ...(effectiveHomeSchool ? { homeSchool: effectiveHomeSchool } : {}),
         })) {
             applyEvent(ev, assistant.id, toolStatuses);
         }
@@ -716,6 +742,99 @@ export default function ChatPage() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    /**
+     * Phase 4 Task E5.4 — apply the onboarding wizard's Goals +
+     * Preferences onto the EXISTING Phase-3 preference ladder.
+     *
+     * TRANSPORT (the binding constraint): this imports NO engine
+     * internals and adds NO `/api/preferences/*` route. It reaches the
+     * ladder the SAME way every other client pref edit does — by
+     * INJECTING a chat turn that asks the agent to call
+     * `propose_plan_change` / `confirm_plan_change`, EXACTLY mirroring
+     * `handleProposeLoadStyle` (addMessage → handleSendV2). The agent
+     * loop compiles each turn (free-text → addSoftObjective; workload
+     * distribution (frontload/backload) → loadStyleOverride; the
+     * summer/J-term/study-abroad/honors toggles → addSoftObjective —
+     * the SchedulingPreferences schema has no field for them, so they
+     * ride the generic SOFT rail) and applies it via
+     * `applyMutationsToPreferences`, then persists.
+     *
+     * `buildPreferenceTurns` returns ONE turn per non-default preference
+     * (empty when the student skipped everything). We inject each
+     * SEQUENTIALLY — awaiting each so the agent's propose/confirm loop
+     * applies them one at a time (a later turn never races an earlier
+     * one). Wired via the wizard's `onReachPlan` callback.
+     *
+     * `seed` (I2) threads the just-confirmed profile (home school / visa /
+     * grad term) into EVERY injected turn so the FIRST turn already carries
+     * the confirmed home school despite React state being async — see
+     * `handleSendV2`'s SendSeed doc. PARTIAL-FAILURE (I5): each turn's
+     * injection is wrapped in its own try/catch so one throwing turn never
+     * silently drops the rest — we surface a brief note and continue.
+     */
+    const handleApplyWizardPreferences = async (values: WizardValues, seed?: SendSeed) => {
+        if (isLoading) return;
+        const turns = buildPreferenceTurns(values);
+        if (turns.length === 0) return; // all defaults — nothing to apply.
+        setIsLoading(true);
+        try {
+            for (const text of turns) {
+                try {
+                    addMessage("user", text);
+                    await handleSendV2(text, seed);
+                } catch (err) {
+                    // I5 — one failing turn must not drop the remaining
+                    // preferences. Surface a brief note and keep going.
+                    addMessage(
+                        "assistant",
+                        err instanceof Error
+                            ? `Couldn't apply one preference (${err.message}); continuing with the rest.`
+                            : "Couldn't apply one preference; continuing with the rest.",
+                    );
+                }
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * Phase 4 Task E5.4 — the wizard's `onReachPlan` consumer (the
+     * deferred-cutover seam). When the onboarding wizard reaches its
+     * terminal "plan" step it hands its collected `values` (+ parsed
+     * DPR) here. We:
+     *   1. seed the EXISTING chat-page profile state from the wizard's
+     *      Goals (home school → body.homeSchool; F-1/domestic →
+     *      body.visaStatus; grad term → body.graduationTarget) using the
+     *      SAME setters the session-restore path uses — no duplicate
+     *      persistence, no new route; and
+     *   2. apply the Goals + Preferences onto the Phase-3 ladder via
+     *      `handleApplyWizardPreferences` (the chat-turn injection rail).
+     * The wizard is NOT mounted yet (E5.x deferred deep cutover); this
+     * is the ready callback a later cutover passes as
+     * `<OnboardingWizard onReachPlan={handleWizardReachPlan} />`.
+     */
+    const handleWizardReachPlan = async (values: WizardValues) => {
+        // Seed the home school ONLY when the student chose one — never
+        // silently CAS (an empty value stays null → field omitted).
+        if (values.homeSchool) setHomeSchool(values.homeSchool);
+        if (values.visa) setVisaStatus(values.visa);
+        if (values.gradTerm) setGraduationTarget(values.gradTerm);
+        // I2 (stale-closure): the setters above are async — they have NOT
+        // flushed by the time the preference turns inject in this same tick.
+        // Thread the confirmed values EXPLICITLY so the FIRST injected turn
+        // already carries the just-confirmed home school (and visa / grad
+        // term), instead of the pre-seed closure values handleSendV2 would
+        // otherwise read. homeSchool falls through ONLY when chosen — never
+        // silently CAS.
+        const seed: SendSeed = {
+            ...(values.homeSchool ? { homeSchool: values.homeSchool } : {}),
+            ...(values.visa ? { visaStatus: values.visa } : {}),
+            ...(values.gradTerm ? { graduationTarget: values.gradTerm } : {}),
+        };
+        await handleApplyWizardPreferences(values, seed);
     };
 
     /**
