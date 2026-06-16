@@ -87,6 +87,28 @@ function validDprPayload(): { kind: "dpr"; report: unknown } {
     return { kind: "dpr", report: r.report };
 }
 
+// F2 — a DPR variant whose program labels match NO school indicator, so
+// `deriveHomeSchool` degrades to "unknown". This is the ONLY case where a
+// body.homeSchool override is honored (the DPR can't determine the school).
+function unknownDprPayload(): { kind: "dpr"; report: unknown } {
+    const r = parseDpr(DPR_FIXTURE, { pageCount: 9, nowIso: "2026-04-27T00:00:00Z" });
+    if (!r.ok) throw new Error("DPR fixture failed to parse");
+    return {
+        kind: "dpr",
+        report: {
+            ...r.report,
+            programs: [
+                {
+                    programType: "Major",
+                    label: "Some Unknown Program Approved",
+                    requirementTerm: "Fall 2024",
+                    requirementStatus: "satisfied" as const,
+                },
+            ],
+        },
+    };
+}
+
 function fakeRequest(body: unknown): { json: () => Promise<unknown> } {
     return { json: async () => body };
 }
@@ -214,15 +236,36 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         expect(session.student?.visaStatus).toBe("f1");
     });
 
-    it("body.homeSchool (explicit THIS-turn signal) beats the persisted value", async () => {
-        const userId = "e12-body-wins-homeschool";
-        // Persisted says "stern", but the client explicitly sends "tandon"
-        // THIS turn — the freshest explicit signal must win.
-        await seedConfirmedProfile(userId, { homeSchool: "stern" });
+    it("F2 — IGNORES a body.homeSchool override when the DPR confidently derives a school (DPR-derived = read-only)", async () => {
+        const userId = "e12-body-ignored-homeschool";
+        // The DPR confidently derives "cas". A body.homeSchool="tandon"
+        // override must be IGNORED under owner decision #1: home school is a
+        // DPR-derived field, so the DPR value wins (to change it the student
+        // uploads a corrected DPR).
+        await seedConfirmedProfile(userId, { homeSchool: "cas" });
 
         const res = await POST(fakeRequest({
             message: "What courses should I take next semester for my engineering major?",
             parsedData: validDprPayload(),
+            userId,
+            homeSchool: "tandon",
+        }) as never);
+        expect(res.status).toBe(200);
+        await drainSse(res);
+
+        const session = holder.session as { student?: StudentProfile };
+        expect(session.student?.homeSchool).toBe("cas");
+    });
+
+    it("F2 — body.homeSchool wins ONLY when the DPR can't determine the school (unknown fallback)", async () => {
+        const userId = "e12-body-wins-unknown";
+        // The DPR derives "unknown"; the body explicitly picks "tandon" — the
+        // legitimate editable home-school case. The override must win.
+        await seedConfirmedProfile(userId, { homeSchool: "unknown" });
+
+        const res = await POST(fakeRequest({
+            message: "What courses should I take next semester for my engineering major?",
+            parsedData: unknownDprPayload(),
             userId,
             homeSchool: "tandon",
         }) as never);

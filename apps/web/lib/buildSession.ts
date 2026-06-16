@@ -223,7 +223,19 @@ function deriveDeclaredPrograms(report: DegreeProgressReport): ProgramDeclaratio
     return out;
 }
 
-function deriveHomeSchool(report: DegreeProgressReport): string {
+/**
+ * Derive the student's home school from the DPR's program labels.
+ *
+ * Returns a confident school CODE when a label matches a known school
+ * indicator, else the school-agnostic sentinel `"unknown"`.
+ *
+ * EXPORTED (F2): this return value is the AUTHORITY SIGNAL for the
+ * DPR-derived-field rule. A confident value means "the DPR deterministically
+ * shows the home school" → it is READ-ONLY (the wizard renders it without an
+ * editable picker; the v2 route ignores a `body.homeSchool` override). Only
+ * `"unknown"` ("the DPR can't show it") lets the student pick a home school.
+ */
+export function deriveHomeSchool(report: DegreeProgressReport): string {
     const programLabels = report.programs.map((p) => p.label.toLowerCase()).join(" ");
     // Order matters: Steinhardt's published name includes "...the Arts",
     // so a naive "arts" substring on Tisch would false-positive on

@@ -119,19 +119,57 @@ describe("D4 honesty-rail CORE RULES", () => {
     });
 
     describe("D4.3 — banner count matches reality", () => {
-        it("emits exactly 13 numbered CORE RULES", () => {
-            expect(numberedRuleCount(prompt)).toBe(13);
+        it("emits exactly 14 numbered CORE RULES", () => {
+            expect(numberedRuleCount(prompt)).toBe(14);
         });
 
         it("the file's BANNER states a rule count EQUAL to the actual numbered-rule count", () => {
             const src = readFileSync(SYSTEM_PROMPT_SRC, "utf8");
             const actual = numberedRuleCount(prompt);
             // The banner must NOT claim the stale "25 rules" once the real
-            // numbered list is 13. Derive: assert the actual count's number-word
+            // numbered list is 14. Derive: assert the actual count's number-word
             // appears in the banner and the stale 25 claim is gone.
-            expect(actual).toBe(13);
-            expect(src).toMatch(/\b13\b/);
+            expect(actual).toBe(14);
+            expect(src).toMatch(/\b14\b/);
             expect(src).not.toMatch(/25 rules|25-rule|25 rules verbatim/);
+        });
+    });
+
+    describe("F2 — CORE RULE 14 (DPR-DERIVED FIELDS ARE AUTHORITATIVE / READ-ONLY)", () => {
+        /** Slice rule 14 from its number to the end of the CORE RULES block. */
+        function rule14(p: string): string {
+            const block = coreRulesBlock(p);
+            const idx = block.indexOf("14.");
+            expect(idx).toBeGreaterThanOrEqual(0);
+            return block.slice(idx);
+        }
+
+        it("names the DPR-derived fields that are authoritative + cannot be changed by request", () => {
+            const r = rule14(prompt);
+            expect(r).toMatch(/DPR-?derived|from (your |the )?DPR|authoritative/i);
+            // The specific fields the owner enumerated.
+            expect(r).toMatch(/home school/i);
+            expect(r).toMatch(/major|minor|declared/i);
+            expect(r).toMatch(/catalog year/i);
+            expect(r).toMatch(/courses? taken|grades?/i);
+        });
+
+        it("redirects a change request to uploading a corrected/new DPR — never force-change, never fabricate", () => {
+            const r = rule14(prompt);
+            expect(r).toMatch(/upload (a )?(corrected|new) DPR|upload a (new|corrected)/i);
+            expect(r).toMatch(/never (invent|fabricate)|do not (invent|fabricate)/i);
+        });
+
+        it("carves out the non-DPR editable fields (visa / F-1, preferences)", () => {
+            const r = rule14(prompt);
+            expect(r).toMatch(/visa|F-?1/i);
+            expect(r).toMatch(/preferences?/i);
+        });
+
+        it("now emits exactly 14 numbered CORE RULES, and the banner agrees", () => {
+            expect(numberedRuleCount(prompt)).toBe(14);
+            const src = readFileSync(SYSTEM_PROMPT_SRC, "utf8");
+            expect(src).toMatch(/\b14\b/);
         });
     });
 

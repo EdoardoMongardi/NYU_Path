@@ -188,6 +188,15 @@ function validDprPayload(): { kind: "dpr"; report: unknown } {
     return { kind: "dpr", report: loadDpr() };
 }
 
+// F2 — a DPR that derives "unknown" (no school indicator). This is the
+// ONLY case where a body.homeSchool override is legitimately accepted +
+// persisted: the DPR can't determine the school, so the student picks it.
+// (When the DPR confidently derives a school, the override is IGNORED —
+// see dprFieldEnforcement.test.ts.)
+function unknownDprPayload(): { kind: "dpr"; report: unknown } {
+    return { kind: "dpr", report: makeUnderivableDpr() };
+}
+
 function fakeRequest(body: unknown): { json: () => Promise<unknown> } {
     return { json: async () => body };
 }
@@ -255,14 +264,17 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         vi.restoreAllMocks();
     });
 
-    it("persists a CHANGED homeSchool from body.homeSchool (profile-exists case)", async () => {
+    it("persists a CHANGED homeSchool from body.homeSchool (UNKNOWN-deriving DPR — the legitimate override case)", async () => {
         const userId = "e52-change-homeschool";
-        // Persisted profile says "cas"; the student now corrects to "stern".
-        await seedConfirmedProfile(userId, { homeSchool: "cas" });
+        // F2: the override is only accepted when the DPR can't determine the
+        // school. Persisted profile is the "unknown" fallback; the student
+        // picks "stern" at the Confirm-profile step (the DPR-derived-field
+        // rule's only editable home-school case).
+        await seedConfirmedProfile(userId, { homeSchool: "unknown" });
 
         const res = await POST(fakeRequest({
             message: "What courses should I take next semester for my major?",
-            parsedData: validDprPayload(),
+            parsedData: unknownDprPayload(),
             userId,
             homeSchool: "stern",
         }) as never);
@@ -274,13 +286,13 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         expect(persisted?.homeSchool).toBe("stern");
     });
 
-    it("accepts + persists a Shanghai override", async () => {
+    it("accepts + persists a Shanghai override (UNKNOWN-deriving DPR)", async () => {
         const userId = "e52-change-shanghai";
-        await seedConfirmedProfile(userId, { homeSchool: "cas" });
+        await seedConfirmedProfile(userId, { homeSchool: "unknown" });
 
         const res = await POST(fakeRequest({
             message: "What courses should I take next semester for my major?",
-            parsedData: validDprPayload(),
+            parsedData: unknownDprPayload(),
             userId,
             homeSchool: "shanghai",
         }) as never);

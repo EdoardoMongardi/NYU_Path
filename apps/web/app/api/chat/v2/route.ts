@@ -53,6 +53,7 @@ import {
 import type { ForwardSchedule, SchedulePreferences, StudentProfile } from "@nyupath/shared";
 import {
     buildStudentProfileFromDpr,
+    deriveHomeSchool,
 } from "../../../../lib/buildSession";
 import { isValidSchoolCode } from "../../../../lib/wizard/homeSchool";
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
@@ -229,17 +230,46 @@ export async function POST(req: NextRequest): Promise<Response> {
     // never-silently-wrong-school rule — core_philosophy.md:4/26). An
     // unrecognized code is ignored (we fall back to deriveHomeSchool) and
     // logged; a valid code threads through as before.
-    const validatedHomeSchool =
+    const validatedSchoolCode =
         typeof body.homeSchool === "string" && isValidSchoolCode(body.homeSchool)
             ? body.homeSchool
             : undefined;
     if (
         typeof body.homeSchool === "string" &&
         body.homeSchool.length > 0 &&
-        validatedHomeSchool === undefined
+        validatedSchoolCode === undefined
     ) {
         console.warn(
             `[v2 route] ignoring unknown home-school code from request body: ${body.homeSchool}`,
+        );
+    }
+
+    // F2 — DPR-DERIVED FIELD GATE (owner decision #1). Home school is a
+    // DPR-derived field: when `deriveHomeSchool(parsedDpr)` returns a
+    // CONFIDENT school code, the DPR deterministically shows the school, so
+    // it is READ-ONLY — a student cannot override it via the wizard or by
+    // asking the agent; to change it they upload a corrected/new DPR. The
+    // ONLY editable home-school case is the `"unknown"` fallback (the DPR
+    // can't determine the school). So we ACCEPT a (validated) `body.homeSchool`
+    // override ONLY when the DPR derived `"unknown"`. When the DPR confidently
+    // derives a school we IGNORE the body override (the DPR-derived value is
+    // used downstream) and never persist it — logging a warning that points
+    // the student at a re-upload. This single narrowing cascades correctly:
+    // the constructor override below won't apply, and the E5.2 change-persist
+    // (which reads `validatedHomeSchool`) won't fire.
+    const dprDerivedHomeSchool = deriveHomeSchool(parsedDpr);
+    const dprConfidentlyDerivedSchool = dprDerivedHomeSchool !== "unknown";
+    const validatedHomeSchool =
+        dprConfidentlyDerivedSchool ? undefined : validatedSchoolCode;
+    if (
+        validatedSchoolCode !== undefined &&
+        dprConfidentlyDerivedSchool &&
+        validatedSchoolCode !== dprDerivedHomeSchool
+    ) {
+        console.warn(
+            `[v2 route] ignoring body.homeSchool override "${validatedSchoolCode}" — the DPR ` +
+            `deterministically derives "${dprDerivedHomeSchool}" (a DPR-derived field is ` +
+            `read-only; to change it the student uploads a corrected/new DPR).`,
         );
     }
 
@@ -312,8 +342,14 @@ export async function POST(req: NextRequest): Promise<Response> {
                 persistedHomeSchool = persistedProfile.homeSchool;
                 persistedVisaStatus = persistedProfile.visaStatus;
                 // homeSchool: persisted wins only when the body did NOT
-                // send an explicit homeSchool this turn (the constructor
-                // override already reflects the body value when it did).
+                // send an explicit homeSchool this turn.
+                // F2 note: when the body DID send one, `student.homeSchool`
+                // already carries the right value — either the constructor's
+                // (honored) override on the `unknown`-DPR fallback path, or
+                // the DPR-derived value when the F2 gate IGNORED the override
+                // (a confidently-derived school is read-only). In BOTH cases
+                // we must NOT clobber it with the persisted value (which can
+                // be a stale earlier pick), so the skip is correct.
                 const bodySentHomeSchool =
                     typeof body.homeSchool === "string" && body.homeSchool.length > 0;
                 if (!bodySentHomeSchool && persistedProfile.homeSchool) {

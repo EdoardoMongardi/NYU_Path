@@ -64,6 +64,23 @@ const SCHOOL_CODE_SET: ReadonlySet<string> = new Set(SCHOOL_OPTIONS.map((o) => o
 export interface HomeSchoolProposal {
     proposed: string | null;
     needsPrompt: boolean;
+    /**
+     * F2 — whether the home school was CONFIDENTLY derived from the DPR
+     * (`deriveHomeSchool` returned a real school code, not `"unknown"`).
+     *
+     * `true`  → the DPR deterministically shows the home school: it is a
+     *           DPR-derived (read-only) field. The Confirm-profile step
+     *           renders it as a fixed value with a "to change it, upload a
+     *           corrected DPR" note — NO editable picker.
+     * `false` → the DPR could NOT determine the school (`"unknown"`): the
+     *           student may pick one (the ONLY editable home-school case),
+     *           so the step renders the school picker.
+     *
+     * This is the SAME signal the v2 route gate uses to decide whether to
+     * accept a `body.homeSchool` override — kept in lockstep so the UI and
+     * the server agree on what's overridable.
+     */
+    derivedFromDpr: boolean;
 }
 
 /**
@@ -85,9 +102,13 @@ export function computeHomeSchoolProposal(dpr: DegreeProgressReport): HomeSchool
     // emits when no indicator matched. An empty/missing value is treated
     // the same way (defensive). Anything else is a real matched school.
     if (!derived || derived === "unknown") {
-        return { proposed: null, needsPrompt: true };
+        // The DPR could NOT determine the school — the student may pick one
+        // (the only editable home-school case). NOT a DPR-derived field.
+        return { proposed: null, needsPrompt: true, derivedFromDpr: false };
     }
-    return { proposed: derived, needsPrompt: false };
+    // The DPR deterministically shows the school — a read-only DPR-derived
+    // field (F2). The wizard renders it fixed; the route ignores overrides.
+    return { proposed: derived, needsPrompt: false, derivedFromDpr: true };
 }
 
 /** True when `code` is one of the selectable home schools. */

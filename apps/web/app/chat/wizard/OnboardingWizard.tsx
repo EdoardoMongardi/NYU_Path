@@ -138,6 +138,15 @@ export default function OnboardingWizard({
     // string = nothing selected (the prompt is unanswered).
     const selectedHomeSchool = state.values.homeSchool || homeSchoolProposal?.proposed || "";
 
+    // F2 — the human-readable home-school label for the READ-ONLY render
+    // (a confidently DPR-derived school). Resolved from the SCHOOL_OPTIONS
+    // registry (the single source of truth) so it never drifts; falls back
+    // to the raw code if a label is somehow missing.
+    const homeSchoolDisplayLabel = useMemo(() => {
+        const code = homeSchoolProposal?.proposed ?? "";
+        return SCHOOL_OPTIONS.find((o) => o.code === code)?.label ?? code;
+    }, [homeSchoolProposal]);
+
     // E5.5 — UNDECLARED detection (the EXISTING engine notion, reused at the
     // wizard edge: `isUndeclared` is `proactiveElicitation.ts`'s
     // `hasDeclaredProgram` predicate negated). We derive the declared-program
@@ -352,45 +361,57 @@ export default function OnboardingWizard({
                 )}
 
                 {state.step === "confirm_profile" && (
-                    // E5.2 — home-school PROPOSE + confirm. We PROPOSE the
-                    // DPR-derived home school and let the student CONFIRM or
-                    // OVERRIDE it across all 11 schools + NYU Shanghai +
-                    // Abu Dhabi. When the DPR carries no school indicator
-                    // (`needsPrompt`) we render an explicit prompt with NO
-                    // default pre-selected — NEVER silently CAS.
+                    // F2 — home school is a DPR-DERIVED field. When the DPR
+                    // DETERMINISTICALLY shows the school (`derivedFromDpr`), it
+                    // is READ-ONLY: we render it as a fixed value with a
+                    // "upload a corrected DPR to change it" note — NO editable
+                    // picker (owner decision #1). The ONLY editable case is
+                    // when the DPR could NOT determine the school
+                    // (`needsPrompt` / `derivedFromDpr === false`): then we
+                    // render the picker with NO default pre-selected — never
+                    // silently CAS.
                     <div className={styles.stepBody}>
-                        {homeSchoolProposal?.needsPrompt ? (
-                            <p className={styles.placeholder}>
-                                We couldn&apos;t determine your home school from your DPR. Please
-                                select it below so your plan uses the right requirements and credit
-                                caps.
-                            </p>
-                        ) : (
-                            <p className={styles.subtitle}>
-                                Based on your DPR we proposed your home school below. Confirm it, or
-                                pick a different one.
-                            </p>
-                        )}
                         <label className={styles.fieldLabel} htmlFor="wizard-home-school">
                             Home school
                         </label>
-                        <select
-                            id="wizard-home-school"
-                            className={styles.select}
-                            value={selectedHomeSchool}
-                            onChange={(e) => setHomeSchool(e.target.value)}
-                        >
-                            {/* Placeholder option — present (and selected) only when
-                                nothing has been chosen yet, so we never default to CAS. */}
-                            <option value="" disabled>
-                                Select your home school…
-                            </option>
-                            {SCHOOL_OPTIONS.map((opt) => (
-                                <option key={opt.code} value={opt.code}>
-                                    {opt.label}
-                                </option>
-                            ))}
-                        </select>
+                        {homeSchoolProposal?.derivedFromDpr ? (
+                            // READ-ONLY — the DPR determines this field.
+                            <div className={styles.readOnlyField} id="wizard-home-school">
+                                <span className={styles.readOnlyValue}>
+                                    {homeSchoolDisplayLabel}
+                                </span>
+                                <p className={styles.readOnlyNote}>
+                                    From your DPR. To change it, upload a corrected DPR.
+                                </p>
+                            </div>
+                        ) : (
+                            // EDITABLE — the DPR couldn't determine the school,
+                            // so the student picks one (the only editable case).
+                            <>
+                                <p className={styles.placeholder}>
+                                    We couldn&apos;t determine your home school from your DPR. Please
+                                    select it below so your plan uses the right requirements and
+                                    credit caps.
+                                </p>
+                                <select
+                                    id="wizard-home-school"
+                                    className={styles.select}
+                                    value={selectedHomeSchool}
+                                    onChange={(e) => setHomeSchool(e.target.value)}
+                                >
+                                    {/* Placeholder option — present (and selected) only when
+                                        nothing has been chosen yet, so we never default to CAS. */}
+                                    <option value="" disabled>
+                                        Select your home school…
+                                    </option>
+                                    {SCHOOL_OPTIONS.map((opt) => (
+                                        <option key={opt.code} value={opt.code}>
+                                            {opt.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </>
+                        )}
 
                         {/* E5.3 — visa-status correction. Sent as
                             body.visaStatus; the v2 route persists a CHANGE so

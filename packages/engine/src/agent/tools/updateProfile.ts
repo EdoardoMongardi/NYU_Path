@@ -128,6 +128,49 @@ export const updateProfileTool = buildTool({
                     `student to confirm via Albert / their adviser before relying on it.`,
             };
         }
+
+        // F2 — DPR-DERIVED FIELD HARD GUARD (defense-in-depth, owner decision
+        // #1). `catalogYear` + `declaredPrograms` come from the student's DPR
+        // and CANNOT be changed by a tool call — to change them the student
+        // uploads a corrected/new DPR. This is a backstop to CORE RULE 14 +
+        // the web-route home-school gate: even if the model tries to stage
+        // such a change, refuse it with the re-upload message.
+        //
+        // The guard fires ONLY when a DPR is loaded into the session
+        // (`session.degreeProgressReport`): then `session.student`'s
+        // catalogYear / declaredPrograms ARE the DPR-derived values, so a
+        // proposed value that DIFFERS is an attempt to override a DPR-derived
+        // field. An IDENTICAL value (no real change) is allowed through. NOTE:
+        // `homeSchool` is deliberately NOT guarded here — it has the cleaner
+        // "DPR couldn't determine it → student may pick" exception, owned by
+        // the web-route gate + CORE RULE 14; `visaStatus` is never on a DPR,
+        // so it stays editable.
+        if (session.degreeProgressReport) {
+            const proposed = input as { field: string; value: unknown };
+            if (proposed.field === "catalogYear") {
+                const current = session.student.catalogYear;
+                if (typeof proposed.value === "string" && proposed.value !== current) {
+                    return {
+                        ok: false,
+                        userMessage:
+                            `Your catalog year comes from your DPR. To change it, upload a ` +
+                            `corrected DPR — I can't change a DPR-derived field by request.`,
+                    };
+                }
+            }
+            if (proposed.field === "declaredPrograms") {
+                const current = JSON.stringify(session.student.declaredPrograms ?? []);
+                if (JSON.stringify(proposed.value) !== current) {
+                    return {
+                        ok: false,
+                        userMessage:
+                            `Your declared major/minor comes from your DPR. To change it, upload ` +
+                            `a corrected DPR — I can't change a DPR-derived field by request.`,
+                    };
+                }
+            }
+        }
+
         return { ok: true };
     },
     prompt: () =>

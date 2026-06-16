@@ -138,6 +138,32 @@
     box-shadow: 0 0 0 3px var(--nyu-violet-glow);
 }
 
+/* ---- F2 read-only DPR-derived field (e.g. a confidently-derived home
+   school). Rendered as a fixed value + a "upload a corrected DPR to change"
+   note — no editable control. Violet brand tokens only, no hardcoded hex. */
+.readOnlyField {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: var(--nyu-violet-faint);
+    border: 1px solid var(--nyu-violet);
+    border-radius: 9px;
+}
+
+.readOnlyValue {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.readOnlyNote {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
 /* ---- E5.4 Goals + Preferences inputs ---- */
 .textInput,
 .textArea {
