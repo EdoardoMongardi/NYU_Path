@@ -50,7 +50,7 @@ import {
     decideElicitationAppend,
     type DegreeProgressReport,
 } from "@nyupath/engine";
-import type { ForwardSchedule, SchedulePreferences } from "@nyupath/shared";
+import type { ForwardSchedule, SchedulePreferences, StudentProfile } from "@nyupath/shared";
 import {
     buildStudentProfileFromDpr,
 } from "../../../../lib/buildSession";
@@ -84,6 +84,17 @@ function getFallbackSink(): FallbackSink {
         FALLBACK_SINK = new JsonlFileSink(path);
     }
     return FALLBACK_SINK;
+}
+
+/** E5.3 — the valid `StudentProfile.visaStatus` union. The v2 body may
+ *  carry a visa correction the student confirmed in the wizard's
+ *  Confirm-profile step; only a value in this union is read back / persisted
+ *  (never invent one). `"other"` is accepted here even though the
+ *  body→student constructor threading (route.ts) only auto-applies
+ *  f1/domestic — the change-persist block below explicitly threads the
+ *  validated body value onto `student` before persisting. */
+function isValidVisaStatus(v: unknown): v is NonNullable<StudentProfile["visaStatus"]> {
+    return v === "f1" || v === "domestic" || v === "other";
 }
 
 /** Onboarding artifact. DPR-only: the Albert Degree Progress Report is
@@ -287,12 +298,19 @@ export async function POST(req: NextRequest): Promise<Response> {
     // Confirm-profile wizard step). `undefined` means "no profile yet"
     // (the bootstrap persist owns that case); a string means a profile
     // exists with that home school.
+    // E5.3 — capture the PERSISTED visaStatus alongside homeSchool so the
+    // change-persist block below can compare it against an explicit
+    // `body.visaStatus` correction (a returning student correcting F-1 /
+    // domestic in the Confirm-profile wizard step). Same `undefined` =
+    // "no profile yet" semantics as `persistedHomeSchool`.
     let persistedHomeSchool: string | undefined;
+    let persistedVisaStatus: StudentProfile["visaStatus"] | undefined;
     if (userId !== "anonymous") {
         try {
             const persistedProfile = await stores.profileStore.get(userId);
             if (persistedProfile) {
                 persistedHomeSchool = persistedProfile.homeSchool;
+                persistedVisaStatus = persistedProfile.visaStatus;
                 // homeSchool: persisted wins only when the body did NOT
                 // send an explicit homeSchool this turn (the constructor
                 // override already reflects the body value when it did).
@@ -302,10 +320,13 @@ export async function POST(req: NextRequest): Promise<Response> {
                     student.homeSchool = persistedProfile.homeSchool;
                 }
                 // visaStatus: persisted wins only when the body did NOT
-                // send a valid f1/domestic this turn.
-                const bodySentVisa =
-                    body.visaStatus === "f1" || body.visaStatus === "domestic";
-                if (!bodySentVisa && persistedProfile.visaStatus) {
+                // send a VALID visa value this turn. E5.3 — accept the full
+                // StudentProfile.visaStatus union ("f1"|"domestic"|"other")
+                // when deciding "did the body send one"; the constructor
+                // override above still only threads f1/domestic (left as-is
+                // per the task note), so the read-back covers the "other"
+                // case + any turn that omits visaStatus entirely.
+                if (!isValidVisaStatus(body.visaStatus) && persistedProfile.visaStatus) {
                     student.visaStatus = persistedProfile.visaStatus;
                 }
                 // catalogYear: body never sends this — persisted (when
@@ -503,6 +524,74 @@ export async function POST(req: NextRequest): Promise<Response> {
             );
         }
     }
+
+    // E5.3 — persist an EXPLICIT visa-status CHANGE (parallel to the E5.2
+    // home-school change-persist above). A returning student correcting
+    // their visa status in the Confirm-profile wizard step sends
+    // `body.visaStatus` AND a profile already exists AND its persisted value
+    // DIFFERS — neither the bootstrap persist (no-profile only) nor the
+    // E1.2 read-back (read, never write) records the correction. This block
+    // closes that gap so the correction survives the next turn (and is read
+    // back by E1.2). Mirrors the homeSchool block's guards exactly:
+    //   - userId !== "anonymous" (no durable store row);
+    //   - the body sent a VALID visa value ("f1"|"domestic"|"other") —
+    //     never invent/persist a junk value (never silently wrong);
+    //   - a profile EXISTS (persistedVisaStatus-capture ran) — the
+    //     no-profile case is owned by the bootstrap persist above;
+    //   - the value actually CHANGED (idempotent — unchanged writes nothing);
+    //   - best-effort, no-throw — a persist failure must NOT break the turn.
+    //
+    // NOTE: the body→student constructor threading (route.ts above) only
+    // auto-applies f1/domestic, so for a "other" correction `student` does
+    // NOT yet carry the new value. We thread the validated body value onto
+    // `student` HERE before persisting so the stored profile (the in-memory
+    // store persists the `student` object by reference) reflects the
+    // correction. This is local to the change-persist path; it does not alter
+    // the existing f1/domestic constructor behavior.
+    const bodyVisaStatus = isValidVisaStatus(body.visaStatus) ? body.visaStatus : undefined;
+    if (
+        userId !== "anonymous" &&
+        bodyVisaStatus !== undefined &&
+        persistedVisaStatus !== undefined &&
+        persistedVisaStatus !== bodyVisaStatus
+    ) {
+        student.visaStatus = bodyVisaStatus;
+        try {
+            await stores.profileStore.persistMutation(
+                student, // now carries visaStatus = bodyVisaStatus (threaded above)
+                {
+                    pendingMutationId: `visa-${Date.now()}`,
+                    field: "visaStatus" as const,
+                    before: persistedVisaStatus,
+                    after: bodyVisaStatus,
+                    confirmedAt: new Date().toISOString(),
+                },
+            );
+        } catch (err) {
+            console.warn(
+                `[v2 route] visa-status change persistMutation failed for ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+
+    // ⚑ E5.3 — KNOWN ADJACENT GAPS NOT CLOSED HERE (do NOT invent fields).
+    // E5.3 persists what the schema + the v2 request body support today:
+    // `homeSchool` (E5.2) + `visaStatus` (here). The following corrections
+    // are NOT yet round-trippable and are deliberately left open, FLAGGED
+    // (never synthesized):
+    //   - DPR-2 — synthetic-grade invention: the parser must never fabricate
+    //     a grade for an in-progress / blank course; a correction here would
+    //     require a real grade signal we don't have.
+    //   - DPR-3 — dropped `advisorNotations`: advisor waivers/notations from
+    //     the DPR are not carried onto the persisted profile correctable set.
+    //   - DPR-4 — dropped `repeatCode`: course repeat semantics are not
+    //     surfaced as a correctable field.
+    //   - `catalogYear` / `declaredPrograms`: real correctable profile fields,
+    //     but NOT transportable through the v2 request body today (the body
+    //     carries neither), so the wizard can't yet send a correction for
+    //     them. They ARE read back by E1.2 once `confirm_profile_update`
+    //     writes them; widening the body to carry them is a follow-on.
+    // Closing any of these is its own task — flagged, not invented.
 
     // Phase 7-E + Phase 8 calendar fix — temporal context.
     // currentTerm + nextTerm come from the wall clock + NYU calendar

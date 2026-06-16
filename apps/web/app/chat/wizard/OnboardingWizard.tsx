@@ -119,6 +119,16 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
         setState((s) => ({ ...s, values: { ...s.values, homeSchool: code } }));
     }, []);
 
+    // E5.3 — visa-status correction. The Confirm-profile step lets the
+    // student CORRECT their F-1 / domestic status; the value is sent as
+    // `body.visaStatus` on chat turns and the v2 route persists it when it
+    // CHANGES an already-persisted profile (the same persist path
+    // confirm_profile_update / the E5.2 home-school correction use), so the
+    // correction survives the next turn (and is read back by E1.2).
+    const setVisa = useCallback((visa: WizardValues["visa"]) => {
+        setState((s) => ({ ...s, values: { ...s.values, visa } }));
+    }, []);
+
     // ---- transitions (thin wrappers over the pure machine) ----
     const advance = useCallback(() => {
         setState((s) => {
@@ -285,6 +295,22 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
                                     {opt.label}
                                 </option>
                             ))}
+                        </select>
+
+                        {/* E5.3 — visa-status correction. Sent as
+                            body.visaStatus; the v2 route persists a CHANGE so
+                            it survives the next turn (read back by E1.2). */}
+                        <label className={styles.fieldLabel} htmlFor="wizard-visa-status">
+                            Visa status
+                        </label>
+                        <select
+                            id="wizard-visa-status"
+                            className={styles.select}
+                            value={state.values.visa}
+                            onChange={(e) => setVisa(e.target.value as WizardValues["visa"])}
+                        >
+                            <option value="domestic">Domestic / not on an F-1 visa</option>
+                            <option value="f1">F-1 visa (full-time enrollment required)</option>
                         </select>
                     </div>
                 )}
