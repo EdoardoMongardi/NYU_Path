@@ -1,0 +1,204 @@
+/* ============================================================
+   wizard.module.css — Phase 4 Task E5.1 (onboarding wizard shell)
+   ------------------------------------------------------------
+   Theming via the global CSS variables ONLY — no hardcoded hex.
+   Brand: --nyu-violet / -light / -faint / -glow. Surfaces/text/borders
+   use the --bg-* / --text-* / --border-* tokens, which resolve to
+   light/dark automatically (globals.css). The progress dots reuse the
+   semantic --badge-grounded-* / --nyu-violet brand tokens.
+   ============================================================ */
+
+.wizard {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 28px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    box-shadow: 0 1px 3px var(--nyu-violet-glow);
+}
+
+/* ---- step indicator ---- */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.stepDots {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-medium);
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.dotDone {
+    background: var(--nyu-violet-faint);
+    border-color: var(--nyu-violet);
+}
+
+.dotActive {
+    background: var(--nyu-violet);
+    border-color: var(--nyu-violet);
+    transform: scale(1.25);
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+}
+
+.stepCount {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--nyu-violet);
+}
+
+/* ---- body ---- */
+.body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 160px;
+}
+
+.title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.subtitle {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.stepBody {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.placeholder {
+    margin: 0;
+    padding: 14px 16px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    background: var(--nyu-violet-faint);
+    border: 1px dashed var(--nyu-violet);
+    border-radius: 10px;
+}
+
+.hiddenInput {
+    display: none;
+}
+
+.error {
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--badge-invalid-text);
+    background: var(--badge-invalid-bg);
+    border: 1px solid var(--badge-invalid-border);
+    border-radius: 8px;
+}
+
+.ok {
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--badge-valid-text);
+    background: var(--badge-valid-bg);
+    border: 1px solid var(--badge-valid-border);
+    border-radius: 8px;
+}
+
+/* ---- footer controls ---- */
+.footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-light);
+}
+
+.footerLeft,
+.footerRight {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.primaryBtn {
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff; /* brand-invariant white on the violet fill — matches chat.module.css */
+    background: var(--nyu-violet);
+    border: 1px solid var(--nyu-violet);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.primaryBtn:hover:not(:disabled) {
+    background: var(--nyu-violet-light);
+    border-color: var(--nyu-violet-light);
+}
+
+.primaryBtn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.ghostBtn {
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--nyu-violet);
+    background: transparent;
+    border: 1px solid var(--nyu-violet);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.ghostBtn:hover:not(:disabled) {
+    background: var(--nyu-violet-faint);
+}
+
+.ghostBtn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.linkBtn {
+    padding: 10px 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transition: color 0.15s ease;
+}
+
+.linkBtn:hover {
+    color: var(--nyu-violet);
+}
