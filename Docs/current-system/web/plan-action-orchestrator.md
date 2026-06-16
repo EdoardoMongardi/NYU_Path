@@ -1,6 +1,6 @@
 # Plan Action Orchestrator — Server Coordinator and Browser Client
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## Purpose
 
@@ -31,6 +31,8 @@ The plan-action orchestrator is the server-side coordinator that the per-verb ro
 
 Alongside it on the client side, `planActionClient.ts` is the browser-side typed fetch layer that maps each UI gesture to the corresponding `/api/plan/*` POST. The third file in this slice, `planActionBubbleHelpers.ts`, owns the pure reducer logic for the chat-thread `plan_action_bubble` message kind (classification, polish/Stage 2 SSE event reduction).
 
+> **Phase 4 E3 — the orchestrator is UNCHANGED; the CLIENT now makes "edits are never instant" visible.** The `/api/plan/*` routes and `planActionOrchestrator.ts` were *not* touched by the E3 group (commits `c35cd13` / `24e605d` / `0d5c90b` / `b209559`): propose still stages a `pendingMutationId` + a non-persisted, validated `forwardSchedule`, and confirm still applies. What E3 reworked is the **client-side edit model**: a successful propose no longer ever commits silently. Instead the page stages the proposal in the shared plan-state store and the canvas renders it as a read-only **"◷ Preview"** overlay (credit delta + consequences) plus a **review card** (verdict ✓/⚠ + Confirm / Cancel / Ask-why); the committed plan is byte-identical until the student clicks Confirm, which fires the same `/api/plan/confirm` round-trip. A `feasible:false` propose renders a separate RED invalid-proposal card and never previews. The orchestrator's four-bucket classification still exists and still drives the *chat bubble*, but the bubble now only fires on the `feasible:false` path (see §2.1 + the client docs in [ui-components.md](./ui-components.md) and [chat-ui-client.md](./chat-ui-client.md)). NO orchestrator/route logic changed — this is purely how the browser surfaces the already-staged proposal.
+
 ```mermaid
 flowchart LR
     UI[Chat UI gesture] --> Client[planActionClient.ts: planAdd / planMove / etc]
@@ -59,7 +61,7 @@ A single plan action progresses through clearly-defined states. The state lives 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Proposing : UI gesture (drag/click)
+    Idle --> Proposing : UI gesture (⋯-menu verb)
     Proposing --> Proposed : runProposeStage success
     Proposing --> ProposeError : runProposeStage failure
     Proposed --> Classified : classifyPlanActionOutcome
@@ -67,7 +69,7 @@ stateDiagram-v2
     Classified --> TradeOffs : feasible AND consequences > 0
     Classified --> SoftRefusal : infeasible AND no hard conflicts
     Classified --> HardRefusal : infeasible AND any hard conflict
-    Clean --> [*] : bubble suppressed; silent commit pattern
+    Clean --> [*] : no bubble; canvas review card (E3) applies on Confirm
     TradeOffs --> Confirming : user clicks Confirm
     SoftRefusal --> Confirming : user clicks Confirm (force=false)
     SoftRefusal --> ConfirmingForce : user clicks Override-anyway (force=true)
@@ -86,14 +88,14 @@ stateDiagram-v2
 
 ### 2.1 The four bubble kinds
 
-After `runProposeStage` returns, the client classifies the response via `classifyPlanActionOutcome` (`apps/web/lib/planActionBubbleHelpers.ts:96-113`). The kind drives the button set the bubble renders:
+`classifyPlanActionOutcome` (`apps/web/lib/planActionBubbleHelpers.ts:96-113`) still maps a propose response into one of four kinds. As of Phase 4 E3 the **chat bubble itself only renders on the `feasible:false` path** — the page's `planActionSurfaces` gate (`apps/web/lib/planActionSurfaces.ts`) returns `showBubble: false` for the two feasible kinds (their sole surface is now the canvas review card), and `showBubble: true` for the two refusal kinds (which carry Override-anyway / hard-refusal copy the cards don't). The classification + button table is unchanged for the bubble that *does* render:
 
-| Kind | Trigger | Buttons | Notes |
-|---|---|---|---|
-| `clean` | `feasible === true` AND `consequences.length === 0` | n/a — bubble suppressed | Silent commit; the page may skip insertion entirely |
-| `trade_offs` | `feasible === true` AND `consequences.length > 0` | Confirm + Keep-as-is | Engine considers it valid but flags side-effects |
-| `soft_refusal` | `feasible === false` AND no conflict in `HARD_CONFLICT_KINDS` | Confirm + Keep-as-is + Override-anyway | Override-anyway sends `force: true` |
-| `hard_refusal` | `feasible === false` AND any conflict in `HARD_CONFLICT_KINDS` | No buttons | Pure refusal; cannot override prereq/graduation/offering violations |
+| Kind | Trigger | Where it surfaces (E3) | Buttons | Notes |
+|---|---|---|---|---|
+| `clean` | `feasible === true` AND `consequences.length === 0` | **Canvas review card (✓ Valid)** — no bubble | Confirm + Cancel + Ask-why (on the card) | A clean apply is no longer a silent commit; it previews like every feasible verb |
+| `trade_offs` | `feasible === true` AND `consequences.length > 0` | **Canvas review card (⚠ trade-offs)** — no bubble | Confirm + Cancel + Ask-why (on the card) | Engine considers it valid but flags side-effects |
+| `soft_refusal` | `feasible === false` AND no conflict in `HARD_CONFLICT_KINDS` | RED invalid-proposal card **+ chat bubble** | bubble: Confirm + Keep-as-is + Override-anyway | Override-anyway sends `force: true` |
+| `hard_refusal` | `feasible === false` AND any conflict in `HARD_CONFLICT_KINDS` | RED invalid-proposal card **+ chat bubble** | bubble: No buttons | Pure refusal; cannot override prereq/graduation/offering violations |
 
 The hard-conflict list (`apps/web/lib/planActionBubbleHelpers.ts:82-90`) contains: `prereq_unsatisfiable`, `prereqChain`, `not_clause`, `graduation_total`, `offering`, `offering_pattern`, `no_plan`.
 
@@ -128,7 +130,7 @@ The optimistic-update affordance lives in three concrete pieces:
 
 ### 3.1 `proposedSchedule` on the propose response
 
-The propose stage extracts `proposedSchedule` from the engine's tool output (`apps/web/lib/planActionOrchestrator.ts:469-470`) and ships it back as `forwardSchedule` on the `PlanActionResponse`. This is a non-persisted preview — the actual write does not happen until confirm. The client can render this preview as the "what your plan would look like" overlay while the bubble is open.
+The propose stage extracts `proposedSchedule` from the engine's tool output (`apps/web/lib/planActionOrchestrator.ts:469-470`) and ships it back as `forwardSchedule` on the `PlanActionResponse`. This is a non-persisted preview — the actual write does not happen until confirm. **As of Phase 4 E3 the client renders exactly this `forwardSchedule` as the canvas "◷ Preview" overlay** — the page stages it into the shared store's `pendingPreview` slot and `planPreview.ts` computes the credit delta vs the committed plan; the committed plan stays untouched until Confirm. (A `feasible:false` response is never staged as a preview — see the RED invalid-proposal card in the client docs.)
 
 `proposePlanChangeTool` produces `proposedSchedule` by running the same `finalizeForwardSchedule` path the build/confirm/simulate flows use — the feasibility-first backtracking search plus the 7-axis `runGraduationPathValidator` (`packages/engine/src/agent/tools/proposePlanChange.ts:153`). So the propose preview is already validated, not a greedy guess.
 
@@ -296,11 +298,11 @@ sequenceDiagram
     Client->>Route: POST JSON
     Route-->>Client: PlanActionRouteResponse
     Client-->>Page: { ok: true, data }
-    Page->>Bubble: classifyPlanActionOutcome(data)
-    Bubble-->>Page: kind
-    alt kind === clean
-        Note over Page: skip bubble; silent commit
-    else any other kind
+    Page->>Page: planActionSurfaces(data) (E3)
+    alt feasible (clean OR trade-offs)
+        Note over Page: stage ◷ Preview overlay + review card on the canvas; NO bubble
+    else feasible:false
+        Note over Page: stage RED invalid card; ALSO mint the bubble (Override-anyway / hard-refusal)
         Page->>Bubble: initBubbleState(data)
         Bubble-->>Page: PlanActionBubbleState
         Page->>Page: insert plan_action_bubble Message
@@ -338,4 +340,4 @@ sequenceDiagram
 ### 6.7 Known limitations
 
 - **Single-instance staging only.** The `pendingMutations` map is purely in-process (see 6.6). A server restart between propose and confirm loses every staged mutation; the next confirm returns `unknown_mutation_id` (404). There is no Redis/DB-backed staging — this is by design but means horizontally-scaled deployments need sticky routing for the propose→confirm pair.
-- **Confirm returns no preferences → stale Lock labels.** `PlanConfirmResponse` (`apps/web/lib/planActionOrchestrator.ts:89-98`) has no `preferences`/`schedulePreferences` field, and the confirm stage never reloads or returns one. The client's confirm handlers (`apps/web/app/chat/page.tsx:894-896` and `931-933`) only call `setForwardSchedule(...)`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the sidebar's `schedulePreferences` state — which drives the Lock/Unlock popover label — is never refreshed; it only re-syncs on a full reload via `/api/session/restore`. The in-code comments at `page.tsx:160-162` and `297-302` that claim the confirm round-trip returns updated prefs are **wrong** (stale comments). This is a known UI bug.
+- **Confirm returns no preferences → stale Lock labels.** `PlanConfirmResponse` (`apps/web/lib/planActionOrchestrator.ts:89-98`) has no `preferences`/`schedulePreferences` field, and the confirm stage never reloads or returns one. The client's confirm handlers (`apps/web/app/chat/page.tsx:944` and `994`) only call `planStore.setForwardSchedule(...)`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the sidebar's `schedulePreferences` state — which drives the Lock/Unlock popover label — is never refreshed; it only re-syncs on a full reload via `/api/session/restore`. This is a known UI bug. (Phase 4 E3 did not touch this — the new review-card Confirm shares the same `setForwardSchedule`-only commit path via `applyReviewConfirm`, so it has the same gap.)

@@ -1,14 +1,16 @@
 # Plan Action Routes — Deterministic Plan Mutation API
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+
+> **Phase 4 E3 — the routes are UNCHANGED; the edit GESTURE and the edit SURFACE changed (both client-side).** The `/api/plan/*` routes stayed propose-only through the E3 group — propose stages a `pendingMutationId` + a non-persisted validated schedule, confirm applies. Two things changed in the browser only: (1) **drag-to-move/exchange was removed ENTIRELY** — the per-course ⋯ menu (Swap / Drop / Lock / Move) + the `+ Add course` input are now the sole edit inputs, which **supersedes the Phase-17 instant-move / drag-grid** description in this doc (the §7 "drag should feel instant" framing below is historical); and (2) every ⋯ verb now PROPOSES and the staged proposal is reconciled into a canvas **preview + review card** (or a RED invalid card on `feasible:false`) — applying only on Confirm. That reconciliation is entirely client-side; see [ui-components.md](./ui-components.md) and [chat-ui-client.md](./chat-ui-client.md). The route contracts, schemas, two-stage handshake, and error mapping in the sections below are unaffected.
 
 ## Purpose
 
-These are the endpoints behind the sidebar's clickable buttons — Add, Move, Swap, Drop, Lock, Confirm. When the student drags a course from one term to another, or clicks "Lock this course in place," the request lands here instead of going through the AI. That's intentional: a drag-and-drop should feel instant, and there's nothing for the AI to interpret about an unambiguous gesture. Each action runs in two steps: first the server checks if the change is valid and returns a preview (without saving anything), then the student clicks "Confirm" and a second call actually commits the change. Two extra endpoints sweeten the experience: one rewrites the dry preview into friendly prose using a small AI call, and another fetches available section times for upcoming terms. Skipping the AI keeps things fast, predictable, and free of token cost.
+These are the endpoints behind the sidebar's clickable buttons — Add, Move, Swap, Drop, Lock, Confirm. When the student opens a course's ⋯ menu and picks "Move," or clicks "Lock this course in place," the request lands here instead of going through the AI. That's intentional: there's nothing for the AI to interpret about an unambiguous gesture, and skipping the model keeps it fast and token-free. Each action runs in two steps: first the server checks if the change is valid and returns a preview (without saving anything), then the student clicks "Confirm" and a second call actually commits the change. (Phase 4 E3 removed the drag gesture — the ⋯ menu is now the sole edit input — and made the preview *visible* on the canvas before Confirm; the routes themselves are unchanged.) Two extra endpoints sweeten the experience: one rewrites the dry preview into friendly prose using a small AI call, and another fetches available section times for upcoming terms. Skipping the AI keeps things fast, predictable, and free of token cost.
 
 ```mermaid
 flowchart LR
-    Gesture[Student drags / clicks] --> Verb[Add / Move / Swap / Drop / Lock]
+    Gesture[Student picks a ⋯-menu verb] --> Verb[Add / Move / Swap / Drop / Lock]
     Verb --> Preview[Server previews the change]
     Preview --> Bubble[Show confirm bubble in chat]
     Bubble --> Polish[AI rewrites the preview text]
@@ -21,7 +23,7 @@ flowchart LR
 
 ## 1. Overview
 
-The plan-action routes form a deterministic, non-LLM HTTP layer under `/api/plan/*` that the chat UI calls when a student interacts with direct affordances (drag a course onto a term, click "Lock", select "Drop", etc.). These routes do **not** invoke the agent loop or any model — they are pure plumbing from a UI gesture, through input validation, into the engine's `proposePlanChangeTool` and `confirmPlanChangeTool`, and back as a typed JSON response.
+The plan-action routes form a deterministic, non-LLM HTTP layer under `/api/plan/*` that the chat UI calls when a student interacts with direct affordances (open a slot's ⋯ menu and pick Move / Swap / Drop / Lock, or type into `+ Add course`). These routes do **not** invoke the agent loop or any model — they are pure plumbing from a UI gesture, through input validation, into the engine's `proposePlanChangeTool` and `confirmPlanChangeTool`, and back as a typed JSON response.
 
 The architecture splits each mutation into a strict two-stage handshake:
 
@@ -32,7 +34,7 @@ Two auxiliary routes wrap the bubble UX: `/api/plan/explain-polish` streams an L
 
 ```mermaid
 flowchart LR
-    UI[Chat UI - drag/click] --> Add[/api/plan/add/]
+    UI[Chat UI - ⋯-menu verb] --> Add[/api/plan/add/]
     UI --> Move[/api/plan/move/]
     UI --> Swap[/api/plan/swap/]
     UI --> Drop[/api/plan/drop/]
@@ -92,7 +94,7 @@ All routes run on the Node.js runtime (each file declares `runtime = "nodejs"`).
 1. A `move` mutation describing the from→to relocation (writes the from-term exclusion).
 2. A `pin` mutation on the destination term with `freeze: true` (writes the to-term placement).
 
-The second mutation is load-bearing: the solver's exclusion set is term-agnostic, so without an explicit pin on `toTerm` the dragged course would simply vanish rather than land in the new term. Delegates to `handleProposeRoute`.
+The second mutation is load-bearing: the solver's exclusion set is term-agnostic, so without an explicit pin on `toTerm` the moved course would simply vanish rather than land in the new term. Delegates to `handleProposeRoute`.
 
 **Response shape (200):** `PlanActionResponse`.
 
@@ -377,7 +379,7 @@ Returned by `/api/plan/confirm` (source: `apps/web/lib/planActionOrchestrator.ts
 - `forwardSchedule` — the persisted schedule (in either slot).
 - `consumedMutationId` — the UUID just consumed; no longer resolvable in the staging map.
 
-> **Known limitation — stale Lock/Unlock labels.** `PlanConfirmResponse` does **not** carry an updated `SchedulePreferences`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the client's confirm handler (`apps/web/app/chat/page.tsx:894-896`) only calls `setForwardSchedule(...)` — it never refreshes the `schedulePreferences` state that drives the sidebar's Lock/Unlock popover label. The in-code comments at `page.tsx:160-162` and `page.tsx:297-302` claim the confirm round-trip returns updated prefs, but neither the response shape nor the handler does this. The label only re-syncs on a full reload, which re-hydrates prefs from `/api/session/restore`. This is a known UI bug, not intended behavior.
+> **Known limitation — stale Lock/Unlock labels.** `PlanConfirmResponse` does **not** carry an updated `SchedulePreferences`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the client's confirm handler (`apps/web/app/chat/page.tsx:944`, and the E3 review-card path's `applyReviewConfirm`) only calls `setForwardSchedule(...)` — it never refreshes the `schedulePreferences` state that drives the sidebar's Lock/Unlock popover label. The label only re-syncs on a full reload, which re-hydrates prefs from `/api/session/restore`. This is a known UI bug, not intended behavior.
 
 ### 4.3 Per-route concerns shared by the verbs
 
@@ -394,9 +396,9 @@ Returned by `/api/plan/confirm` (source: `apps/web/lib/planActionOrchestrator.ts
 
 The plan-action routes bypass the agent loop entirely. They are the deterministic counterpart, designed for student-initiated UI gestures where:
 
-- **Latency matters.** A drag-to-move should feel instant. The agent loop adds at minimum one model round-trip; the plan-action routes hit the engine directly in ~180-600ms.
-- **No ambiguity exists.** A drag from term A to term B has a single, unambiguous `PlanMutation[]` encoding. There is nothing for the LLM to interpret.
-- **Token budget is precious.** Every drag should not cost Anthropic credits. The propose stage costs zero tokens. The polish call is optional, env-gated, and uses Anthropic Haiku (`claude-haiku-4-5-20251001`, pinned in `apps/web/lib/llmPolishPrompt.ts:96`) with a strict rewrite-only prompt; the engine output is the source of truth. (This Haiku polish model is independent of the agent loop's default primary model, `claude-sonnet-4-6`.)
+- **Latency matters.** A ⋯-menu Move/Swap should feel responsive. The agent loop adds at minimum one model round-trip; the plan-action routes hit the engine directly in ~180-600ms. (Phase 4 E3: the propose is fast, but the *commit* is now a deliberate Confirm on the canvas review card — "never instant" is intentional, not a latency regression.)
+- **No ambiguity exists.** A "move CSCI-UA 101 from term A to term B" verb has a single, unambiguous `PlanMutation[]` encoding. There is nothing for the LLM to interpret.
+- **Token budget is precious.** Every edit should not cost Anthropic credits. The propose stage costs zero tokens. The polish call is optional, env-gated, and uses Anthropic Haiku (`claude-haiku-4-5-20251001`, pinned in `apps/web/lib/llmPolishPrompt.ts:96`) with a strict rewrite-only prompt; the engine output is the source of truth. (This Haiku polish model is independent of the agent loop's default primary model, `claude-sonnet-4-6`.)
 - **Side-by-side bubble UX.** The agent loop emits chat turns. The plan-action routes emit a structured `pendingMutationId` plus a deterministic template that the UI surfaces as a confirm-bubble — clearly distinct from a model reply.
 
 The two paths share the engine's two tools (`proposePlanChangeTool`, `confirmPlanChangeTool` — both still live in the registry at `packages/engine/src/agent/registry.ts`), so the validation semantics, the conflict-kind taxonomy, and the persisted state model are identical. Both tools route the post-mutation schedule through `finalizeForwardSchedule`, which runs the feasibility-first backtracking search (`findFirstValidPlan` → `localImprove` → `materializePlan`) and the authoritative 7-axis `runGraduationPathValidator` — the legacy greedy solver was removed in the Phase 0-2 rebuild (PRs #35-#41). The plan-action routes simply skip the agent shell and call the tools directly, in a fresh `ToolSession` rebuilt from the persistence stores.
@@ -409,7 +411,7 @@ flowchart TB
         Loop --> Tools[propose_plan_change + confirm_plan_change]
     end
     subgraph Deterministic Path
-        Gesture[drag/click] --> PlanRoutes[/api/plan/verb/]
+        Gesture[⋯-menu verb] --> PlanRoutes[/api/plan/verb/]
         PlanRoutes --> Orch[runProposeStage / runConfirmStage]
         Orch --> Tools
     end
