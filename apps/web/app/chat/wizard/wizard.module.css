@@ -202,6 +202,26 @@
     color: var(--text-secondary);
 }
 
+/* ---- E5.5 undeclared → intended-major preview (hedged) ---- */
+.undeclaredBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 14px 16px;
+    background: var(--nyu-violet-faint);
+    border: 1px dashed var(--nyu-violet);
+    border-radius: 10px;
+}
+
+.undeclaredActions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 2px;
+}
+
 .error {
     margin: 0;
     padding: 10px 12px;

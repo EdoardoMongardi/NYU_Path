@@ -52,6 +52,8 @@ import {
     computeHomeSchoolProposal,
     type HomeSchoolProposal,
 } from "../../../lib/wizard/homeSchool";
+import { isUndeclared } from "../../../lib/wizard/intendedMajor";
+import { deriveDeclaredProgramsFromDpr } from "../../../lib/buildSession";
 import styles from "./wizard.module.css";
 
 // ---------------------------------------------------------------------------
@@ -72,6 +74,19 @@ export interface OnboardingWizardProps {
      * chat instead"). No-op if omitted.
      */
     onDismiss?: () => void;
+    /**
+     * E5.5 — undeclared → INTENDED-major RAG-preview (Lane B, hedged).
+     * Called with the named intended major when an UNDECLARED student
+     * chooses "Preview by name". The parent injects
+     * `buildIntendedMajorPreviewTurn(major)` through the existing
+     * `addMessage → handleSendV2` agent-loop rail (chat page's
+     * `handleIntendedMajorPreview`), so the agent answers through its
+     * grounded RAG + the §11 / D4.4 confidence + adviser hedge — the
+     * wizard invents no requirement and ships no unqualified plan. No-op
+     * if omitted (the other arm — uploading an Albert What-If audit —
+     * reuses the existing /api/onboard upload, already wired below).
+     */
+    onPreviewIntendedMajor?: (intendedMajor: string) => void;
 }
 
 const STEP_TITLES: Record<WizardStepId, string> = {
@@ -90,12 +105,20 @@ const STEP_SUBTITLES: Record<WizardStepId, string> = {
     plan: "That's everything we need. Let's build your plan.",
 };
 
-export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingWizardProps) {
+export default function OnboardingWizard({
+    onReachPlan,
+    onDismiss,
+    onPreviewIntendedMajor,
+}: OnboardingWizardProps) {
     const [state, setState] = useState<WizardState>(initialWizardState);
     const [uploadBusy, setUploadBusy] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const [parsedDpr, setParsedDpr] = useState<DegreeProgressReport | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    // E5.5 — the named INTENDED major for an undeclared student. Optional /
+    // skippable like every wizard field; empty = the student didn't name one.
+    const [intendedMajor, setIntendedMajor] = useState("");
 
     const stepIndex = WIZARD_STEPS.indexOf(state.step);
     const totalSteps = WIZARD_STEPS.length;
@@ -114,6 +137,44 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
     // the student's explicit pick if any, else the proposed school. Empty
     // string = nothing selected (the prompt is unanswered).
     const selectedHomeSchool = state.values.homeSchool || homeSchoolProposal?.proposed || "";
+
+    // E5.5 — UNDECLARED detection (the EXISTING engine notion, reused at the
+    // wizard edge: `isUndeclared` is `proactiveElicitation.ts`'s
+    // `hasDeclaredProgram` predicate negated). We derive the declared-program
+    // signal from the parsed DPR's `programs[]`: PeopleSoft tags real
+    // declarations with a `programType` of Major / Minor / Concentration
+    // (the "Undergraduate Career" / "Program" rows are administrative, not a
+    // declared program). A student with NO Major/Minor/Concentration row is
+    // undeclared → we offer the intended-major preview affordances. Before a
+    // DPR is parsed we treat the student as declared (no preview prompt) — the
+    // signal only becomes meaningful once we have their programs. NO new
+    // requirement-model logic: this only maps the DPR's existing rows onto the
+    // existing `ProgramDeclaration[]` shape `isUndeclared` consumes.
+    //
+    // ONE classification rule: we call the engine's shared
+    // `deriveDeclaredProgramsFromDpr` (apps/web/lib/buildSession.ts) — the
+    // SAME Major/Minor/Concentration → ProgramDeclaration mapping the
+    // session builder uses — rather than re-implementing it here. We use the
+    // RAW, PRE-FALLBACK result on purpose: `deriveDeclaredProgramsFromDpr`
+    // does NOT append the `unknown_major` placeholder that
+    // `deriveDeclaredPrograms` adds for the session path. That padding would
+    // make `isUndeclared` ALWAYS false and kill this feature — the wizard
+    // must see the genuine "no Major/Minor/Concentration row" state. This
+    // intentional divergence is documented on the shared function.
+    const declaredFromDpr = useMemo(
+        () => (parsedDpr ? deriveDeclaredProgramsFromDpr(parsedDpr) : null),
+        [parsedDpr],
+    );
+    // null (no DPR yet) → NOT undeclared (don't prompt before we know).
+    const studentIsUndeclared = declaredFromDpr !== null && isUndeclared(declaredFromDpr);
+
+    // E5.5 — fire the RAG-preview arm: inject the hedged intended-major
+    // preview turn through the parent's agent-loop rail. No-op if the parent
+    // didn't wire it or no major was named.
+    const previewIntendedMajor = useCallback(() => {
+        const major = intendedMajor.trim();
+        if (major) onPreviewIntendedMajor?.(major);
+    }, [intendedMajor, onPreviewIntendedMajor]);
 
     const setHomeSchool = useCallback((code: string) => {
         setState((s) => ({ ...s, values: { ...s.values, homeSchool: code } }));
@@ -254,15 +315,27 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
                 <h2 className={styles.title}>{STEP_TITLES[state.step]}</h2>
                 <p className={styles.subtitle}>{STEP_SUBTITLES[state.step]}</p>
 
+                {/* FIX-1 — the hidden DPR/What-If file input is hoisted OUT of
+                    the Upload-step block so it is ALWAYS mounted. Both the
+                    Upload step's "Choose DPR PDF" button AND the
+                    confirm_profile step's "Upload a What-If DPR instead"
+                    button call `fileInputRef.current?.click()`; if the input
+                    were rendered only inside the Upload conditional the ref
+                    would be null on confirm_profile and the click a silent
+                    no-op. One input, one ref, one onChange — every chosen file
+                    routes through the SAME /api/onboard parse path
+                    (`handleFile` → updates `parsedDpr`, re-deriving the
+                    declared/undeclared signal). */}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className={styles.hiddenInput}
+                    onChange={onFileInputChange}
+                />
+
                 {state.step === "upload" && (
                     <div className={styles.stepBody}>
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="application/pdf,.pdf"
-                            className={styles.hiddenInput}
-                            onChange={onFileInputChange}
-                        />
                         <button
                             type="button"
                             className={styles.primaryBtn}
@@ -334,6 +407,71 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
                             <option value="domestic">Domestic / not on an F-1 visa</option>
                             <option value="f1">F-1 visa (full-time enrollment required)</option>
                         </select>
+
+                        {/* E5.5 — UNDECLARED → INTENDED-major preview (Lane B,
+                            hedged). Only shown when the parsed DPR carries no
+                            declared Major/Minor/Concentration (studentIsUndeclared,
+                            the EXISTING engine notion). Optional + skippable like
+                            every wizard field. Two affordances: (a) upload an
+                            Albert What-If audit — reuses the SAME /api/onboard
+                            upload (a What-If report parses end-to-end into Lane A);
+                            (b) "Preview by name" — injects a HEDGED RAG-preview turn
+                            through the agent loop (the §11 / D4.4 confidence +
+                            adviser rail fires). The wizard renders NO fabricated
+                            requirement list — the grounded agent answers. */}
+                        {studentIsUndeclared && (
+                            <div className={styles.undeclaredBlock}>
+                                <p className={styles.subtitle}>
+                                    You don&apos;t have a declared major yet. If you have one in
+                                    mind, you can preview what it typically requires — this is a{" "}
+                                    <strong>preview to verify with your academic adviser</strong>,
+                                    not a confirmed degree plan.
+                                </p>
+                                <label
+                                    className={styles.fieldLabel}
+                                    htmlFor="wizard-intended-major"
+                                >
+                                    Intended major (optional)
+                                </label>
+                                <input
+                                    id="wizard-intended-major"
+                                    type="text"
+                                    className={styles.textInput}
+                                    placeholder="e.g. Computer Science — leave blank to skip"
+                                    value={intendedMajor}
+                                    onChange={(e) => setIntendedMajor(e.target.value)}
+                                />
+                                <div className={styles.undeclaredActions}>
+                                    {/* (b) Preview by name → hedged RAG-preview turn. */}
+                                    <button
+                                        type="button"
+                                        className={styles.primaryBtn}
+                                        disabled={!intendedMajor.trim()}
+                                        onClick={previewIntendedMajor}
+                                    >
+                                        Preview by name
+                                    </button>
+                                    {/* (a) Upload an Albert What-If audit → the SAME
+                                        /api/onboard upload (parses end-to-end into
+                                        Lane A; the deterministic path). */}
+                                    <button
+                                        type="button"
+                                        className={styles.ghostBtn}
+                                        disabled={uploadBusy}
+                                        onClick={() => fileInputRef.current?.click()}
+                                    >
+                                        {uploadBusy
+                                            ? "Reading…"
+                                            : "Upload a What-If DPR instead"}
+                                    </button>
+                                </div>
+                                <p className={styles.hint}>
+                                    A by-name preview is an estimate from the bulletin — confirm
+                                    the exact requirements with your adviser. Uploading an Albert
+                                    What-If audit for this major gives a precise, DPR-grade read.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 

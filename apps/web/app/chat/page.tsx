@@ -40,6 +40,7 @@ import {
     buildExplainProposalQuestion,
 } from "../../lib/explainQuestion";
 import { buildPreferenceTurns } from "../../lib/wizard/preferenceTurns";
+import { buildIntendedMajorPreviewTurn } from "../../lib/wizard/intendedMajor";
 import type { WizardValues } from "../../lib/wizard/wizardMachine";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
@@ -666,6 +667,41 @@ export default function ChatPage() {
     };
 
     /**
+     * Phase 4 Task E5.5 — undeclared → INTENDED-major RAG-preview (Lane B,
+     * hedged). When an UNDECLARED wizard student names an intended major and
+     * chooses "Preview by name", we inject `buildIntendedMajorPreviewTurn`
+     * through the SAME `addMessage → handleSendV2` rail every client edit
+     * uses — EXACTLY mirroring `handleProposeLoadStyle`. The turn is HONESTLY
+     * framed as a PREVIEW to verify with the adviser / NOT a confirmed plan /
+     * with a confidence ask, so the agent answers through its grounded RAG
+     * (`what_if_audit` / `search_policy`) and the §11 / D4.4 confidence +
+     * adviser rail FIRES — the engine owns the hedge; the wizard invents NO
+     * requirement and ships NO unqualified plan. School-AGNOSTIC: a non-CAS
+     * (NYU Shanghai / Abu Dhabi) intended major previews + hedges identically.
+     * The other undeclared arm — uploading an Albert What-If audit — reuses
+     * the EXISTING `/api/onboard` upload (a What-If report parses end-to-end
+     * via `parseDpr` into Lane A); no new route, no new requirement logic.
+     */
+    const handleIntendedMajorPreview = async (intendedMajor: string) => {
+        if (isLoading) return;
+        const major = intendedMajor.trim();
+        if (!major) return; // nothing named — no-op.
+        const text = buildIntendedMajorPreviewTurn(major);
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage(
+                "assistant",
+                err instanceof Error ? err.message : "Could not preview that intended major.",
+            );
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
      * Phase 14 Task 10 — Slot-level change proposal.
      * Injects a user-visible chat message describing the desired
      * slot mutation. The agent's tool-use behavior routes the call
@@ -814,7 +850,10 @@ export default function ChatPage() {
      *      `handleApplyWizardPreferences` (the chat-turn injection rail).
      * The wizard is NOT mounted yet (E5.x deferred deep cutover); this
      * is the ready callback a later cutover passes as
-     * `<OnboardingWizard onReachPlan={handleWizardReachPlan} />`.
+     * `<OnboardingWizard onReachPlan={handleWizardReachPlan}
+     *                    onPreviewIntendedMajor={handleIntendedMajorPreview} />`
+     * — `handleIntendedMajorPreview` (E5.5) being the matching ready
+     * callback for an UNDECLARED student's intended-major RAG-preview arm.
      */
     const handleWizardReachPlan = async (values: WizardValues) => {
         // Seed the home school ONLY when the student chose one — never
