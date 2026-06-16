@@ -215,6 +215,39 @@ Migrations are managed by `drizzle-kit`. The config lives at `apps/web/drizzle.c
 
 This is the standard drizzle-kit setup: editing `schema.ts` and running the kit's generate command produces a new SQL file under `apps/web/drizzle/`. The runtime app itself doesn't apply migrations — that's an out-of-band deploy step.
 
+### Applying migrations — the `db:migrate` deploy step (E6.2)
+
+`apps/web/package.json` exposes a single migration script:
+
+```json
+"db:migrate": "drizzle-kit migrate"
+```
+
+`drizzle-kit migrate` is the **apply** command (not `generate`, which only writes a new SQL file, nor `push`, which diffs the schema straight onto the DB without going through the journal). It reads the `DATABASE_URL` from `drizzle.config.ts`, walks the journal at `apps/web/drizzle/meta/_journal.json`, and applies any not-yet-applied SQL files (`0000_strong_riptide.sql` → `0001_phase16_persistence.sql` → `0002_drop_cohort.sql`) **in journal order**, tracking what it has applied in drizzle's bookkeeping table.
+
+**How an operator runs it** (the live run is gated by E6.1 — provisioning the Neon `DATABASE_URL`):
+
+```sh
+# from the repo root
+DATABASE_URL='postgres://…neon…' pnpm --filter web db:migrate
+# or, from apps/web:
+DATABASE_URL='postgres://…neon…' npm run db:migrate
+```
+
+> ⚠️ **DESTRUCTIVE — `0002_drop_cohort.sql` drops a data column.** Migration `0002` is not additive. It runs three statements:
+> 1. `DROP TABLE "cohort_assignments" CASCADE;`
+> 2. `ALTER TABLE "students" DROP COLUMN "parsed_transcript";`
+> 3. `DROP TYPE "public"."cohort";`
+>
+> Statement 2 **permanently deletes the `students.parsed_transcript` column and all of its data.** This is **expected and intended** — `parsed_transcript` is a dead column (the engine reads `parsed_dpr`, not `parsed_transcript`) and the `cohort` subsystem was removed. But an operator applying `0002` to a **pre-existing 0001-era database** WILL lose whatever was in `parsed_transcript`. There is no rollback. Confirm this is acceptable before running `db:migrate` against a populated DB.
+
+**Fresh Neon baseline vs. running the `0000→0001→0002` sequence — pick the right path.** These two paths diverge and must not be mixed:
+
+- **A brand-new / empty Neon branch (the supported path):** run the **full journaled sequence** with `db:migrate`. It applies `0000 → 0001 → 0002` in order, leaving the journal and drizzle's applied-migrations table internally consistent. Because `0002` drops a table/column/type that `0000`+`0001` created, the net end-state on a fresh DB is identical to the current `schema.ts`, just reached by build-then-drop. **Do this** — it keeps every environment on the same migration history.
+- **Do NOT hand-apply a squashed baseline.** If you instead let drizzle-kit `generate` a single fresh baseline from the current `schema.ts` and apply only that, the resulting journal will have **one** entry (`0000_*`) rather than three. That database can never again receive the real `0001`/`0002` files (their tags aren't in its journal), so it permanently diverges from every other environment and from the repo's `drizzle/` history. Squashing the migration history is a deliberate, repo-wide decision — not something an operator does ad hoc while provisioning one Neon branch.
+
+In short: **one history, applied in full via `db:migrate`.** Do not run the live apply until the Neon `DATABASE_URL` is provisioned (E6.1).
+
 ## The store factory — `store.ts`
 
 `getStores(env)` returns a `StoreBundle` containing the four engine-required stores. It is memoized at module scope so subsequent calls reuse the same bundle (and the same connection pool).
