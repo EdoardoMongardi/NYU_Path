@@ -743,6 +743,58 @@ button.reasoningHeader:focus-visible {
 }
 
 /* ------------------------------------------------------------------
+   Phase 4 Task E3.3 — RED invalid-proposal card. An engine-REJECTED
+   (feasible:false) proposal renders here instead of the violet preview
+   overlay, naming the binding constraint(s) from the response's own
+   fields. Error colours come from the semantic --badge-invalid-*
+   tokens (light/dark resolve with no hardcoded hex). It carries NO
+   proposed-plan overlay — the committed term cards render unchanged.
+   ------------------------------------------------------------------ */
+.invalidProposalCard {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--badge-invalid-border);
+    border-radius: 8px;
+    background: var(--badge-invalid-bg);
+    color: var(--badge-invalid-text);
+    font-size: 0.85em;
+}
+.invalidProposalHeading {
+    margin: 0 0 6px 0;
+    font-weight: 700;
+    color: var(--badge-invalid-text);
+}
+.invalidProposalList {
+    margin: 0 0 6px 16px;
+    padding: 0;
+}
+.invalidProposalList li {
+    margin-bottom: 2px;
+}
+.invalidProposalFallback {
+    margin: 0 0 6px 0;
+}
+.invalidProposalUntouched {
+    margin: 0 0 8px 0;
+    font-style: italic;
+    opacity: 0.85;
+}
+.invalidProposalActions {
+    display: flex;
+    gap: 8px;
+}
+.invalidProposalDismiss {
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 0.95em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--badge-invalid-border);
+    background: var(--surface, transparent);
+    color: var(--badge-invalid-text);
+}
+
+/* ------------------------------------------------------------------
    Phase 4 Task E2.1 / E2.3 — plan-level badge row.
    State colours come from the semantic --badge-* tokens defined in
    globals.css (light + a [data-theme="dark"] override), so light/dark

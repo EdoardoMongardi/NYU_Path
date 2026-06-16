@@ -8,6 +8,7 @@ import { groupCoursesByTerm } from "../../lib/groupCoursesByTerm";
 import { computePlanBadges } from "../../lib/planBadges";
 import { computePreviewView } from "../../lib/planPreview";
 import { computeReviewCard } from "../../lib/reviewCard";
+import type { InvalidProposalCard } from "../../lib/reviewCard";
 import type { PendingPreview } from "./planState";
 import {
     planAdd,
@@ -145,6 +146,16 @@ interface ScheduleSidebarProps {
      * Confirm / Cancel / Keep-as-is.
      */
     pendingPreview?: PendingPreview | null;
+    /**
+     * Phase 4 Task E3.3 — the RED card for an engine-REJECTED
+     * (`feasible:false`) proposal. When set, the sidebar renders a
+     * clearly-error-styled card naming the binding constraint(s) (from
+     * the response's OWN fields — conflicts ∪ feasibility
+     * .constraintViolations) with a Dismiss button. It renders NO
+     * proposed-plan overlay: the committed term cards stay exactly as
+     * they are. MUTUALLY EXCLUSIVE with `pendingPreview`. Null at rest.
+     */
+    invalidProposal?: InvalidProposalCard | null;
     student?: StudentProfile | null;
     dpr?: DegreeProgressReport | null;
     materialization?: ForwardMaterializationPayload | null;
@@ -192,6 +203,9 @@ interface ScheduleSidebarProps {
     onReviewConfirm?: (pendingMutationId: string) => void | Promise<void>;
     onReviewCancel?: () => void;
     onReviewAskWhy?: (pendingMutationId: string, verb?: string) => void;
+    /** Phase 4 Task E3.3 — Dismiss the RED invalid-proposal card.
+     *  Nothing was staged or committed, so this just clears the slot. */
+    onDismissInvalid?: () => void;
     onConfirmCombination?: (proposalId: string) => void;
     onRefreshDpr?: (file: File) => Promise<void>;
     onClearAll?: () => Promise<void>;
@@ -200,6 +214,7 @@ interface ScheduleSidebarProps {
 export default function ScheduleSidebar({
     schedule,
     pendingPreview,
+    invalidProposal,
     student,
     dpr,
     materialization,
@@ -212,6 +227,7 @@ export default function ScheduleSidebar({
     onReviewConfirm,
     onReviewCancel,
     onReviewAskWhy,
+    onDismissInvalid,
     onConfirmCombination,
     onRefreshDpr,
     onClearAll,
@@ -866,6 +882,56 @@ export default function ScheduleSidebar({
                             <p className={styles.schedulePreviewCommittedLabel}>
                                 Your current plan (unchanged):
                             </p>
+                        </div>
+                    )}
+
+                    {/* Phase 4 Task E3.3 — RED invalid-proposal card. An
+                        engine-REJECTED (`feasible:false`) proposal NEVER
+                        reaches the preview overlay above: it renders here as
+                        a clearly error-styled card naming the binding
+                        constraint(s) the response's OWN fields surfaced
+                        (conflicts ∪ feasibility.constraintViolations,
+                        deduped by `computeInvalidCard`). It renders NO
+                        proposed-plan overlay — the committed term cards below
+                        stay exactly as they are. Mutually exclusive with the
+                        preview (the page clears one when staging the other).
+                        Both sources empty → a generic, no-invented-specifics
+                        fallback line. */}
+                    {invalidProposal && (
+                        <div
+                            className={styles.invalidProposalCard}
+                            role="alert"
+                            aria-label="Proposed change is invalid"
+                        >
+                            <p className={styles.invalidProposalHeading}>
+                                <span aria-hidden="true">✗</span>{" "}
+                                {invalidProposal.verb
+                                    ? `Can't ${invalidProposal.verb} — invalid change`
+                                    : "Invalid change"}
+                            </p>
+                            {invalidProposal.bindingConstraints.length > 0 ? (
+                                <ul className={styles.invalidProposalList}>
+                                    {invalidProposal.bindingConstraints.slice(0, 5).map((c, i) => (
+                                        <li key={i}>{c.detail}</li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className={styles.invalidProposalFallback}>
+                                    The engine could not validate this change — verify with your adviser.
+                                </p>
+                            )}
+                            <p className={styles.invalidProposalUntouched}>
+                                Your plan was not changed.
+                            </p>
+                            <div className={styles.invalidProposalActions}>
+                                <button
+                                    type="button"
+                                    className={styles.invalidProposalDismiss}
+                                    onClick={() => onDismissInvalid?.()}
+                                >
+                                    Dismiss
+                                </button>
+                            </div>
                         </div>
                     )}
 

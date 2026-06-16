@@ -36,6 +36,7 @@
 
 import type { ForwardSchedule, PlanDiff, SchedulePreferences } from "@nyupath/shared";
 import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
+import type { InvalidProposalCard } from "../../lib/reviewCard";
 
 /**
  * Phase 4 Task E3.1 — a STAGED (not-yet-committed) plan proposal the
@@ -74,6 +75,13 @@ export interface PlanState {
     /** Phase 4 Task E3.1 — staged proposal overlay; null when no
      *  proposal is pending. NEVER the committed plan. */
     pendingPreview: PendingPreview | null;
+    /** Phase 4 Task E3.3 — an engine-REJECTED (`feasible:false`)
+     *  proposal's RED card: the binding constraint(s) from the
+     *  response's OWN fields (conflicts ∪ feasibility.constraintViolations).
+     *  Null at rest. MUTUALLY EXCLUSIVE with `pendingPreview` — an
+     *  invalid proposal NEVER previews, and a feasible preview clears
+     *  any stale red card. NEVER the committed plan. */
+    invalidProposal: InvalidProposalCard | null;
 }
 
 /**
@@ -94,6 +102,11 @@ export interface PlanStore {
     setPendingPreview(p: PendingPreview | null): void;
     /** E3.1 — clear the staged overlay (Confirm / Cancel / Keep-as-is). */
     clearPendingPreview(): void;
+    /** E3.3 — stage the RED invalid-proposal card (NEVER touches
+     *  forwardSchedule; mutually exclusive with pendingPreview). */
+    setInvalidProposal(c: InvalidProposalCard | null): void;
+    /** E3.3 — clear the RED card (Dismiss, or a later feasible preview). */
+    clearInvalidProposal(): void;
 }
 
 const EMPTY_STATE: PlanState = {
@@ -101,6 +114,7 @@ const EMPTY_STATE: PlanState = {
     schedulePreferences: null,
     forwardMaterialization: null,
     pendingPreview: null,
+    invalidProposal: null,
 };
 
 /**
@@ -133,7 +147,16 @@ export function createPlanStore(initial?: Partial<PlanState>): PlanStore {
             };
         },
         setForwardSchedule(s: ForwardSchedule | null): void {
-            snapshot = { ...snapshot, forwardSchedule: s };
+            // Committing a new plan supersedes ANY pending proposal card —
+            // a staged preview (E3.1) or an invalid-proposal red card (E3.3)
+            // both describe a proposal against the PRIOR committed plan, so
+            // they are stale the moment the committed plan changes. Clearing
+            // both here (the single commit chokepoint) is intentional: it
+            // closes the stale-card lingering that an explicit per-call-site
+            // clear would otherwise have to enumerate (clean apply, bubble
+            // confirm, override-anyway, SSE forward_schedule_update, DPR
+            // refresh all commit through this one setter).
+            snapshot = { ...snapshot, forwardSchedule: s, pendingPreview: null, invalidProposal: null };
             emit();
         },
         setSchedulePreferences(p: SchedulePreferences | null): void {
@@ -153,6 +176,17 @@ export function createPlanStore(initial?: Partial<PlanState>): PlanStore {
         },
         clearPendingPreview(): void {
             snapshot = { ...snapshot, pendingPreview: null };
+            emit();
+        },
+        setInvalidProposal(c: InvalidProposalCard | null): void {
+            // Swap ONLY the invalidProposal slot — forwardSchedule (the
+            // committed plan) is carried over by reference, so staging a
+            // red card can never mutate the committed plan.
+            snapshot = { ...snapshot, invalidProposal: c };
+            emit();
+        },
+        clearInvalidProposal(): void {
+            snapshot = { ...snapshot, invalidProposal: null };
             emit();
         },
     };

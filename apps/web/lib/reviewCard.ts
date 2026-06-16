@@ -119,6 +119,73 @@ export function computeReviewCard(response: PlanActionResponse): ReviewCardView 
 }
 
 // ---------------------------------------------------------------------------
+// Invalid-proposal card (E3.3).
+// ---------------------------------------------------------------------------
+// A proposal the engine REJECTS (`feasible: false`) never reaches the
+// E3.1 preview path — it renders a RED card naming the binding
+// constraint(s). Those constraints come STRICTLY from fields the
+// response/sidebar already surface:
+//   - `response.conflicts` (the propose orchestrator's own rejection
+//     reasons — planActionOrchestrator.ts:487), and/or
+//   - `response.forwardSchedule.feasibility.constraintViolations` (the
+//     SAME source the shipped infeasible banner reads in
+//     scheduleSidebar.tsx — `…constraintViolations.slice(0,5).map(v =>
+//     v.detail)`).
+// There is NO `infeasibilityReport` field anywhere — this helper
+// invents nothing. When BOTH sources are empty the binding list is `[]`
+// (the card may then show a generic "could not validate — verify with
+// your adviser" fallback, but NO invented specifics).
+// ---------------------------------------------------------------------------
+
+export interface InvalidProposalCard {
+    /** Which verb produced this rejected proposal (add | swap | drop |
+     *  lock | move). Optional — drives only the card heading. */
+    verb?: string;
+    /** The binding constraint(s) that make the proposal invalid:
+     *  `response.conflicts` UNION
+     *  `response.forwardSchedule.feasibility.constraintViolations`,
+     *  mapped to `{kind, detail}` and DEDUPED by `detail`. Both sources
+     *  empty → `[]` (NEVER fabricated). */
+    bindingConstraints: Array<{ kind: string; detail: string }>;
+}
+
+/**
+ * Compute the invalid-proposal card from a `feasible:false`
+ * PlanActionResponse. Pure: reads only engine fields, allocates nothing
+ * on the store, never mutates the response, and NEVER fabricates a
+ * constraint — both sources empty yields an empty list.
+ *
+ * `bindingConstraints` = `(response.conflicts ?? [])` UNION
+ * `(response.forwardSchedule?.feasibility?.constraintViolations ?? [])`
+ * (each mapped to `{kind, detail}`), deduped by `detail` (first
+ * occurrence wins; conflicts are listed before constraintViolations).
+ */
+export function computeInvalidCard(
+    response: PlanActionResponse,
+    verb?: string,
+): InvalidProposalCard {
+    const fromConflicts = Array.isArray(response.conflicts) ? response.conflicts : [];
+    const fromViolations = Array.isArray(response.forwardSchedule?.feasibility?.constraintViolations)
+        ? response.forwardSchedule!.feasibility.constraintViolations
+        : [];
+
+    const seen = new Set<string>();
+    const bindingConstraints: Array<{ kind: string; detail: string }> = [];
+    for (const c of [...fromConflicts, ...fromViolations]) {
+        // Dedup STRICTLY by `detail` (the line the user reads); the first
+        // occurrence's kind+detail is kept.
+        if (seen.has(c.detail)) continue;
+        seen.add(c.detail);
+        bindingConstraints.push({ kind: c.kind, detail: c.detail });
+    }
+
+    return {
+        ...(verb !== undefined ? { verb } : {}),
+        bindingConstraints,
+    };
+}
+
+// ---------------------------------------------------------------------------
 // Confirm / Cancel actions — store-mutating, with an INJECTABLE confirm
 // fn so the React card's behaviour is unit-testable without a DOM.
 // ---------------------------------------------------------------------------

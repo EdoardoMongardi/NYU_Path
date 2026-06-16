@@ -264,5 +264,7 @@ const _typecheck: PlanState = {
     forwardMaterialization: null,
     // Phase 4 Task E3.1 — the appended staged-proposal overlay slot.
     pendingPreview: null,
+    // Phase 4 Task E3.3 — the RED invalid-proposal card slot.
+    invalidProposal: null,
 };
 void _typecheck;

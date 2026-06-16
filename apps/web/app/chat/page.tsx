@@ -34,7 +34,7 @@ import {
     type PlanActionRouteResponse,
 } from "../../lib/planActionClient";
 import { createPlanStore } from "./planState";
-import { applyReviewConfirm, applyReviewCancel } from "../../lib/reviewCard";
+import { applyReviewConfirm, applyReviewCancel, computeInvalidCard } from "../../lib/reviewCard";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -176,7 +176,7 @@ export default function ChatPage() {
     //     `materialize_sections`; drives the sidebar's IMMEDIATE-term
     //     render (full → Sections view; partial/unavailable → banner).
     const planStore = useMemo(() => createPlanStore(), []);
-    const { forwardSchedule, schedulePreferences, forwardMaterialization, pendingPreview } =
+    const { forwardSchedule, schedulePreferences, forwardMaterialization, pendingPreview, invalidProposal } =
         useSyncExternalStore(planStore.subscribe, planStore.getSnapshot, planStore.getSnapshot);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -861,14 +861,26 @@ export default function ChatPage() {
             // do here. (E3.4 will reconcile the clean-result canvas.)
             return;
         }
-        // Phase 4 Task E3.1 — push a PENDING canvas preview for a
-        // FEASIBLE proposal that carries a proposed schedule. The
-        // committed plan (planStore.forwardSchedule) is left untouched;
-        // the sidebar overlays `pendingPreview.proposedSchedule`
-        // read-only with the credit deltas until the user Confirms or
-        // Cancels. Invalid proposals (feasible === false) NEVER preview
-        // — that path is E3.3's red-card scope, not the canvas overlay.
-        if (result.data.feasible === true && result.data.forwardSchedule) {
+        // Phase 4 Task E3.1 / E3.3 — the canvas overlay is one of two
+        // MUTUALLY-EXCLUSIVE slots, decided by the engine's verdict:
+        //   - feasible + a proposed schedule → a PENDING violet preview
+        //     (E3.1), the committed plan untouched; AND we clear any
+        //     stale RED card.
+        //   - feasible === false → a RED invalid-proposal card (E3.3)
+        //     naming the binding constraint(s) from the response's OWN
+        //     fields (conflicts ∪ feasibility.constraintViolations); the
+        //     proposal NEVER previews and the committed plan is left
+        //     byte-identical. We also clear any stale preview.
+        // Either way the committed plan (planStore.forwardSchedule) is
+        // NEVER mutated here.
+        if (result.data.feasible === false) {
+            // E3.3 — invalid proposal: red card, NO preview, canvas
+            // untouched. The binding constraints are read STRICTLY from
+            // the response's own fields (computeInvalidCard invents
+            // nothing).
+            planStore.setInvalidProposal(computeInvalidCard(result.data, verb));
+            planStore.clearPendingPreview();
+        } else if (result.data.forwardSchedule) {
             planStore.setPendingPreview({
                 proposedSchedule: result.data.forwardSchedule,
                 pendingMutationId: result.data.pendingMutationId,
@@ -876,6 +888,8 @@ export default function ChatPage() {
                 ...(result.data.planDiff ? { planDiff: result.data.planDiff } : {}),
                 verb,
             });
+            // E3.3 — a feasible preview supersedes any stale red card.
+            planStore.clearInvalidProposal();
         }
         // Build the bubble Message + insert.
         const bubble = initBubbleState(result.data);
@@ -1016,6 +1030,13 @@ export default function ChatPage() {
      *  preview WITHOUT a confirm round-trip. */
     const handleReviewCancel = useCallback((): void => {
         applyReviewCancel(planStore);
+    }, []);
+
+    /** E3.3 — Dismiss the RED invalid-proposal card. Nothing was ever
+     *  staged or committed, so this just clears the slot; the committed
+     *  plan is untouched. */
+    const handleDismissInvalid = useCallback((): void => {
+        planStore.clearInvalidProposal();
     }, []);
 
     /** Review-card Ask-why — route a scoped "why" question into the
@@ -1552,6 +1573,7 @@ export default function ChatPage() {
             <ScheduleSidebar
                 schedule={forwardSchedule}
                 pendingPreview={pendingPreview}
+                invalidProposal={invalidProposal}
                 student={sidebarStudent}
                 dpr={sidebarDpr}
                 materialization={forwardMaterialization}
@@ -1564,6 +1586,7 @@ export default function ChatPage() {
                 onReviewConfirm={handleReviewConfirm}
                 onReviewCancel={handleReviewCancel}
                 onReviewAskWhy={handleReviewAskWhy}
+                onDismissInvalid={handleDismissInvalid}
                 onConfirmCombination={handleConfirmSectionCombination}
                 onRefreshDpr={handleRefreshDpr}
                 onClearAll={handleClearAll}
