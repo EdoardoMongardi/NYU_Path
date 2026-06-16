@@ -106,6 +106,38 @@
     display: none;
 }
 
+/* ---- E5.2 home-school selector ---- */
+.fieldLabel {
+    margin: 4px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.select {
+    appearance: none;
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-medium);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.select:hover {
+    border-color: var(--nyu-violet);
+}
+
+.select:focus {
+    outline: none;
+    border-color: var(--nyu-violet);
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+}
+
 .error {
     margin: 0;
     padding: 10px 12px;

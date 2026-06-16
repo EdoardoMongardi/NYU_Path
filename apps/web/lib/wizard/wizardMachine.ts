@@ -85,6 +85,19 @@ export interface WizardValues {
      */
     homeSchoolConfirmed: "unconfirmed" | "confirmed" | "corrected";
     /**
+     * The confirmed/overridden home-school CODE (e.g. "cas", "stern",
+     * "shanghai", "nyuad"), E5.2. The Confirm-profile step PROPOSES the
+     * DPR-derived school (`computeHomeSchoolProposal`) and the student
+     * confirms or overrides it. Sent as `body.homeSchool` on chat turns.
+     *
+     * BINDING — NEVER SILENT CAS (core_philosophy.md:4/26): the DEFAULT
+     * is the empty string (no home school chosen), NOT "cas". An empty
+     * value means "not confirmed yet" — the wizard prompts and nothing
+     * is sent until the student picks one, so the engine never silently
+     * treats an unknown-school student as CAS.
+     */
+    homeSchool: string;
+    /**
      * Target graduation term, E5.1 placeholder. Default "" = "let the
      * engine infer from the DPR's expected term" (E5.4 wires the real
      * grad-term picker). Empty string is a sane, defined default.
@@ -122,6 +135,9 @@ export interface WizardValues {
  */
 export const DEFAULT_WIZARD_VALUES: WizardValues = Object.freeze({
     homeSchoolConfirmed: "unconfirmed",
+    // NEVER SILENT CAS — empty default, never "cas". The Confirm-profile
+    // step fills this from the DPR-derived proposal or the student's pick.
+    homeSchool: "",
     gradTerm: "",
     visa: "domestic",
     workload: "balanced",

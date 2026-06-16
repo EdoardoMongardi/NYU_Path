@@ -161,6 +161,12 @@ export default function ChatPage() {
     const [parsedData, setParsedData] = useState<ParsedTranscript | null>(null);
     const [visaStatus, setVisaStatus] = useState<string | null>(null);
     const [graduationTarget, setGraduationTarget] = useState<string | null>(null);
+    // E5.2 — the onboarding-confirmed home-school CODE (e.g. "cas",
+    // "stern", "shanghai", "nyuad"). Set from the wizard's Confirm-profile
+    // step (onReachPlan) and from /api/session/restore's persisted profile.
+    // Sent as `body.homeSchool` on chat turns ONLY when set — NEVER
+    // silently CAS (null = unconfirmed → the field is omitted).
+    const [homeSchool, setHomeSchool] = useState<string | null>(null);
     // Phase 4 Task E1.1 — single source of truth for plan state.
     // forwardSchedule + schedulePreferences + forwardMaterialization
     // used to be three independent server-push-only `useState`s. They
@@ -287,9 +293,16 @@ export default function ChatPage() {
                 // v2 route's per-turn body carries the right value
                 // (the profile is the source of truth, but the v2
                 // request shape still passes visaStatus separately).
-                const restoredProfile = data.profile as { visaStatus?: string };
+                const restoredProfile = data.profile as { visaStatus?: string; homeSchool?: string };
                 if (restoredProfile.visaStatus === "f1" || restoredProfile.visaStatus === "domestic") {
                     setVisaStatus(restoredProfile.visaStatus);
+                }
+                // E5.2 — hydrate the persisted home school so subsequent
+                // chat turns thread `body.homeSchool` (the confirmed value,
+                // not a re-derivation). Skip the school-agnostic "unknown"
+                // sentinel so we never send it as a confirmed school.
+                if (restoredProfile.homeSchool && restoredProfile.homeSchool !== "unknown") {
+                    setHomeSchool(restoredProfile.homeSchool);
                 }
                 // Hydrate graduation target from the restored schedule
                 // when present; the v2 route uses it to populate the
@@ -420,6 +433,10 @@ export default function ChatPage() {
             graduationTarget,
             history: recentHistory,
             userId: getOrCreateClientId(),
+            // E5.2 — thread the onboarding-confirmed home school. Spread in
+            // ONLY when set so an unconfirmed student never sends a (silent
+            // CAS) value; the v2 route maps this → homeSchoolOverride.
+            ...(homeSchool ? { homeSchool } : {}),
         })) {
             applyEvent(ev, assistant.id, toolStatuses);
         }

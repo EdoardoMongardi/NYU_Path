@@ -94,6 +94,11 @@ export interface ChatV2Request {
      *  30 msg/UTC-day quota (cohort-A approximation of per-user
      *  limits — real auth lands in W12). */
     userId?: string;
+    /** CAS-1 / Phase 4 E5.2 — the onboarding-confirmed home-school CODE
+     *  (e.g. "cas", "stern", "shanghai", "nyuad"). When present, the v2
+     *  route threads it as `homeSchoolOverride` so deriveHomeSchool is
+     *  bypassed. Omitted entirely when unconfirmed — NEVER silently CAS. */
+    homeSchool?: string;
 }
 
 /**

@@ -33,7 +33,8 @@
 //   a parent can wire it in later without changing the shell.
 // ============================================================
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import type { DegreeProgressReport } from "@nyupath/engine";
 import {
     WIZARD_STEPS,
     initialWizardState,
@@ -46,6 +47,11 @@ import {
     type WizardStepId,
     type WizardValues,
 } from "../../../lib/wizard/wizardMachine";
+import {
+    SCHOOL_OPTIONS,
+    computeHomeSchoolProposal,
+    type HomeSchoolProposal,
+} from "../../../lib/wizard/homeSchool";
 import styles from "./wizard.module.css";
 
 // ---------------------------------------------------------------------------
@@ -60,7 +66,7 @@ export interface OnboardingWizardProps {
      * `values` (+ any parsed DPR) and hands off to the planning
      * surface. No-op if omitted — the shell still reaches Plan.
      */
-    onReachPlan?: (values: WizardValues, dpr: unknown | null) => void;
+    onReachPlan?: (values: WizardValues, dpr: DegreeProgressReport | null) => void;
     /**
      * Called when the student dismisses the wizard (e.g. "I'll use the
      * chat instead"). No-op if omitted.
@@ -88,12 +94,30 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
     const [state, setState] = useState<WizardState>(initialWizardState);
     const [uploadBusy, setUploadBusy] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
-    const [parsedDpr, setParsedDpr] = useState<unknown | null>(null);
+    const [parsedDpr, setParsedDpr] = useState<DegreeProgressReport | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const stepIndex = WIZARD_STEPS.indexOf(state.step);
     const totalSteps = WIZARD_STEPS.length;
     const onPlan = state.step === "plan";
+
+    // E5.2 — the DPR-derived home-school proposal for the Confirm-profile
+    // step. `needsPrompt` (no school indicator in the DPR) means the wizard
+    // PROMPTS with NO default pre-selected — never silently CAS. The student
+    // confirms the proposal or overrides it; either way `values.homeSchool`
+    // is set explicitly (the default is the empty string, NOT "cas").
+    const homeSchoolProposal: HomeSchoolProposal | null = useMemo(
+        () => (parsedDpr ? computeHomeSchoolProposal(parsedDpr) : null),
+        [parsedDpr],
+    );
+    // The currently-selected home-school code on the Confirm-profile step:
+    // the student's explicit pick if any, else the proposed school. Empty
+    // string = nothing selected (the prompt is unanswered).
+    const selectedHomeSchool = state.values.homeSchool || homeSchoolProposal?.proposed || "";
+
+    const setHomeSchool = useCallback((code: string) => {
+        setState((s) => ({ ...s, values: { ...s.values, homeSchool: code } }));
+    }, []);
 
     // ---- transitions (thin wrappers over the pure machine) ----
     const advance = useCallback(() => {
@@ -138,12 +162,17 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
                 const formData = new FormData();
                 formData.append("dpr", file);
                 const res = await fetch("/api/onboard", { method: "POST", body: formData });
-                const data = await res.json();
+                const data = (await res.json()) as {
+                    message?: string;
+                    // /api/onboard returns the parsed DPR wrapped in the
+                    // canonical discriminated onboarding shape.
+                    parsedData?: { kind: "dpr"; report: DegreeProgressReport };
+                };
                 if (!res.ok) {
                     setUploadError(data?.message ?? "Upload failed. Please try again.");
                     return;
                 }
-                if (data?.parsedData) setParsedDpr(data.parsedData);
+                if (data.parsedData?.report) setParsedDpr(data.parsedData.report);
                 // Advance past Upload once the DPR parses.
                 advance();
             } catch {
@@ -217,8 +246,53 @@ export default function OnboardingWizard({ onReachPlan, onDismiss }: OnboardingW
                     </div>
                 )}
 
-                {state.step !== "upload" && state.step !== "plan" && (
-                    // E5.1 placeholder bodies — E5.2–E5.4 flesh these out.
+                {state.step === "confirm_profile" && (
+                    // E5.2 — home-school PROPOSE + confirm. We PROPOSE the
+                    // DPR-derived home school and let the student CONFIRM or
+                    // OVERRIDE it across all 11 schools + NYU Shanghai +
+                    // Abu Dhabi. When the DPR carries no school indicator
+                    // (`needsPrompt`) we render an explicit prompt with NO
+                    // default pre-selected — NEVER silently CAS.
+                    <div className={styles.stepBody}>
+                        {homeSchoolProposal?.needsPrompt ? (
+                            <p className={styles.placeholder}>
+                                We couldn&apos;t determine your home school from your DPR. Please
+                                select it below so your plan uses the right requirements and credit
+                                caps.
+                            </p>
+                        ) : (
+                            <p className={styles.subtitle}>
+                                Based on your DPR we proposed your home school below. Confirm it, or
+                                pick a different one.
+                            </p>
+                        )}
+                        <label className={styles.fieldLabel} htmlFor="wizard-home-school">
+                            Home school
+                        </label>
+                        <select
+                            id="wizard-home-school"
+                            className={styles.select}
+                            value={selectedHomeSchool}
+                            onChange={(e) => setHomeSchool(e.target.value)}
+                        >
+                            {/* Placeholder option — present (and selected) only when
+                                nothing has been chosen yet, so we never default to CAS. */}
+                            <option value="" disabled>
+                                Select your home school…
+                            </option>
+                            {SCHOOL_OPTIONS.map((opt) => (
+                                <option key={opt.code} value={opt.code}>
+                                    {opt.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                {state.step !== "upload" &&
+                    state.step !== "plan" &&
+                    state.step !== "confirm_profile" && (
+                    // E5.1 placeholder bodies — E5.4 fleshes these out.
                     // Every field here is defaulted in the machine and the
                     // step is Skippable, so this placeholder never blocks
                     // the path to Plan.

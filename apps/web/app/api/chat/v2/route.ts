@@ -54,6 +54,7 @@ import type { ForwardSchedule, SchedulePreferences } from "@nyupath/shared";
 import {
     buildStudentProfileFromDpr,
 } from "../../../../lib/buildSession";
+import { isValidSchoolCode } from "../../../../lib/wizard/homeSchool";
 import { createSseStream, type SseWriter } from "../../../../lib/sseStream";
 import { getCourseSearchFn } from "../../../../lib/courseCatalogSearch";
 import { getCatalog } from "../../../../lib/loadCatalog";
@@ -210,6 +211,27 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const stores = getStores();
 
+    // E5.2 — VALIDATE an explicit home-school override against the known
+    // school registry BEFORE it threads into the profile or persists. A
+    // forged / malformed `body.homeSchool` must NOT silently become the
+    // override or get durably written to the profile (the
+    // never-silently-wrong-school rule — core_philosophy.md:4/26). An
+    // unrecognized code is ignored (we fall back to deriveHomeSchool) and
+    // logged; a valid code threads through as before.
+    const validatedHomeSchool =
+        typeof body.homeSchool === "string" && isValidSchoolCode(body.homeSchool)
+            ? body.homeSchool
+            : undefined;
+    if (
+        typeof body.homeSchool === "string" &&
+        body.homeSchool.length > 0 &&
+        validatedHomeSchool === undefined
+    ) {
+        console.warn(
+            `[v2 route] ignoring unknown home-school code from request body: ${body.homeSchool}`,
+        );
+    }
+
     // Build the student profile from the DPR (the only onboarding artifact).
     const student = buildStudentProfileFromDpr(parsedDpr, {
         // RC: studentIdOverride MUST track the auth subject so every
@@ -223,10 +245,9 @@ export async function POST(req: NextRequest): Promise<Response> {
             ? { visaStatus: body.visaStatus }
             : {}),
         // CAS-1 (Task 1.5): thread onboarding-confirmed home school so
-        // deriveHomeSchool is bypassed when the client provides an explicit value.
-        ...(typeof body.homeSchool === "string" && body.homeSchool.length > 0
-            ? { homeSchoolOverride: body.homeSchool }
-            : {}),
+        // deriveHomeSchool is bypassed when the client provides an explicit
+        // value. E5.2: only a VALIDATED (known-registry) code overrides.
+        ...(validatedHomeSchool ? { homeSchoolOverride: validatedHomeSchool } : {}),
     });
 
     // E1.2 (Phase 4) — read the student's CONFIRMED profile back into
@@ -259,10 +280,19 @@ export async function POST(req: NextRequest): Promise<Response> {
     // break the live turn — warn and continue with the DPR-derived values.
     // This is a SEPARATE single-PK read from the P3.2 write-gate's
     // existence check below (correctness + scope-safety over the micro-opt).
+    //
+    // E5.2 — capture the PERSISTED homeSchool so the change-persist block
+    // below can compare it against an explicit `body.homeSchool`
+    // correction (a returning student picking a NEW home school in the
+    // Confirm-profile wizard step). `undefined` means "no profile yet"
+    // (the bootstrap persist owns that case); a string means a profile
+    // exists with that home school.
+    let persistedHomeSchool: string | undefined;
     if (userId !== "anonymous") {
         try {
             const persistedProfile = await stores.profileStore.get(userId);
             if (persistedProfile) {
+                persistedHomeSchool = persistedProfile.homeSchool;
                 // homeSchool: persisted wins only when the body did NOT
                 // send an explicit homeSchool this turn (the constructor
                 // override already reflects the body value when it did).
@@ -426,6 +456,50 @@ export async function POST(req: NextRequest): Promise<Response> {
         } catch (err) {
             console.warn(
                 `[v2 route] bootstrap persistMutation failed for ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+
+    // E5.2 — persist an EXPLICIT home-school CHANGE. The bootstrap persist
+    // above is gated to INITIAL onboarding (no profile yet); the E1.2
+    // read-back lets persisted values flow back into `student` but never
+    // WRITES. So when a RETURNING student corrects their home school in the
+    // Confirm-profile wizard step — `body.homeSchool` arrives AND a profile
+    // already exists AND its persisted value DIFFERS — neither path records
+    // the correction. This block closes that gap: it persists the corrected
+    // `student` (already carrying the override from the constructor) and
+    // appends the audit row, mirroring the bootstrap persist's shape.
+    //
+    // Guards (matching the bootstrap/read-back gates):
+    //   - userId !== "anonymous" (no durable store row);
+    //   - a profile EXISTS (persistedHomeSchool !== undefined) — the
+    //     no-profile case is already owned by the bootstrap persist above;
+    //   - the value actually CHANGED (idempotent — an unchanged home school
+    //     writes nothing, so we don't clobber/append on every turn);
+    //   - best-effort, no-throw — a persist failure must NOT break the turn.
+    // E5.2 — only a VALIDATED (known-registry) code may persist; a forged
+    // value was already dropped to `undefined` above (never silently wrong).
+    const bodyHomeSchool = validatedHomeSchool;
+    if (
+        userId !== "anonymous" &&
+        bodyHomeSchool !== undefined &&
+        persistedHomeSchool !== undefined &&
+        persistedHomeSchool !== bodyHomeSchool
+    ) {
+        try {
+            await stores.profileStore.persistMutation(
+                student, // already carries homeSchool = bodyHomeSchool (constructor override)
+                {
+                    pendingMutationId: `homeschool-${Date.now()}`,
+                    field: "homeSchool" as const,
+                    before: persistedHomeSchool,
+                    after: bodyHomeSchool,
+                    confirmedAt: new Date().toISOString(),
+                },
+            );
+        } catch (err) {
+            console.warn(
+                `[v2 route] home-school change persistMutation failed for ${userId}: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
     }
