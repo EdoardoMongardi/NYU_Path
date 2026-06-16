@@ -22,6 +22,11 @@ import { PostgresSessionStore } from "./sessionStorePostgres.js";
 import { PostgresProfileStore } from "./profileStorePostgres.js";
 import { PostgresScheduleStore } from "./scheduleStorePostgres.js";
 import { PostgresChatHistoryStore } from "./chatHistoryStorePostgres.js";
+import {
+    InMemoryPendingMutationStore,
+    PostgresPendingMutationStore,
+    type PendingMutationStore,
+} from "./pendingMutationStore.js";
 
 interface StoreBundle {
     sessionStore: SessionStore;
@@ -30,6 +35,8 @@ interface StoreBundle {
     scheduleStore: ScheduleStore;
     /** Phase 16 Task A — append-only chat transcript. */
     chatHistoryStore: ChatHistoryStore;
+    /** Phase 4 Task E6.3 — durable propose→confirm staging. */
+    pendingMutationStore: PendingMutationStore;
 }
 
 let cached: StoreBundle | null = null;
@@ -44,6 +51,7 @@ export function getStores(env: Record<string, string | undefined> = process.env)
             profileStore: new PostgresProfileStore(db),
             scheduleStore: new PostgresScheduleStore(db),
             chatHistoryStore: new PostgresChatHistoryStore(db),
+            pendingMutationStore: new PostgresPendingMutationStore(db),
         };
         return cached;
     }
@@ -57,6 +65,7 @@ export function getStores(env: Record<string, string | undefined> = process.env)
         profileStore: new InMemoryProfileStore(),
         scheduleStore: new InMemoryScheduleStore(),
         chatHistoryStore: new InMemoryChatHistoryStore(),
+        pendingMutationStore: new InMemoryPendingMutationStore(),
     };
     return cached;
 }

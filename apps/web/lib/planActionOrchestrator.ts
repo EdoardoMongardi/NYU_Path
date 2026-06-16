@@ -52,6 +52,7 @@ import type {
     StudentProfile,
 } from "@nyupath/shared";
 import { getStores } from "./db/store.js";
+import { InMemoryPendingMutationStore } from "./db/pendingMutationStore.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -109,47 +110,46 @@ export type RunConfirmError =
     | RunProposeError;
 
 // ---------------------------------------------------------------------------
-// Pending-mutation staging map
+// Pending-mutation staging (durable — Phase 4 Task E6.3)
 // ---------------------------------------------------------------------------
 //
-// Mirrors the in-session `pendingMaterializations` map from Phase 15
-// Task 7 — but keyed at module scope because the propose → confirm
-// round-trip crosses two route invocations (each with its own fresh
-// ToolSession). The key is the uuid the orchestrator mints; the
-// value carries the studentId (so confirm can refuse cross-tenant
-// id-guessing) plus the mutation array to re-apply.
+// The propose → confirm round-trip crosses two route invocations (each
+// with its own fresh ToolSession), so the staged mutation array must
+// outlive a single request. Pre-E6.3 this lived in a module-scope `Map`
+// here: single-instance, lost on restart, invisible to a sibling
+// instance. E6.3 moved it behind `getStores().pendingMutationStore` —
+// the Postgres `pending_mutations` table when a DB handle exists, an
+// in-memory singleton otherwise (dev + offline tests).
 //
-// Entries are evicted on confirm. They also age out after 10 minutes
-// to keep the map bounded if a UI flow crashes mid-confirm. The
-// 10-minute TTL is well above the typical "user reads the bubble +
-// clicks Confirm" latency; longer-lived deferrals (close-tab,
-// re-open) are handled by re-running the propose from scratch.
+// The studentId cross-tenant guard + the single-use delete + the
+// 10-minute TTL now live INSIDE the store's `take` / `stage` (see
+// pendingMutationStore.ts). The orchestrator just calls `stage` on
+// propose and `take` on confirm.
 
-interface PendingMutationEntry {
-    studentId: string;
-    mutations: PlanMutation[];
-    createdAt: number;
-}
-
-const PENDING_TTL_MS = 10 * 60 * 1000;
-const pendingMutations = new Map<string, PendingMutationEntry>();
-
-function purgeExpired(now: number = Date.now()): void {
-    for (const [id, entry] of pendingMutations) {
-        if (now - entry.createdAt > PENDING_TTL_MS) {
-            pendingMutations.delete(id);
-        }
+/**
+ * Test-only: drop every staged mutation. Delegates to the in-memory
+ * store (the only path offline tests exercise). On the Postgres path
+ * this is a no-op — live cleanup is the table itself (TTL sweep +
+ * cascade-on-delete), not this hook.
+ */
+export function _resetPendingMutationsForTests(): void {
+    const store = getStores().pendingMutationStore;
+    if (store instanceof InMemoryPendingMutationStore) {
+        store.clearForTests();
     }
 }
 
-/** Test-only: drop every staged mutation. */
-export function _resetPendingMutationsForTests(): void {
-    pendingMutations.clear();
-}
-
-/** Test-only: peek at the staging map size. */
+/**
+ * Test-only: peek at the staged-entry count. Synchronous; only the
+ * in-memory store exposes a sync size, which is all the offline tests
+ * need. Returns 0 on the Postgres path (no sync introspection).
+ */
 export function _pendingMutationsSizeForTests(): number {
-    return pendingMutations.size;
+    const store = getStores().pendingMutationStore;
+    if (store instanceof InMemoryPendingMutationStore) {
+        return store.sizeForTests();
+    }
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -469,10 +469,12 @@ export async function runProposeStage(
     const proposedForwardSchedule = (outcome as { proposedSchedule?: ForwardSchedule })
         .proposedSchedule;
 
-    // Mint a pendingMutationId and stage the mutations for confirm.
-    purgeExpired();
+    // Mint a pendingMutationId and stage the mutations for confirm via
+    // the durable store (E6.3) so the entry survives a restart /
+    // multi-instance deploy. The store's `stage` runs its own TTL sweep.
     const pendingMutationId = randomUUID();
-    pendingMutations.set(pendingMutationId, {
+    await getStores(env).pendingMutationStore.stage({
+        pendingMutationId,
         studentId,
         mutations,
         createdAt: Date.now(),
@@ -521,10 +523,14 @@ export async function runConfirmStage(
 ): Promise<{ ok: true; response: PlanConfirmResponse } | { ok: false; error: RunConfirmError }> {
     const env = opts.env ?? process.env;
     const force = opts.force === true;
-    purgeExpired();
+    const pendingStore = getStores(env).pendingMutationStore;
 
-    const entry = pendingMutations.get(pendingMutationId);
-    if (!entry) {
+    // Atomically read-validate-tenant-check-delete via the durable store
+    // (E6.3). `take` enforces the cross-tenant guard + single-use delete +
+    // TTL; the discriminated result lets us preserve the two distinct
+    // route errors below.
+    const taken = await pendingStore.take(pendingMutationId, studentId);
+    if (taken.status === "not_found") {
         return {
             ok: false,
             error: {
@@ -533,7 +539,7 @@ export async function runConfirmStage(
             },
         };
     }
-    if (entry.studentId !== studentId) {
+    if (taken.status === "tenant_mismatch") {
         return {
             ok: false,
             error: {
@@ -542,9 +548,33 @@ export async function runConfirmStage(
             },
         };
     }
+    const entry = taken.entry;
+
+    // `take` already CONSUMED (deleted) the entry. The pre-E6.3 Map flow
+    // deleted only AFTER a successful apply, so on a session-load / engine
+    // failure we RE-STAGE the (unchanged, original-`createdAt`) entry to keep
+    // the "consume only on a successful apply" semantic. Best-effort: a
+    // re-stage DB blip must NOT propagate as an unhandled rejection or it
+    // would lose the entry harder than the old flow — log + degrade to the
+    // "re-run propose" fallback that any lost staging already has.
+    const restageBestEffort = async (): Promise<void> => {
+        try {
+            await pendingStore.stage({ ...entry });
+        } catch (restageErr) {
+            console.warn(
+                `[planActionOrchestrator] best-effort re-stage after a confirm failure errored: ${restageErr instanceof Error ? restageErr.message : String(restageErr)}`,
+            );
+        }
+    };
 
     const loaded = await loadSessionState(studentId, env);
-    if (!loaded.ok) return { ok: false, error: loaded.error };
+    if (!loaded.ok) {
+        // Loading the session failed for reasons unrelated to the staged
+        // mutation (e.g. profile/DPR gone) — restage so the id stays
+        // confirmable on a retry.
+        await restageBestEffort();
+        return { ok: false, error: loaded.error };
+    }
 
     const session = buildSession(loaded.state, env);
     const ctx = { signal: new AbortController().signal, session };
@@ -556,6 +586,9 @@ export async function runConfirmStage(
             ctx,
         );
     } catch (err) {
+        // Engine failure — restage so the staged id is not burned by a
+        // transient apply error (preserves single-use-only-on-success).
+        await restageBestEffort();
         return {
             ok: false,
             error: {
@@ -565,9 +598,9 @@ export async function runConfirmStage(
         };
     }
 
-    // Drop the staging entry so a second confirm with the same id
-    // returns 404 (avoids accidental double-apply).
-    pendingMutations.delete(pendingMutationId);
+    // The staging entry was already consumed by `take` above, so a
+    // second confirm of the same id returns 404 (no accidental
+    // double-apply).
 
     let persistedSchedule = session.forwardSchedule ?? session.studentDraftPlan;
 
