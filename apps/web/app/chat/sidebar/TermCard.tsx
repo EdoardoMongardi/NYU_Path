@@ -7,10 +7,10 @@
 //   - structural slot list (or Sections-view swap-in)
 //   - per-slot rows via <SlotRow>
 //   - per-term-card "+ Add course" affordance via <AddCourseAffordance>
-//   - drag-to-move drop-target plumbing (term-card-level)
 //
 // All routing logic stays in the parent (`scheduleSidebar.tsx`) —
-// TermCard only RECEIVES typed handlers.
+// TermCard only RECEIVES typed handlers. Phase 4 Task E3.4 removed the
+// drag gesture entirely; the per-course ⋯ menu is the sole edit input.
 // ============================================================
 "use client";
 
@@ -43,8 +43,6 @@ interface TermCardProps {
     openPopoverKey: string | null;
     openSubmenu: { key: string; verb: "swap" | "move" } | null;
     addCourseDraft: string | undefined;
-    /** Active drop-target term ("YYYY-season"). */
-    dropTargetTerm: string | null;
     selectedComboIdx: number;
     setSelectedComboIdx: (i: number) => void;
     onSlotClick: (key: string, slot: ScheduleSlot) => void;
@@ -55,25 +53,18 @@ interface TermCardProps {
     onAddCourseClose: (term: string) => void;
     onAddCourseChange: (term: string, value: string) => void;
     onAddCourseSubmit: (term: string) => void;
-    /** Drag-and-drop term-card handlers + per-slot key derivation. */
+    /** Per-slot stable identity key derivation (drives the spinner Set). */
     slotKeyOf: (slot: ScheduleSlot, term: string) => string;
-    onDragStartSlot: (e: React.DragEvent<HTMLLIElement>, slot: ScheduleSlot, term: string) => void;
-    onTermDragOver: (e: React.DragEvent<HTMLElement>, term: string) => void;
-    onTermDragLeave: (term: string) => void;
-    onTermDrop: (e: React.DragEvent<HTMLElement>, term: string) => void;
-    onSlotDragOver: (e: React.DragEvent<HTMLElement>) => void;
-    onSlotDrop: (e: React.DragEvent<HTMLElement>, target: { courseId: string; term: string }) => void;
 }
 
 export default function TermCard(props: TermCardProps) {
     const {
         bucket, semIdx, forwardSemester, schedule, materialization,
         isImmediate, frozenKeys, pendingSlots, openPopoverKey, openSubmenu,
-        addCourseDraft, dropTargetTerm, selectedComboIdx, setSelectedComboIdx,
+        addCourseDraft, selectedComboIdx, setSelectedComboIdx,
         onSlotClick, onSubmenuToggle, handlers, onConfirmCombination,
         onAddCourseOpen, onAddCourseClose, onAddCourseChange, onAddCourseSubmit,
-        slotKeyOf, onDragStartSlot, onTermDragOver, onTermDragLeave, onTermDrop,
-        onSlotDragOver, onSlotDrop,
+        slotKeyOf,
     } = props;
 
     const matApplies = isImmediate && !!materialization
@@ -91,16 +82,14 @@ export default function TermCard(props: TermCardProps) {
         ? forwardSemester.plannedCredits
         : bucket.slots.reduce((sum, s) => sum + (slotCredits(s)), 0);
 
-    // Phase 17 Task C — drag-to-move drop-target eligibility:
-    // term card must NOT be locked (history/completed buckets stay
-    // read-only).
-    const isDropEligible = !bucket.locked;
-    const isActiveDropTarget = isDropEligible && dropTargetTerm === bucket.term;
+    // A term card is editable only when NOT locked (history/completed
+    // buckets stay read-only).
+    const isEditable = !bucket.locked;
 
     // Phase 17 Task C — Add-course affordance: only on non-locked
     // future term cards (the bucket is non-locked AND has a forward
     // semester entry — we don't add courses to an IP term).
-    const showAddCourse = isDropEligible && !!forwardSemester;
+    const showAddCourse = isEditable && !!forwardSemester;
 
     return (
         <section
@@ -108,11 +97,7 @@ export default function TermCard(props: TermCardProps) {
             className={[
                 styles.semesterCard,
                 bucket.locked ? styles.locked : "",
-                isActiveDropTarget ? styles.termCardDropTarget : "",
             ].filter(Boolean).join(" ")}
-            onDragOver={isDropEligible ? (e) => onTermDragOver(e, bucket.term) : undefined}
-            onDragLeave={isDropEligible ? () => onTermDragLeave(bucket.term) : undefined}
-            onDrop={isDropEligible ? (e) => onTermDrop(e, bucket.term) : undefined}
         >
             <header className={styles.semesterCardHeader}>
                 <h3>{formatTermLabel(bucket.term)}</h3>
@@ -144,12 +129,6 @@ export default function TermCard(props: TermCardProps) {
                         const sKey = slotKeyOf(slot, bucket.term);
                         const isPending = pendingSlots.has(sKey);
                         const isFrozen = frozenKeys.has(sKey);
-                        const slotCourseId = (
-                            slot.kind === "specific_planned"
-                            || slot.kind === "in_progress"
-                            || slot.kind === "completed"
-                        ) ? slot.courseId : null;
-                        const isDraggable = !isLocked && slotCourseId !== null;
                         const submenu = openSubmenu && openSubmenu.key === key
                             ? openSubmenu.verb
                             : null;
@@ -164,20 +143,12 @@ export default function TermCard(props: TermCardProps) {
                                 semesterLocked={bucket.locked}
                                 isPending={isPending}
                                 isOpen={isOpen}
-                                isDraggable={isDraggable}
                                 schedule={schedule}
                                 isFrozen={isFrozen}
                                 submenu={submenu}
                                 onSlotClick={() => onSlotClick(key, slot)}
                                 onSubmenuToggle={(verb) => onSubmenuToggle(key, verb)}
                                 handlers={handlers}
-                                onDragStart={(e) => onDragStartSlot(e, slot, bucket.term)}
-                                onDragOverSlot={onSlotDragOver}
-                                onDropSlot={
-                                    isDraggable && slotCourseId
-                                        ? (e) => onSlotDrop(e, { courseId: slotCourseId, term: bucket.term })
-                                        : () => undefined
-                                }
                             />
                         );
                     })}

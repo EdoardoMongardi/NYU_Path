@@ -1306,29 +1306,15 @@ button.reasoningHeader:focus-visible {
 /* ==========================================================
    Phase 17 Task C — 4-verb sidebar affordances
    ----------------------------------------------------------
-   Drag-to-move (slot pill draggable + term-card drop target),
-   nested submenus inside the slot popover (Swap / Move),
+   Nested submenus inside the slot popover (Swap / Move),
    per-term-card "+ Add course" affordance, in-flight slot
    spinner replacing the grade cell during the Stage-1 round
    trip, and a small lock toggle for the Lock verb.
+
+   Phase 4 Task E3.4 removed the drag-to-move gesture entirely
+   (the per-course ⋯ menu is the sole edit input now), so the
+   `.slotDraggable` / `.termCardDropTarget` styles are gone.
    ========================================================== */
-
-/* Pill cursor — distinct from `.slotClickable` (the popover-opening
-   cursor) so the student knows they can EITHER click for the popover
-   OR drag the pill to a different term card. */
-.slotDraggable {
-    cursor: grab;
-}
-.slotDraggable:active { cursor: grabbing; }
-
-/* Highlight ring shown on a term card while a draggable slot pill is
-   hovering above it. Pure visual cue — the JS `onDragOver` /
-   `onDragLeave` handlers toggle this class. */
-.termCardDropTarget {
-    outline: 2px dashed var(--nyu-violet);
-    outline-offset: -2px;
-    background: rgba(87, 6, 140, 0.06);
-}
 
 /* Submenu container shared by Swap + Move. Sits below the verb row
    inside the slot popover. */

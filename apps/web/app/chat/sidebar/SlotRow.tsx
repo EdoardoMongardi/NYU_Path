@@ -2,14 +2,14 @@
 // SlotRow — single slot pill inside a term card's slot list
 // ============================================================
 // Phase 17 Task D pre-flight extraction. Owns:
-//   - tier-tint + locked / draggable class derivation
+//   - tier-tint + locked class derivation
 //   - the inline spinner / grade cell swap
-//   - draggable affordance + cross-term/exchange drop targets
 //   - per-slot click → open popover
 //   - the popover render (4-verb model: Swap / Drop / Lock / Move)
 //
 // All routing logic stays in the parent (`scheduleSidebar.tsx`) —
-// SlotRow only RECEIVES typed handlers.
+// SlotRow only RECEIVES typed handlers. Phase 4 Task E3.4 removed the
+// drag gesture entirely; the per-course ⋯ menu is the sole edit input.
 // ============================================================
 "use client";
 
@@ -37,7 +37,6 @@ interface SlotRowProps {
     semesterLocked: boolean;
     isPending: boolean;
     isOpen: boolean;
-    isDraggable: boolean;
     schedule: ForwardSchedule | null;
     /** Phase 17 Task D — the freeze flag plumbed in from the
      *  SchedulePreferences.pins[] walk. Drives the popover's
@@ -49,19 +48,13 @@ interface SlotRowProps {
     onSlotClick: () => void;
     onSubmenuToggle: (v: "swap" | "move" | null) => void;
     handlers: SlotPopoverHandlers;
-    /** Drag-to-move source-ref + drop-target plumbing comes from the
-     *  parent so the parent owns the live useRef + state. */
-    onDragStart: (e: React.DragEvent<HTMLLIElement>) => void;
-    onDragOverSlot: (e: React.DragEvent<HTMLElement>) => void;
-    onDropSlot: (e: React.DragEvent<HTMLElement>) => void;
 }
 
 export default function SlotRow(props: SlotRowProps) {
     const {
-        slot, slotIdx, isLocked, semesterLocked, isPending, isOpen, isDraggable,
+        slot, slotIdx, isLocked, semesterLocked, isPending, isOpen,
         schedule, isFrozen, submenu, onSlotClick, onSubmenuToggle,
-        handlers, onDragStart, onDragOverSlot, onDropSlot,
-        bucketTerm,
+        handlers, bucketTerm,
     } = props;
     const tierClass = slotTierClassName(slot);
 
@@ -86,7 +79,6 @@ export default function SlotRow(props: SlotRowProps) {
                 isLocked ? styles.slotLocked : styles.slotClickable,
                 tierClass ? styles.slotTier : "",
                 tierClass ?? "",
-                isDraggable ? styles.slotDraggable : "",
                 isFrozen ? styles.slotFrozen : "",
             ].filter(Boolean).join(" ")}
             onClick={onSlotClick}
@@ -94,15 +86,11 @@ export default function SlotRow(props: SlotRowProps) {
                 isLocked
                     ? "Completed — locked"
                     : isFrozen
-                        ? "Locked — click to unlock or drag to move (the lock will travel with it)"
+                        ? "Locked — click to open verbs (unlock / move via the ⋯ menu)"
                         : slot.kind === "in_progress"
                             ? slotState.label // "In progress (fixed in its term)"
-                            : "Click to open verbs · drag to move"
+                            : "Click to open verbs"
             }
-            draggable={isDraggable}
-            onDragStart={isDraggable ? onDragStart : undefined}
-            onDragOver={isDraggable ? onDragOverSlot : undefined}
-            onDrop={isDraggable ? onDropSlot : undefined}
         >
             {renderSlotInner(slot)}
             {isPending ? (

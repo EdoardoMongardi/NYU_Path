@@ -18,7 +18,6 @@ import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@n
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
 import ScheduleSidebar from "./scheduleSidebar";
 import {
-    classifyPlanActionOutcome,
     bubbleSlotKey,
     bubbleHasButtons,
     bubbleHasOverrideButton,
@@ -26,7 +25,6 @@ import {
     applyPolishEvent,
     applyStage2Event,
     type PlanActionBubbleState,
-    type PlanActionBubbleKind,
 } from "../../lib/planActionBubbleHelpers";
 import {
     planConfirm,
@@ -34,7 +32,8 @@ import {
     type PlanActionRouteResponse,
 } from "../../lib/planActionClient";
 import { createPlanStore } from "./planState";
-import { applyReviewConfirm, applyReviewCancel, computeInvalidCard } from "../../lib/reviewCard";
+import { applyReviewConfirm, applyReviewCancel } from "../../lib/reviewCard";
+import { planActionSurfaces } from "../../lib/planActionSurfaces";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -753,6 +752,17 @@ export default function ChatPage() {
      * hard refusal already failed structural validation — surfacing
      * "✓ Open sections exist" for terms we just refused to plan into
      * is confusing UX.
+     *
+     * Phase 4 Task E3.4 — the FEASIBLE path (clean + trade-offs) no
+     * longer mints a chat bubble (the canvas review card is its sole
+     * surface), so the ONLY live callers here are now the
+     * `soft_refusal` / `hard_refusal` (`feasible:false`) bubbles. The
+     * `kind !== "clean"` polish gate + the `kind !== "hard_refusal"`
+     * Stage-2 gate are therefore partially vestigial. Surfacing the
+     * feasible-path Stage-2 FOSE "open sections" signal on the review
+     * card is deliberately PARKED for Phase 5 (live-data UI — design §9
+     * / plan Out-of-scope line 47); the review card shows the
+     * deterministic engine `consequences` instead (no-invention).
      */
     const spawnBubbleEnrichers = useCallback((messageId: string, bubble: PlanActionBubbleState) => {
         // Reuse-or-create the AbortController for this bubble.
@@ -853,45 +863,44 @@ export default function ChatPage() {
             setTimeout(scrollToBottom, 50);
             return;
         }
-        const kind: PlanActionBubbleKind = classifyPlanActionOutcome(result.data);
-        if (kind === "clean") {
-            // Spec: clean apply ≈ 70% of clicks → silent commit, no
-            // bubble. The sidebar's own Stage-1 spinner clears
-            // synchronously when the route returns; nothing else to
-            // do here. (E3.4 will reconcile the clean-result canvas.)
-            return;
-        }
-        // Phase 4 Task E3.1 / E3.3 — the canvas overlay is one of two
-        // MUTUALLY-EXCLUSIVE slots, decided by the engine's verdict:
-        //   - feasible + a proposed schedule → a PENDING violet preview
-        //     (E3.1), the committed plan untouched; AND we clear any
-        //     stale RED card.
+        // Phase 4 Task E3.4 — drag/⋯ reconciliation. The per-course ⋯
+        // menu is the SOLE edit input now (drag was removed), and EVERY
+        // ⋯ verb PROPOSES — it stages the E3.1 canvas preview + E3.2
+        // review card and applies ONLY on Confirm. The single pure
+        // `planActionSurfaces` helper decides the THREE surfaces from the
+        // engine's own verdict; there is NO `kind === "clean"` early
+        // return any more (a clean result is no longer silently dropped —
+        // it previews like every other feasible verb).
+        //
+        //   - feasible (clean OR trade-offs) + a proposed schedule → a
+        //     PENDING violet preview (E3.1), the committed plan untouched,
+        //     and any stale RED card cleared. NO chat bubble — the canvas
+        //     review card is the sole surface (E3.4 bubble↔card dedup).
         //   - feasible === false → a RED invalid-proposal card (E3.3)
         //     naming the binding constraint(s) from the response's OWN
-        //     fields (conflicts ∪ feasibility.constraintViolations); the
-        //     proposal NEVER previews and the committed plan is left
-        //     byte-identical. We also clear any stale preview.
+        //     fields, the committed plan byte-identical, any stale preview
+        //     cleared. The chat bubble is ALSO minted (it carries
+        //     Override-anyway / hard-refusal copy the red card doesn't).
+        //
         // Either way the committed plan (planStore.forwardSchedule) is
-        // NEVER mutated here.
-        if (result.data.feasible === false) {
-            // E3.3 — invalid proposal: red card, NO preview, canvas
-            // untouched. The binding constraints are read STRICTLY from
-            // the response's own fields (computeInvalidCard invents
-            // nothing).
-            planStore.setInvalidProposal(computeInvalidCard(result.data, verb));
+        // NEVER mutated here — only Confirm commits.
+        const surfaces = planActionSurfaces(result.data, verb);
+        if (surfaces.invalidCard) {
+            planStore.setInvalidProposal(surfaces.invalidCard);
             planStore.clearPendingPreview();
-        } else if (result.data.forwardSchedule) {
-            planStore.setPendingPreview({
-                proposedSchedule: result.data.forwardSchedule,
-                pendingMutationId: result.data.pendingMutationId,
-                consequences: result.data.consequences,
-                ...(result.data.planDiff ? { planDiff: result.data.planDiff } : {}),
-                verb,
-            });
-            // E3.3 — a feasible preview supersedes any stale red card.
+        } else if (surfaces.preview) {
+            planStore.setPendingPreview(surfaces.preview);
+            // A feasible preview supersedes any stale red card.
             planStore.clearInvalidProposal();
         }
-        // Build the bubble Message + insert.
+        // E3.4 bubble↔card dedup — mint the chat bubble ONLY for the
+        // feasible:false path (showBubble). The feasible path's sole
+        // surface is the canvas review card (nothing is appended to the
+        // chat thread → no scroll), which removes the double-surface +
+        // the card→bubble stale-button bug entirely.
+        if (!surfaces.showBubble) {
+            return;
+        }
         const bubble = initBubbleState(result.data);
         const id = `bubble-${result.data.pendingMutationId}`;
         const msg: Message = {
@@ -958,6 +967,10 @@ export default function ChatPage() {
         // WITHOUT committing: the sidebar reverts to the (untouched)
         // committed plan.
         planStore.clearPendingPreview();
+        // E3.4 — Keep-as-is on a feasible:false bubble must ALSO clear
+        // the E3.3 red card that renders alongside it, so dismissing the
+        // bubble doesn't leave the red card hanging.
+        planStore.clearInvalidProposal();
         patchMessage(messageId, {
             bubbleResolved: true,
             content: "Kept the plan as-is.",

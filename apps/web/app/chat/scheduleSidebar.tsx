@@ -69,15 +69,6 @@ const SIDEBAR_TOAST_THRESHOLD_MS = 600;
 type LegacySlotAction = "lock" | "replace" | "drop" | "pin";
 
 /**
- * Phase 17 Task C — slot-with-term tuple used by drag-to-move /
- * drag-to-exchange handlers.
- */
-interface DragSlotRef {
-    courseId: string;
-    term: string;
-}
-
-/**
  * Phase 4 Task E2.1 — plan-level badge row.
  *
  * Thin consumer of the pure `computePlanBadges` helper: it renders the
@@ -244,8 +235,6 @@ export default function ScheduleSidebar({
      *  rendered? Driven by `pendingSince` + a 600ms timer. */
     const [showToast, setShowToast] = useState(false);
     const [addCourseDraft, setAddCourseDraft] = useState<Map<string, string>>(() => new Map());
-    const dragSourceRef = useRef<DragSlotRef | null>(null);
-    const [dropTargetTerm, setDropTargetTerm] = useState<string | null>(null);
     const [selectedComboIdx, setSelectedComboIdx] = useState(0);
     const sidebarRef = useRef<HTMLElement>(null);
     const refreshDprInputRef = useRef<HTMLInputElement>(null);
@@ -522,112 +511,6 @@ export default function ScheduleSidebar({
         });
     };
 
-    /** Phase 17 Task C — slot-pill `onDragStart` handler. */
-    const handleDragStart = (
-        e: React.DragEvent<HTMLLIElement>,
-        slot: ScheduleSlot,
-        term: string,
-    ): void => {
-        const courseId =
-            slot.kind === "specific_planned" || slot.kind === "completed" || slot.kind === "in_progress"
-                ? slot.courseId
-                : null;
-        if (!courseId) {
-            e.preventDefault();
-            return;
-        }
-        dragSourceRef.current = { courseId, term };
-        try {
-            e.dataTransfer.setData("application/x-nyupath-slot", JSON.stringify({ courseId, term }));
-            e.dataTransfer.effectAllowed = "move";
-        } catch { /* jsdom may not support dataTransfer */ }
-    };
-
-    const handleTermDragOver = (e: React.DragEvent<HTMLElement>, term: string): void => {
-        if (!dragSourceRef.current) return;
-        if (dragSourceRef.current.term === term) return;
-        e.preventDefault();
-        try { e.dataTransfer.dropEffect = "move"; } catch { /* */ }
-        if (dropTargetTerm !== term) setDropTargetTerm(term);
-    };
-
-    const handleTermDragLeave = (term: string): void => {
-        if (dropTargetTerm === term) setDropTargetTerm(null);
-    };
-
-    const handleTermDrop = async (
-        e: React.DragEvent<HTMLElement>,
-        targetTerm: string,
-    ): Promise<void> => {
-        e.preventDefault();
-        const src = dragSourceRef.current;
-        dragSourceRef.current = null;
-        setDropTargetTerm(null);
-        if (!src) return;
-        if (src.term === targetTerm) return;
-        const key = `${src.term}::${src.courseId}`;
-        markSlotPending(key, true);
-        try {
-            const result = await planMove({
-                courseId: src.courseId,
-                fromTerm: src.term,
-                toTerm: targetTerm,
-            });
-            announceResult("move", result);
-        } finally {
-            markSlotPending(key, false);
-        }
-    };
-
-    const handleSlotDragOver = (e: React.DragEvent<HTMLElement>): void => {
-        if (!dragSourceRef.current) return;
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
-    const handleSlotDrop = async (
-        e: React.DragEvent<HTMLElement>,
-        target: { courseId: string; term: string },
-    ): Promise<void> => {
-        e.preventDefault();
-        e.stopPropagation();
-        const src = dragSourceRef.current;
-        dragSourceRef.current = null;
-        setDropTargetTerm(null);
-        if (!src) return;
-        if (src.courseId === target.courseId && src.term === target.term) return;
-        if (src.term === target.term) {
-            const key = `${src.term}::${src.courseId}`;
-            markSlotPending(key, true);
-            try {
-                const result = await planSwap({
-                    drop: src.courseId,
-                    add: target.courseId,
-                    term: src.term,
-                });
-                announceResult("swap", result);
-            } finally {
-                markSlotPending(key, false);
-            }
-            return;
-        }
-        const key = `${src.term}::${src.courseId}`;
-        markSlotPending(key, true);
-        try {
-            const result = await planSwap({
-                exchanges: [{
-                    aCourseId: src.courseId,
-                    aTerm: src.term,
-                    bCourseId: target.courseId,
-                    bTerm: target.term,
-                }],
-            });
-            announceResult("swap", result);
-        } finally {
-            markSlotPending(key, false);
-        }
-    };
-
     const handleRefreshDprPick = async (file: File) => {
         if (!onRefreshDpr || refreshing) return;
         setRefreshing(true);
@@ -769,7 +652,6 @@ export default function ScheduleSidebar({
                                                 openPopoverKey={null}
                                                 openSubmenu={null}
                                                 addCourseDraft={undefined}
-                                                dropTargetTerm={null}
                                                 selectedComboIdx={selectedComboIdx}
                                                 setSelectedComboIdx={setSelectedComboIdx}
                                                 onSlotClick={() => { /* read-only preview */ }}
@@ -780,12 +662,6 @@ export default function ScheduleSidebar({
                                                 onAddCourseChange={() => { /* read-only preview */ }}
                                                 onAddCourseSubmit={() => { /* read-only preview */ }}
                                                 slotKeyOf={slotKey}
-                                                onDragStartSlot={() => { /* read-only preview */ }}
-                                                onTermDragOver={() => { /* read-only preview */ }}
-                                                onTermDragLeave={() => { /* read-only preview */ }}
-                                                onTermDrop={() => { /* read-only preview */ }}
-                                                onSlotDragOver={() => { /* read-only preview */ }}
-                                                onSlotDrop={() => { /* read-only preview */ }}
                                             />
                                         ))}
                                     </>
@@ -1015,7 +891,6 @@ export default function ScheduleSidebar({
                                         openPopoverKey={openPopover}
                                         openSubmenu={openSubmenu}
                                         addCourseDraft={addCourseDraft.get(bucket.term)}
-                                        dropTargetTerm={dropTargetTerm}
                                         selectedComboIdx={selectedComboIdx}
                                         setSelectedComboIdx={setSelectedComboIdx}
                                         onSlotClick={handleSlotClick}
@@ -1030,12 +905,6 @@ export default function ScheduleSidebar({
                                         onAddCourseChange={handleAddCourseChange}
                                         onAddCourseSubmit={handleAddCourseSubmit}
                                         slotKeyOf={slotKey}
-                                        onDragStartSlot={handleDragStart}
-                                        onTermDragOver={handleTermDragOver}
-                                        onTermDragLeave={handleTermDragLeave}
-                                        onTermDrop={handleTermDrop}
-                                        onSlotDragOver={handleSlotDragOver}
-                                        onSlotDrop={handleSlotDrop}
                                     />
                                 ))}
                                 {!schedule && (
