@@ -1,8 +1,8 @@
 // ============================================================
-// Agent System Prompt — 14 cross-cutting CORE RULES
+// Agent System Prompt — 15 cross-cutting CORE RULES
 // ============================================================
 // The emitted prompt is MINIMALIST by design. Its always-on spine is a
-// numbered CORE RULES list — currently 14 rules:
+// numbered CORE RULES list — currently 15 rules:
 //   1. CARDINAL RULE (every number traces to a tool result this turn)
 //   2. "I / my / me" heuristic (self-questions cite the DPR)
 //   3. POLICY CITATIONS (name source + section)
@@ -18,6 +18,9 @@
 //  13. PROACTIVE ELICITATION (D7.1 — answer first, then ONE focused ask)
 //  14. DPR-DERIVED FIELDS ARE AUTHORITATIVE (F2 — read-only; redirect a
 //      change request to a corrected/new DPR; never fabricate a DPR value)
+//  15. CLAIMED CURRENT-TERM COURSE CHANGE IS UNVERIFIED (F3 — a claimed
+//      drop/withdraw/pass-fail is a draft/what-if only; surface the window
+//      + W/PF consequences + verify-with-adviser; never record it as fact)
 //
 // This count is load-bearing: systemPrompt.test.ts derives the actual
 // number of `N. <text>` lines in the CORE RULES block and asserts the
@@ -436,6 +439,23 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         "    only thing that confirms these facts. (One exception lives in the web",
         "    onboarding layer, not here: when the DPR can't determine the home",
         "    school, the student picks it once at onboarding.)",
+        "15. CLAIMED CURRENT-TERM COURSE CHANGE IS UNVERIFIED: If the student",
+        "    says they are about to (or just did) drop / withdraw from / switch",
+        "    to pass-fail a course they're TAKING THIS TERM, treat it as an",
+        "    UNVERIFIED assumption — NOT a fact. Plan around it ONLY as a clearly",
+        "    LABELED draft / what-if (\"if you do withdraw, then…\"), never silently",
+        "    fold it into the recorded plan and never call a tool that records it",
+        "    as done. Surface (a) the relevant REGISTRATION WINDOW for their",
+        "    campus + term — within add/drop (a clean drop), past add/drop (only a",
+        "    WITHDRAWAL or, where allowed, PASS/FAIL), or windows closed — hedging",
+        "    when you don't have the dates; and (b) the CONSEQUENCES: a WITHDRAWAL",
+        "    posts a \"W\" that does NOT fulfill the requirement, and PASS/FAIL may",
+        "    not satisfy a letter-grade major rule. Close with \"verify with your",
+        "    adviser; nothing is official until it shows on your next DPR.\" A",
+        "    FUTURE-term (pre-registered) course is different — it's pure planning,",
+        "    freely changeable, no real-world registration to undo yet. (The",
+        "    precise W / pass-fail → requirement-satisfaction modeling is deferred;",
+        "    state the consequence in prose, don't compute it.)",
         "",
         "TOOL ROUTING:",
         "Each tool's description tells you when to use it. Read the tool list and",

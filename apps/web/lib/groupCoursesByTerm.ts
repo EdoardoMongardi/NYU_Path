@@ -39,7 +39,14 @@ import type {
     ScheduleSlot,
     CourseTaken,
 } from "@nyupath/shared";
-import type { DegreeProgressReport, DPRCourseRow } from "@nyupath/engine";
+import type { DegreeProgressReport, DPRCourseRow, AcademicCalendar, Campus } from "@nyupath/engine";
+import {
+    deriveTemporalContext,
+    campusForHomeSchool,
+    classifyIpChangeability,
+    NYU_ACADEMIC_CALENDAR,
+} from "@nyupath/engine";
+import type { SlotIpChangeability } from "../app/chat/sidebar/slotState";
 
 export interface PriorCreditEntry {
     /**
@@ -67,6 +74,14 @@ export interface TermBucket {
     /** History = true (locked, no popover); IP / future = false. */
     locked: boolean;
     slots: ScheduleSlot[];
+    /** F3 — for an IP (in-progress) term bucket, the engine's per-term
+     *  changeability classification (`classifyIpChangeability`). All slots
+     *  in an IP bucket share the same term, so ONE classification per IP
+     *  bucket is correct. The renderer threads this into `computeSlotState`
+     *  so an in_progress slot's editable + label/hedge come from the honest
+     *  registration-window state instead of the blanket "IP → editable".
+     *  Absent on history/future buckets (and when no DPR is available). */
+    ipChangeability?: SlotIpChangeability;
 }
 
 export interface GroupedDegree {
@@ -81,6 +96,11 @@ export function groupCoursesByTerm(args: {
     /** Raw DPR for extracting TE rows + historical/IP titles + types.
      *  Optional — if absent, we fall back to `student.coursesTaken`. */
     dpr?: DegreeProgressReport | null;
+    /** F3 — inject "today" + the academic calendar for the IP-changeability
+     *  classification (tests pass a fixed clock + a fixture calendar).
+     *  Default: real `new Date()` + the bundled NYU calendar. */
+    now?: Date;
+    calendar?: AcademicCalendar;
 }): GroupedDegree {
     const { student, forwardSchedule, dpr } = args;
 
@@ -97,8 +117,18 @@ export function groupCoursesByTerm(args: {
     // Preferred path: walk dpr.courseHistory so we get real titles + the
     // accurate type discriminator (EN vs IP). Fallback path uses
     // student.coursesTaken when no DPR is available.
+    //
+    // F3 — derive the temporal context + campus ONCE here (from the DPR's
+    // IP rows + the student's home school) so each IP bucket can be
+    // classified by `classifyIpChangeability` (its registration window).
+    const now = args.now ?? new Date();
+    const calendar = args.calendar ?? NYU_ACADEMIC_CALENDAR;
     const dprTerms: TermBucket[] = dpr
-        ? buildTermsFromDpr(dpr)
+        ? buildTermsFromDpr(dpr, {
+            now,
+            calendar,
+            campus: campusForHomeSchool(student?.homeSchool),
+        })
         : buildTermsFromCoursesTaken(student?.coursesTaken ?? [], student?.currentSemester);
 
     // ---- 3. Future-term buckets (from forwardSchedule) ---------------
@@ -140,7 +170,10 @@ export function groupCoursesByTerm(args: {
  * student doesn't see a phantom "passed" status next to a re-enrolled
  * row.
  */
-function buildTermsFromDpr(dpr: DegreeProgressReport): TermBucket[] {
+function buildTermsFromDpr(
+    dpr: DegreeProgressReport,
+    ipCtx: { now: Date; calendar: AcademicCalendar; campus: Campus },
+): TermBucket[] {
     const byTerm = new Map<string, DPRCourseRow[]>();
     for (const row of dpr.courseHistory) {
         // TE rows surface in the Prior Credits card, not a term card.
@@ -153,14 +186,44 @@ function buildTermsFromDpr(dpr: DegreeProgressReport): TermBucket[] {
         byTerm.set(row.term, list);
     }
 
+    // F3 — derive the temporal context once for the whole DPR so each IP
+    // bucket below can be classified against the real registration windows.
+    const temporalContext = deriveTemporalContext(dpr, { now: ipCtx.now });
+
     const buckets: TermBucket[] = [];
     for (const [term, rows] of byTerm.entries()) {
         const isIP = rows.some((r) => r.type === "IP");
-        buckets.push({
-            term,
-            locked: !isIP, // historical = locked; IP = editable
-            slots: rows.map((r) => dprRowToSlot(r, isIP)),
-        });
+        if (isIP) {
+            // Classify THIS IP term's changeability (future / add-drop /
+            // withdraw-pf / closed / unknown). A "closed" current-term IP
+            // renders NOT editable even though it's IP; a future-term IP is
+            // freely changeable. The blanket `locked: !isIP` (false for IP)
+            // stays — the per-slot editable gate now honors this instead.
+            const result = classifyIpChangeability({
+                ipTerm: term,
+                temporalContext,
+                campus: ipCtx.campus,
+                calendar: ipCtx.calendar,
+                now: ipCtx.now,
+            });
+            const ipChangeability: SlotIpChangeability = {
+                window: result.window,
+                editable: result.editable,
+                ...(result.hedge ? { hedge: result.hedge } : {}),
+            };
+            buckets.push({
+                term,
+                locked: false, // IP term is not a history bucket
+                slots: rows.map((r) => dprRowToSlot(r, true)),
+                ipChangeability,
+            });
+        } else {
+            buckets.push({
+                term,
+                locked: true, // historical = locked
+                slots: rows.map((r) => dprRowToSlot(r, false)),
+            });
+        }
     }
     return buckets;
 }

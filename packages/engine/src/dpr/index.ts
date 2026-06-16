@@ -54,6 +54,26 @@ export {
 } from "./temporalContext.js";
 export type { DprTemporalContext } from "./temporalContext.js";
 
+// F3 — academic-calendar config + IP-course changeability classifier.
+export {
+    NYU_ACADEMIC_CALENDAR,
+    getTermWindows,
+    campusForHomeSchool,
+    normalizeCalendarTermKey,
+} from "./academicCalendar.js";
+export type {
+    AcademicCalendar,
+    Campus,
+    ISODate,
+    TermWindows,
+} from "./academicCalendar.js";
+export { classifyIpChangeability } from "./ipCourseChangeability.js";
+export type {
+    IpChangeWindow,
+    IpChangeabilityResult,
+    ClassifyIpChangeabilityArgs,
+} from "./ipCourseChangeability.js";
+
 // Phase 16 Task A — content-only fingerprint used by the Update-DPR
 // route to detect meaningful re-uploads.
 export { computeDprFingerprint } from "./fingerprint.js";

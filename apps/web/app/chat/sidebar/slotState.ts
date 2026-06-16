@@ -59,6 +59,28 @@ export interface SlotStateView {
     /** Does the sidebar offer edit/move verbs (popover + drag) for this
      *  slot? Mirrors the component's actual gating — see the scope note. */
     editable: boolean;
+    /** F3 — the full "verify with your adviser" hedge for an in_progress
+     *  slot whose term was classified (`ipChangeability.hedge`). Surfaced
+     *  as the slot's tooltip/title; the concise `label` stays the visible
+     *  marker. Absent when there's no hedge to surface. */
+    title?: string;
+}
+
+/** The window-classification an `in_progress` slot was given by the
+ *  engine's `classifyIpChangeability` (F3 — IP-course temporal model).
+ *  Threaded down from the caller (groupCoursesByTerm/TermCard), which
+ *  derives the temporal context once + classifies each IP slot's term.
+ *  A subset of the engine's `IpChangeabilityResult` (we don't need the
+ *  rationale in the view). */
+export interface SlotIpChangeability {
+    /** "future" | "add_drop" | "withdraw_pf" | "closed" | "unknown". */
+    window: "future" | "add_drop" | "withdraw_pf" | "closed" | "unknown";
+    /** Whether the engine deems this IP course student-changeable. */
+    editable: boolean;
+    /** The full "verify with your adviser" hedge, when one applies.
+     *  Surfaced as the slot's tooltip/title — NOT inlined into the tiny
+     *  slot label (the agent surfaces the full prose in chat). */
+    hedge?: string;
 }
 
 export interface SlotStateOpts {
@@ -68,6 +90,13 @@ export interface SlotStateOpts {
     /** The slot's `ForwardSemester.locked` — a DPR-derived history /
      *  in-progress term that is read-only for EVERY kind. */
     semesterLocked: boolean;
+    /** F3 — per-IP-course changeability for an `in_progress` slot. When
+     *  PRESENT, an in_progress slot's `editable` + label/aria come from
+     *  this honest temporal classification instead of the blanket
+     *  `in_progress → editable:true`. When ABSENT, in_progress keeps its
+     *  back-compat behavior (editable: true, ◐, "fixed in its term").
+     *  Ignored for non-in_progress kinds. */
+    ipChangeability?: SlotIpChangeability;
 }
 
 const LABELS = {
@@ -77,6 +106,36 @@ const LABELS = {
     lockedByYou: "Locked by you",
     termLocked: "Locked — past or in-progress term",
 } as const;
+
+/** F3 — window-honest labels for an in_progress slot that carries an
+ *  `ipChangeability` classification. Kept CONCISE (the agent surfaces the
+ *  full hedge prose in chat; `hedge` rides through as the tooltip/title).
+ *  Maps the engine's IpChangeWindow → a short marker + aria phrasing. */
+const IP_WINDOW_LABELS: Record<
+    SlotIpChangeability["window"],
+    { label: string; aria: string }
+> = {
+    future: {
+        label: "Planned for a future term — changeable",
+        aria: "Planned for a future term — changeable",
+    },
+    add_drop: {
+        label: "In progress (within add/drop)",
+        aria: "In progress — within add/drop, changeable",
+    },
+    withdraw_pf: {
+        label: "In progress — withdraw/pass-fail only (verify with adviser)",
+        aria: "In progress — withdraw or pass-fail only; verify with your adviser",
+    },
+    closed: {
+        label: "In progress — change windows closed (verify with adviser)",
+        aria: "In progress — change windows closed; verify with your adviser",
+    },
+    unknown: {
+        label: "In progress — changes need adviser verification",
+        aria: "In progress — changes need adviser verification",
+    },
+};
 
 /**
  * Map a slot + its render context to the design §8 slot-state view.
@@ -91,8 +150,12 @@ const LABELS = {
  *   2. `semesterLocked` → 🔒 term-locked, not editable (any other kind).
  *   3. `isFrozen`       → 🔒 "locked by you", still editable (unlock /
  *                         move; the lock travels with it).
- *   4. `in_progress`    → ◐ "fixed in its term" (editable matches the
- *                         component today — see scope note).
+ *   4. `in_progress`    → ◐. With an F3 `ipChangeability` classification:
+ *                         editable + label/aria come from the honest
+ *                         temporal window (closed → NOT editable; future →
+ *                         changeable; withdraw_pf/unknown → editable+hedge).
+ *                         Without it: back-compat "fixed in its term",
+ *                         editable.
  *   5. planned kinds    → no glyph, "Planned (movable)", editable.
  */
 export function computeSlotState(slot: ScheduleSlot, opts: SlotStateOpts): SlotStateView {
@@ -131,9 +194,27 @@ export function computeSlotState(slot: ScheduleSlot, opts: SlotStateOpts): SlotS
         };
     }
 
-    // 4. An in-progress course — the IP rule made visible (◐). Editable
-    //    matches the component's current gating; see the scope note.
+    // 4. An in-progress course — the IP rule made visible (◐). When the
+    //    caller has classified the slot's term (F3 `ipChangeability`), the
+    //    editable flag + label/aria come from that HONEST temporal window
+    //    (future → changeable; closed → NOT editable; withdraw_pf/unknown →
+    //    editable-with-a-hedge). Absent → keep the back-compat blanket
+    //    (editable: true, "fixed in its term"). The ◐ glyph stays in every
+    //    case (the slot is still an in-progress course); the full hedge
+    //    prose rides through as the tooltip (`title`) via the SlotRow, NOT
+    //    inlined into the tiny label.
     if (slot.kind === "in_progress") {
+        const ip = opts.ipChangeability;
+        if (ip) {
+            const view = IP_WINDOW_LABELS[ip.window];
+            return {
+                glyph: "◐",
+                label: view.label,
+                ariaLabel: view.aria,
+                editable: ip.editable,
+                ...(ip.hedge ? { title: ip.hedge } : {}),
+            };
+        }
         return {
             glyph: "◐",
             label: LABELS.inProgress,

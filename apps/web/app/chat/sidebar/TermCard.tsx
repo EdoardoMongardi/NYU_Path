@@ -162,6 +162,7 @@ export default function TermCard(props: TermCardProps) {
                                 bucketTerm={bucket.term}
                                 isLocked={isLocked}
                                 semesterLocked={bucket.locked}
+                                {...(bucket.ipChangeability ? { ipChangeability: bucket.ipChangeability } : {})}
                                 isPending={isPending}
                                 isOpen={isOpen}
                                 schedule={schedule}

@@ -19,7 +19,7 @@ import styles from "../chat.module.css";
 import { renderSlotPopover, type SlotPopoverHandlers } from "./slotPopover";
 import { renderSlotInner, slotGradeText } from "./slotRenderHelpers";
 import { slotTierClassName } from "./slotTier";
-import { computeSlotState } from "./slotState";
+import { computeSlotState, type SlotIpChangeability } from "./slotState";
 
 interface SlotRowProps {
     slot: ScheduleSlot;
@@ -35,6 +35,12 @@ interface SlotRowProps {
      *  term-locked (🔒 / not editable) regardless of kind. Sourced from
      *  the render-plan bucket's `locked` flag in TermCard. */
     semesterLocked: boolean;
+    /** F3 — the IP-changeability classification for this slot's term, when
+     *  it's an in_progress (IP) bucket. Threaded from the term card's
+     *  `bucket.ipChangeability`. When present, an in_progress slot's
+     *  editable + label/hedge come from the honest registration-window
+     *  state; when absent, the slot keeps its back-compat IP treatment. */
+    ipChangeability?: SlotIpChangeability;
     isPending: boolean;
     isOpen: boolean;
     schedule: ForwardSchedule | null;
@@ -52,7 +58,7 @@ interface SlotRowProps {
 
 export default function SlotRow(props: SlotRowProps) {
     const {
-        slot, slotIdx, isLocked, semesterLocked, isPending, isOpen,
+        slot, slotIdx, isLocked, semesterLocked, ipChangeability, isPending, isOpen,
         schedule, isFrozen, submenu, onSlotClick, onSubmenuToggle,
         handlers, bucketTerm,
     } = props;
@@ -68,6 +74,7 @@ export default function SlotRow(props: SlotRowProps) {
     const slotState = computeSlotState(slot, {
         isFrozen,
         semesterLocked,
+        ...(ipChangeability ? { ipChangeability } : {}),
     });
 
     return (
@@ -88,7 +95,10 @@ export default function SlotRow(props: SlotRowProps) {
                     : isFrozen
                         ? "Locked — click to open verbs (unlock / move via the ⋯ menu)"
                         : slot.kind === "in_progress"
-                            ? slotState.label // "In progress (fixed in its term)"
+                            // F3 — surface the full "verify with your adviser"
+                            // hedge as the tooltip when one applies; otherwise
+                            // the concise window-honest label.
+                            ? (slotState.title ?? slotState.label)
                             : "Click to open verbs"
             }
         >
