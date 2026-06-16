@@ -166,6 +166,19 @@ interface ScheduleSidebarProps {
     onProposeLoadStyle?: (style: "balanced" | "frontload" | "backload") => void;
     onProposeSlotChange?: (slot: ScheduleSlot, action: LegacySlotAction) => void;
     /**
+     * Phase 4 Task E4.1 — the slot ⋯ "Explain why" affordance. Fired
+     * with the clicked slot + its term; the page builds a SCOPED
+     * natural-language question (course code / placeholder category +
+     * human term label) and injects it into the normal agent loop. The
+     * sidebar holds NO question-building logic of its own. Optional so
+     * pre-onboarding renders (and the read-only preview overlay) can
+     * omit it.
+     */
+    onExplainSlot?: (slot: ScheduleSlot, term: string) => void;
+    /** Phase 4 Task E4.1 — the term-header "Explain this term"
+     *  affordance (workload-scoped). Fired with the term. */
+    onExplainTerm?: (term: string) => void;
+    /**
      * Phase 17 Task C — fired AFTER each deterministic plan-action
      * route returns. Phase 17 Task D wires this into the page's
      * inline `plan_action_bubble` message kind so the result renders
@@ -214,6 +227,8 @@ export default function ScheduleSidebar({
     onClose,
     onProposeLoadStyle,
     onProposeSlotChange,
+    onExplainSlot,
+    onExplainTerm,
     onPlanActionResult,
     onReviewConfirm,
     onReviewCancel,
@@ -531,11 +546,22 @@ export default function ScheduleSidebar({
     // one place.
     void isLlmPolishEnabled;
 
+    /** Phase 4 Task E4.1 — slot ⋯ "Explain why" → close the popover,
+     *  then ask the page to inject a scoped chat question. The page
+     *  owns the question-building + agent-loop injection; the sidebar
+     *  only closes its own popover state. */
+    const handleExplain = (slot: ScheduleSlot, term: string): void => {
+        setOpenPopover(null);
+        setOpenSubmenu(null);
+        onExplainSlot?.(slot, term);
+    };
+
     const slotPopoverHandlers: SlotPopoverHandlers = {
         onSwap: handleSwap,
         onMove: handleMove,
         onDrop: handleDrop,
         onLock: handleLockToggle,
+        onExplain: handleExplain,
     };
 
     return (
@@ -900,6 +926,7 @@ export default function ScheduleSidebar({
                                         }}
                                         handlers={slotPopoverHandlers}
                                         {...(onConfirmCombination ? { onConfirmCombination } : {})}
+                                        {...(onExplainTerm ? { onExplainTerm } : {})}
                                         onAddCourseOpen={handleAddCourseOpen}
                                         onAddCourseClose={handleAddCourseClose}
                                         onAddCourseChange={handleAddCourseChange}

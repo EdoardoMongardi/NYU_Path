@@ -48,6 +48,10 @@ interface TermCardProps {
     onSlotClick: (key: string, slot: ScheduleSlot) => void;
     onSubmenuToggle: (key: string, verb: "swap" | "move" | null) => void;
     handlers: SlotPopoverHandlers;
+    /** Phase 4 Task E4.1 — term-header "Explain this term" affordance.
+     *  Optional; rendered only on editable (non-locked) future terms.
+     *  Absent on the read-only preview overlay + history cards. */
+    onExplainTerm?: (term: string) => void;
     onConfirmCombination?: (proposalId: string) => void;
     onAddCourseOpen: (term: string) => void;
     onAddCourseClose: (term: string) => void;
@@ -64,7 +68,7 @@ export default function TermCard(props: TermCardProps) {
         addCourseDraft, selectedComboIdx, setSelectedComboIdx,
         onSlotClick, onSubmenuToggle, handlers, onConfirmCombination,
         onAddCourseOpen, onAddCourseClose, onAddCourseChange, onAddCourseSubmit,
-        slotKeyOf,
+        slotKeyOf, onExplainTerm,
     } = props;
 
     const matApplies = isImmediate && !!materialization
@@ -101,7 +105,24 @@ export default function TermCard(props: TermCardProps) {
         >
             <header className={styles.semesterCardHeader}>
                 <h3>{formatTermLabel(bucket.term)}</h3>
-                <span className={styles.semesterCredits}>{headerCredits} cr</span>
+                <span className={styles.semesterCardHeaderRight}>
+                    {/* Phase 4 Task E4.1 — term-header "Explain this term"
+                        shortcut. Only on editable (non-locked) future
+                        terms; injects a scoped workload question into the
+                        normal agent loop via the page handler. */}
+                    {isEditable && onExplainTerm && (
+                        <button
+                            type="button"
+                            className={styles.explainTermBtn}
+                            title={`Explain why ${formatTermLabel(bucket.term)} is planned this way`}
+                            aria-label={`Explain ${formatTermLabel(bucket.term)}`}
+                            onClick={() => onExplainTerm(bucket.term)}
+                        >
+                            Explain
+                        </button>
+                    )}
+                    <span className={styles.semesterCredits}>{headerCredits} cr</span>
+                </span>
             </header>
             {forwardSemester && forwardSemester.notes.length > 0 && (
                 <ul className={styles.semesterNotes}>

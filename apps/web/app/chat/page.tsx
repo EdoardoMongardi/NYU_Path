@@ -34,6 +34,11 @@ import {
 import { createPlanStore } from "./planState";
 import { applyReviewConfirm, applyReviewCancel } from "../../lib/reviewCard";
 import { planActionSurfaces } from "../../lib/planActionSurfaces";
+import {
+    buildExplainSlotQuestion,
+    buildExplainTermQuestion,
+    buildExplainProposalQuestion,
+} from "../../lib/explainQuestion";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -651,6 +656,52 @@ export default function ChatPage() {
     };
 
     /**
+     * Phase 4 Task E4.1 — slot ⋯ "Explain why" shortcut.
+     * Builds a SCOPED natural-language question naming the course code
+     * (or placeholder category) + the human term label, injects it as a
+     * user-visible chat message, then drops into the normal agent loop —
+     * EXACTLY mirroring `handleProposeSlotChange` (addMessage →
+     * handleSendV2). The agent composes the Phase-3 introspection tools
+     * (`view_forward_plan`, `probe_counterfactual`, the trade-off diff)
+     * to answer; there is NO new explanation route (design §2.6).
+     */
+    const handleExplainSlot = async (
+        slot: import("@nyupath/shared").ScheduleSlot,
+        term: string,
+    ) => {
+        if (isLoading) return;
+        const text = buildExplainSlotQuestion(slot, term);
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage("assistant", err instanceof Error ? err.message : "Could not explain that slot.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * Phase 4 Task E4.1 — term-header "Explain this term" shortcut.
+     * Same injection contract as `handleExplainSlot`, scoped to a whole
+     * term (workload-included).
+     */
+    const handleExplainTerm = async (term: string) => {
+        if (isLoading) return;
+        const text = buildExplainTermQuestion(term);
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage("assistant", err instanceof Error ? err.message : "Could not explain that term.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
      * Two-step profile-update confirm affordance (§7.2). Sends a
      * follow-up user message that asks the agent to invoke
      * `confirm_profile_update` with the pending id. The agent's
@@ -1058,8 +1109,10 @@ export default function ChatPage() {
      *  add a user-visible message, then drop into the v2 tool-use loop. */
     const handleReviewAskWhy = useCallback(async (_pendingMutationId: string, verb?: string): Promise<void> => {
         if (isLoading) return;
-        const subject = verb ? `the proposed ${verb} change` : "this proposed change";
-        const text = `Why does ${subject} have these trade-offs? Explain the validity verdict and each trade-off, grounded in my plan.`;
+        // E4.1 — reuse the shared question-builder so all three Explain
+        // affordances (slot ⋯, term header, review-card Ask-why) share
+        // one surface and run through the same agent loop.
+        const text = buildExplainProposalQuestion(verb);
         addMessage("user", text);
         setIsLoading(true);
         try {
@@ -1595,6 +1648,8 @@ export default function ChatPage() {
                 onClose={() => setSidebarOpen(false)}
                 onProposeLoadStyle={handleProposeLoadStyle}
                 onProposeSlotChange={handleProposeSlotChange}
+                onExplainSlot={handleExplainSlot}
+                onExplainTerm={handleExplainTerm}
                 onPlanActionResult={handlePlanActionResult}
                 onReviewConfirm={handleReviewConfirm}
                 onReviewCancel={handleReviewCancel}

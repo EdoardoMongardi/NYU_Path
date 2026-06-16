@@ -877,6 +877,33 @@ button.reasoningHeader:focus-visible {
     /* Phase 16 Task D — credit columns line up across cards. */
     font-variant-numeric: tabular-nums;
 }
+/* Phase 4 Task E4.1 — term-header right cluster (Explain + credits). */
+.semesterCardHeaderRight {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+/* Phase 4 Task E4.1 — "Explain this term" term-header shortcut. Quiet
+   violet text-button styled off the same tokens as the review-card
+   Ask-why button so light/dark resolve with no hardcoded hex. */
+.explainTermBtn {
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.72em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--nyu-violet);
+    background: var(--nyu-violet-faint);
+    color: var(--nyu-violet);
+}
+.explainTermBtn:hover {
+    background: var(--nyu-violet);
+    color: #fff;
+}
+.explainTermBtn:focus-visible {
+    outline: 2px solid var(--nyu-violet);
+    outline-offset: 1px;
+}
 .semesterNotes {
     list-style: disc;
     margin: 0 0 8px 16px;
