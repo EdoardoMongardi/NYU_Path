@@ -11,6 +11,7 @@ describe("What-If report parses as a DPR", () => {
     const r = parseDpr(TEXT, { pageCount: 8, nowIso: "2026-06-05T00:00:00Z" });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
+    expect(r.report.reportKind).toBe("what_if");
     const blob = JSON.stringify(r.report.requirementGroups).toLowerCase();
     expect(blob).toContain("economics");
     expect(JSON.stringify(r.report).toUpperCase()).toContain("ECON-UA");

@@ -204,17 +204,15 @@ function detectReportKind(lines: string[]): "dpr" | "what_if" {
             if (/what-if report/i.test(stripped)) {
                 return "what_if";
             }
-            // Check for the Career Simulation Report sub-title line that
-            // immediately follows the DPR title in What-If PDFs (skip blanks).
+            // Otherwise the FIRST non-blank line after the title decides it:
+            // the "Career Simulation Report" sub-title (present only in What-If
+            // PDFs) → what_if; anything else → a normal DPR.
             for (let j = i + 1; j < lines.length; j++) {
                 const next = lines[j]!.trim();
                 if (next === "") continue;
-                if (/^career simulation report$/i.test(next)) {
-                    return "what_if";
-                }
-                break; // first non-blank, non-CSR line → not a what-if
+                return /^career simulation report$/i.test(next) ? "what_if" : "dpr";
             }
-            return "dpr";
+            return "dpr"; // title only, no following content → normal DPR
         }
     }
     // Title not found — extractHeader would also fail; caller will handle it.
