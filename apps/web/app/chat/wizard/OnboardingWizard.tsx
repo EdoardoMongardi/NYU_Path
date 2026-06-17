@@ -222,31 +222,28 @@ export default function OnboardingWizard({
     );
 
     // ---- transitions (thin wrappers over the pure machine) ----
+    // NOTE: these handlers are PURE state transitions — they do NOT fire
+    // `onReachPlan`. The handoff is triggered EXCLUSIVELY by the terminal
+    // "Build my plan" button's onClick (an event handler, not render). Firing
+    // `onReachPlan` inside a setState updater synchronously updated the parent
+    // (`ChatPage`) DURING this component's render — React's "Cannot update a
+    // component while rendering a different component" warning — and also
+    // double-fired the handoff (once on reaching plan, once on the button).
+    // Reaching the plan step now just LANDS the student on it so they SEE the
+    // confirmation summary + click "Build my plan" to confirm.
     const advance = useCallback(() => {
-        setState((s) => {
-            const ns = nextStep(s);
-            if (ns.step === "plan") onReachPlan?.(ns.values, parsedDpr);
-            return ns;
-        });
-    }, [onReachPlan, parsedDpr]);
+        setState((s) => nextStep(s));
+    }, []);
 
     const skip = useCallback(() => {
-        setState((s) => {
-            const ns = skipStep(s);
-            if (ns.step === "plan") onReachPlan?.(ns.values, parsedDpr);
-            return ns;
-        });
-    }, [onReachPlan, parsedDpr]);
+        setState((s) => skipStep(s));
+    }, []);
 
     const back = useCallback(() => setState((s) => prevStep(s)), []);
 
     const skipEverything = useCallback(() => {
-        setState((s) => {
-            const ns = skipAll(s);
-            onReachPlan?.(ns.values, parsedDpr);
-            return ns;
-        });
-    }, [onReachPlan, parsedDpr]);
+        setState((s) => skipAll(s));
+    }, []);
 
     // ---- DPR upload — REUSES the existing /api/onboard endpoint ----
     // Same shape as the chat page's handleFileUpload: POST a multipart

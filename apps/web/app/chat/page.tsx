@@ -42,6 +42,7 @@ import {
 import { buildPreferenceTurns } from "../../lib/wizard/preferenceTurns";
 import { buildIntendedMajorPreviewTurn } from "../../lib/wizard/intendedMajor";
 import type { WizardValues } from "../../lib/wizard/wizardMachine";
+import OnboardingWizard from "./wizard/OnboardingWizard";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -433,6 +434,14 @@ export default function ChatPage() {
         homeSchool?: string | null;
         visaStatus?: string | null;
         graduationTarget?: string | null;
+        // F1 fix — the just-uploaded DPR, wrapped in the SAME
+        // discriminated `{ kind: "dpr"; report }` shape the page
+        // `parsedData` state uses. Threaded so a SAME-TICK wizard turn
+        // carries the DPR before `setParsedData` has flushed (the I2
+        // stale-closure race extends to the DPR itself — without this the
+        // first wizard preference turn would POST `parsedData: null` and
+        // fall to the v1 route).
+        parsedData?: ParsedTranscript;
     };
 
     const handleSendV2 = async (userText: string, seed?: SendSeed) => {
@@ -446,6 +455,12 @@ export default function ChatPage() {
         const effectiveHomeSchool = seed?.homeSchool ?? homeSchool;
         const effectiveVisaStatus = seed?.visaStatus ?? visaStatus;
         const effectiveGraduationTarget = seed?.graduationTarget ?? graduationTarget;
+        // F1 fix — same stale-closure dodge for the DPR itself. The wizard
+        // sets `parsedData` and injects its preference turns in the SAME
+        // tick; React state is async, so the injected turn would otherwise
+        // read the PRE-UPLOAD closure value (null). Threading the DPR
+        // through the seed makes the first wizard turn carry it.
+        const effectiveParsedData = seed?.parsedData ?? parsedData;
 
         // Pre-create the assistant bubble so tokens stream INTO it.
         const assistant = addMessage("assistant", "");
@@ -459,7 +474,7 @@ export default function ChatPage() {
 
         for await (const ev of streamChatV2({
             message: userText,
-            parsedData,
+            parsedData: effectiveParsedData,
             visaStatus: effectiveVisaStatus,
             graduationTarget: effectiveGraduationTarget,
             history: recentHistory,
@@ -841,25 +856,57 @@ export default function ChatPage() {
     };
 
     /**
-     * Phase 4 Task E5.4 — the wizard's `onReachPlan` consumer (the
-     * deferred-cutover seam). When the onboarding wizard reaches its
-     * terminal "plan" step it hands its collected `values` (+ parsed
-     * DPR) here. We:
+     * Phase 4 Task E5.4 + F1 — the wizard's `onReachPlan` consumer (the
+     * cutover seam, now LIVE: the wizard is mounted as the `awaiting_dpr`
+     * onboarding surface — see the `<OnboardingWizard … />` mount below).
+     * When the onboarding wizard reaches its terminal "plan" step it hands
+     * its collected `values` + the parsed DPR (`dpr`, the wizard's internal
+     * `parsedDpr` — `null` when the student never uploaded) here. We:
+     *   0. (F1 fix) COMPLETE onboarding when a DPR is present —
+     *      `setParsedData({ kind: "dpr", report: dpr })` +
+     *      `setOnboardingStep("complete")` (mirroring the session-restore
+     *      path, page.tsx:295/:299) so EVERY future chat turn routes through
+     *      the v2 agent loop and the sidebar hydrates. When the DPR is
+     *      ABSENT we do NOT complete (no DPR → no personalized plan): we
+     *      surface the upload-needed prompt and stay `awaiting_dpr`,
+     *      fabricating no plan;
      *   1. seed the EXISTING chat-page profile state from the wizard's
      *      Goals (home school → body.homeSchool; F-1/domestic →
      *      body.visaStatus; grad term → body.graduationTarget) using the
      *      SAME setters the session-restore path uses — no duplicate
      *      persistence, no new route; and
      *   2. apply the Goals + Preferences onto the Phase-3 ladder via
-     *      `handleApplyWizardPreferences` (the chat-turn injection rail).
-     * The wizard is NOT mounted yet (E5.x deferred deep cutover); this
-     * is the ready callback a later cutover passes as
-     * `<OnboardingWizard onReachPlan={handleWizardReachPlan}
-     *                    onPreviewIntendedMajor={handleIntendedMajorPreview} />`
-     * — `handleIntendedMajorPreview` (E5.5) being the matching ready
-     * callback for an UNDECLARED student's intended-major RAG-preview arm.
+     *      `handleApplyWizardPreferences` (the chat-turn injection rail),
+     *      threading the DPR + profile through the seed so the FIRST
+     *      injected turn carries them despite React state being async (I2).
+     * `handleIntendedMajorPreview` (E5.5) is the matching ready callback for
+     * an UNDECLARED student's intended-major RAG-preview arm.
      */
-    const handleWizardReachPlan = async (values: WizardValues) => {
+    const handleWizardReachPlan = async (values: WizardValues, dpr?: DegreeProgressReport | null) => {
+        // F1 fix — COMPLETE onboarding on handoff. Without a DPR we cannot
+        // build a personalized plan (core philosophy: no DPR → no
+        // personalized plan), so we must NOT flip to "complete" — that would
+        // strand the student on a v2 path with empty `parsedData` and an
+        // empty sidebar. Surface the upload-needed prompt and stay in
+        // `awaiting_dpr` (the wizard/upload remains available). We fabricate
+        // NO plan.
+        if (!dpr) {
+            addMessage(
+                "assistant",
+                "I need your Degree Progress Report to build your plan — please upload it (📎 / drag-and-drop).",
+            );
+            return;
+        }
+        // DPR present → complete onboarding so EVERY future chat turn routes
+        // through the v2 agent loop (the `useV2` gate is
+        // `onboardingStep === "complete" && parsedData`). Mirrors the
+        // session-restore path (page.tsx:295/:299) — same setters, same
+        // `{ kind: "dpr", report }` shape, no duplicate persistence, no new
+        // route. This is the bug fix: the prior code ignored `dpr` and never
+        // set EITHER, so the handoff silently dropped the student back onto
+        // the legacy v1 route with a null `parsedData` (empty sidebar).
+        setParsedData({ kind: "dpr", report: dpr });
+        setOnboardingStep("complete");
         // Seed the home school ONLY when the student chose one — never
         // silently CAS (an empty value stays null → field omitted).
         if (values.homeSchool) setHomeSchool(values.homeSchool);
@@ -869,10 +916,11 @@ export default function ChatPage() {
         // flushed by the time the preference turns inject in this same tick.
         // Thread the confirmed values EXPLICITLY so the FIRST injected turn
         // already carries the just-confirmed home school (and visa / grad
-        // term), instead of the pre-seed closure values handleSendV2 would
-        // otherwise read. homeSchool falls through ONLY when chosen — never
-        // silently CAS.
+        // term) AND the just-uploaded DPR, instead of the pre-seed closure
+        // values handleSendV2 would otherwise read. homeSchool falls through
+        // ONLY when chosen — never silently CAS.
         const seed: SendSeed = {
+            parsedData: { kind: "dpr", report: dpr },
             ...(values.homeSchool ? { homeSchool: values.homeSchool } : {}),
             ...(values.visa ? { visaStatus: values.visa } : {}),
             ...(values.gradTerm ? { graduationTarget: values.gradTerm } : {}),
@@ -1551,6 +1599,16 @@ export default function ChatPage() {
             {/* Messages */}
             <div className={styles.messages}>
                 {messages.map((msg, i) => {
+                    // F1 — wizard cutover. In the `awaiting_dpr` state the
+                    // structured OnboardingWizard (below) is the LIVE
+                    // onboarding surface, so the legacy welcome bubble (its
+                    // ask-and-reply "upload your DPR" prompt) is suppressed
+                    // here to avoid double-prompting. Every OTHER onboarding
+                    // state and the post-upload `complete` v2 path render
+                    // their bubbles unchanged.
+                    if (msg.id === "welcome" && onboardingStep === "awaiting_dpr") {
+                        return null;
+                    }
                     // Phase 17 Task D follow-up — plan_action_bubble has its
                     // own render block. Returns early so the regular
                     // assistant-bubble path below doesn't double-render the
@@ -1789,6 +1847,26 @@ export default function ChatPage() {
                     );
                 })}
 
+                {/* F1 — wizard cutover (the LIVE onboarding). The
+                    structured OnboardingWizard REPLACES the legacy
+                    welcome/upload ask-and-reply flow for the `awaiting_dpr`
+                    state. Its Upload step reuses `/api/onboard`; once
+                    `onReachPlan` fires (`handleWizardReachPlan`) the existing
+                    rail hands off to `onboardingStep="complete"` + the v2 SSE
+                    path automatically. `onPreviewIntendedMajor`
+                    (`handleIntendedMajorPreview`, E5.5) wires the undeclared
+                    student's hedged intended-major RAG-preview arm. No
+                    "use chat instead" fallback this pass — the wizard's
+                    skip-all no-dead-end guarantees a plan is always
+                    reachable. All OTHER onboarding states + the `complete`
+                    v2 path are unchanged. */}
+                {onboardingStep === "awaiting_dpr" && (
+                    <OnboardingWizard
+                        onReachPlan={handleWizardReachPlan}
+                        onPreviewIntendedMajor={handleIntendedMajorPreview}
+                    />
+                )}
+
                 {/* Legacy v1 loader — only shown for onboarding turns
                     that go through the JSON `/api/chat` route (which
                     has no SSE indicator of its own). v2 turns get
@@ -1810,15 +1888,11 @@ export default function ChatPage() {
             {/* Input area */}
             <div className={styles.inputArea}>
                 <div className={styles.inputContainer}>
-                    {onboardingStep === "awaiting_dpr" && (
-                        <button
-                            className={styles.uploadBtn}
-                            onClick={() => fileInputRef.current?.click()}
-                            title="Upload Degree Progress Report PDF"
-                        >
-                            📎
-                        </button>
-                    )}
+                    {/* F1 — the legacy `📎` upload button is removed: in the
+                        `awaiting_dpr` state the OnboardingWizard (above) owns
+                        the Upload step (same `/api/onboard` parse), so the
+                        inline upload affordance is no longer the live path.
+                        The page-level drag-drop handler still accepts a DPR. */}
                     <textarea
                         ref={inputRef}
                         className={styles.textInput}
