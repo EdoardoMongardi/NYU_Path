@@ -61,6 +61,11 @@ describe("pfEligibility", () => {
         it("sps/elective → counts (canElect not false)", () => {
             expect(pfEligibility("sps", "elective")).toBe("counts");
         });
+        it("unknown-school/elective → unknown (no config → hedge, NOT counts)", () => {
+            // Intentional fail-safe deviation: with no config we cannot know
+            // the school's P/F policy at all, so we hedge rather than assume.
+            expect(pfEligibility("not_a_real_school", "elective")).toBe("unknown");
+        });
     });
 
     // -------------------------------------------------------------------

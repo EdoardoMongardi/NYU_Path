@@ -118,9 +118,11 @@ export function pfEligibility(
     schoolId: string,
     category: PfCategory,
 ): PfEligibilityResult {
+    // Load the school's config once (the single source of truth for P/F policy).
+    const config = loadSchoolConfig(schoolId);
+
     // ---- Step 1: Elective category ----
     if (category === "elective") {
-        const config = loadSchoolConfig(schoolId);
         // canElect:false → students cannot elect P/F at all → outcome unknown
         // even for electives (Tandon case).
         if (config?.passFail?.canElect === false) return "unknown";
@@ -135,7 +137,6 @@ export function pfEligibility(
     if (deferCategories?.has(category)) return "defer";
 
     // ---- Step 3: Read the category boolean from the school config ----
-    const config = loadSchoolConfig(schoolId);
     if (!config || !config.passFail) return "unknown";
 
     const pf = config.passFail;
