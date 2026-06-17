@@ -38,14 +38,15 @@
 // per-season pattern PER CAMPUS or, in future, layer a per-year exception
 // on top — without touching the classifier.
 //
-// ⚑ OWNER: per-campus refinement. NYU Shanghai and NYU Abu Dhabi run
-// genuinely different academic calendars (their term boundaries and
-// deadlines do NOT match New York's). For now all three campuses reference
-// the SAME assumed defaults (DEFAULT_SEASON_WINDOWS below) so the model is
-// usable everywhere with an honest hedge; an owner SHOULD override the
-// shanghai / abudhabi entries with their real registrar patterns when
-// available (and may cite the URL). Do NOT silently copy NY's exact dates
-// as if they were Shanghai's / Abu Dhabi's truth.
+// ⚑ PER-CAMPUS calendars. NYU Shanghai and NYU Abu Dhabi run genuinely
+// different academic calendars (their term boundaries and deadlines do NOT
+// match New York's), so each campus has its OWN per-season pattern below:
+// NY → DEFAULT_SEASON_WINDOWS, Shanghai → SHANGHAI_SEASON_WINDOWS, Abu
+// Dhabi → ABU_DHABI_SEASON_WINDOWS — sourced from each campus's registrar
+// (citations on each const). Shanghai/Abu Dhabi fall + spring are sourced;
+// their genuinely-unsourced windows (e.g. Shanghai's TBD spring withdrawal,
+// the summer/J-term deadlines) are LEFT ABSENT so the classifier hedges
+// rather than copying NY's dates as if they were those campuses' truth.
 //
 // DEFERRED (own task, not in this pass): the precise requirement-engine
 // modeling of W / pass-fail → requirement satisfaction (does a W satisfy
@@ -131,14 +132,88 @@ export const DEFAULT_SEASON_WINDOWS: Record<Season, SeasonWindows> = {
     },
 };
 
-// All three campuses reference the SAME assumed defaults for now. ⚑ OWNER:
-// NYU Shanghai / Abu Dhabi calendars genuinely differ — override these per
-// campus with the real registrar patterns when available (do NOT treat the
-// shared NY-anchored defaults as those campuses' truth).
+// NYU Shanghai — per-season TYPICAL windows from its OWN registrar, which
+// runs a calendar distinct from New York's (term boundaries + deadlines do
+// NOT match NY). Sourced from the NYU Shanghai academic calendar
+// (https://shanghai.nyu.edu/academics/registration/academic-calendar) and
+// the NYU Bulletins Shanghai academic calendar
+// (https://bulletins.nyu.edu/undergraduate/shanghai/academic-calendar/).
+// ⚑ Same TYPICAL-not-EXACT discipline: month-day patterns assumed every
+// year, ALWAYS hedged. Genuinely-unsourced windows are LEFT ABSENT (never
+// invented) so the classifier falls back to its honest hedge:
+//   - spring full-term WITHDRAWAL deadline is published as TBD in the
+//     current Shanghai calendar → absent.
+//   - summer / january add-drop + withdrawal deadlines were not reliably
+//     sourced (only the session start) → absent.
+export const SHANGHAI_SEASON_WINDOWS: Record<Season, SeasonWindows> = {
+    // Fall — classes begin late Aug/early Sep; full-term add/drop mid-Sep;
+    // full-term withdrawal late Nov (Fall 2025 full-term withdrawal was
+    // Mon Nov 24, a representative typical value).
+    fall: {
+        termStartMonthDay: "09-01",
+        addDropMonthDay: "09-11",
+        withdrawMonthDay: "11-24",
+    },
+    // Spring — classes begin mid-January; full-term add/drop late January;
+    // full-term withdrawal published as TBD → absent (honest hedge).
+    spring: {
+        termStartMonthDay: "01-18",
+        addDropMonthDay: "01-29",
+    },
+    // Summer — Session I start only (mid-May); deadlines not sourced.
+    summer: {
+        termStartMonthDay: "05-17",
+    },
+    // January (J-term) — ~2-week intensive start only (early Jan).
+    january: {
+        termStartMonthDay: "01-04",
+    },
+};
+
+// NYU Abu Dhabi — per-season TYPICAL windows from its OWN registrar (again
+// distinct from NY). Sourced from the NYU Abu Dhabi academic calendar
+// (https://nyuad.nyu.edu/en/academics/registration/academic-calendar.html)
+// and the NYU Bulletins Abu Dhabi academic calendar
+// (https://bulletins.nyu.edu/undergraduate/abu-dhabi/academic-calendar/).
+// fall / spring are fully sourced (the standard 14-week session); summer /
+// january hold the sourced START only (deadlines not reliably sourced) →
+// absent → honest hedge.
+export const ABU_DHABI_SEASON_WINDOWS: Record<Season, SeasonWindows> = {
+    // Fall (14-week) — first day late Aug; add/drop early Sep; withdrawal
+    // deadline early Nov (2025-2026: first day Aug 25, add/drop Sep 8,
+    // withdrawal Nov 7).
+    fall: {
+        termStartMonthDay: "08-25",
+        addDropMonthDay: "09-08",
+        withdrawMonthDay: "11-07",
+    },
+    // Spring (14-week) — first day late Jan; add/drop early Feb; withdrawal
+    // deadline late Apr (2025-2026: first day Jan 20, add/drop Feb 2,
+    // withdrawal Apr 24).
+    spring: {
+        termStartMonthDay: "01-20",
+        addDropMonthDay: "02-02",
+        withdrawMonthDay: "04-24",
+    },
+    // Summer — sourced start only (4-week session, mid/late May).
+    summer: {
+        termStartMonthDay: "05-20",
+    },
+    // January (J-term) — sourced start only (~2-week intensive, early Jan).
+    january: {
+        termStartMonthDay: "01-05",
+    },
+};
+
+// The full calendar. NY uses the NY-anchored defaults; Shanghai and Abu
+// Dhabi use their own registrar patterns above (sourced fall/spring;
+// genuinely-unsourced windows absent → the classifier hedges, never
+// inventing). An owner may refine any entry — the classifier is pure and
+// reads whatever this map provides.
 export const NYU_ACADEMIC_CALENDAR: AcademicCalendar = {
     ny: DEFAULT_SEASON_WINDOWS,
-    shanghai: DEFAULT_SEASON_WINDOWS,
-    abudhabi: DEFAULT_SEASON_WINDOWS,
+    shanghai: SHANGHAI_SEASON_WINDOWS,
+    abudhabi: ABU_DHABI_SEASON_WINDOWS,
 };
 
 /**
