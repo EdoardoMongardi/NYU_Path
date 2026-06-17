@@ -1,28 +1,51 @@
 // ============================================================
 // Academic-calendar config (F3 — IP-course temporal model)
 // ============================================================
-// The OWNER-CORRECTABLE source of truth for NYU's per-campus, per-term
-// registration windows: term start · add/drop deadline · withdraw
-// deadline. The IP-changeability classifier (./ipCourseChangeability.ts)
-// reads this map to decide whether a CURRENT-term in-progress course is
-// still inside add/drop, inside the withdraw / pass-fail window, or
-// effectively locked — and to surface the honest, verification-grounded
-// state in the UI + the agent's grounding.
+// The OWNER-CORRECTABLE source of TYPICAL per-SEASON registration windows
+// for NYU: term start · add/drop deadline · withdraw deadline. The
+// IP-changeability classifier (./ipCourseChangeability.ts) reads this map
+// to decide whether a CURRENT-term in-progress course is still inside
+// add/drop, inside the withdraw / pass-fail window, or effectively
+// locked — and to surface the honest, verification-grounded state in the
+// UI + the agent's grounding.
 //
-// ⚑ NEVER INVENT DATES (binding, core_philosophy.md). Every date here is
-// SOURCED from NYU's official registrar/academic calendar and CITED in a
-// comment. A term/campus we could NOT reliably source is left ABSENT
-// (fields omitted) — the classifier then falls back to a GENERIC HEDGE
-// ("changes depend on this term's registrar deadlines — verify with your
-// adviser"). We never guess a date to fill a gap.
+// ⚑ TYPICAL, NOT EXACT (binding, core_philosophy.md). These are NOT a
+// specific year's officially-published dates. Instead we hold ONE TYPICAL
+// date-set PER SEASON (fall · spring · summer · january/J-term) that we
+// ASSUME applies EVERY year, expressed as year-agnostic MONTH-DAY strings.
+// The classifier stamps the IP term's actual YEAR onto the season pattern
+// to build a concrete date, then ALWAYS HEDGES the conclusion ("this is
+// NYU's typical deadline for this season — the exact date shifts each
+// year, verify with your adviser/registrar; nothing is official until your
+// next DPR"). We are NOT inventing exact-year certainty — we hold a
+// typical pattern and we never drop the hedge.
 //
-// ⚑ OWNER: verify / correct / extend. Dates change every year and are
-// session-dependent (a 6-week summer course has different deadlines than
-// the 12-week session). The values below are the STANDARD full-term
-// session for each campus. Re-check every academic year against the
-// registrar before relying on them. The DATA is intentionally separate
-// from the LOGIC (the classifier in ipCourseChangeability.ts is pure and
-// reads whatever this map provides).
+// SEASON PATTERNS (the values below):
+//   - fall / spring are ANCHORED to NYU's recently-published dates and are
+//     a reliable typical pattern. Representative source: the NYU Office of
+//     the Registrar dates as republished by the NYU Computer Science
+//     department academic calendar (https://cs.nyu.edu/dynamic/calendar/
+//     undergraduate/), cross-checked against the NYU Bulletins academic
+//     calendar (https://bulletins.nyu.edu/nyu/academic-calendar/).
+//   - summer / january (J-term) are REASONABLE ESTIMATES, not anchored to
+//     a single published value: summer has many overlapping sub-sessions
+//     (12-week, 10-week, 6-week, …) each with its own deadlines, and the
+//     J-term is a ~3-week intensive — so these are ESPECIALLY approximate
+//     and the classifier flags that extra uncertainty.
+//
+// ⚑ DATA SEPARATE FROM LOGIC. The classifier in ipCourseChangeability.ts
+// is pure and reads whatever this map provides. An owner may override the
+// per-season pattern PER CAMPUS or, in future, layer a per-year exception
+// on top — without touching the classifier.
+//
+// ⚑ OWNER: per-campus refinement. NYU Shanghai and NYU Abu Dhabi run
+// genuinely different academic calendars (their term boundaries and
+// deadlines do NOT match New York's). For now all three campuses reference
+// the SAME assumed defaults (DEFAULT_SEASON_WINDOWS below) so the model is
+// usable everywhere with an honest hedge; an owner SHOULD override the
+// shanghai / abudhabi entries with their real registrar patterns when
+// available (and may cite the URL). Do NOT silently copy NY's exact dates
+// as if they were Shanghai's / Abu Dhabi's truth.
 //
 // DEFERRED (own task, not in this pass): the precise requirement-engine
 // modeling of W / pass-fail → requirement satisfaction (does a W satisfy
@@ -37,29 +60,86 @@
  *  other NYU school (CAS/Stern/Tandon/…) → "ny". */
 export type Campus = "ny" | "shanghai" | "abudhabi";
 
-/** An ISO calendar date string, "YYYY-MM-DD". */
-export type ISODate = string;
+/** A season of the NYU academic year. `january` is the J-term — a ~3-week
+ *  intensive in January (NYU's J-term IS January; we do NOT model a
+ *  separate "winter"). */
+export type Season = "fall" | "spring" | "summer" | "january";
 
-/** The registration windows for ONE term on ONE campus. Every field is
- *  OPTIONAL: an absent field means "not sourced" → the classifier must
- *  fall back to the generic hedge (never assume a missing date). */
-export interface TermWindows {
-    /** First day of classes / term start. */
-    termStart?: ISODate;
+/** A year-agnostic month-day string, "MM-DD" (e.g. "09-15"). The classifier
+ *  stamps the IP term's actual year onto this to build a concrete date. */
+export type MonthDay = string;
+
+/** The TYPICAL registration windows for ONE season, assumed to apply every
+ *  year, as year-agnostic MONTH-DAY strings. Every field is OPTIONAL: an
+ *  absent field means "no typical pattern on file for this window" → the
+ *  classifier hedges rather than assume a date. */
+export interface SeasonWindows {
+    /** First day of classes / term start, "MM-DD". */
+    termStartMonthDay?: MonthDay;
     /** Last day to add/drop a class WITHOUT a transcript mark (a drop
-     *  before this date leaves no trace). After this date, dropping
-     *  becomes a withdrawal (a "W"). */
-    addDropDeadline?: ISODate;
-    /** Last day to withdraw from a class (a "W" appears on the
-     *  transcript; in this window a student may also elect pass/fail
-     *  where the school allows it). After this date the course is
-     *  effectively locked — it will receive its letter grade. */
-    withdrawDeadline?: ISODate;
+     *  before this date leaves no trace), "MM-DD". After this date,
+     *  dropping becomes a withdrawal (a "W"). */
+    addDropMonthDay?: MonthDay;
+    /** Last day to withdraw from a class (a "W" appears on the transcript;
+     *  in this window a student may also elect pass/fail where the school
+     *  allows it), "MM-DD". After this date the course is effectively
+     *  locked — it will receive its letter grade. */
+    withdrawMonthDay?: MonthDay;
 }
 
-/** The full calendar: campus → normalized-term-key ("YYYY-season",
- *  lowercase season) → its windows. */
-export type AcademicCalendar = Record<Campus, Record<string, TermWindows>>;
+/** The full calendar: campus → season → its TYPICAL windows. */
+export type AcademicCalendar = Record<Campus, Record<Season, SeasonWindows>>;
+
+// ============================================================
+// THE ASSUMED PER-SEASON PATTERNS (owner-correctable)
+// ============================================================
+// One typical date-set per season, ASSUMED to apply every year. fall /
+// spring anchored to NYU's recently-published dates; summer / january are
+// reasonable estimates (see the header note). These are TYPICAL patterns,
+// never an exact year's official dates — the classifier always hedges.
+export const DEFAULT_SEASON_WINDOWS: Record<Season, SeasonWindows> = {
+    // Fall — anchored to NYU's recently-published Fall dates (cs.nyu.edu /
+    // bulletins.nyu.edu): classes begin early September, drop/add mid
+    // September, withdrawal deadline late November.
+    fall: {
+        termStartMonthDay: "09-02",
+        addDropMonthDay: "09-15",
+        withdrawMonthDay: "11-26",
+    },
+    // Spring — anchored to NYU's recently-published Spring dates: classes
+    // begin late January, drop/add early February, withdrawal early April.
+    spring: {
+        termStartMonthDay: "01-22",
+        addDropMonthDay: "02-04",
+        withdrawMonthDay: "04-03",
+    },
+    // Summer — REASONABLE ESTIMATE for a TYPICAL full-summer session.
+    // Summer has many overlapping sub-sessions, each with its own
+    // deadlines, so this single pattern is ESPECIALLY approximate; the
+    // classifier flags that extra uncertainty in its hedge.
+    summer: {
+        termStartMonthDay: "05-27",
+        addDropMonthDay: "06-02",
+        withdrawMonthDay: "07-15",
+    },
+    // January (J-term) — REASONABLE ESTIMATE for the ~3-week intensive.
+    // Approximate: the intensive's short calendar compresses the windows.
+    january: {
+        termStartMonthDay: "01-02",
+        addDropMonthDay: "01-06",
+        withdrawMonthDay: "01-15",
+    },
+};
+
+// All three campuses reference the SAME assumed defaults for now. ⚑ OWNER:
+// NYU Shanghai / Abu Dhabi calendars genuinely differ — override these per
+// campus with the real registrar patterns when available (do NOT treat the
+// shared NY-anchored defaults as those campuses' truth).
+export const NYU_ACADEMIC_CALENDAR: AcademicCalendar = {
+    ny: DEFAULT_SEASON_WINDOWS,
+    shanghai: DEFAULT_SEASON_WINDOWS,
+    abudhabi: DEFAULT_SEASON_WINDOWS,
+};
 
 /**
  * Normalize a term string to the calendar's canonical key. Accepts the
@@ -70,9 +150,9 @@ export type AcademicCalendar = Record<Campus, Record<string, TermWindows>>;
  * engine + web agree on the key shape; kept local to avoid a web↔engine
  * dependency. NOTE: this engine copy additionally canonicalizes
  * `winter`/`win` → "winter"; the web `normalizeTermKey` does NOT (a
- * pre-existing web gap). The classifier uses only this engine normalizer,
- * and the calendar has no winter terms, so F3 is unaffected — but if a
- * Winter/J-term IP ever appears, reconcile the web normalizer too.
+ * pre-existing web gap). `seasonOfTerm` (below) maps a normalized "winter"
+ * to `null` + a hedge — NYU's J-term IS January, so we do NOT silently
+ * fold winter into january.
  */
 export function normalizeCalendarTermKey(term: string): string {
     const SEASON_CANON: Record<string, string> = {
@@ -103,9 +183,41 @@ export function normalizeCalendarTermKey(term: string): string {
     return term.toLowerCase();
 }
 
+/**
+ * Extract the {@link Season} from a term string. Normalizes the term, then
+ * maps the season token to a Season. Returns `null` when the season can't
+ * be recognized (the caller then hedges rather than guess).
+ *
+ * Aliases are folded by `normalizeCalendarTermKey`: `j-term`/`jterm` →
+ * "january". A normalized "winter" is mapped to `null` ON PURPOSE: NYU's
+ * winter intersession IS the January J-term, but the DPR/planner do not
+ * emit "winter" for it (they emit "january"/"jterm"), so an actual literal
+ * "winter" token is ambiguous/unexpected — we return `null` so the
+ * classifier hedges instead of silently treating it as J-term.
+ */
+export function seasonOfTerm(term: string): Season | null {
+    const key = normalizeCalendarTermKey(term);
+    const m = key.match(/^\d{4}-([a-z-]+)$/);
+    const season = (m ? m[1]! : key).toLowerCase();
+    switch (season) {
+        case "fall":
+            return "fall";
+        case "spring":
+            return "spring";
+        case "summer":
+            return "summer";
+        case "january":
+            return "january";
+        // "winter" and anything else → unrecognized → hedge.
+        default:
+            return null;
+    }
+}
+
 /** Map a student's home-school id to a calendar campus. Only NYU
  *  Shanghai + NYU Abu Dhabi have their own registrar calendar; every
- *  other school sits on the New York campus calendar. */
+ *  other school sits on the New York campus calendar. (All three campuses
+ *  currently share DEFAULT_SEASON_WINDOWS — see the header note.) */
 export function campusForHomeSchool(homeSchool: string | undefined): Campus {
     switch ((homeSchool ?? "").toLowerCase()) {
         case "shanghai":
@@ -119,95 +231,19 @@ export function campusForHomeSchool(homeSchool: string | undefined): Campus {
     }
 }
 
-// ============================================================
-// THE SOURCED DATA (owner-correctable)
-// ============================================================
-// Today is 2026-06-16 (Summer 2026), so a current student's DPR shows IP
-// rows for roughly Summer 2026, Fall 2026, and Spring 2027. We source the
-// NEW YORK campus standard full-term session for those terms below.
-//
-// SOURCE (NYU-official): NYU Computer Science Department academic
-// calendar, which republishes the NYU Office of the Registrar dates:
-//   https://cs.nyu.edu/dynamic/calendar/undergraduate/
-// Cross-checked against the NYU Bulletins academic calendar
-// (https://bulletins.nyu.edu/nyu/academic-calendar/) for term starts and
-// the registrar landing page
-// (https://www.nyu.edu/registrar/calendars).
-//
-// ⚑ OWNER: the registrar publishes session-specific deadlines (12-week,
-// 6-week, etc.) that this STANDARD-session map flattens. For a summer
-// course the student should confirm the deadline for THEIR session — the
-// classifier already hedges current-term conclusions, but verify before
-// extending this with summer sub-session granularity.
-
-export const NYU_ACADEMIC_CALENDAR: AcademicCalendar = {
-    ny: {
-        // Summer 2026 — classes begin 2026-05-18 (12-week / multi-session).
-        //   Source: cs.nyu.edu undergraduate calendar — "Summer 2026
-        //   Classes Begin: 12-Week, 10-Week, 7-Week, First 6-Week, …".
-        // ⚑ add/drop + withdraw deadlines are SESSION-DEPENDENT and NOT
-        // published as a single full-term value we can rely on → left
-        // ABSENT so the classifier uses the GENERIC HEDGE for a Summer-2026
-        // current-term course. Do NOT invent these.
-        "2026-summer": {
-            termStart: "2026-05-18",
-            // addDropDeadline: ⚑ owner: fill from the registrar for the
-            //   student's specific summer session (absent → generic hedge).
-            // withdrawDeadline: ⚑ owner: fill per session (absent → hedge).
-        },
-        // Fall 2026 — FULLY SOURCED (standard 15-week session).
-        //   Source: cs.nyu.edu undergraduate calendar:
-        //     "Fall 2026 Classes Begin"        → 2026-09-02
-        //     "Fall 2026 Drop/Add Deadline"    → 2026-09-15
-        //     "Fall 2026 Withdrawal Period Begins" → 2026-09-16
-        //     "Fall 2026 Withdrawal Deadline"  → 2026-11-26
-        "2026-fall": {
-            termStart: "2026-09-02",
-            addDropDeadline: "2026-09-15",
-            withdrawDeadline: "2026-11-26",
-        },
-        // Spring 2027 — term start SOURCED; deadlines NOT YET published.
-        //   Source: bulletins.nyu.edu academic calendar — "Spring 2027
-        //   classes begin" → 2027-01-19. The Drop/Add + Withdrawal
-        //   deadlines were NOT present on the sourced pages at authoring
-        //   time → left ABSENT (generic hedge for a Spring-2027 current
-        //   term course). ⚑ owner: fill once the registrar publishes them.
-        "2027-spring": {
-            termStart: "2027-01-19",
-            // addDropDeadline: ⚑ owner: fill from the registrar (absent → hedge).
-            // withdrawDeadline: ⚑ owner: fill from the registrar (absent → hedge).
-        },
-    },
-    // ⚑ NEEDS-FILL: NYU Shanghai runs its own academic calendar
-    // (https://shanghai.nyu.edu/academics/calendar). We did NOT reliably
-    // source its Summer-2026 / Fall-2026 / Spring-2027 add-drop / withdraw
-    // deadlines at authoring time, so it is left EMPTY → every Shanghai
-    // current-term course gets the GENERIC HEDGE. Owner: add the sourced
-    // dates here (same shape as `ny`) and cite the URL. Do NOT copy NY's
-    // dates — Shanghai's term boundaries differ.
-    shanghai: {},
-    // ⚑ NEEDS-FILL: NYU Abu Dhabi runs its own academic calendar
-    // (https://students.nyuad.nyu.edu/academics/registration/academic-calendar/).
-    // Not reliably sourced at authoring time → EMPTY → generic hedge for
-    // every Abu Dhabi current-term course. Owner: add the sourced dates
-    // here and cite the URL. Do NOT copy NY's dates.
-    abudhabi: {},
-};
-
 /**
- * Look up the registration windows for a campus + term. Returns the
- * sourced {@link TermWindows} (which may itself have absent fields), or
- * `undefined` when the campus/term pair has no entry at all (→ the
- * classifier must use the generic hedge). Pure: pass a `calendar` to
- * override the bundled {@link NYU_ACADEMIC_CALENDAR} (tests inject
- * fixtures this way).
+ * Look up the TYPICAL registration windows for a campus + season. Returns
+ * the season's {@link SeasonWindows} (which may itself have absent fields),
+ * or `undefined` when the campus has no entry for that season at all (→ the
+ * classifier hedges). Pure: pass a `calendar` to override the bundled
+ * {@link NYU_ACADEMIC_CALENDAR} (tests inject fixtures this way).
  */
-export function getTermWindows(
+export function getSeasonWindows(
     campus: Campus,
-    term: string,
+    season: Season,
     calendar: AcademicCalendar = NYU_ACADEMIC_CALENDAR,
-): TermWindows | undefined {
-    const byTerm = calendar[campus];
-    if (!byTerm) return undefined;
-    return byTerm[normalizeCalendarTermKey(term)];
+): SeasonWindows | undefined {
+    const byCampus = calendar[campus];
+    if (!byCampus) return undefined;
+    return byCampus[season];
 }

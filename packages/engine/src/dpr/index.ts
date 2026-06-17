@@ -57,15 +57,18 @@ export type { DprTemporalContext } from "./temporalContext.js";
 // F3 — academic-calendar config + IP-course changeability classifier.
 export {
     NYU_ACADEMIC_CALENDAR,
-    getTermWindows,
+    DEFAULT_SEASON_WINDOWS,
+    getSeasonWindows,
+    seasonOfTerm,
     campusForHomeSchool,
     normalizeCalendarTermKey,
 } from "./academicCalendar.js";
 export type {
     AcademicCalendar,
     Campus,
-    ISODate,
-    TermWindows,
+    Season,
+    SeasonWindows,
+    MonthDay,
 } from "./academicCalendar.js";
 export { classifyIpChangeability } from "./ipCourseChangeability.js";
 export type {

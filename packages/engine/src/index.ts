@@ -141,7 +141,9 @@ export {
     normalizeGraduationTarget,
     // F3 — academic-calendar config + IP-course changeability classifier.
     NYU_ACADEMIC_CALENDAR,
-    getTermWindows,
+    DEFAULT_SEASON_WINDOWS,
+    getSeasonWindows,
+    seasonOfTerm,
     campusForHomeSchool,
     normalizeCalendarTermKey,
     classifyIpChangeability,
@@ -167,8 +169,9 @@ export type {
     // F3 — calendar + classifier types.
     AcademicCalendar,
     Campus,
-    ISODate,
-    TermWindows,
+    Season,
+    SeasonWindows,
+    MonthDay,
     IpChangeWindow,
     IpChangeabilityResult,
     ClassifyIpChangeabilityArgs,
