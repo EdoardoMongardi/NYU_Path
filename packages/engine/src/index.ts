@@ -139,6 +139,14 @@ export {
     dprToPrimaryAuditResult,
     deriveTemporalContext,
     normalizeGraduationTarget,
+    // F3 — academic-calendar config + IP-course changeability classifier.
+    NYU_ACADEMIC_CALENDAR,
+    DEFAULT_SEASON_WINDOWS,
+    getSeasonWindows,
+    seasonOfTerm,
+    campusForHomeSchool,
+    normalizeCalendarTermKey,
+    classifyIpChangeability,
 } from "./dpr/index.js";
 export type {
     DegreeProgressReport,
@@ -158,6 +166,15 @@ export type {
     ParseDprFailure,
     DprToAuditOptions,
     DprTemporalContext,
+    // F3 — calendar + classifier types.
+    AcademicCalendar,
+    Campus,
+    Season,
+    SeasonWindows,
+    MonthDay,
+    IpChangeWindow,
+    IpChangeabilityResult,
+    ClassifyIpChangeabilityArgs,
 } from "./dpr/index.js";
 
 

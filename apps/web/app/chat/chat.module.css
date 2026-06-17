@@ -596,6 +596,258 @@ button.reasoningHeader:focus-visible {
     margin-bottom: 12px;
 }
 
+/* ------------------------------------------------------------------
+   Phase 4 Task E3.1 — PENDING proposal canvas overlay.
+   A staged (not-yet-committed) proposal is shown above the committed
+   plan, clearly marked PENDING with the credit deltas. Colours come
+   from the NYU-violet brand tokens (globals.css, light + dark), so the
+   overlay reads as on-brand "preview" chrome with NO hardcoded hex.
+   ------------------------------------------------------------------ */
+.schedulePreviewOverlay {
+    border: 2px dashed var(--nyu-violet);
+    border-radius: 8px;
+    background: var(--nyu-violet-faint);
+    padding: 12px;
+    margin-bottom: 16px;
+}
+.schedulePreviewBanner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.schedulePreviewBadge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.74em;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--nyu-violet);
+}
+.schedulePreviewBannerText {
+    font-size: 0.82em;
+    color: var(--nyu-violet);
+    font-weight: 600;
+}
+.schedulePreviewDelta {
+    font-size: 0.82em;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+.schedulePreviewDeltaTotal {
+    font-weight: 700;
+    color: var(--nyu-violet);
+}
+.schedulePreviewDeltaList {
+    margin: 4px 0 0 16px;
+    padding: 0;
+}
+.schedulePreviewConsequences {
+    margin: 0 0 10px 16px;
+    padding: 0;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+.schedulePreviewCommittedLabel {
+    margin: 10px 0 0 0;
+    font-size: 0.78em;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--nyu-violet);
+    padding-top: 8px;
+}
+
+/* ------------------------------------------------------------------
+   Phase 4 Task E3.2 — review card (verdict + ✓/⚠ + Confirm / Cancel /
+   Ask-why). Sits inside the E3.1 preview overlay, above the
+   "current plan (unchanged)" divider. Verdict colours come from the
+   semantic --badge-* tokens (light/dark resolve with no hardcoded
+   hex); the brand affordance is the NYU-violet Confirm button.
+   ------------------------------------------------------------------ */
+.reviewCard {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid var(--nyu-violet);
+    border-radius: 8px;
+    background: var(--surface, transparent);
+}
+.reviewCardHeading {
+    margin: 0 0 6px 0;
+    font-size: 0.82em;
+    font-weight: 700;
+    color: var(--nyu-violet);
+    text-transform: capitalize;
+}
+.reviewVerdictValid,
+.reviewVerdictTradeOffs {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 8px 0;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.8em;
+    font-weight: 700;
+    border: 1px solid var(--border-light);
+}
+.reviewVerdictValid {
+    background: var(--badge-valid-bg);
+    border-color: var(--badge-valid-border);
+    color: var(--badge-valid-text);
+}
+.reviewVerdictTradeOffs {
+    background: var(--badge-hedged-bg);
+    border-color: var(--badge-hedged-border);
+    color: var(--badge-hedged-text);
+}
+.reviewTradeOffList {
+    margin: 0 0 10px 16px;
+    padding: 0;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+.reviewCardActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.reviewBtnConfirm,
+.reviewBtnCancel,
+.reviewBtnAskWhy {
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border-light);
+    background: var(--surface, transparent);
+    color: var(--text-primary);
+}
+.reviewBtnConfirm {
+    background: var(--nyu-violet);
+    border-color: var(--nyu-violet);
+    color: #fff;
+}
+.reviewBtnConfirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.reviewBtnAskWhy {
+    color: var(--nyu-violet);
+    border-color: var(--nyu-violet);
+    background: var(--nyu-violet-faint);
+}
+
+/* ------------------------------------------------------------------
+   Phase 4 Task E3.3 — RED invalid-proposal card. An engine-REJECTED
+   (feasible:false) proposal renders here instead of the violet preview
+   overlay, naming the binding constraint(s) from the response's own
+   fields. Error colours come from the semantic --badge-invalid-*
+   tokens (light/dark resolve with no hardcoded hex). It carries NO
+   proposed-plan overlay — the committed term cards render unchanged.
+   ------------------------------------------------------------------ */
+.invalidProposalCard {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--badge-invalid-border);
+    border-radius: 8px;
+    background: var(--badge-invalid-bg);
+    color: var(--badge-invalid-text);
+    font-size: 0.85em;
+}
+.invalidProposalHeading {
+    margin: 0 0 6px 0;
+    font-weight: 700;
+    color: var(--badge-invalid-text);
+}
+.invalidProposalList {
+    margin: 0 0 6px 16px;
+    padding: 0;
+}
+.invalidProposalList li {
+    margin-bottom: 2px;
+}
+.invalidProposalFallback {
+    margin: 0 0 6px 0;
+}
+.invalidProposalUntouched {
+    margin: 0 0 8px 0;
+    font-style: italic;
+    opacity: 0.85;
+}
+.invalidProposalActions {
+    display: flex;
+    gap: 8px;
+}
+.invalidProposalDismiss {
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 0.95em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--badge-invalid-border);
+    background: var(--surface, transparent);
+    color: var(--badge-invalid-text);
+}
+
+/* ------------------------------------------------------------------
+   Phase 4 Task E2.1 / E2.3 — plan-level badge row.
+   State colours come from the semantic --badge-* tokens defined in
+   globals.css (light + a [data-theme="dark"] override), so light/dark
+   resolve with no hardcoded hex here. The row carries a low-emphasis
+   NYU-violet left accent so the validity strip reads as on-brand.
+   ------------------------------------------------------------------ */
+.planBadgeRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+    /* E2.3 — on-brand NYU-violet accent for the validity strip. */
+    padding-left: 8px;
+    border-left: 3px solid var(--nyu-violet);
+}
+.planBadgeRow span {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.78em;
+    font-weight: 600;
+    line-height: 1.4;
+    border: 1px solid var(--border-light);
+}
+.planBadgeValid {
+    background: var(--badge-valid-bg);
+    border-color: var(--badge-valid-border);
+    color: var(--badge-valid-text);
+}
+.planBadgeInvalid {
+    background: var(--badge-invalid-bg);
+    border-color: var(--badge-invalid-border);
+    color: var(--badge-invalid-text);
+}
+/* "Grounded" is a validity-positive state — fold in the NYU-violet
+   brand (violet border + text) so the on-brand affirmative reads
+   distinctly from the green "valid" badge. */
+.planBadgeGrounded {
+    background: var(--badge-grounded-bg);
+    border-color: var(--badge-grounded-border);
+    color: var(--badge-grounded-text);
+}
+.planBadgeHedged {
+    background: var(--badge-hedged-bg);
+    border-color: var(--badge-hedged-border);
+    color: var(--badge-hedged-text);
+}
+.planBadgeNeutral {
+    background: var(--badge-neutral-bg);
+    color: var(--badge-neutral-text);
+}
+
 .semesterCard {
     margin-bottom: 16px;
     padding: 12px;
@@ -624,6 +876,33 @@ button.reasoningHeader:focus-visible {
     color: var(--text-secondary);
     /* Phase 16 Task D — credit columns line up across cards. */
     font-variant-numeric: tabular-nums;
+}
+/* Phase 4 Task E4.1 — term-header right cluster (Explain + credits). */
+.semesterCardHeaderRight {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+/* Phase 4 Task E4.1 — "Explain this term" term-header shortcut. Quiet
+   violet text-button styled off the same tokens as the review-card
+   Ask-why button so light/dark resolve with no hardcoded hex. */
+.explainTermBtn {
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.72em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--nyu-violet);
+    background: var(--nyu-violet-faint);
+    color: var(--nyu-violet);
+}
+.explainTermBtn:hover {
+    background: var(--nyu-violet);
+    color: #fff;
+}
+.explainTermBtn:focus-visible {
+    outline: 2px solid var(--nyu-violet);
+    outline-offset: 1px;
 }
 .semesterNotes {
     list-style: disc;
@@ -800,9 +1079,14 @@ button.reasoningHeader:focus-visible {
     transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.sidebarClearBtn:hover {
+.sidebarClearBtn:hover:not(:disabled) {
     background: #f8d7da;
     border-color: #842029;
+}
+
+.sidebarClearBtn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
 .sidebarClearBtn:focus-visible {
@@ -969,7 +1253,11 @@ button.reasoningHeader:focus-visible {
     font-size: 0.78em;
     line-height: 1;
     text-align: center;
-    opacity: 0.6;
+    /* Phase 4 Task E2.3 — the 🔒 / ◐ slot-state glyph reads in the
+       NYU-violet brand (light/dark aware via --slot-glyph-color), at a
+       slightly raised opacity so the on-brand tint is legible. */
+    color: var(--slot-glyph-color);
+    opacity: 0.75;
 }
 
 /* ==========================================================
@@ -1050,29 +1338,15 @@ button.reasoningHeader:focus-visible {
 /* ==========================================================
    Phase 17 Task C — 4-verb sidebar affordances
    ----------------------------------------------------------
-   Drag-to-move (slot pill draggable + term-card drop target),
-   nested submenus inside the slot popover (Swap / Move),
+   Nested submenus inside the slot popover (Swap / Move),
    per-term-card "+ Add course" affordance, in-flight slot
    spinner replacing the grade cell during the Stage-1 round
    trip, and a small lock toggle for the Lock verb.
+
+   Phase 4 Task E3.4 removed the drag-to-move gesture entirely
+   (the per-course ⋯ menu is the sole edit input now), so the
+   `.slotDraggable` / `.termCardDropTarget` styles are gone.
    ========================================================== */
-
-/* Pill cursor — distinct from `.slotClickable` (the popover-opening
-   cursor) so the student knows they can EITHER click for the popover
-   OR drag the pill to a different term card. */
-.slotDraggable {
-    cursor: grab;
-}
-.slotDraggable:active { cursor: grabbing; }
-
-/* Highlight ring shown on a term card while a draggable slot pill is
-   hovering above it. Pure visual cue — the JS `onDragOver` /
-   `onDragLeave` handlers toggle this class. */
-.termCardDropTarget {
-    outline: 2px dashed var(--nyu-violet);
-    outline-offset: -2px;
-    background: rgba(87, 6, 140, 0.06);
-}
 
 /* Submenu container shared by Swap + Move. Sits below the verb row
    inside the slot popover. */

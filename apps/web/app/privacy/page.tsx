@@ -30,7 +30,7 @@ export default function PrivacyPage() {
         <main style={container}>
             <h1>Privacy &amp; data handling</h1>
             <p>
-                <em>Last updated 2026-06-15.</em> NYU Path is a course-planning assistant for NYU
+                <em>Last updated 2026-06-16.</em> NYU Path is a course-planning assistant for NYU
                 undergraduates. It handles your academic records, so we keep this notice specific
                 and FERPA-aware. It describes what the system collects, what it stores, who it is
                 shared with, and how to delete it.
@@ -81,10 +81,10 @@ export default function PrivacyPage() {
             <h2>Retention &amp; deletion</h2>
             <p>
                 Because the point is to resume your planning across sessions, your account data is
-                retained until it is deleted. Deleting your account removes all of the above in one
-                step (it cascades across every per-student record). Where the operator has enabled
-                the in-app &ldquo;clear my data&rdquo; control you can do this yourself from the chat
-                screen; otherwise contact the operator / NYU to request deletion.
+                retained until it is deleted. You can delete your account yourself at any time — it
+                removes all of the above in one step (it cascades across every per-student record).
+                Self-serve deletion is always available to signed-in users; you do not need to
+                contact anyone to exercise it.
             </p>
 
             <h2>A reminder</h2>

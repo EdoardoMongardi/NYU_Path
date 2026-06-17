@@ -119,19 +119,113 @@ describe("D4 honesty-rail CORE RULES", () => {
     });
 
     describe("D4.3 — banner count matches reality", () => {
-        it("emits exactly 13 numbered CORE RULES", () => {
-            expect(numberedRuleCount(prompt)).toBe(13);
+        it("emits exactly 15 numbered CORE RULES", () => {
+            expect(numberedRuleCount(prompt)).toBe(15);
         });
 
         it("the file's BANNER states a rule count EQUAL to the actual numbered-rule count", () => {
             const src = readFileSync(SYSTEM_PROMPT_SRC, "utf8");
             const actual = numberedRuleCount(prompt);
             // The banner must NOT claim the stale "25 rules" once the real
-            // numbered list is 13. Derive: assert the actual count's number-word
+            // numbered list is 15. Derive: assert the actual count's number-word
             // appears in the banner and the stale 25 claim is gone.
-            expect(actual).toBe(13);
-            expect(src).toMatch(/\b13\b/);
+            expect(actual).toBe(15);
+            expect(src).toMatch(/\b15\b/);
             expect(src).not.toMatch(/25 rules|25-rule|25 rules verbatim/);
+        });
+    });
+
+    describe("F2 — CORE RULE 14 (DPR-DERIVED FIELDS ARE AUTHORITATIVE / READ-ONLY)", () => {
+        /** Slice rule 14 from its number to the end of the CORE RULES block. */
+        function rule14(p: string): string {
+            const block = coreRulesBlock(p);
+            const idx = block.indexOf("14.");
+            expect(idx).toBeGreaterThanOrEqual(0);
+            return block.slice(idx);
+        }
+
+        it("names the DPR-derived fields that are authoritative + cannot be changed by request", () => {
+            const r = rule14(prompt);
+            expect(r).toMatch(/DPR-?derived|from (your |the )?DPR|authoritative/i);
+            // The specific fields the owner enumerated.
+            expect(r).toMatch(/home school/i);
+            expect(r).toMatch(/major|minor|declared/i);
+            expect(r).toMatch(/catalog year/i);
+            expect(r).toMatch(/courses? taken|grades?/i);
+        });
+
+        it("redirects a change request to uploading a corrected/new DPR — never force-change, never fabricate", () => {
+            const r = rule14(prompt);
+            expect(r).toMatch(/upload (a )?(corrected|new) DPR|upload a (new|corrected)/i);
+            expect(r).toMatch(/never (invent|fabricate)|do not (invent|fabricate)/i);
+        });
+
+        it("carves out the non-DPR editable fields (visa / F-1, preferences)", () => {
+            const r = rule14(prompt);
+            expect(r).toMatch(/visa|F-?1/i);
+            expect(r).toMatch(/preferences?/i);
+        });
+
+        it("now emits exactly 15 numbered CORE RULES, and the banner agrees", () => {
+            expect(numberedRuleCount(prompt)).toBe(15);
+            const src = readFileSync(SYSTEM_PROMPT_SRC, "utf8");
+            expect(src).toMatch(/\b15\b/);
+        });
+    });
+
+    describe("F3 — CORE RULE 15 (CLAIMED CURRENT-TERM COURSE CHANGE IS UNVERIFIED)", () => {
+        /** Slice rule 15 from its number to the end of the CORE RULES block. */
+        function rule15(p: string): string {
+            const block = coreRulesBlock(p);
+            const idx = block.indexOf("15.");
+            expect(idx).toBeGreaterThanOrEqual(0);
+            return block.slice(idx);
+        }
+
+        it("frames a claimed current-term drop/withdraw/pass-fail as UNVERIFIED — a draft / what-if, not a recorded fact", () => {
+            const r = rule15(prompt);
+            expect(r).toMatch(/unverified/i);
+            expect(r).toMatch(/draft|what-?if/i);
+            expect(r).toMatch(/drop|withdraw|pass-?fail/i);
+            // Must NOT record it as fact.
+            expect(r).toMatch(/never (record|silently|fold)|not (a )?fact|never silently/i);
+        });
+
+        it("surfaces the registration window + the W / pass-fail consequences", () => {
+            const r = rule15(prompt);
+            expect(r).toMatch(/add\/?drop|withdraw|window/i);
+            // A W does not fulfill the requirement.
+            expect(r).toMatch(/\bW\b/);
+            expect(r).toMatch(/does not fulfill|not fulfill the requirement/i);
+            // Pass/fail may not satisfy a letter-grade major rule.
+            expect(r).toMatch(/pass\/?fail|pass-?fail/i);
+            expect(r).toMatch(/letter-?grade/i);
+        });
+
+        it("closes with verify-with-adviser + not-official-until-next-DPR", () => {
+            const r = rule15(prompt);
+            // The rule text wraps "verify with your" / "adviser" across lines,
+            // so match across the newline ([\s\S], not `.`).
+            expect(r).toMatch(/verify[\s\S]*adviser/i);
+            expect(r).toMatch(/next DPR|on (your |a )?(new |next )?DPR|official until/i);
+        });
+
+        it("contrasts a future / pre-registered course as freely changeable planning", () => {
+            const r = rule15(prompt);
+            expect(r).toMatch(/future|pre-?registered/i);
+            expect(r).toMatch(/freely changeable|pure planning|no real-world/i);
+        });
+
+        it("present for a CAS student and for a non-CAS (Shanghai / Abu Dhabi) student", () => {
+            for (const school of ["cas", "shanghai", "nyuad"]) {
+                const p = buildSystemPrompt({ student: { ...baseStudent, homeSchool: school } });
+                const r = (() => {
+                    const block = p.slice(p.indexOf("CORE RULES (mandatory"), p.indexOf("TOOL ROUTING:"));
+                    return block.slice(block.indexOf("15."));
+                })();
+                expect(r).toMatch(/unverified/i);
+                expect(r).toMatch(/verify[\s\S]*adviser/i);
+            }
         });
     });
 

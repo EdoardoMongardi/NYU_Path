@@ -18,13 +18,17 @@ import { useState } from "react";
 import type { ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
 import styles from "../chat.module.css";
 
-type SlotVerb = "swap" | "drop" | "lock" | "move";
+type SlotVerb = "swap" | "drop" | "lock" | "move" | "explain";
 
 const SLOT_VERBS: Array<{ verb: SlotVerb; label: string; submenu: boolean }> = [
     { verb: "swap", label: "Swap with…", submenu: true },
     { verb: "drop", label: "Drop", submenu: false },
     { verb: "lock", label: "Lock / Unlock", submenu: false },
     { verb: "move", label: "Move to…", submenu: true },
+    // Phase 4 Task E4.1 — "Explain why" injects a SCOPED chat question
+    // (course code + human term label) into the normal agent loop. No
+    // submenu; fires `onExplain` directly.
+    { verb: "explain", label: "Explain why", submenu: false },
 ];
 
 export interface SlotPopoverHandlers {
@@ -32,6 +36,8 @@ export interface SlotPopoverHandlers {
     onMove: (slot: ScheduleSlot, fromTerm: string, toTerm: string) => Promise<void>;
     onDrop: (slot: ScheduleSlot, term: string) => Promise<void>;
     onLock: (slot: ScheduleSlot, term: string) => Promise<void>;
+    /** Phase 4 Task E4.1 — inject a scoped "Explain why" chat question. */
+    onExplain: (slot: ScheduleSlot, term: string) => void;
 }
 
 interface RenderSlotPopoverArgs {
@@ -62,6 +68,7 @@ export function renderSlotPopover(args: RenderSlotPopoverArgs) {
                         }
                         if (v.verb === "drop") void handlers.onDrop(slot, term);
                         else if (v.verb === "lock") void handlers.onLock(slot, term);
+                        else if (v.verb === "explain") handlers.onExplain(slot, term);
                     }}
                 >
                     {v.verb === "lock" ? (isFrozen ? "Unlock" : "Lock") : v.label}

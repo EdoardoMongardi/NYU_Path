@@ -1,6 +1,6 @@
 # DPR Subsystem — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-17 (Phase 4 follow-up F3-campus — `academicCalendar.ts` now gives NYU Shanghai + Abu Dhabi their OWN sourced per-season patterns, `SHANGHAI_SEASON_WINDOWS` / `ABU_DHABI_SEASON_WINDOWS`, instead of sharing the NY defaults; genuinely-unsourced windows left absent → hedge). Prior: 2026-06-16 (F3-revise — §13 IP-course changeability temporal model reworked to a **per-SEASON typical-date** model: `academicCalendar.ts` now holds one assumed date-set per season applied every year + `classifyIpChangeability.ts` stamps the term's year onto it and ALWAYS hedges "typical, shifts each year"). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
@@ -527,6 +527,15 @@ Any grade outside `GRADE_ORDER` → `false` from `meetsGradeThreshold` (fail-clo
 
 The final `degreeProgressReportSchema.safeParse` fails the whole parse with `ParseDprFailure` even when all intermediate steps "succeeded" — the guard against parser-vs-schema drift.
 
+## 13. IP-course changeability — temporal model (Phase 4 follow-up F3)
+
+The DPR marks a course `IP` (in-progress) for BOTH a current-term enrollment and a future-term pre-registration. They are NOT equally changeable, and the difference is real-world registration policy, not planning:
+
+- `deriveTemporalContext(dpr)` (`temporalContext.ts`) separates an IP row into the **current** term (`enrolledNowTerm`, reconciled with wall-clock `termInSession(now)`) vs **future** pre-registered terms (`preRegisteredTerms`) — the two sets are disjoint by construction.
+- **`academicCalendar.ts`** is an owner-correctable config of NYU registration windows, modeled **per SEASON** (`Season` = `fall` / `spring` / `summer` / `january` (the J-term)) rather than per specific term-year. The shape is `AcademicCalendar = Record<Campus, Record<Season, SeasonWindows>>` (`Campus` = `ny` / `shanghai` / `abudhabi`, via `campusForHomeSchool`); each `SeasonWindows` carries year-agnostic `"MM-DD"` `MonthDay` strings: `termStartMonthDay` · `addDropMonthDay` · `withdrawMonthDay`. **The dates are TYPICAL/ASSUMED-every-year, NOT a specific year's official dates** (binding `core_philosophy.md`): `DEFAULT_SEASON_WINDOWS` anchors **fall** (09-02 / 09-15 / 11-26) and **spring** (01-22 / 02-04 / 04-03) to NYU's recently-published dates (cs.nyu.edu / bulletins.nyu.edu / the registrar), and gives **summer** (05-27 / 06-02 / 07-15) and **january/J-term** (01-02 / 01-06 / 01-15) as reasonable ESTIMATES. The classifier stamps the IP term's actual year onto the season pattern and ALWAYS hedges that the date is typical and shifts year to year. **Each campus now has its OWN per-season pattern** (they run genuinely different calendars): `ny` → `DEFAULT_SEASON_WINDOWS`; `shanghai` → `SHANGHAI_SEASON_WINDOWS` (fall 09-01 / 09-11 / 11-24, spring 01-18 / 01-29 / **withdrawal absent** — Shanghai publishes its full-term spring withdrawal as TBD; summer 05-17 + january 01-04 hold the sourced start only; cited shanghai.nyu.edu + bulletins); `abudhabi` → `ABU_DHABI_SEASON_WINDOWS` (14-week fall 08-25 / 09-08 / 11-07, spring 01-20 / 02-02 / 04-24; summer 05-20 + january 01-05 start only; cited nyuad.nyu.edu + bulletins). Genuinely-unsourced windows are **left ABSENT (never invented)** so the classifier falls back to its honest hedge (cite-or-hedge per `core_philosophy.md`). `getSeasonWindows(campus, season, calendar?)` looks the pattern up; `seasonOfTerm(term)` maps a term to its `Season` (a literal "winter" → `null` → hedge, since NYU's intersession is the J-term/`january`, never "winter").
+- **`classifyIpChangeability(...)`** (`ipCourseChangeability.ts`, pure, `now`/`calendar`-injectable) → `{ window: "future" | "add_drop" | "withdraw_pf" | "closed" | "unknown", editable, hedge?, rationale }`. For a CURRENT-term IP it derives the **season + year**, builds concrete dates by stamping the year onto the season's `"MM-DD"` windows, then classifies. Decision order: future → freely changeable (no hedge); season unrecognized (e.g. literal "winter") → `unknown`; current within add/drop → changeable; current within the withdraw/pass-fail window → editable + a hedge naming the W/PF consequences; current past a KNOWN withdraw deadline → NOT editable (effectively locked); current past add/drop with NO withdraw date OR no usable dates at all → `unknown` (editable + generic hedge — it NEVER falsely locks for lack of data); past/stale → closed. **Every current-term hedge conveys the date is NYU's TYPICAL seasonal deadline (it shifts each year) + "verify with your adviser/registrar; nothing is official until your next DPR"; a SUMMER course appends an extra clause flagging that summer's many overlapping sub-sessions make the deadline especially uncertain.**
+- **Consumed by** the sidebar (`apps/web/lib/groupCoursesByTerm.ts` classifies each IP bucket → `TermBucket.ipChangeability` → `slotState.ts`; see [ui-components.md](../web/ui-components.md)) and the agent (`systemPrompt.ts` CORE RULE 15 — a claimed current-term change is an unverified assumption, never recorded as fact; only a new DPR confirms it). **DEFERRED (own task):** the precise W/pass-fail → requirement-satisfaction modeling (the classifier hedges that consequence in prose; the solver/validator are untouched — the frozen-engine contract holds).
+
 ## Known limitations
 
 - **Non-CAS parsing is untested**: both fixtures (`packages/engine/tests/fixtures/dpr_sample.redacted.txt`, `dpr_whatif_sample.redacted.txt`) are CAS reports. The parser's middle-dot folding, residency heuristic, and cumulative R-ID set were verified against the canonical CAS DPR; other schools' DPRs have not been exercised in tests.
@@ -543,6 +552,8 @@ The final `degreeProgressReportSchema.safeParse` fails the whole parse with `Par
 - `packages/engine/src/dpr/gradeComparison.ts`
 - `packages/engine/src/dpr/prereqSatisfaction.ts`
 - `packages/engine/src/dpr/temporalContext.ts`
+- `packages/engine/src/dpr/academicCalendar.ts` (F3 — owner-correctable NYU registration-window config)
+- `packages/engine/src/dpr/ipCourseChangeability.ts` (F3 — `classifyIpChangeability`)
 - `packages/engine/src/dpr/visaValidator.ts`
 - `packages/engine/src/dpr/spsDivision.ts`
 - `packages/engine/src/dpr/index.ts`

@@ -5,6 +5,11 @@ import type { ForwardSchedule, ScheduleSlot, SchedulePreferences, StudentProfile
 import type { DegreeProgressReport } from "@nyupath/engine";
 import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import { groupCoursesByTerm } from "../../lib/groupCoursesByTerm";
+import { computePlanBadges } from "../../lib/planBadges";
+import { computePreviewView } from "../../lib/planPreview";
+import { computeReviewCard } from "../../lib/reviewCard";
+import type { InvalidProposalCard } from "../../lib/reviewCard";
+import type { PendingPreview } from "./planState";
 import {
     planAdd,
     planSwap,
@@ -64,16 +69,84 @@ const SIDEBAR_TOAST_THRESHOLD_MS = 600;
 type LegacySlotAction = "lock" | "replace" | "drop" | "pin";
 
 /**
- * Phase 17 Task C — slot-with-term tuple used by drag-to-move /
- * drag-to-exchange handlers.
+ * Phase 4 Task E2.1 — plan-level badge row.
+ *
+ * Thin consumer of the pure `computePlanBadges` helper: it renders the
+ * four plan-level badges (validity · confidence · graduation term ·
+ * trade-off count) derived from the live `ForwardSchedule`. ALL the
+ * derivation logic — including the binding §11 confidence hedge — lives
+ * in `apps/web/lib/planBadges.ts` (node-unit-tested in
+ * planBadges.test.ts); this component holds no decision logic of its own.
+ *
+ * Styling is deliberately minimal here (semantic class names only);
+ * E2.3 applies the NYU-violet light/dark theme to these classes next.
+ *
+ * `consequences` is the latest plan-action diff's `consequences[]`,
+ * threaded down for the trade-off count. At rest (no pending diff) it is
+ * absent → count 0. (Live consequences wiring is E3's job.)
  */
-interface DragSlotRef {
-    courseId: string;
-    term: string;
+function PlanBadges({
+    schedule,
+    consequences,
+}: {
+    schedule: ForwardSchedule;
+    consequences?: string[];
+}) {
+    const badges = computePlanBadges(schedule, consequences);
+    return (
+        <div className={styles.planBadgeRow} role="status" aria-label="Plan summary badges">
+            <span
+                className={
+                    badges.validity.valid
+                        ? styles.planBadgeValid
+                        : styles.planBadgeInvalid
+                }
+                title={badges.validity.valid ? "Plan satisfies all hard requirements" : "Draft plan with unmet requirements"}
+            >
+                {badges.validity.label}
+            </span>
+            <span
+                className={
+                    badges.confidence.hedged
+                        ? styles.planBadgeHedged
+                        : styles.planBadgeGrounded
+                }
+                title={badges.confidence.label}
+            >
+                {badges.confidence.label}
+            </span>
+            <span className={styles.planBadgeNeutral} title="Targeted graduation term">
+                🎓 {badges.graduationTerm}
+            </span>
+            <span className={styles.planBadgeNeutral} title="Trade-offs in the latest change">
+                {badges.tradeOffCount} trade-off{badges.tradeOffCount === 1 ? "" : "s"}
+            </span>
+        </div>
+    );
 }
 
 interface ScheduleSidebarProps {
     schedule: ForwardSchedule | null;
+    /**
+     * Phase 4 Task E3.1 — a STAGED (not-yet-committed) proposal to
+     * overlay on the canvas. When set, the sidebar renders
+     * `pendingPreview.proposedSchedule` marked PENDING (a violet
+     * "preview" banner + the credit deltas) instead of the committed
+     * `schedule`; the committed plan is NOT mutated. Null at rest →
+     * the committed `schedule` renders as today. Cleared by the page on
+     * Confirm / Cancel / Keep-as-is.
+     */
+    pendingPreview?: PendingPreview | null;
+    /**
+     * Phase 4 Task E3.3 — the RED card for an engine-REJECTED
+     * (`feasible:false`) proposal. When set, the sidebar renders a
+     * clearly-error-styled card naming the binding constraint(s) (from
+     * the response's OWN fields — conflicts ∪ feasibility
+     * .constraintViolations) with a Dismiss button. It renders NO
+     * proposed-plan overlay: the committed term cards stay exactly as
+     * they are. MUTUALLY EXCLUSIVE with `pendingPreview`. Null at rest.
+     */
+    invalidProposal?: InvalidProposalCard | null;
     student?: StudentProfile | null;
     dpr?: DegreeProgressReport | null;
     materialization?: ForwardMaterializationPayload | null;
@@ -93,6 +166,19 @@ interface ScheduleSidebarProps {
     onProposeLoadStyle?: (style: "balanced" | "frontload" | "backload") => void;
     onProposeSlotChange?: (slot: ScheduleSlot, action: LegacySlotAction) => void;
     /**
+     * Phase 4 Task E4.1 — the slot ⋯ "Explain why" affordance. Fired
+     * with the clicked slot + its term; the page builds a SCOPED
+     * natural-language question (course code / placeholder category +
+     * human term label) and injects it into the normal agent loop. The
+     * sidebar holds NO question-building logic of its own. Optional so
+     * pre-onboarding renders (and the read-only preview overlay) can
+     * omit it.
+     */
+    onExplainSlot?: (slot: ScheduleSlot, term: string) => void;
+    /** Phase 4 Task E4.1 — the term-header "Explain this term"
+     *  affordance (workload-scoped). Fired with the term. */
+    onExplainTerm?: (term: string) => void;
+    /**
      * Phase 17 Task C — fired AFTER each deterministic plan-action
      * route returns. Phase 17 Task D wires this into the page's
      * inline `plan_action_bubble` message kind so the result renders
@@ -103,13 +189,44 @@ interface ScheduleSidebarProps {
         verb: "add" | "swap" | "drop" | "lock" | "move",
         result: PlanActionResult<PlanActionRouteResponse>,
     ) => void;
+    /**
+     * Phase 4 Task E3.2 — review-card actions. The card renders the
+     * verdict (✓/⚠/✗) + trade-off lines alongside the E3.1 preview
+     * overlay, with three buttons:
+     *   - onReviewConfirm: applies the staged mutation via the shared
+     *     /api/plan/confirm path (commits + clears the preview on
+     *     success; leaves it staged on failure for retry).
+     *   - onReviewCancel: drops the staged proposal + clears the
+     *     preview WITHOUT a confirm round-trip.
+     *   - onReviewAskWhy: routes a scoped "why" question into the
+     *     grounded chat agent (basic now; E4 builds the full ⋯ Explain).
+     * Each is threaded from page.tsx so the sidebar holds NO confirm
+     * logic of its own (the decision logic lives in the pure
+     * `apps/web/lib/reviewCard.ts` helpers).
+     */
+    onReviewConfirm?: (pendingMutationId: string) => void | Promise<void>;
+    onReviewCancel?: () => void;
+    onReviewAskWhy?: (pendingMutationId: string, verb?: string) => void;
+    /** Phase 4 Task E3.3 — Dismiss the RED invalid-proposal card.
+     *  Nothing was staged or committed, so this just clears the slot. */
+    onDismissInvalid?: () => void;
     onConfirmCombination?: (proposalId: string) => void;
     onRefreshDpr?: (file: File) => Promise<void>;
     onClearAll?: () => Promise<void>;
+    /** Phase 4 Task E6.4 — STANDING, always-on self-serve account
+     *  deletion (DELETE /api/session/delete). Unlike `onClearAll`
+     *  (the env-gated test affordance) this is always shown to a
+     *  signed-in student. */
+    onDeleteAccount?: () => Promise<void>;
+    /** Phase 4 Task E6.4 — in-flight guard from the page; disables the
+     *  delete control while the request is pending. */
+    deletingAccount?: boolean;
 }
 
 export default function ScheduleSidebar({
     schedule,
+    pendingPreview,
+    invalidProposal,
     student,
     dpr,
     materialization,
@@ -118,10 +235,18 @@ export default function ScheduleSidebar({
     onClose,
     onProposeLoadStyle,
     onProposeSlotChange,
+    onExplainSlot,
+    onExplainTerm,
     onPlanActionResult,
+    onReviewConfirm,
+    onReviewCancel,
+    onReviewAskWhy,
+    onDismissInvalid,
     onConfirmCombination,
     onRefreshDpr,
     onClearAll,
+    onDeleteAccount,
+    deletingAccount,
 }: ScheduleSidebarProps) {
     const [openPopover, setOpenPopover] = useState<string | null>(null);
     const [openSubmenu, setOpenSubmenu] = useState<{ key: string; verb: "swap" | "move" } | null>(null);
@@ -135,8 +260,6 @@ export default function ScheduleSidebar({
      *  rendered? Driven by `pendingSince` + a 600ms timer. */
     const [showToast, setShowToast] = useState(false);
     const [addCourseDraft, setAddCourseDraft] = useState<Map<string, string>>(() => new Map());
-    const dragSourceRef = useRef<DragSlotRef | null>(null);
-    const [dropTargetTerm, setDropTargetTerm] = useState<string | null>(null);
     const [selectedComboIdx, setSelectedComboIdx] = useState(0);
     const sidebarRef = useRef<HTMLElement>(null);
     const refreshDprInputRef = useRef<HTMLInputElement>(null);
@@ -201,7 +324,16 @@ export default function ScheduleSidebar({
 
     if (!open) return null;
 
-    const hasBody = !!student || !!schedule;
+    // Phase 4 Task E3.1 — when a proposal is staged, derive the
+    // render-ready preview view (proposed schedule + credit deltas vs
+    // the committed plan). The committed `schedule` is read ONLY to
+    // compute the delta; it is never mutated. Null when nothing is
+    // staged → the committed plan renders as today.
+    const previewView = pendingPreview
+        ? computePreviewView(schedule, pendingPreview)
+        : null;
+
+    const hasBody = !!student || !!schedule || !!previewView;
 
     const handlePillClick = (style: "balanced" | "frontload" | "backload") => {
         onProposeLoadStyle?.(style);
@@ -404,112 +536,6 @@ export default function ScheduleSidebar({
         });
     };
 
-    /** Phase 17 Task C — slot-pill `onDragStart` handler. */
-    const handleDragStart = (
-        e: React.DragEvent<HTMLLIElement>,
-        slot: ScheduleSlot,
-        term: string,
-    ): void => {
-        const courseId =
-            slot.kind === "specific_planned" || slot.kind === "completed" || slot.kind === "in_progress"
-                ? slot.courseId
-                : null;
-        if (!courseId) {
-            e.preventDefault();
-            return;
-        }
-        dragSourceRef.current = { courseId, term };
-        try {
-            e.dataTransfer.setData("application/x-nyupath-slot", JSON.stringify({ courseId, term }));
-            e.dataTransfer.effectAllowed = "move";
-        } catch { /* jsdom may not support dataTransfer */ }
-    };
-
-    const handleTermDragOver = (e: React.DragEvent<HTMLElement>, term: string): void => {
-        if (!dragSourceRef.current) return;
-        if (dragSourceRef.current.term === term) return;
-        e.preventDefault();
-        try { e.dataTransfer.dropEffect = "move"; } catch { /* */ }
-        if (dropTargetTerm !== term) setDropTargetTerm(term);
-    };
-
-    const handleTermDragLeave = (term: string): void => {
-        if (dropTargetTerm === term) setDropTargetTerm(null);
-    };
-
-    const handleTermDrop = async (
-        e: React.DragEvent<HTMLElement>,
-        targetTerm: string,
-    ): Promise<void> => {
-        e.preventDefault();
-        const src = dragSourceRef.current;
-        dragSourceRef.current = null;
-        setDropTargetTerm(null);
-        if (!src) return;
-        if (src.term === targetTerm) return;
-        const key = `${src.term}::${src.courseId}`;
-        markSlotPending(key, true);
-        try {
-            const result = await planMove({
-                courseId: src.courseId,
-                fromTerm: src.term,
-                toTerm: targetTerm,
-            });
-            announceResult("move", result);
-        } finally {
-            markSlotPending(key, false);
-        }
-    };
-
-    const handleSlotDragOver = (e: React.DragEvent<HTMLElement>): void => {
-        if (!dragSourceRef.current) return;
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
-    const handleSlotDrop = async (
-        e: React.DragEvent<HTMLElement>,
-        target: { courseId: string; term: string },
-    ): Promise<void> => {
-        e.preventDefault();
-        e.stopPropagation();
-        const src = dragSourceRef.current;
-        dragSourceRef.current = null;
-        setDropTargetTerm(null);
-        if (!src) return;
-        if (src.courseId === target.courseId && src.term === target.term) return;
-        if (src.term === target.term) {
-            const key = `${src.term}::${src.courseId}`;
-            markSlotPending(key, true);
-            try {
-                const result = await planSwap({
-                    drop: src.courseId,
-                    add: target.courseId,
-                    term: src.term,
-                });
-                announceResult("swap", result);
-            } finally {
-                markSlotPending(key, false);
-            }
-            return;
-        }
-        const key = `${src.term}::${src.courseId}`;
-        markSlotPending(key, true);
-        try {
-            const result = await planSwap({
-                exchanges: [{
-                    aCourseId: src.courseId,
-                    aTerm: src.term,
-                    bCourseId: target.courseId,
-                    bTerm: target.term,
-                }],
-            });
-            announceResult("swap", result);
-        } finally {
-            markSlotPending(key, false);
-        }
-    };
-
     const handleRefreshDprPick = async (file: File) => {
         if (!onRefreshDpr || refreshing) return;
         setRefreshing(true);
@@ -530,11 +556,22 @@ export default function ScheduleSidebar({
     // one place.
     void isLlmPolishEnabled;
 
+    /** Phase 4 Task E4.1 — slot ⋯ "Explain why" → close the popover,
+     *  then ask the page to inject a scoped chat question. The page
+     *  owns the question-building + agent-loop injection; the sidebar
+     *  only closes its own popover state. */
+    const handleExplain = (slot: ScheduleSlot, term: string): void => {
+        setOpenPopover(null);
+        setOpenSubmenu(null);
+        onExplainSlot?.(slot, term);
+    };
+
     const slotPopoverHandlers: SlotPopoverHandlers = {
         onSwap: handleSwap,
         onMove: handleMove,
         onDrop: handleDrop,
         onLock: handleLockToggle,
+        onExplain: handleExplain,
     };
 
     return (
@@ -573,6 +610,243 @@ export default function ScheduleSidebar({
                 </p>
             ) : (
                 <div className={styles.scheduleSidebarBody}>
+                    {/* Phase 4 Task E3.1 — PENDING proposal overlay. When a
+                        proposal is staged, the proposed plan is shown read-only
+                        above the committed cards, clearly marked PENDING with
+                        the per-term + total credit deltas. The committed plan
+                        below is NOT mutated — it stays until the user Confirms
+                        (which commits + clears) or Cancels (which clears). */}
+                    {previewView && (
+                        <div
+                            className={styles.schedulePreviewOverlay}
+                            role="status"
+                            aria-label="Proposed plan preview (pending confirmation)"
+                        >
+                            <div className={styles.schedulePreviewBanner}>
+                                <span className={styles.schedulePreviewBadge}>◷ Preview</span>
+                                <span className={styles.schedulePreviewBannerText}>
+                                    Proposed change — not applied yet. Confirm in chat to keep it.
+                                </span>
+                            </div>
+
+                            {(() => {
+                                const { total, byTerm } = previewView.creditDelta;
+                                const changedTerms = Object.entries(byTerm)
+                                    .filter(([, d]) => d !== 0)
+                                    .sort((a, b) => a[0].localeCompare(b[0]));
+                                const fmtDelta = (d: number): string => (d > 0 ? `+${d}` : `${d}`);
+                                return (
+                                    <div className={styles.schedulePreviewDelta}>
+                                        <span className={styles.schedulePreviewDeltaTotal}>
+                                            Credit change: {fmtDelta(total)}
+                                        </span>
+                                        {changedTerms.length > 0 && (
+                                            <ul className={styles.schedulePreviewDeltaList}>
+                                                {changedTerms.map(([term, d]) => (
+                                                    <li key={term}>
+                                                        {formatTermLabel(term)}: {fmtDelta(d)} credits
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
+                            {previewView.consequences.length > 0 && (
+                                <ul className={styles.schedulePreviewConsequences}>
+                                    {previewView.consequences.slice(0, 5).map((c, i) => (
+                                        <li key={i}>{c}</li>
+                                    ))}
+                                </ul>
+                            )}
+
+                            {/* Proposed term cards rendered read-only (no slot
+                                handlers): this is a preview, not an editable plan. */}
+                            {(() => {
+                                const grouped = groupCoursesByTerm({
+                                    student: student ?? null,
+                                    forwardSchedule: previewView.proposedSchedule,
+                                    dpr: dpr ?? null,
+                                });
+                                const forwardByTerm = new Map(
+                                    previewView.proposedSchedule.semesters.map(s => [s.term, s]),
+                                );
+                                return (
+                                    <>
+                                        {grouped.terms.map((bucket, semIdx) => (
+                                            <TermCard
+                                                key={`preview-${bucket.term}`}
+                                                bucket={bucket}
+                                                semIdx={semIdx}
+                                                forwardSemester={forwardByTerm.get(bucket.term)}
+                                                schedule={previewView.proposedSchedule}
+                                                materialization={null}
+                                                isImmediate={false}
+                                                frozenKeys={frozenKeys}
+                                                pendingSlots={new Set()}
+                                                openPopoverKey={null}
+                                                openSubmenu={null}
+                                                addCourseDraft={undefined}
+                                                selectedComboIdx={selectedComboIdx}
+                                                setSelectedComboIdx={setSelectedComboIdx}
+                                                onSlotClick={() => { /* read-only preview */ }}
+                                                onSubmenuToggle={() => { /* read-only preview */ }}
+                                                handlers={slotPopoverHandlers}
+                                                onAddCourseOpen={() => { /* read-only preview */ }}
+                                                onAddCourseClose={() => { /* read-only preview */ }}
+                                                onAddCourseChange={() => { /* read-only preview */ }}
+                                                onAddCourseSubmit={() => { /* read-only preview */ }}
+                                                slotKeyOf={slotKey}
+                                            />
+                                        ))}
+                                    </>
+                                );
+                            })()}
+
+                            {/* Phase 4 Task E3.2 — review card: verdict
+                                (✓ valid / ⚠ valid-with-trade-offs) + the
+                                trade-off lines + Confirm / Cancel / Ask-why.
+                                The verdict + lines are computed by the pure
+                                `computeReviewCard` helper from the engine's
+                                own fields (NEVER fabricated). A staged
+                                preview is always feasible (E3.1 gates
+                                feasible:false out of the preview path), so
+                                only the ✓/⚠ cards render here; the ✗ red
+                                card is E3.3's scope. */}
+                            {(() => {
+                                // A staged preview is, by the E3.1 gate,
+                                // always a FEASIBLE proposal. Build the
+                                // minimal PlanActionResponse the pure helper
+                                // reads (feasible + consequences + planDiff +
+                                // pendingMutationId) from the preview's own
+                                // engine-sourced fields — no fabrication.
+                                const card = computeReviewCard({
+                                    feasible: true,
+                                    diff: { added: [], removed: [] },
+                                    consequences: previewView.consequences,
+                                    explanation: "",
+                                    pendingMutationId: previewView.pendingMutationId,
+                                    futureTerms: [],
+                                    ...(previewView.planDiff ? { planDiff: previewView.planDiff } : {}),
+                                });
+                                const verbLabel = pendingPreview?.verb
+                                    ? `Review: ${pendingPreview.verb} change`
+                                    : "Review proposed change";
+                                return (
+                                    <div
+                                        className={styles.reviewCard}
+                                        role="group"
+                                        aria-label="Review proposed plan change"
+                                    >
+                                        <p className={styles.reviewCardHeading}>{verbLabel}</p>
+                                        <p
+                                            className={
+                                                card.verdict === "valid"
+                                                    ? styles.reviewVerdictValid
+                                                    : styles.reviewVerdictTradeOffs
+                                            }
+                                        >
+                                            <span aria-hidden="true">{card.glyph}</span> {card.label}
+                                        </p>
+                                        {card.tradeOffLines.length > 0 && (
+                                            <ul className={styles.reviewTradeOffList}>
+                                                {card.tradeOffLines.slice(0, 6).map((line, i) => (
+                                                    <li key={i}>{line}</li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                        <div className={styles.reviewCardActions}>
+                                            <button
+                                                type="button"
+                                                className={styles.reviewBtnConfirm}
+                                                disabled={!card.canConfirm}
+                                                onClick={() =>
+                                                    void onReviewConfirm?.(card.pendingMutationId)
+                                                }
+                                            >
+                                                Confirm
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={styles.reviewBtnCancel}
+                                                onClick={() => onReviewCancel?.()}
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={styles.reviewBtnAskWhy}
+                                                onClick={() =>
+                                                    onReviewAskWhy?.(
+                                                        card.pendingMutationId,
+                                                        pendingPreview?.verb,
+                                                    )
+                                                }
+                                            >
+                                                Ask why
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            <p className={styles.schedulePreviewCommittedLabel}>
+                                Your current plan (unchanged):
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Phase 4 Task E3.3 — RED invalid-proposal card. An
+                        engine-REJECTED (`feasible:false`) proposal NEVER
+                        reaches the preview overlay above: it renders here as
+                        a clearly error-styled card naming the binding
+                        constraint(s) the response's OWN fields surfaced
+                        (conflicts ∪ feasibility.constraintViolations,
+                        deduped by `computeInvalidCard`). It renders NO
+                        proposed-plan overlay — the committed term cards below
+                        stay exactly as they are. Mutually exclusive with the
+                        preview (the page clears one when staging the other).
+                        Both sources empty → a generic, no-invented-specifics
+                        fallback line. */}
+                    {invalidProposal && (
+                        <div
+                            className={styles.invalidProposalCard}
+                            role="alert"
+                            aria-label="Proposed change is invalid"
+                        >
+                            <p className={styles.invalidProposalHeading}>
+                                <span aria-hidden="true">✗</span>{" "}
+                                {invalidProposal.verb
+                                    ? `Can't ${invalidProposal.verb} — invalid change`
+                                    : "Invalid change"}
+                            </p>
+                            {invalidProposal.bindingConstraints.length > 0 ? (
+                                <ul className={styles.invalidProposalList}>
+                                    {invalidProposal.bindingConstraints.slice(0, 5).map((c, i) => (
+                                        <li key={i}>{c.detail}</li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <p className={styles.invalidProposalFallback}>
+                                    The engine could not validate this change — verify with your adviser.
+                                </p>
+                            )}
+                            <p className={styles.invalidProposalUntouched}>
+                                Your plan was not changed.
+                            </p>
+                            <div className={styles.invalidProposalActions}>
+                                <button
+                                    type="button"
+                                    className={styles.invalidProposalDismiss}
+                                    onClick={() => onDismissInvalid?.()}
+                                >
+                                    Dismiss
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {student && <SummaryCard student={student} dpr={dpr ?? null} schedule={schedule} />}
 
                     {schedule && (
@@ -625,6 +899,9 @@ export default function ScheduleSidebar({
                         </div>
                     )}
 
+                    {/* Phase 4 Task E2.1 — plan-level badge row above the term cards. */}
+                    {schedule && <PlanBadges schedule={schedule} />}
+
                     {(() => {
                         const grouped = groupCoursesByTerm({
                             student: student ?? null,
@@ -650,7 +927,6 @@ export default function ScheduleSidebar({
                                         openPopoverKey={openPopover}
                                         openSubmenu={openSubmenu}
                                         addCourseDraft={addCourseDraft.get(bucket.term)}
-                                        dropTargetTerm={dropTargetTerm}
                                         selectedComboIdx={selectedComboIdx}
                                         setSelectedComboIdx={setSelectedComboIdx}
                                         onSlotClick={handleSlotClick}
@@ -660,17 +936,12 @@ export default function ScheduleSidebar({
                                         }}
                                         handlers={slotPopoverHandlers}
                                         {...(onConfirmCombination ? { onConfirmCombination } : {})}
+                                        {...(onExplainTerm ? { onExplainTerm } : {})}
                                         onAddCourseOpen={handleAddCourseOpen}
                                         onAddCourseClose={handleAddCourseClose}
                                         onAddCourseChange={handleAddCourseChange}
                                         onAddCourseSubmit={handleAddCourseSubmit}
                                         slotKeyOf={slotKey}
-                                        onDragStartSlot={handleDragStart}
-                                        onTermDragOver={handleTermDragOver}
-                                        onTermDragLeave={handleTermDragLeave}
-                                        onTermDrop={handleTermDrop}
-                                        onSlotDragOver={handleSlotDragOver}
-                                        onSlotDrop={handleSlotDrop}
                                     />
                                 ))}
                                 {!schedule && (
@@ -694,6 +965,26 @@ export default function ScheduleSidebar({
                         <span className={styles.slotSpinner} aria-hidden="true" />
                         <span>Validating plan change…</span>
                     </div>
+                </div>
+            )}
+
+            {/* Phase 4 Task E6.4 — STANDING self-serve account deletion.
+                Always visible to a signed-in student (NOT gated on the
+                test-clear flag below); wired to the always-on DELETE
+                /api/session/delete route so the /privacy promise that
+                "self-serve deletion is always available to signed-in
+                users" is literally true in-app. */}
+            {onDeleteAccount && (
+                <div className={styles.sidebarToolbarBottom}>
+                    <button
+                        type="button"
+                        className={styles.sidebarClearBtn}
+                        onClick={() => void onDeleteAccount()}
+                        disabled={deletingAccount}
+                        title="Permanently delete your account and all your data"
+                    >
+                        {deletingAccount ? "Deleting…" : "Delete my account & data"}
+                    </button>
                 </div>
             )}
 

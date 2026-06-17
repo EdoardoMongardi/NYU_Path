@@ -173,7 +173,30 @@ function compareTerms(a: string, b: string): number {
     return (SEASON_ORDER[seasonA ?? ""] ?? 0) - (SEASON_ORDER[seasonB ?? ""] ?? 0);
 }
 
-function deriveDeclaredPrograms(report: DegreeProgressReport): ProgramDeclaration[] {
+/**
+ * The PRE-FALLBACK declared-program classification rule — the single
+ * source of truth for "what counts as a declared program in a DPR."
+ *
+ * Scans the DPR Programs table and maps each Major / Minor / Concentration
+ * row onto a `ProgramDeclaration` (skipping the administrative Career +
+ * Program rows). Returns the genuine, UN-padded set: when the DPR lists no
+ * Major/Minor/Concentration row this returns `[]` — the true "undeclared"
+ * state.
+ *
+ * IMPORTANT — this deliberately does NOT append the `unknown_major`
+ * fallback. Two callers need different things from the SAME rule:
+ *   • `deriveDeclaredPrograms` (engine/session path) wraps this and appends
+ *     the `unknown_major` placeholder when it returns empty, so downstream
+ *     tools always see at least one declared program.
+ *   • The wizard's undeclared-detection (OnboardingWizard.tsx) needs the
+ *     RAW pre-fallback result — the `unknown_major` padding would make
+ *     `isUndeclared` ALWAYS false and kill the intended-major preview
+ *     feature. It calls THIS function so there is one classification rule,
+ *     not a hand-rolled second copy.
+ */
+export function deriveDeclaredProgramsFromDpr(
+    report: DegreeProgressReport,
+): ProgramDeclaration[] {
     const out: ProgramDeclaration[] = [];
     for (const p of report.programs) {
         const t = p.programType.toLowerCase();
@@ -185,16 +208,34 @@ function deriveDeclaredPrograms(report: DegreeProgressReport): ProgramDeclaratio
             out.push({ programId: programIdFromLabel(p.label), programType: "concentration" });
         }
     }
+    return out;
+}
+
+function deriveDeclaredPrograms(report: DegreeProgressReport): ProgramDeclaration[] {
+    const out = deriveDeclaredProgramsFromDpr(report);
     // Fallback when Programs table doesn't list a Major (rare):
     // emit a generic placeholder so downstream tools see at least
-    // one declared program.
+    // one declared program. (The wizard deliberately does NOT use this
+    // padded path — see deriveDeclaredProgramsFromDpr's docstring.)
     if (out.length === 0) {
         out.push({ programId: "unknown_major", programType: "major" });
     }
     return out;
 }
 
-function deriveHomeSchool(report: DegreeProgressReport): string {
+/**
+ * Derive the student's home school from the DPR's program labels.
+ *
+ * Returns a confident school CODE when a label matches a known school
+ * indicator, else the school-agnostic sentinel `"unknown"`.
+ *
+ * EXPORTED (F2): this return value is the AUTHORITY SIGNAL for the
+ * DPR-derived-field rule. A confident value means "the DPR deterministically
+ * shows the home school" → it is READ-ONLY (the wizard renders it without an
+ * editable picker; the v2 route ignores a `body.homeSchool` override). Only
+ * `"unknown"` ("the DPR can't show it") lets the student pick a home school.
+ */
+export function deriveHomeSchool(report: DegreeProgressReport): string {
     const programLabels = report.programs.map((p) => p.label.toLowerCase()).join(" ");
     // Order matters: Steinhardt's published name includes "...the Arts",
     // so a naive "arts" substring on Tisch would false-positive on

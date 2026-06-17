@@ -137,3 +137,24 @@ export const chatMessages = pgTable("chat_messages", {
 }, (t) => ({
     byStudent: index("chat_messages_student_idx").on(t.studentId, t.id),
 }));
+
+/**
+ * Phase 4 Task E6.3 — durable propose→confirm staging. Replaces the
+ * single-instance in-process `Map` so a staged plan-change proposal
+ * survives a process restart / multi-instance deploy. One row per
+ * `pendingMutationId`; the `mutations` JSONB is the exact PlanMutation[]
+ * the confirm re-applies. `expires_at` carries the 10-min TTL so a
+ * crashed mid-confirm flow ages out instead of leaking rows. Rows are
+ * deleted on a successful `take` (single-use) and cascade-deleted when
+ * the student row is removed (self-serve deletion / test-clear).
+ */
+export const pendingMutations = pgTable("pending_mutations", {
+    pendingMutationId: text("pending_mutation_id").primaryKey(),
+    studentId: text("student_id").notNull().references(() => students.studentId, { onDelete: "cascade" }),
+    mutations: jsonb("mutations").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+    byStudent: index("pending_mutations_student_idx").on(t.studentId),
+    byExpiry: index("pending_mutations_expires_idx").on(t.expiresAt),
+}));

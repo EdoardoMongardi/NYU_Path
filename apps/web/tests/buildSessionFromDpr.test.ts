@@ -5,8 +5,12 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { DegreeProgressReport } from "@nyupath/engine";
 import { parseDpr } from "@nyupath/engine";
-import { buildStudentProfileFromDpr } from "../lib/buildSession";
+import {
+    buildStudentProfileFromDpr,
+    deriveDeclaredProgramsFromDpr,
+} from "../lib/buildSession";
 
 const FIXTURE = readFileSync(
     join(__dirname, "..", "..", "..", "packages/engine/tests/fixtures/dpr_sample.redacted.txt"),
@@ -133,5 +137,68 @@ describe("buildStudentProfileFromDpr (Phase 7-E W2.4)", () => {
             declaredProgramsOverride: [{ programId: "test_override", programType: "major" }],
         });
         expect(p.declaredPrograms[0]!.programId).toBe("test_override");
+    });
+});
+
+// ============================================================
+// deriveDeclaredProgramsFromDpr — the SHARED pre-fallback classifier
+// (FIX-2). Pins the INTENTIONAL divergence between the raw classifier
+// the wizard reads (no padding → genuine "undeclared" survives) and the
+// session-path `deriveDeclaredPrograms` (which appends an
+// `unknown_major` placeholder so downstream tools always see ≥1
+// program). Both must agree on the classification RULE; they diverge
+// ONLY on the empty case, on purpose.
+// ============================================================
+
+/** Minimal report exercising only the `programs[]` surface the classifier reads. */
+function reportWithPrograms(
+    programs: Array<{ programType: string; label: string }>,
+): DegreeProgressReport {
+    return {
+        header: { studentName: "Test Student" },
+        programs: programs.map((p) => ({ ...p, requirementTerm: "Fall 2024" })),
+        courseHistory: [],
+        advisorNotations: [],
+    } as unknown as DegreeProgressReport;
+}
+
+describe("deriveDeclaredProgramsFromDpr — shared classifier (pre-fallback)", () => {
+    it("maps Major / Minor / Concentration rows, skipping administrative rows", () => {
+        const out = deriveDeclaredProgramsFromDpr(
+            reportWithPrograms([
+                { programType: "Undergraduate Career", label: "UA-Coll of Arts & Sci" },
+                { programType: "Program", label: "Computer Science" },
+                { programType: "Major", label: "Computer Science/Math Major" },
+                { programType: "Minor", label: "Mathematics Minor" },
+            ]),
+        );
+        expect(out).toHaveLength(2);
+        expect(out.map((d) => d.programType).sort()).toEqual(["major", "minor"]);
+    });
+
+    it("a DPR with NO Major/Minor/Concentration row → core returns [] (genuinely undeclared)", () => {
+        const out = deriveDeclaredProgramsFromDpr(
+            reportWithPrograms([
+                { programType: "Undergraduate Career", label: "UA-Coll of Arts & Sci" },
+                { programType: "Program", label: "Liberal Studies Core" },
+            ]),
+        );
+        // The wizard reads THIS raw result — empty means truly undeclared.
+        expect(out).toEqual([]);
+    });
+
+    it("deriveDeclaredPrograms (session path) pads the SAME empty case with unknown_major", () => {
+        // Same no-declared-program DPR, but driven through the public
+        // builder: the session path MUST still emit the unknown_major
+        // placeholder (output UNCHANGED for its callers). This pins the
+        // intentional divergence from the raw classifier above.
+        const report = reportWithPrograms([
+            { programType: "Undergraduate Career", label: "UA-Coll of Arts & Sci" },
+            { programType: "Program", label: "Liberal Studies Core" },
+        ]);
+        const profile = buildStudentProfileFromDpr(report);
+        expect(profile.declaredPrograms).toEqual([
+            { programId: "unknown_major", programType: "major" },
+        ]);
     });
 });

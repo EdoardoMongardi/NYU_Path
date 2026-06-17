@@ -1,6 +1,6 @@
 # Chat UI Client — React Page & SSE Consumer
 
-> Last verified against code: 2026-06-13 (doc-sync pass: removed non-existent `onboardingStep` `"unsupported_major"` member; corrected the bouncing-dots loader citation to `page.tsx:1398-1407`).
+> Last verified against code: 2026-06-16 (Phase 4 follow-ups F1-F3 — DPR-field authority, IP-window model, wizard mounted). F1: the `OnboardingWizard` is now MOUNTED as the LIVE `awaiting_dpr` onboarding surface (§3 "Onboarding wizard mount" + the `handleWizardReachPlan` handoff threading the DPR through `SendSeed.parsedData`); a jsdom-per-file render-test harness (`.test.tsx` glob) was added. F3: each IP term bucket now carries an `ipChangeability` classification (`TermBucket.ipChangeability` → `TermCard`/`SlotRow` → `computeSlotState`) so an in-progress slot's editable/label/hedge come from the real registration-window state (§5 `groupCoursesByTerm`, §7). Prior 2026-06-16 pass: Phase 4 E3 (never-instant preview/review card; drag removed — §3 store gains `pendingPreview`/`invalidProposal`; §4/§7 the feasible path is the canvas review card, the chat bubble fires ONLY on `feasible:false`; drag gestures removed). Prior 2026-06-15 pass: Phase 4 E2 (badge row + slot-state glyphs + violet light/dark — §7 cross-refs the new render-only sidebar surfaces in ui-components.md). Prior 2026-06-15 pass: Phase 4 E1 (shared plan-state store + profile read-back) — §3 documents the `createPlanStore` / `useSyncExternalStore` binding; the two "Known limitations" bullets revised for the in-session shared store + the E1.2 server-side profile read-back. Prior 2026-06-13 pass: removed non-existent `onboardingStep` `"unsupported_major"` member; corrected the bouncing-dots loader citation to `page.tsx:1398-1407`.
 
 ## TL;DR
 
@@ -27,7 +27,7 @@ The chat UI is a single React Client Component (`apps/web/app/chat/page.tsx`) th
 The component manages four kinds of state in parallel:
 - The conversation thread (`messages[]` — a discriminated array of user / assistant / `plan_action_bubble` records).
 - The onboarding state machine (`onboardingStep` — drives whether v1 or v2 endpoint is used for a turn).
-- The forward-schedule sidebar inputs (`forwardSchedule`, `schedulePreferences`, `forwardMaterialization`, plus a memoized `sidebarDpr` + `sidebarStudent`).
+- The forward-schedule sidebar inputs (`forwardSchedule`, `schedulePreferences`, `forwardMaterialization` — now held in one shared `createPlanStore` snapshot read via `useSyncExternalStore`, Phase 4 E1.1 — plus a memoized `sidebarDpr` + `sidebarStudent`).
 - The plan-action bubble lifecycle (per-bubble polish + Stage 2 streams, plus an AbortController registry).
 
 Two streaming mechanics are layered on top:
@@ -96,7 +96,7 @@ The regex matches `pendingMutationId: pm_<alphanumeric_underscores>` in the tool
 
 ### Page-level state
 
-The page (`apps/web/app/chat/page.tsx:148-174`) holds:
+The page (`apps/web/app/chat/page.tsx:150-181`) holds:
 - `messages` — array of `Message` records (see below).
 - `input` — the textarea value.
 - `isLoading` — true between `handleSend` invoke and finalize.
@@ -104,9 +104,21 @@ The page (`apps/web/app/chat/page.tsx:148-174`) holds:
 - `isDragOver` — for the drag-drop file overlay.
 - `parsedData` — the discriminated DPR/transcript payload (used in every v2 turn body).
 - `visaStatus`, `graduationTarget` — collected during onboarding, threaded into each v2 body.
-- `forwardSchedule`, `schedulePreferences`, `forwardMaterialization` — sidebar inputs hydrated from `/api/session/restore` and updated by SSE events.
+- `forwardSchedule`, `schedulePreferences`, `forwardMaterialization` (+ the E3 `pendingPreview` / `invalidProposal` staged-proposal slots) — the live plan state. **Phase 4 Task E1.1**: these are no longer independent `useState`s. They now live in **one shared, subscribable store** — `createPlanStore()` from `apps/web/app/chat/planState.ts`, created once per mount via `useMemo`, and read through a single `useSyncExternalStore(planStore.subscribe, planStore.getSnapshot, planStore.getSnapshot)` that destructures all five fields off the snapshot (`page.tsx:178`). See [Page-level plan-state store](#page-level-plan-state-store) below.
 - `sidebarOpen` — sidebar visibility toggle.
 - Refs: `fileInputRef`, `messagesEndRef`, `inputRef`, `bubbleAbortersRef` (a `Map<messageId, AbortController>`).
+
+### Page-level plan-state store
+
+**Phase 4 Task E1.1** lifted `forwardSchedule` + `schedulePreferences` + `forwardMaterialization` out of three independent server-push-only `useState`s into one shared, subscribable store (`apps/web/app/chat/planState.ts`). The store is **pure TypeScript with no React import** (so it is unit-testable in the node-env vitest harness without a DOM render — see `apps/web/tests/sharedPlanState.test.ts`); the `useSyncExternalStore` binding lives in `page.tsx`.
+
+`createPlanStore(initial?)` (`planState.ts:124-193`) returns a `PlanStore` exposing the React-19 external-store surface plus the typed setters:
+- `getSnapshot()` — returns the current `PlanState` **by reference** on a no-op read (React 19 caches it; allocating per read would log "getSnapshot should be cached" and risk an infinite loop).
+- `subscribe(listener)` — registers a listener; returns an unsubscribe fn.
+- `setForwardSchedule(s)` / `setSchedulePreferences(p)` / `setForwardMaterialization(m)` — each swaps the snapshot for a **new** object (never mutates in place) so React's referential-equality check fires and every consumer re-renders.
+- **Phase 4 E3 — two staged-proposal slots + their setters.** `PlanState` gained `pendingPreview: PendingPreview | null` (E3.1) and `invalidProposal: InvalidProposalCard | null` (E3.3), with `setPendingPreview` / `clearPendingPreview` and `setInvalidProposal` / `clearInvalidProposal`. The two slots are **mutually exclusive** (a feasible proposal previews; a `feasible:false` one shows the red card). Neither setter ever touches `forwardSchedule` — staging a proposal cannot mutate the committed plan. Crucially, **`setForwardSchedule` is the single commit chokepoint** and clears BOTH slots (`planState.ts:149-161`): a staged card describes a proposal against the *prior* committed plan, so every commit path (clean apply, bubble confirm, override-anyway, the SSE `forward_schedule_update`, DPR refresh) drops a stale card automatically.
+
+Why it matters: chat-driven updates (SSE events + `/api/plan/*` HTTP responses) and sidebar-driven edits now write to the **same** in-page state, and every consumer — including `<ScheduleSidebar>` — re-renders from the one snapshot with **no server round-trip for the render**. All ~8 former setter call sites dispatch into the store: session-restore (`page.tsx:302-310`), the `forward_schedule_update` / `forward_materialization_update` SSE cases (`page.tsx:504`, `512`), the two `/api/plan/confirm` success paths (`page.tsx:904`, `941`), and the refresh-DPR handler (`page.tsx:992`). No `useState` setter for these three fields remains.
 
 ### The `Message` shape
 
@@ -154,8 +166,8 @@ The page (`apps/web/app/chat/page.tsx:148-174`) holds:
 - `tool_invocation_done` → patch the matching running status with `state: "done"` or `"error"`, plus `summary` and `error` fields. If the tool was `update_profile`, run `extractPendingMutationId(summary)` and set the message's `pendingMutationId` (`page.tsx:445-461`).
 - `token` → APPEND the text to `content`. The handler comment notes the route emits a single block-streamed token today; the append-rather-than-overwrite pattern is forward-compatible with a future intra-token streaming upgrade (`page.tsx:462-471`).
 - `thinking` → first event sets `hasRealThinking = true` and REPLACES any synthesized sentence narration (resets `thinkingRevealed = 0` so the typewriter restarts on the new text). Subsequent events append (`page.tsx:472-493`).
-- `forward_schedule_update` → call `setForwardSchedule(ev.schedule)` (`page.tsx:494-496`).
-- `forward_materialization_update` → call `setForwardMaterialization(ev.result)` (`page.tsx:497-504`).
+- `forward_schedule_update` → call `planStore.setForwardSchedule(ev.schedule)` (`page.tsx:503-505`).
+- `forward_materialization_update` → call `planStore.setForwardMaterialization(ev.result)` (`page.tsx:506-512`).
 - `validator_block` → set `validatorViolations` on the message (`page.tsx:505-513`).
 - `done` → server's `finalText` is authoritative; set `content = ev.finalText` and `completedAt = Date.now()`. Guards against any future partial-chunk artifact in the accumulated tokens (`page.tsx:514-520`).
 - `error` → don't leak the raw exception to the student. Log `ev.message` to console (for operator correlation), then either keep any partial content that arrived or fall back to a generic "something went wrong, email the operator" copy. Set `failedAt = Date.now()` (`page.tsx:521-536`).
@@ -243,9 +255,9 @@ sequenceDiagram
         else token
             Apply->>Page: append to content
         else forward_schedule_update
-            Apply->>Sidebar: setForwardSchedule
+            Apply->>Sidebar: planStore.setForwardSchedule
         else forward_materialization_update
-            Apply->>Sidebar: setForwardMaterialization
+            Apply->>Sidebar: planStore.setForwardMaterialization
         else validator_block
             Apply->>Page: set validatorViolations
         else done
@@ -256,32 +268,36 @@ sequenceDiagram
         Ticker->>Page: each frame, advance thinkingRevealed / contentRevealed
     end
 
-    Note over Page,Sidebar: Sidebar interactions
-    User->>Sidebar: Add/Swap/Drop/Lock/Move click
+    Note over Page,Sidebar: Sidebar interactions (E3 — ⋯ menu; drag removed)
+    User->>Sidebar: ⋯ menu → Add/Swap/Drop/Lock/Move
     Sidebar->>Page: onPlanActionResult(verb, result)
-    alt clean apply
-        Page->>Page: silent (no bubble)
-    else trade_offs / soft / hard refusal
-        Page->>Page: inject plan_action_bubble Message
+    Page->>Page: planActionSurfaces(result, verb)
+    alt feasible (clean OR trade-offs)
+        Page->>Sidebar: setPendingPreview → ◷ Preview overlay + review card (NO bubble)
+        User->>Sidebar: review card Confirm / Cancel / Ask why
+    else feasible:false
+        Page->>Sidebar: setInvalidProposal → RED card
+        Page->>Page: inject plan_action_bubble Message (Override-anyway / hard-refusal)
         Page->>Stream: streamPlanActionPolish (background, if enabled)
         Page->>Stream: streamPlanActionStage2 (background, if futureTerms)
+        User->>Page: bubble Confirm / Keep-as-is / Override-anyway
     end
-    User->>Page: Confirm / Keep-as-is / Override-anyway
-    Page->>Page: abort polish + stage2 streams
-    Page->>Page: POST /api/plan/confirm (with force? for override)
+    Page->>Page: POST /api/plan/confirm (with force? for override) → setForwardSchedule + clear cards
 ```
 
 ## 4. Plan-Action Bubble Helpers
 
 `apps/web/lib/planActionBubbleHelpers.ts` owns the bubble lifecycle math so the JSX in `page.tsx` stays slim.
 
+> **Phase 4 E3 — the bubble now fires ONLY for `feasible:false`.** As of the E3 group the FEASIBLE path (clean + trade-offs) no longer mints a chat bubble at all — its sole surface is the **canvas review card** in the sidebar (the "◷ Preview" overlay + the verdict card, see [ui-components.md](./ui-components.md) "Canvas edit-model surfaces"). The page's `handlePlanActionResult` routes through the pure `planActionSurfaces` helper (`apps/web/lib/planActionSurfaces.ts`), which returns `showBubble:false` for feasible and `showBubble:true` for `feasible:false`; only the latter appends a `plan_action_bubble`, because it carries Override-anyway / hard-refusal copy the cards lack. The classifier + bubble-state machinery below is therefore exercised **only on the refusal path** now — but the classifier itself is unchanged.
+
 ### Bubble kinds
 
-`PlanActionBubbleKind` (`planActionBubbleHelpers.ts:64-68`) is a discriminated union of four values:
-- `clean` — feasible AND empty consequences. Bubble is NOT injected (silent commit; the sidebar's own re-render is the only feedback). The classifier still returns this so the call site can branch.
-- `trade_offs` — feasible BUT non-empty consequences. Buttons: Confirm + Keep-as-is.
-- `soft_refusal` — not feasible, but the violations are caps/floors/exclusion sets the student can override. Buttons: Confirm + Keep-as-is + Override-anyway.
-- `hard_refusal` — not feasible, with violations the student cannot override at the engine level. NO buttons.
+`PlanActionBubbleKind` (`planActionBubbleHelpers.ts:64-68`) is a discriminated union of four values. The classifier still returns all four (it runs on the propose response regardless of surface), but post-E3 only the two refusal kinds ever mint a chat bubble:
+- `clean` — feasible AND empty consequences. **No chat bubble** (E3); the canvas review card (✓ Valid) is the sole surface and applies only on Confirm. The classifier still returns this so the call site can branch.
+- `trade_offs` — feasible BUT non-empty consequences. **No chat bubble** (E3); the canvas review card (⚠ trade-offs) is the surface. (Pre-E3 this minted a Confirm + Keep-as-is bubble.)
+- `soft_refusal` — not feasible, but the violations are caps/floors/exclusion sets the student can override. Bubble (Confirm + Keep-as-is + Override-anyway) renders ALONGSIDE the E3.3 RED invalid-proposal card.
+- `hard_refusal` — not feasible, with violations the student cannot override at the engine level. Bubble (NO buttons) renders alongside the RED card.
 
 `HARD_CONFLICT_KINDS` (`planActionBubbleHelpers.ts:82-90`) is the explicit set of solver conflict kinds that map to hard refusals:
 - `prereq_unsatisfiable`, `prereqChain`, `not_clause`, `graduation_total`, `offering`, `offering_pattern`, `no_plan`.
@@ -328,18 +344,27 @@ Everything else is treated as soft (Decision #32's `student-preferred-invalid-dr
 
 The chat page (`page.tsx:696-877`) owns the bubble lifecycle:
 
-1. **Injection** — `handlePlanActionResult(verb, result)` is the `<ScheduleSidebar onPlanActionResult>` callback. On route failure (HTTP / network), inject a plain assistant message with the verb + status. On success, run `classifyPlanActionOutcome`: if `"clean"`, return silently; otherwise build a bubble via `initBubbleState`, give it id `bubble-<pendingMutationId>`, append to messages, and call `spawnBubbleEnrichers`.
+1. **Injection (E3-reworked)** — `handlePlanActionResult(verb, result)` (`page.tsx:845-919`) is the `<ScheduleSidebar onPlanActionResult>` callback. On route failure (HTTP / network), inject a plain assistant message with the verb + status. On success it runs the pure `planActionSurfaces(result.data, verb)` (`page.tsx:887`) to decide the THREE surfaces:
+   - **feasible (clean OR trade-offs)** → stage the E3.1 preview into the store (`planStore.setPendingPreview`) and clear any stale red card; **return without a bubble** (`showBubble:false`) — the canvas review card is the sole surface. (There is NO `kind === "clean"` early return any more; a clean apply now previews like every feasible verb instead of silently committing.)
+   - **`feasible:false`** → stage the E3.3 red card (`planStore.setInvalidProposal`), clear any stale preview, AND (because `showBubble:true`) build a chat bubble via `initBubbleState`, give it id `bubble-<pendingMutationId>`, append to messages, and call `spawnBubbleEnrichers`. The bubble carries the Override-anyway / hard-refusal copy the red card doesn't.
+   The committed plan (`planStore.forwardSchedule`) is NEVER mutated here — only Confirm commits.
 
-2. **Enrichment** — `spawnBubbleEnrichers(messageId, bubble)` (`page.tsx:754-811`):
+2. **Enrichment** — `spawnBubbleEnrichers(messageId, bubble)`:
    - Creates an `AbortController` (or reuses an existing one) in `bubbleAbortersRef`.
    - When `process.env.NEXT_PUBLIC_PLAN_CHANGE_LLM_POLISH === "1"` AND `bubble.kind !== "clean"`, fires `streamPlanActionPolish` in a fire-and-forget async IIFE, dispatching each event through `applyPolishEvent` via `patchBubble`.
    - When `bubble.futureTerms.length > 0` AND `bubble.kind !== "hard_refusal"`, fires `streamPlanActionStage2`, dispatching each event through `applyStage2Event`.
-   - Both fetches respect the controller's `signal`; aborted streams return silently.
+   - Both fetches respect the controller's `signal`; aborted streams return silently. (Post-E3 this only runs on the `feasible:false` path, which is the only path that mints a bubble.)
 
-3. **Resolution** — three handlers (`page.tsx:880-951`):
-   - `handleBubbleConfirm(messageId, pendingMutationId)` — set `bubbleResolved: true` immediately (lock buttons), abort enrichers, POST `/api/plan/confirm` via `planConfirm`. On success: persist any returned `forwardSchedule`; set `content = "✓ Applied."`. On failure: re-enable buttons (`bubbleResolved: false`) and put the failure copy in `content`.
-   - `handleBubbleKeepAsIs(messageId)` — abort enrichers, set `bubbleResolved: true`, `content = "Kept the plan as-is."`.
+3. **Resolution — the chat-bubble handlers** (`page.tsx:922-1010`):
+   - `handleBubbleConfirm(messageId, pendingMutationId)` — set `bubbleResolved: true` immediately (lock buttons), abort enrichers, POST `/api/plan/confirm` via `planConfirm`. On success: persist any returned `forwardSchedule` (`planStore.setForwardSchedule`) and `clearPendingPreview`; set `content = "✓ Applied."`. On failure: re-enable buttons (`bubbleResolved: false`) and put the failure copy in `content`.
+   - `handleBubbleKeepAsIs(messageId)` — abort enrichers, `clearPendingPreview` + `clearInvalidProposal` (so dismissing a `feasible:false` bubble also drops its red card), set `bubbleResolved: true`, `content = "Kept the plan as-is."`.
    - `handleBubbleOverrideAnyway(messageId, pendingMutationId)` — same as Confirm but POSTs with `force: true`. Success copy: `"⚠ Override applied — plan saved as student-preferred-invalid-draft."`.
+
+4. **Resolution — the canvas review/red-card handlers (E3)** (`page.tsx:1026-1073`): the feasible path's surface is the sidebar review card, whose three buttons wire to:
+   - `handleReviewConfirm(pendingMutationId)` — delegates to the pure `applyReviewConfirm(planStore, planConfirm, …)` (`reviewCard.ts:223`), which shares the SAME commit path as the bubble Confirm (`planConfirm` → `setForwardSchedule` → `clearPendingPreview`) so the two surfaces can't double-commit. On failure the preview stays staged and a brief assistant note is injected.
+   - `handleReviewCancel()` — `applyReviewCancel(planStore)` (`reviewCard.ts:247`): drops the staged preview without a confirm round-trip; the committed plan was never touched.
+   - `handleReviewAskWhy(_id, verb?)` — injects a scoped "why … trade-offs" user message and runs the v2 tool-use loop (basic now; E4 builds the full ⋯ Explain).
+   - `handleDismissInvalid()` — `planStore.clearInvalidProposal()`: clears the red card (nothing was staged or committed).
 
 ### Bubble render path
 
@@ -391,31 +416,46 @@ The helper performs no LLM synthesis and no fabrication — when upstream data i
 
 The page is **mostly NOT optimistic on the chat side** — the regular chat flow only renders state the server has confirmed. The pre-created assistant `Message` is empty until `token` / `thinking` / `done` events arrive; content is set on `done` (server-authoritative), not optimistically.
 
-There is one explicit optimistic UI affordance: **plan-action bubble button locking**. When the user clicks Confirm / Override-anyway, `handleBubbleConfirm` and `handleBubbleOverrideAnyway` immediately call `patchMessage(messageId, { bubbleResolved: true })` BEFORE awaiting the `/api/plan/confirm` round-trip (`page.tsx:875`, `920`). This locks the buttons so a double-click can't double-submit. If the route fails, the buttons re-enable (`bubbleResolved: false`) and the failure copy lands in `content`.
+There is one explicit optimistic UI affordance: **plan-action bubble button locking**. When the user clicks Confirm / Override-anyway, `handleBubbleConfirm` and `handleBubbleOverrideAnyway` immediately call `patchMessage(messageId, { bubbleResolved: true })` BEFORE awaiting the `/api/plan/confirm` round-trip (`page.tsx:884`, `929`). This locks the buttons so a double-click can't double-submit. If the route fails, the buttons re-enable (`bubbleResolved: false`) and the failure copy lands in `content`.
 
-The schedule sidebar IS optimistic-on-the-server-side: when `/api/plan/confirm` returns a fresh `forwardSchedule`, the page calls `setForwardSchedule(result.data.forwardSchedule)` directly (`page.tsx:894-896`, `931-933`) — no waiting for the next chat-turn `forward_schedule_update` event. This bridges the gap between the route's HTTP-JSON response and the chat-side SSE channel.
+The schedule sidebar IS optimistic-on-the-server-side: when `/api/plan/confirm` returns a fresh `forwardSchedule`, the page calls `planStore.setForwardSchedule(result.data.forwardSchedule)` directly (`page.tsx:944`, `994`) — no waiting for the next chat-turn `forward_schedule_update` event. This bridges the gap between the route's HTTP-JSON response and the chat-side SSE channel; because the sidebar reads the same `createPlanStore` snapshot (E1.1), the edit lands in the sidebar render immediately.
+
+**Phase 4 E3 — the canvas preview/review card is the deliberate "never-instant" surface.** A ⋯-menu verb proposes (zero-token, fast) but does NOT optimistically commit: the page stages the proposed `forwardSchedule` into `pendingPreview` and the sidebar renders it read-only with the credit delta + the review card; the committed plan stays byte-identical until the student clicks the review card's Confirm (which runs the same `planConfirm` → `setForwardSchedule` → `clearPendingPreview` path as the bubble Confirm). A `feasible:false` proposal renders the red card instead and never previews. So the only true optimistic affordance remains the bubble-button locking above; the canvas preview is intentionally NOT a commit.
 
 ## 7. Sidebar Interactions
 
-The `<ScheduleSidebar>` is rendered at the bottom of the page (`page.tsx:1465-1479`) with these props:
-- `schedule` ← `forwardSchedule` state (updated by `forward_schedule_update` SSE events AND by `/api/plan/confirm` HTTP responses).
-- `student` ← memoized `sidebarStudent` (rebuilt from `sidebarDpr` and `visaStatus` via `buildStudentProfileFromDpr` whenever either changes; null when no DPR is loaded — `page.tsx:1068-1078`). NOTE: this profile is derived **entirely client-side from the raw DPR** with `visaStatus` defaulting to `"domestic"` whenever the page has not captured `"f1"`; it has no access to the server's authenticated `studentId` / home-school overrides, so the sidebar's identity fields can disagree with the server-side profile. See "Known limitations".
-- `dpr` ← memoized `sidebarDpr` (extracted from `parsedData` when `parsedData.kind === "dpr"`; null otherwise — `page.tsx:1064-1067`).
-- `materialization` ← `forwardMaterialization` state (updated by `forward_materialization_update` SSE events).
-- `schedulePreferences` ← `schedulePreferences` state (hydrated from `/api/session/restore`; updated by plan-action route responses).
+The `<ScheduleSidebar>` is rendered at the bottom of the page (`page.tsx:1586-1606`) with these props:
+- `schedule` ← `forwardSchedule` from the shared `createPlanStore` snapshot (E1.1) — written by `forward_schedule_update` SSE events AND by `/api/plan/confirm` HTTP responses; the sidebar re-renders directly off the store.
+- `pendingPreview` ← `pendingPreview` from the store snapshot (E3.1) — a staged feasible proposal; drives the "◷ Preview" overlay + review card.
+- `invalidProposal` ← `invalidProposal` from the store snapshot (E3.3) — a `feasible:false` proposal; drives the RED card. Mutually exclusive with `pendingPreview`.
+- `student` ← memoized `sidebarStudent` (rebuilt from `sidebarDpr` and `visaStatus` via `buildStudentProfileFromDpr` whenever either changes; null when no DPR is loaded — `page.tsx:1077-1087`). NOTE: this profile is derived **entirely client-side from the raw DPR** with `visaStatus` defaulting to `"domestic"` whenever the page has not captured `"f1"`; it has no access to the server's authenticated `studentId` / home-school overrides, so the sidebar's identity fields can disagree with the server-side profile. (E1.2 fixed the SERVER/agent view of those fields, not this client-side `sidebarStudent`.) See "Known limitations".
+- `dpr` ← memoized `sidebarDpr` (extracted from `parsedData` when `parsedData.kind === "dpr"`; null otherwise — `page.tsx:1073-1076`).
+- `materialization` ← `forwardMaterialization` from the store snapshot (updated by `forward_materialization_update` SSE events).
+- `schedulePreferences` ← `schedulePreferences` from the store snapshot (hydrated from `/api/session/restore`; updated by plan-action route responses).
 - `open` / `onClose` — visibility.
 
-The sidebar drives back into the page via four callbacks:
-- `onProposeLoadStyle(style)` (`page.tsx:597-609`) — injects a chat-visible user message like `"Please propose a balanced load style for my schedule — call propose_plan_change with loadStyle="balanced"."` and runs it through `handleSendV2`. The agent's tool-use behavior handles the round-trip.
-- `onProposeSlotChange(slot, action)` (`page.tsx:617-642`) — similar pattern for `lock` / `replace` / `drop` / `pin` on a specific slot. Constructs a slotId from `courseId` (for specific/in-progress/completed) or `placeholder(<category>)` (for pool/free-elective slots). In practice the sidebar passes this only as a legacy no-op shim; the live verb result flows through `onPlanActionResult`.
-- `onPlanActionResult(verb, result)` (`page.tsx:825-870`) — the sidebar's verb routes return responses through this callback; the page classifies the outcome and injects a `plan_action_bubble` (Section 4) or stays silent (clean apply).
-- `onConfirmCombination(proposalId)` (`page.tsx:673-687`) — for the materialization picker. Injects `"Yes, please apply section combination <id> — call confirm_section_combination with proposalId="<id>"."` and runs v2.
+The sidebar drives back into the page via these callbacks:
+- `onProposeLoadStyle(style)` (`page.tsx:606`) — injects a chat-visible user message like `"Please propose a balanced load style for my schedule — call propose_plan_change with loadStyle="balanced"."` and runs it through `handleSendV2`. The agent's tool-use behavior handles the round-trip.
+- `onProposeSlotChange(slot, action)` (`page.tsx:626`) — similar pattern for `lock` / `replace` / `drop` / `pin` on a specific slot. Constructs a slotId from `courseId` (for specific/in-progress/completed) or `placeholder(<category>)` (for pool/free-elective slots). In practice the sidebar passes this only as a legacy no-op shim; the live verb result flows through `onPlanActionResult`.
+- `onPlanActionResult(verb, result)` (`page.tsx:845`) — the sidebar's ⋯-menu verb routes return responses through this callback; the page runs `planActionSurfaces` (Section 4) to stage the canvas preview / red card, and injects a `plan_action_bubble` **only on the `feasible:false` path** (the feasible path's surface is the canvas review card, no bubble).
+- `onReviewConfirm` / `onReviewCancel` / `onReviewAskWhy` (E3.2) — the review card's three buttons (`handleReviewConfirm` / `handleReviewCancel` / `handleReviewAskWhy`, `page.tsx:1026-1073`). See Section 4 step 4.
+- `onExplainSlot(slot, term)` / `onExplainTerm(term)` (E4.1) — the **Explain shortcut**: the slot ⋯ menu's "Explain why" verb and the editable term header's "Explain" button inject a SCOPED natural-language question (`handleExplainSlot` / `handleExplainTerm`, `page.tsx:668/690`) built by the pure `apps/web/lib/explainQuestion.ts` (`buildExplainSlotQuestion` / `buildExplainTermQuestion`, using `formatTermLabel` for the human term label) → `addMessage('user', text)` → `handleSendV2(text)`. The question runs through the NORMAL agent loop (the Phase-3 introspection tools `view_forward_plan` / `probe_counterfactual` / the trade-off diff) — there is NO new explanation route (design §2.6). The review card's `onReviewAskWhy` reuses the same module (`buildExplainProposalQuestion`). The term-header "Explain" is gated to editable terms and is omitted from the read-only preview overlay.
+- `onDismissInvalid` (E3.3) — the red card's Dismiss button (`handleDismissInvalid`, `page.tsx:1051`); clears `invalidProposal`.
+- `onConfirmCombination(proposalId)` (`page.tsx:682`) — for the materialization picker. Injects `"Yes, please apply section combination <id> — call confirm_section_combination with proposalId="<id>"."` and runs v2.
 
-The sidebar toggle button (`page.tsx:1115-1123`) is always visible in the header (no longer gated on `forwardSchedule !== null`), so students can inspect their DPR-derived term cards even before computing a forward plan.
+The sidebar toggle button (`page.tsx:1239`) is always visible in the header (no longer gated on `forwardSchedule !== null`), so students can inspect their DPR-derived term cards even before computing a forward plan.
+
+**Phase 4 E2 workspace surfaces (render-only, no page wiring).** The sidebar renders two surfaces derived purely from the `schedule` prop, with no new page-side state or callback:
+- A **plan-level badge row** above the term cards — validity · confidence · graduation term · trade-off count (the confidence badge derives a "verify with your adviser" hedge only from real engine fields, never a fabricated CAS number).
+- Per-slot **state glyphs** (🔒 locked/final · ◐ in-progress · planned-movable) on each slot pill.
+
+**Phase 4 E3 canvas edit-model surfaces (page-wired).** Unlike E2, the E3 surfaces ARE driven by page state — the `pendingPreview` / `invalidProposal` store slots and the `onReviewConfirm` / `onReviewCancel` / `onReviewAskWhy` / `onDismissInvalid` callbacks above: the "◷ Preview" overlay + review card (feasible) and the RED invalid card (`feasible:false`).
+
+All are documented in full in [ui-components.md](./ui-components.md) ("Plan-level badge row" / "Slot-state glyphs" / "NYU-violet light/dark theme" / "Canvas edit-model surfaces").
 
 Two sidebar utility paths talk to non-chat routes:
-- `handleRefreshDpr(file)` (`page.tsx:955-989`) — POSTs the new PDF to `/api/onboard/refresh-dpr` as multipart form-data. The route fingerprint-compares with the stored DPR. On match → `window.alert("No changes detected …")`. On mismatch → updates `forwardSchedule` directly and alerts the user. Failures surface via `window.alert`.
-- `handleClearAll()` (`page.tsx:997-1016`) — test-only wipe gated server-side on `NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`. Confirms via `window.confirm`, DELETEs `/api/session/clear`, then `window.location.reload()` to re-run onboarding from a clean slate.
+- `handleRefreshDpr(file)` (`page.tsx:1084`) — POSTs the new PDF to `/api/onboard/refresh-dpr` as multipart form-data. The route fingerprint-compares with the stored DPR. On match → `window.alert("No changes detected …")`. On mismatch → updates `forwardSchedule` directly and alerts the user. Failures surface via `window.alert`.
+- `handleClearAll()` (`page.tsx:1126`) — test-only wipe gated server-side on `NEXT_PUBLIC_ENABLE_TEST_CLEAR=1`. Confirms via `window.confirm`, DELETEs `/api/session/clear`, then `window.location.reload()` to re-run onboarding from a clean slate.
 
 ## 8. Loading + Error States
 
@@ -461,13 +501,17 @@ Both `handleRefreshDpr` and `handleClearAll` use `window.alert()` for failure su
 
 ## Known limitations
 
-- **Sidebar profile is client-derived and can disagree with the server.** `sidebarStudent` (`page.tsx:1068-1078`) is built purely from the raw DPR via `buildStudentProfileFromDpr`, with `visaStatus` forced to `"domestic"` whenever the page state is not `"f1"`. It never consults the authenticated `studentId` or any server-side home-school / program overrides, so the sidebar's `SummaryCard` identity fields are a best-effort client reconstruction, not the authoritative server profile.
-- **State flows one way.** The agent never observes sidebar edits mid-conversation: server SSE events and HTTP confirm responses flow `route → page → sidebar`, and sidebar verbs round-trip through their own deterministic `/api/plan/*` routes. A schedule the student edited via the sidebar is only visible to the agent on the next chat turn once the persisted `forwardSchedule` is reloaded into the request body.
+- **Sidebar profile is client-derived and can disagree with the server (narrowed by E1.2, not eliminated).** `sidebarStudent` (`page.tsx:1077-1087`) is still built purely from the raw DPR via `buildStudentProfileFromDpr`, with `visaStatus` forced to `"domestic"` whenever the page state is not `"f1"`. It never consults the authenticated `studentId` or any server-side home-school / program overrides, so the sidebar's `SummaryCard` identity fields remain a best-effort **client** reconstruction. **Phase 4 Task E1.2** fixed the SERVER/agent view of this divergence — the v2 route now reads the four confirmed `confirm_profile_update` fields (`homeSchool` / `catalogYear` / `declaredPrograms` / `visaStatus`) back into the per-turn `session.student` (see [chat-route-sse.md §5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12)) — so a corrected home school no longer gets clobbered by the fresh body-DPR derivation each turn. But that read-back lands on the SERVER session only; the **sidebar's own** `sidebarStudent` is still derived client-side from the raw DPR, so the two can still disagree on the client until the page itself surfaces the confirmed profile.
+- **In-session the plan state is shared; cross-channel AGENT visibility is still next-turn (by design).** **Phase 4 Task E1.1** made the chat page and the sidebar share ONE live state — the `createPlanStore` snapshot. A sidebar-driven edit and a chat-driven update both write the store, and every consumer re-renders from it with **no server round-trip for the render** (so the prior "state flows one way" framing no longer holds in-session). What is **still intentionally next-turn** is the AGENT *seeing* a sidebar edit: the agent does not observe an uncommitted sidebar edit mid-turn. Cross-channel agent visibility comes from the v2 route's per-turn re-hydration — the persisted plan/prefs (P3.1) and the confirmed profile read-back (E1.2) are reloaded into the agent's session at the start of each turn — not from mid-turn awareness of in-flight client state. So it is NOT fully bidirectional: render-state is shared live; agent-state converges on the next turn.
 
 ## Related Files
 
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/lib/chatV2Client.ts` — SSE consumer + plan-action stream consumers.
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/app/chat/page.tsx` — the chat client component.
+- `/Users/edoardomongardi/Desktop/Ideas/NYU_Path/apps/web/app/chat/planState.ts` — the shared `createPlanStore` plan-state store (Phase 4 E1.1); the `useSyncExternalStore` source of truth for `forwardSchedule` / `schedulePreferences` / `forwardMaterialization` (+ the E3 `pendingPreview` / `invalidProposal` staged-proposal slots).
+- `/Users/edoardomongardi/Desktop/Ideas/NYU_Path/apps/web/lib/planPreview.ts` — pure `computePreviewView` (E3.1 canvas-preview credit deltas).
+- `/Users/edoardomongardi/Desktop/Ideas/NYU_Path/apps/web/lib/reviewCard.ts` — pure `computeReviewCard` / `computeInvalidCard` + `applyReviewConfirm` / `applyReviewCancel` (E3.2/E3.3 review + red card).
+- `/Users/edoardomongardi/Desktop/Ideas/NYU_Path/apps/web/lib/planActionSurfaces.ts` — pure `planActionSurfaces` (E3.4 — decides preview / invalid card / bubble from a propose response).
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/app/chat/layout.tsx` — server-side auth gate (redirects to `/login`).
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/lib/formatDuration.ts` — duration formatter for the agent-status header.
 - `/Users/edoardomongardi/Desktop/Ideas/NYU Path/apps/web/lib/groupCoursesByTerm.ts` — pure sidebar render-plan builder.

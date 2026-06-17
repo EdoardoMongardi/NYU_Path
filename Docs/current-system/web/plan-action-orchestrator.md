@@ -1,10 +1,10 @@
 # Plan Action Orchestrator — Server Coordinator and Browser Client
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-16 (Phase 4 E6 — DB-backed pending-mutation staging; live exit gates). Prior: 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## Purpose
 
-The orchestrator is the conductor between the sidebar buttons and the planning engine. When the student clicks something like "swap this course," the orchestrator pulls up everything the engine needs to think clearly — the student's profile, their parsed degree report, their current plan, their saved preferences — and packages it into a request the engine can handle. After the engine answers, the orchestrator remembers the proposed change in a short-lived memory bucket so when the student clicks Confirm a moment later, it can apply that exact same change atomically. It also categorizes the outcome into one of four buckets (clean / trade-offs / soft refusal / hard refusal), which is what tells the UI whether to show a confirm button, an override button, or no buttons at all. The browser-side companion to the orchestrator is the small layer that fires the actual HTTP calls and turns errors into friendly results.
+The orchestrator is the conductor between the sidebar buttons and the planning engine. When the student clicks something like "swap this course," the orchestrator pulls up everything the engine needs to think clearly — the student's profile, their parsed degree report, their current plan, their saved preferences — and packages it into a request the engine can handle. After the engine answers, the orchestrator stashes the proposed change in a short-lived, durable staging table (the `pending_mutations` row, keyed by a minted UUID; an in-memory entry when no database is wired) so when the student clicks Confirm a moment later, it can apply that exact same change atomically — even if a different server instance handles the confirm. It also categorizes the outcome into one of four buckets (clean / trade-offs / soft refusal / hard refusal), which is what tells the UI whether to show a confirm button, an override button, or no buttons at all. The browser-side companion to the orchestrator is the small layer that fires the actual HTTP calls and turns errors into friendly results.
 
 ```mermaid
 flowchart LR
@@ -12,7 +12,7 @@ flowchart LR
     Client --> Server[Plan-action route]
     Server --> Assemble[Load student state]
     Assemble --> Engine[Engine validates change]
-    Engine --> Stage[Stash proposal in memory]
+    Engine --> Stage[Stash proposal in pending_mutations]
     Stage --> Classify[Classify outcome]
     Classify --> Bubble[Bubble appears in chat]
     Bubble --> Apply[Confirm click applies + persists]
@@ -26,10 +26,12 @@ The plan-action orchestrator is the server-side coordinator that the per-verb ro
 
 1. **State assembly.** Loading the student's persisted state (profile, parsed DPR, latest schedule, scheduling preferences) via the store bundle (see [db-and-stores.md](./db-and-stores.md)) and reconstructing a minimal `ToolSession` the engine tools can consume.
 2. **Two-stage handshake.** Splitting every mutation into a propose stage (`runProposeStage`) that stages but does not persist, and a confirm stage (`runConfirmStage`) that applies and persists.
-3. **Pending-mutation staging.** Maintaining an in-memory, TTL-bounded map keyed by minted UUID so a propose→confirm round-trip can re-apply the exact same `PlanMutation[]` atomically.
+3. **Pending-mutation staging.** Stashing the staged `PlanMutation[]` keyed by minted UUID so a propose→confirm round-trip can re-apply it atomically. **As of Phase 4 E6.3 this is DB-backed** (`getStores().pendingMutationStore` — a `pending_mutations` row when a DB handle exists, an in-memory singleton otherwise), replacing the pre-E6.3 in-process `Map`; the single-use delete + cross-tenant guard + 10-min TTL now live inside the store's `take`. See [db-and-stores.md](./db-and-stores.md#pendingmutationstore--pendingmutationstorets-phase-4-e63).
 4. **Stage-2 hint computation.** Deriving the list of `futureTerms` the confirm-bubble UI uses to fan out FOSE section enrichments.
 
 Alongside it on the client side, `planActionClient.ts` is the browser-side typed fetch layer that maps each UI gesture to the corresponding `/api/plan/*` POST. The third file in this slice, `planActionBubbleHelpers.ts`, owns the pure reducer logic for the chat-thread `plan_action_bubble` message kind (classification, polish/Stage 2 SSE event reduction).
+
+> **Phase 4 E3 — the orchestrator is UNCHANGED; the CLIENT now makes "edits are never instant" visible.** The `/api/plan/*` routes and `planActionOrchestrator.ts` were *not* touched by the E3 group (commits `c35cd13` / `24e605d` / `0d5c90b` / `b209559`): propose still stages a `pendingMutationId` + a non-persisted, validated `forwardSchedule`, and confirm still applies. What E3 reworked is the **client-side edit model**: a successful propose no longer ever commits silently. Instead the page stages the proposal in the shared plan-state store and the canvas renders it as a read-only **"◷ Preview"** overlay (credit delta + consequences) plus a **review card** (verdict ✓/⚠ + Confirm / Cancel / Ask-why); the committed plan is byte-identical until the student clicks Confirm, which fires the same `/api/plan/confirm` round-trip. A `feasible:false` propose renders a separate RED invalid-proposal card and never previews. The orchestrator's four-bucket classification still exists and still drives the *chat bubble*, but the bubble now only fires on the `feasible:false` path (see §2.1 + the client docs in [ui-components.md](./ui-components.md) and [chat-ui-client.md](./chat-ui-client.md)). NO orchestrator/route logic changed — this is purely how the browser surfaces the already-staged proposal.
 
 ```mermaid
 flowchart LR
@@ -39,7 +41,7 @@ flowchart LR
     Orch --> LoadState[loadSessionState]
     Orch --> BuildSession[buildSession]
     Orch --> ProposeTool[proposePlanChangeTool.call]
-    Orch --> Pending[pendingMutations map]
+    Orch --> Pending[pendingMutationStore.stage - DB or in-memory]
     Orch --> FT[computeFutureTerms]
     Orch -->|response| Route
     Route -->|JSON| Client
@@ -59,7 +61,7 @@ A single plan action progresses through clearly-defined states. The state lives 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Proposing : UI gesture (drag/click)
+    Idle --> Proposing : UI gesture (⋯-menu verb)
     Proposing --> Proposed : runProposeStage success
     Proposing --> ProposeError : runProposeStage failure
     Proposed --> Classified : classifyPlanActionOutcome
@@ -67,7 +69,7 @@ stateDiagram-v2
     Classified --> TradeOffs : feasible AND consequences > 0
     Classified --> SoftRefusal : infeasible AND no hard conflicts
     Classified --> HardRefusal : infeasible AND any hard conflict
-    Clean --> [*] : bubble suppressed; silent commit pattern
+    Clean --> [*] : no bubble; canvas review card (E3) applies on Confirm
     TradeOffs --> Confirming : user clicks Confirm
     SoftRefusal --> Confirming : user clicks Confirm (force=false)
     SoftRefusal --> ConfirmingForce : user clicks Override-anyway (force=true)
@@ -86,14 +88,14 @@ stateDiagram-v2
 
 ### 2.1 The four bubble kinds
 
-After `runProposeStage` returns, the client classifies the response via `classifyPlanActionOutcome` (`apps/web/lib/planActionBubbleHelpers.ts:96-113`). The kind drives the button set the bubble renders:
+`classifyPlanActionOutcome` (`apps/web/lib/planActionBubbleHelpers.ts:96-113`) still maps a propose response into one of four kinds. As of Phase 4 E3 the **chat bubble itself only renders on the `feasible:false` path** — the page's `planActionSurfaces` gate (`apps/web/lib/planActionSurfaces.ts`) returns `showBubble: false` for the two feasible kinds (their sole surface is now the canvas review card), and `showBubble: true` for the two refusal kinds (which carry Override-anyway / hard-refusal copy the cards don't). The classification + button table is unchanged for the bubble that *does* render:
 
-| Kind | Trigger | Buttons | Notes |
-|---|---|---|---|
-| `clean` | `feasible === true` AND `consequences.length === 0` | n/a — bubble suppressed | Silent commit; the page may skip insertion entirely |
-| `trade_offs` | `feasible === true` AND `consequences.length > 0` | Confirm + Keep-as-is | Engine considers it valid but flags side-effects |
-| `soft_refusal` | `feasible === false` AND no conflict in `HARD_CONFLICT_KINDS` | Confirm + Keep-as-is + Override-anyway | Override-anyway sends `force: true` |
-| `hard_refusal` | `feasible === false` AND any conflict in `HARD_CONFLICT_KINDS` | No buttons | Pure refusal; cannot override prereq/graduation/offering violations |
+| Kind | Trigger | Where it surfaces (E3) | Buttons | Notes |
+|---|---|---|---|---|
+| `clean` | `feasible === true` AND `consequences.length === 0` | **Canvas review card (✓ Valid)** — no bubble | Confirm + Cancel + Ask-why (on the card) | A clean apply is no longer a silent commit; it previews like every feasible verb |
+| `trade_offs` | `feasible === true` AND `consequences.length > 0` | **Canvas review card (⚠ trade-offs)** — no bubble | Confirm + Cancel + Ask-why (on the card) | Engine considers it valid but flags side-effects |
+| `soft_refusal` | `feasible === false` AND no conflict in `HARD_CONFLICT_KINDS` | RED invalid-proposal card **+ chat bubble** | bubble: Confirm + Keep-as-is + Override-anyway | Override-anyway sends `force: true` |
+| `hard_refusal` | `feasible === false` AND any conflict in `HARD_CONFLICT_KINDS` | RED invalid-proposal card **+ chat bubble** | bubble: No buttons | Pure refusal; cannot override prereq/graduation/offering violations |
 
 The hard-conflict list (`apps/web/lib/planActionBubbleHelpers.ts:82-90`) contains: `prereq_unsatisfiable`, `prereqChain`, `not_clause`, `graduation_total`, `offering`, `offering_pattern`, `no_plan`.
 
@@ -110,15 +112,17 @@ Source: `apps/web/lib/planActionOrchestrator.ts:583-612`.
 
 ### 2.3 Server-side pending-mutation states
 
-| Map state | How to reach it | Resolution |
-|---|---|---|
-| Absent | UUID never minted or already consumed/expired | `unknown_mutation_id` → 404 |
-| Present + matching studentId | Within 10-minute TTL | Confirmable |
-| Present + mismatched studentId | Cross-tenant id guess | `studentId_mismatch` → 403 |
-| Present but stale | Older than `PENDING_TTL_MS` (10 minutes) | Purged by `purgeExpired()` on next propose or confirm; subsequent confirm returns 404 |
-| Just consumed | `runConfirmStage` deleted the entry | Subsequent confirm returns 404 |
+As of Phase 4 E6.3 these states are resolved **inside the store's `take`** (`pendingMutationStore.ts`), which returns a discriminated `TakeResult` the orchestrator maps to the HTTP outcome. The store is `PostgresPendingMutationStore` (a `pending_mutations` row) when a DB handle exists, else `InMemoryPendingMutationStore`.
 
-Source: `apps/web/lib/planActionOrchestrator.ts:128-148`.
+| Store state | How to reach it | `take` result → Resolution |
+|---|---|---|
+| Absent | UUID never minted, or already consumed/expired | `not_found` → `unknown_mutation_id` → 404 |
+| Present + matching studentId, unexpired | Within 10-minute TTL | `ok` (entry returned + **deleted single-use**) → Confirmable |
+| Present + mismatched studentId | Cross-tenant id guess | `tenant_mismatch` (entry left **intact** for its owner) → `studentId_mismatch` → 403 |
+| Present but stale | Older than `PENDING_MUTATION_TTL_MS` (10 minutes) | Swept by `sweepExpired` (runs on every `stage`; the Postgres `take` also treats a matched-but-expired row as `not_found`) → 404 |
+| Just consumed | `take` deleted the entry on the matched read | `not_found` on a second `take` → 404 |
+
+Source: `apps/web/lib/db/pendingMutationStore.ts:101`/`:182` (the `take` seam); `apps/web/lib/planActionOrchestrator.ts:526-551` (the orchestrator mapping).
 
 ## 3. Optimistic Updates
 
@@ -128,7 +132,7 @@ The optimistic-update affordance lives in three concrete pieces:
 
 ### 3.1 `proposedSchedule` on the propose response
 
-The propose stage extracts `proposedSchedule` from the engine's tool output (`apps/web/lib/planActionOrchestrator.ts:469-470`) and ships it back as `forwardSchedule` on the `PlanActionResponse`. This is a non-persisted preview — the actual write does not happen until confirm. The client can render this preview as the "what your plan would look like" overlay while the bubble is open.
+The propose stage extracts `proposedSchedule` from the engine's tool output (`apps/web/lib/planActionOrchestrator.ts:469-470`) and ships it back as `forwardSchedule` on the `PlanActionResponse`. This is a non-persisted preview — the actual write does not happen until confirm. **As of Phase 4 E3 the client renders exactly this `forwardSchedule` as the canvas "◷ Preview" overlay** — the page stages it into the shared store's `pendingPreview` slot and `planPreview.ts` computes the credit delta vs the committed plan; the committed plan stays untouched until Confirm. (A `feasible:false` response is never staged as a preview — see the RED invalid-proposal card in the client docs.)
 
 `proposePlanChangeTool` produces `proposedSchedule` by running the same `finalizeForwardSchedule` path the build/confirm/simulate flows use — the feasibility-first backtracking search plus the 7-axis `runGraduationPathValidator` (`packages/engine/src/agent/tools/proposePlanChange.ts:153`). So the propose preview is already validated, not a greedy guess.
 
@@ -175,8 +179,8 @@ Source: `apps/web/lib/planActionOrchestrator.ts:106-109`. Variants — the propo
 
 The orchestrator does not implement an explicit rollback. Each stage is atomic with respect to persistence:
 
-- **Propose** never writes. A failure leaves both the schedule and preference stores untouched. A successful propose only adds a single entry to the in-memory staging map; no DB writes.
-- **Confirm** writes via the engine's `confirmPlanChangeTool`. If the tool throws, the orchestrator surfaces `engine_error` and the staging entry is **not** deleted, so the user could retry the same id. If the tool returns successfully, the staging entry is deleted regardless of `feasible`.
+- **Propose** never writes to the schedule/preference stores. A failure leaves both untouched. A successful propose only calls `pendingMutationStore.stage` — a single row in `pending_mutations` (or a single in-memory entry); no plan/preference DB writes.
+- **Confirm** writes via the engine's `confirmPlanChangeTool`. The staging entry is **consumed (deleted) by `take`** at the start of confirm (single-use). If the session-load or the engine tool then throws, the orchestrator **re-stages** the same entry best-effort (`restageBestEffort` — a swallowed `stage` retry) so the single-use guarantee holds only on a *successful* apply and the user can retry the same id. A best-effort re-stage DB blip is logged, never thrown. If the tool returns successfully, the entry stays consumed regardless of `feasible`.
 - **Force reclassification** persists via `scheduleStore.persistSchedule` after the engine apply lands. Persistence failures here are logged (`console.warn`) but swallowed — the in-memory state is the source of truth.
 
 ### 4.4 Client-side rollback semantics
@@ -296,11 +300,11 @@ sequenceDiagram
     Client->>Route: POST JSON
     Route-->>Client: PlanActionRouteResponse
     Client-->>Page: { ok: true, data }
-    Page->>Bubble: classifyPlanActionOutcome(data)
-    Bubble-->>Page: kind
-    alt kind === clean
-        Note over Page: skip bubble; silent commit
-    else any other kind
+    Page->>Page: planActionSurfaces(data) (E3)
+    alt feasible (clean OR trade-offs)
+        Note over Page: stage ◷ Preview overlay + review card on the canvas; NO bubble
+    else feasible:false
+        Note over Page: stage RED invalid card; ALSO mint the bubble (Override-anyway / hard-refusal)
         Page->>Bubble: initBubbleState(data)
         Bubble-->>Page: PlanActionBubbleState
         Page->>Page: insert plan_action_bubble Message
@@ -331,11 +335,11 @@ sequenceDiagram
 ### 6.6 Where the orchestrator does and does not show up
 
 - **Server-only.** `planActionOrchestrator.ts` is Node-only — it imports `node:crypto`, the engine package, and the persistence stores. It must never be imported from the browser bundle. The shape duplication in `planActionClient.ts` is exactly to enforce this separation.
-- **Singleton in-process state.** The `pendingMutations` map is a module-scope `Map` (`apps/web/lib/planActionOrchestrator.ts:135`). It does not persist across server restarts and is not shared across server instances. In a multi-instance deployment, a propose served by instance A and a confirm served by instance B would 404 — the design assumes the propose→confirm round-trip lands on the same process within the 10-minute TTL.
+- **Staging is store-backed (E6.3).** The orchestrator no longer owns a module-scope `Map` — it calls `getStores().pendingMutationStore.stage` on propose and `.take` on confirm. With a DB handle this is the durable `PostgresPendingMutationStore` (`pending_mutations` table), so a propose served by instance A and a confirm served by instance B agree across a multi-instance deploy and survive a restart. Without a DB handle it is the `InMemoryPendingMutationStore` singleton (dev/offline), whose volatility matches the old Map. The test-only `_resetPendingMutationsForTests` / `_pendingMutationsSizeForTests` helpers (`apps/web/lib/planActionOrchestrator.ts:135-150`) delegate to the in-memory store.
 - **Cached bundled data.** `loadCourses` and `loadPrereqs` are cached at module scope (`apps/web/lib/planActionOrchestrator.ts:361-382`) so a flurry of plan-action calls doesn't re-read the JSON catalog repeatedly.
-- **Session reconstruction is per-call.** Every propose and every confirm rebuilds a fresh `ToolSession` from the persistence stores (`apps/web/lib/planActionOrchestrator.ts:388-413`). There is no session caching across requests — the staging map carries only the `studentId` and `PlanMutation[]`, not the heavyweight session state.
+- **Session reconstruction is per-call.** Every propose and every confirm rebuilds a fresh `ToolSession` from the persistence stores (`apps/web/lib/planActionOrchestrator.ts:388-413`). There is no session caching across requests — the staged entry carries only the `studentId` and `PlanMutation[]`, not the heavyweight session state.
 
 ### 6.7 Known limitations
 
-- **Single-instance staging only.** The `pendingMutations` map is purely in-process (see 6.6). A server restart between propose and confirm loses every staged mutation; the next confirm returns `unknown_mutation_id` (404). There is no Redis/DB-backed staging — this is by design but means horizontally-scaled deployments need sticky routing for the propose→confirm pair.
-- **Confirm returns no preferences → stale Lock labels.** `PlanConfirmResponse` (`apps/web/lib/planActionOrchestrator.ts:89-98`) has no `preferences`/`schedulePreferences` field, and the confirm stage never reloads or returns one. The client's confirm handlers (`apps/web/app/chat/page.tsx:894-896` and `931-933`) only call `setForwardSchedule(...)`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the sidebar's `schedulePreferences` state — which drives the Lock/Unlock popover label — is never refreshed; it only re-syncs on a full reload via `/api/session/restore`. The in-code comments at `page.tsx:160-162` and `297-302` that claim the confirm round-trip returns updated prefs are **wrong** (stale comments). This is a known UI bug.
+- **Single-instance staging only WITHOUT a DB (resolved with one).** Pre-E6.3 the staging was a purely in-process `Map`, so a restart or a multi-instance deploy lost staged mutations. **Phase 4 E6.3 closed this** when a `DATABASE_URL` is wired: `PostgresPendingMutationStore` persists each proposal to `pending_mutations`, so the propose→confirm pair survives a restart and is visible across instances (no sticky routing needed). The residual limitation only applies to the **in-memory fallback** (dev/offline), where the in-process singleton still loses staged mutations on a cold restart.
+- **Confirm returns no preferences → stale Lock labels.** `PlanConfirmResponse` (`apps/web/lib/planActionOrchestrator.ts:89-98`) has no `preferences`/`schedulePreferences` field, and the confirm stage never reloads or returns one. The client's confirm handlers (`apps/web/app/chat/page.tsx:944` and `994`) only call `planStore.setForwardSchedule(...)`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the sidebar's `schedulePreferences` state — which drives the Lock/Unlock popover label — is never refreshed; it only re-syncs on a full reload via `/api/session/restore`. This is a known UI bug. (Phase 4 E3 did not touch this — the new review-card Confirm shares the same `setForwardSchedule`-only commit path via `applyReviewConfirm`, so it has the same gap.)

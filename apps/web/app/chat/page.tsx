@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import styles from "./chat.module.css";
 import {
     streamChatV2,
@@ -18,7 +18,6 @@ import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@n
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
 import ScheduleSidebar from "./scheduleSidebar";
 import {
-    classifyPlanActionOutcome,
     bubbleSlotKey,
     bubbleHasButtons,
     bubbleHasOverrideButton,
@@ -26,13 +25,24 @@ import {
     applyPolishEvent,
     applyStage2Event,
     type PlanActionBubbleState,
-    type PlanActionBubbleKind,
 } from "../../lib/planActionBubbleHelpers";
 import {
     planConfirm,
     type PlanActionResult,
     type PlanActionRouteResponse,
 } from "../../lib/planActionClient";
+import { createPlanStore } from "./planState";
+import { applyReviewConfirm, applyReviewCancel } from "../../lib/reviewCard";
+import { planActionSurfaces } from "../../lib/planActionSurfaces";
+import {
+    buildExplainSlotQuestion,
+    buildExplainTermQuestion,
+    buildExplainProposalQuestion,
+} from "../../lib/explainQuestion";
+import { buildPreferenceTurns } from "../../lib/wizard/preferenceTurns";
+import { buildIntendedMajorPreviewTurn } from "../../lib/wizard/intendedMajor";
+import type { WizardValues } from "../../lib/wizard/wizardMachine";
+import OnboardingWizard from "./wizard/OnboardingWizard";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -155,21 +165,38 @@ export default function ChatPage() {
     const [parsedData, setParsedData] = useState<ParsedTranscript | null>(null);
     const [visaStatus, setVisaStatus] = useState<string | null>(null);
     const [graduationTarget, setGraduationTarget] = useState<string | null>(null);
-    const [forwardSchedule, setForwardSchedule] = useState<ForwardSchedule | null>(null);
-    // Phase 17 Task D — restored SchedulePreferences row drives the
-    // sidebar's freeze-flag plumb-through (so the Lock popover label
-    // flips to "Unlock" when a slot is in pins[]). Hydrated from
-    // /api/session/restore on mount; refreshed after each successful
-    // /api/plan/confirm round-trip when the route returns updated prefs.
-    const [schedulePreferences, setSchedulePreferences] =
-        useState<SchedulePreferences | null>(null);
-    // Phase 15 Task 8 — captured from the `forward_materialization_update`
-    // SSE event when the agent runs `materialize_sections`. Drives the
-    // sidebar's IMMEDIATE-term render: full → Sections view with
-    // combination picker; partial / unavailable → structural slots +
-    // explanatory banner. Reset on any flow that resets the schedule.
-    const [forwardMaterialization, setForwardMaterialization] = useState<ForwardMaterializationPayload | null>(null);
+    // E5.2 — the onboarding-confirmed home-school CODE (e.g. "cas",
+    // "stern", "shanghai", "nyuad"). Set from the wizard's Confirm-profile
+    // step (onReachPlan) and from /api/session/restore's persisted profile.
+    // Sent as `body.homeSchool` on chat turns ONLY when set — NEVER
+    // silently CAS (null = unconfirmed → the field is omitted).
+    const [homeSchool, setHomeSchool] = useState<string | null>(null);
+    // Phase 4 Task E1.1 — single source of truth for plan state.
+    // forwardSchedule + schedulePreferences + forwardMaterialization
+    // used to be three independent server-push-only `useState`s. They
+    // are now one shared, subscribable store (`./planState`) so
+    // chat-driven SSE updates AND sidebar-driven edits write to the
+    // SAME state and every consumer re-renders from it. The store is
+    // created once per page mount; setters dispatch into it; reads come
+    // from the `useSyncExternalStore` snapshot below.
+    //   - forwardSchedule: hydrated from /api/session/restore on mount;
+    //     pushed live by the `forward_schedule_update` SSE event;
+    //     refreshed after each successful /api/plan/confirm round-trip.
+    //   - schedulePreferences (Phase 17 Task D): drives the sidebar's
+    //     freeze-flag plumb-through (Lock popover label flips to
+    //     "Unlock" when a slot is in pins[]).
+    //   - forwardMaterialization (Phase 15 Task 8): captured from the
+    //     `forward_materialization_update` SSE event when the agent runs
+    //     `materialize_sections`; drives the sidebar's IMMEDIATE-term
+    //     render (full → Sections view; partial/unavailable → banner).
+    const planStore = useMemo(() => createPlanStore(), []);
+    const { forwardSchedule, schedulePreferences, forwardMaterialization, pendingPreview, invalidProposal } =
+        useSyncExternalStore(planStore.subscribe, planStore.getSnapshot, planStore.getSnapshot);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    // Phase 4 Task E6.4 — in-flight guard for the standing
+    // self-serve account-deletion control (disables the button so a
+    // student can't fire DELETE /api/session/delete twice).
+    const [deletingAccount, setDeletingAccount] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -274,9 +301,16 @@ export default function ChatPage() {
                 // v2 route's per-turn body carries the right value
                 // (the profile is the source of truth, but the v2
                 // request shape still passes visaStatus separately).
-                const restoredProfile = data.profile as { visaStatus?: string };
+                const restoredProfile = data.profile as { visaStatus?: string; homeSchool?: string };
                 if (restoredProfile.visaStatus === "f1" || restoredProfile.visaStatus === "domestic") {
                     setVisaStatus(restoredProfile.visaStatus);
+                }
+                // E5.2 — hydrate the persisted home school so subsequent
+                // chat turns thread `body.homeSchool` (the confirmed value,
+                // not a re-derivation). Skip the school-agnostic "unknown"
+                // sentinel so we never send it as a confirmed school.
+                if (restoredProfile.homeSchool && restoredProfile.homeSchool !== "unknown") {
+                    setHomeSchool(restoredProfile.homeSchool);
                 }
                 // Hydrate graduation target from the restored schedule
                 // when present; the v2 route uses it to populate the
@@ -291,15 +325,15 @@ export default function ChatPage() {
                 // `forwardSchedule` for the live render; surface either
                 // (the sidebar's 4-state banner keys off `state`).
                 if (data.forwardSchedule) {
-                    setForwardSchedule(data.forwardSchedule);
+                    planStore.setForwardSchedule(data.forwardSchedule);
                 } else if (data.studentDraftPlan) {
-                    setForwardSchedule(data.studentDraftPlan);
+                    planStore.setForwardSchedule(data.studentDraftPlan);
                 }
                 // Hydrate restored preferences so the sidebar can
                 // render freeze indicators on Lock-toggle UI without
                 // waiting for the next /api/plan/confirm round-trip.
                 if (data.schedulePreferences) {
-                    setSchedulePreferences(data.schedulePreferences as SchedulePreferences);
+                    planStore.setSchedulePreferences(data.schedulePreferences as SchedulePreferences);
                 }
                 // ---- Replay chat history ----
                 if (data.chatMessages.length > 0) {
@@ -384,11 +418,49 @@ export default function ChatPage() {
      * legacy `/api/chat` JSON route per Option B (the agent loop
      * doesn't replicate the onboarding state machine).
      */
-    const handleSendV2 = async (userText: string) => {
+    /**
+     * Optional per-call overrides for the profile fields `handleSendV2`
+     * normally reads from React state. Used by the wizard cutover
+     * (`handleWizardReachPlan`) to defeat the STALE-CLOSURE race (I2):
+     * the wizard calls `setHomeSchool`/`setVisaStatus`/`setGraduationTarget`
+     * and then injects its turns in the SAME tick, but React state is
+     * async, so the injected `handleSendV2` would otherwise read the
+     * PRE-SEED closure values — the first wizard turn would go out WITHOUT
+     * the just-confirmed home school, risking the silent-CAS outcome the
+     * wizard exists to prevent. Threading the seed EXPLICITLY here makes
+     * the very first injected turn carry the confirmed homeSchool.
+     */
+    type SendSeed = {
+        homeSchool?: string | null;
+        visaStatus?: string | null;
+        graduationTarget?: string | null;
+        // F1 fix — the just-uploaded DPR, wrapped in the SAME
+        // discriminated `{ kind: "dpr"; report }` shape the page
+        // `parsedData` state uses. Threaded so a SAME-TICK wizard turn
+        // carries the DPR before `setParsedData` has flushed (the I2
+        // stale-closure race extends to the DPR itself — without this the
+        // first wizard preference turn would POST `parsedData: null` and
+        // fall to the v1 route).
+        parsedData?: ParsedTranscript;
+    };
+
+    const handleSendV2 = async (userText: string, seed?: SendSeed) => {
         const recentHistory = messages
             .filter(m => m.id !== "welcome")
             .slice(-10)
             .map(m => ({ role: m.role, content: m.content }));
+
+        // Seed overrides win over the (possibly not-yet-flushed) closure
+        // state so a same-tick wizard injection sends the confirmed values.
+        const effectiveHomeSchool = seed?.homeSchool ?? homeSchool;
+        const effectiveVisaStatus = seed?.visaStatus ?? visaStatus;
+        const effectiveGraduationTarget = seed?.graduationTarget ?? graduationTarget;
+        // F1 fix — same stale-closure dodge for the DPR itself. The wizard
+        // sets `parsedData` and injects its preference turns in the SAME
+        // tick; React state is async, so the injected turn would otherwise
+        // read the PRE-UPLOAD closure value (null). Threading the DPR
+        // through the seed makes the first wizard turn carry it.
+        const effectiveParsedData = seed?.parsedData ?? parsedData;
 
         // Pre-create the assistant bubble so tokens stream INTO it.
         const assistant = addMessage("assistant", "");
@@ -402,11 +474,15 @@ export default function ChatPage() {
 
         for await (const ev of streamChatV2({
             message: userText,
-            parsedData,
-            visaStatus,
-            graduationTarget,
+            parsedData: effectiveParsedData,
+            visaStatus: effectiveVisaStatus,
+            graduationTarget: effectiveGraduationTarget,
             history: recentHistory,
             userId: getOrCreateClientId(),
+            // E5.2 — thread the onboarding-confirmed home school. Spread in
+            // ONLY when set so an unconfirmed student never sends a (silent
+            // CAS) value; the v2 route maps this → homeSchoolOverride.
+            ...(effectiveHomeSchool ? { homeSchool: effectiveHomeSchool } : {}),
         })) {
             applyEvent(ev, assistant.id, toolStatuses);
         }
@@ -493,7 +569,7 @@ export default function ChatPage() {
                 }));
                 break;
             case "forward_schedule_update":
-                setForwardSchedule(ev.schedule);
+                planStore.setForwardSchedule(ev.schedule);
                 break;
             case "forward_materialization_update":
                 // Phase 15 Task 8 — `materialize_sections` produced a
@@ -501,7 +577,7 @@ export default function ChatPage() {
                 // can switch the IMMEDIATE term to the Sections view
                 // (or render a partial/unavailable banner). Cleared
                 // alongside `forwardSchedule` when a new chat starts.
-                setForwardMaterialization(ev.result);
+                planStore.setForwardMaterialization(ev.result);
                 break;
             case "validator_block":
                 updateMessage(assistantId, {
@@ -610,6 +686,41 @@ export default function ChatPage() {
     };
 
     /**
+     * Phase 4 Task E5.5 — undeclared → INTENDED-major RAG-preview (Lane B,
+     * hedged). When an UNDECLARED wizard student names an intended major and
+     * chooses "Preview by name", we inject `buildIntendedMajorPreviewTurn`
+     * through the SAME `addMessage → handleSendV2` rail every client edit
+     * uses — EXACTLY mirroring `handleProposeLoadStyle`. The turn is HONESTLY
+     * framed as a PREVIEW to verify with the adviser / NOT a confirmed plan /
+     * with a confidence ask, so the agent answers through its grounded RAG
+     * (`what_if_audit` / `search_policy`) and the §11 / D4.4 confidence +
+     * adviser rail FIRES — the engine owns the hedge; the wizard invents NO
+     * requirement and ships NO unqualified plan. School-AGNOSTIC: a non-CAS
+     * (NYU Shanghai / Abu Dhabi) intended major previews + hedges identically.
+     * The other undeclared arm — uploading an Albert What-If audit — reuses
+     * the EXISTING `/api/onboard` upload (a What-If report parses end-to-end
+     * via `parseDpr` into Lane A); no new route, no new requirement logic.
+     */
+    const handleIntendedMajorPreview = async (intendedMajor: string) => {
+        if (isLoading) return;
+        const major = intendedMajor.trim();
+        if (!major) return; // nothing named — no-op.
+        const text = buildIntendedMajorPreviewTurn(major);
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage(
+                "assistant",
+                err instanceof Error ? err.message : "Could not preview that intended major.",
+            );
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
      * Phase 14 Task 10 — Slot-level change proposal.
      * Injects a user-visible chat message describing the desired
      * slot mutation. The agent's tool-use behavior routes the call
@@ -640,6 +751,181 @@ export default function ChatPage() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    /**
+     * Phase 4 Task E4.1 — slot ⋯ "Explain why" shortcut.
+     * Builds a SCOPED natural-language question naming the course code
+     * (or placeholder category) + the human term label, injects it as a
+     * user-visible chat message, then drops into the normal agent loop —
+     * EXACTLY mirroring `handleProposeSlotChange` (addMessage →
+     * handleSendV2). The agent composes the Phase-3 introspection tools
+     * (`view_forward_plan`, `probe_counterfactual`, the trade-off diff)
+     * to answer; there is NO new explanation route (design §2.6).
+     */
+    const handleExplainSlot = async (
+        slot: import("@nyupath/shared").ScheduleSlot,
+        term: string,
+    ) => {
+        if (isLoading) return;
+        const text = buildExplainSlotQuestion(slot, term);
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage("assistant", err instanceof Error ? err.message : "Could not explain that slot.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * Phase 4 Task E4.1 — term-header "Explain this term" shortcut.
+     * Same injection contract as `handleExplainSlot`, scoped to a whole
+     * term (workload-included).
+     */
+    const handleExplainTerm = async (term: string) => {
+        if (isLoading) return;
+        const text = buildExplainTermQuestion(term);
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage("assistant", err instanceof Error ? err.message : "Could not explain that term.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * Phase 4 Task E5.4 — apply the onboarding wizard's Goals +
+     * Preferences onto the EXISTING Phase-3 preference ladder.
+     *
+     * TRANSPORT (the binding constraint): this imports NO engine
+     * internals and adds NO `/api/preferences/*` route. It reaches the
+     * ladder the SAME way every other client pref edit does — by
+     * INJECTING a chat turn that asks the agent to call
+     * `propose_plan_change` / `confirm_plan_change`, EXACTLY mirroring
+     * `handleProposeLoadStyle` (addMessage → handleSendV2). The agent
+     * loop compiles each turn (free-text → addSoftObjective; workload
+     * distribution (frontload/backload) → loadStyleOverride; the
+     * summer/J-term/study-abroad/honors toggles → addSoftObjective —
+     * the SchedulingPreferences schema has no field for them, so they
+     * ride the generic SOFT rail) and applies it via
+     * `applyMutationsToPreferences`, then persists.
+     *
+     * `buildPreferenceTurns` returns ONE turn per non-default preference
+     * (empty when the student skipped everything). We inject each
+     * SEQUENTIALLY — awaiting each so the agent's propose/confirm loop
+     * applies them one at a time (a later turn never races an earlier
+     * one). Wired via the wizard's `onReachPlan` callback.
+     *
+     * `seed` (I2) threads the just-confirmed profile (home school / visa /
+     * grad term) into EVERY injected turn so the FIRST turn already carries
+     * the confirmed home school despite React state being async — see
+     * `handleSendV2`'s SendSeed doc. PARTIAL-FAILURE (I5): each turn's
+     * injection is wrapped in its own try/catch so one throwing turn never
+     * silently drops the rest — we surface a brief note and continue.
+     */
+    const handleApplyWizardPreferences = async (values: WizardValues, seed?: SendSeed) => {
+        if (isLoading) return;
+        const turns = buildPreferenceTurns(values);
+        if (turns.length === 0) return; // all defaults — nothing to apply.
+        setIsLoading(true);
+        try {
+            for (const text of turns) {
+                try {
+                    addMessage("user", text);
+                    await handleSendV2(text, seed);
+                } catch (err) {
+                    // I5 — one failing turn must not drop the remaining
+                    // preferences. Surface a brief note and keep going.
+                    addMessage(
+                        "assistant",
+                        err instanceof Error
+                            ? `Couldn't apply one preference (${err.message}); continuing with the rest.`
+                            : "Couldn't apply one preference; continuing with the rest.",
+                    );
+                }
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    /**
+     * Phase 4 Task E5.4 + F1 — the wizard's `onReachPlan` consumer (the
+     * cutover seam, now LIVE: the wizard is mounted as the `awaiting_dpr`
+     * onboarding surface — see the `<OnboardingWizard … />` mount below).
+     * When the onboarding wizard reaches its terminal "plan" step it hands
+     * its collected `values` + the parsed DPR (`dpr`, the wizard's internal
+     * `parsedDpr` — `null` when the student never uploaded) here. We:
+     *   0. (F1 fix) COMPLETE onboarding when a DPR is present —
+     *      `setParsedData({ kind: "dpr", report: dpr })` +
+     *      `setOnboardingStep("complete")` (mirroring the session-restore
+     *      path, page.tsx:295/:299) so EVERY future chat turn routes through
+     *      the v2 agent loop and the sidebar hydrates. When the DPR is
+     *      ABSENT we do NOT complete (no DPR → no personalized plan): we
+     *      surface the upload-needed prompt and stay `awaiting_dpr`,
+     *      fabricating no plan;
+     *   1. seed the EXISTING chat-page profile state from the wizard's
+     *      Goals (home school → body.homeSchool; F-1/domestic →
+     *      body.visaStatus; grad term → body.graduationTarget) using the
+     *      SAME setters the session-restore path uses — no duplicate
+     *      persistence, no new route; and
+     *   2. apply the Goals + Preferences onto the Phase-3 ladder via
+     *      `handleApplyWizardPreferences` (the chat-turn injection rail),
+     *      threading the DPR + profile through the seed so the FIRST
+     *      injected turn carries them despite React state being async (I2).
+     * `handleIntendedMajorPreview` (E5.5) is the matching ready callback for
+     * an UNDECLARED student's intended-major RAG-preview arm.
+     */
+    const handleWizardReachPlan = async (values: WizardValues, dpr?: DegreeProgressReport | null) => {
+        // F1 fix — COMPLETE onboarding on handoff. Without a DPR we cannot
+        // build a personalized plan (core philosophy: no DPR → no
+        // personalized plan), so we must NOT flip to "complete" — that would
+        // strand the student on a v2 path with empty `parsedData` and an
+        // empty sidebar. Surface the upload-needed prompt and stay in
+        // `awaiting_dpr` (the wizard/upload remains available). We fabricate
+        // NO plan.
+        if (!dpr) {
+            addMessage(
+                "assistant",
+                "I need your Degree Progress Report to build your plan — please upload it (📎 / drag-and-drop).",
+            );
+            return;
+        }
+        // DPR present → complete onboarding so EVERY future chat turn routes
+        // through the v2 agent loop (the `useV2` gate is
+        // `onboardingStep === "complete" && parsedData`). Mirrors the
+        // session-restore path (page.tsx:295/:299) — same setters, same
+        // `{ kind: "dpr", report }` shape, no duplicate persistence, no new
+        // route. This is the bug fix: the prior code ignored `dpr` and never
+        // set EITHER, so the handoff silently dropped the student back onto
+        // the legacy v1 route with a null `parsedData` (empty sidebar).
+        setParsedData({ kind: "dpr", report: dpr });
+        setOnboardingStep("complete");
+        // Seed the home school ONLY when the student chose one — never
+        // silently CAS (an empty value stays null → field omitted).
+        if (values.homeSchool) setHomeSchool(values.homeSchool);
+        if (values.visa) setVisaStatus(values.visa);
+        if (values.gradTerm) setGraduationTarget(values.gradTerm);
+        // I2 (stale-closure): the setters above are async — they have NOT
+        // flushed by the time the preference turns inject in this same tick.
+        // Thread the confirmed values EXPLICITLY so the FIRST injected turn
+        // already carries the just-confirmed home school (and visa / grad
+        // term) AND the just-uploaded DPR, instead of the pre-seed closure
+        // values handleSendV2 would otherwise read. homeSchool falls through
+        // ONLY when chosen — never silently CAS.
+        const seed: SendSeed = {
+            parsedData: { kind: "dpr", report: dpr },
+            ...(values.homeSchool ? { homeSchool: values.homeSchool } : {}),
+            ...(values.visa ? { visaStatus: values.visa } : {}),
+            ...(values.gradTerm ? { graduationTarget: values.gradTerm } : {}),
+        };
+        await handleApplyWizardPreferences(values, seed);
     };
 
     /**
@@ -744,6 +1030,17 @@ export default function ChatPage() {
      * hard refusal already failed structural validation — surfacing
      * "✓ Open sections exist" for terms we just refused to plan into
      * is confusing UX.
+     *
+     * Phase 4 Task E3.4 — the FEASIBLE path (clean + trade-offs) no
+     * longer mints a chat bubble (the canvas review card is its sole
+     * surface), so the ONLY live callers here are now the
+     * `soft_refusal` / `hard_refusal` (`feasible:false`) bubbles. The
+     * `kind !== "clean"` polish gate + the `kind !== "hard_refusal"`
+     * Stage-2 gate are therefore partially vestigial. Surfacing the
+     * feasible-path Stage-2 FOSE "open sections" signal on the review
+     * card is deliberately PARKED for Phase 5 (live-data UI — design §9
+     * / plan Out-of-scope line 47); the review card shows the
+     * deterministic engine `consequences` instead (no-invention).
      */
     const spawnBubbleEnrichers = useCallback((messageId: string, bubble: PlanActionBubbleState) => {
         // Reuse-or-create the AbortController for this bubble.
@@ -844,15 +1141,44 @@ export default function ChatPage() {
             setTimeout(scrollToBottom, 50);
             return;
         }
-        const kind: PlanActionBubbleKind = classifyPlanActionOutcome(result.data);
-        if (kind === "clean") {
-            // Spec: clean apply ≈ 70% of clicks → silent commit, no
-            // bubble. The sidebar's own Stage-1 spinner clears
-            // synchronously when the route returns; nothing else to
-            // do here.
+        // Phase 4 Task E3.4 — drag/⋯ reconciliation. The per-course ⋯
+        // menu is the SOLE edit input now (drag was removed), and EVERY
+        // ⋯ verb PROPOSES — it stages the E3.1 canvas preview + E3.2
+        // review card and applies ONLY on Confirm. The single pure
+        // `planActionSurfaces` helper decides the THREE surfaces from the
+        // engine's own verdict; there is NO `kind === "clean"` early
+        // return any more (a clean result is no longer silently dropped —
+        // it previews like every other feasible verb).
+        //
+        //   - feasible (clean OR trade-offs) + a proposed schedule → a
+        //     PENDING violet preview (E3.1), the committed plan untouched,
+        //     and any stale RED card cleared. NO chat bubble — the canvas
+        //     review card is the sole surface (E3.4 bubble↔card dedup).
+        //   - feasible === false → a RED invalid-proposal card (E3.3)
+        //     naming the binding constraint(s) from the response's OWN
+        //     fields, the committed plan byte-identical, any stale preview
+        //     cleared. The chat bubble is ALSO minted (it carries
+        //     Override-anyway / hard-refusal copy the red card doesn't).
+        //
+        // Either way the committed plan (planStore.forwardSchedule) is
+        // NEVER mutated here — only Confirm commits.
+        const surfaces = planActionSurfaces(result.data, verb);
+        if (surfaces.invalidCard) {
+            planStore.setInvalidProposal(surfaces.invalidCard);
+            planStore.clearPendingPreview();
+        } else if (surfaces.preview) {
+            planStore.setPendingPreview(surfaces.preview);
+            // A feasible preview supersedes any stale red card.
+            planStore.clearInvalidProposal();
+        }
+        // E3.4 bubble↔card dedup — mint the chat bubble ONLY for the
+        // feasible:false path (showBubble). The feasible path's sole
+        // surface is the canvas review card (nothing is appended to the
+        // chat thread → no scroll), which removes the double-surface +
+        // the card→bubble stale-button bug entirely.
+        if (!surfaces.showBubble) {
             return;
         }
-        // Build the bubble Message + insert.
         const bubble = initBubbleState(result.data);
         const id = `bubble-${result.data.pendingMutationId}`;
         const msg: Message = {
@@ -893,8 +1219,13 @@ export default function ChatPage() {
             // next render. Keep the bubble in the resolved state so the
             // chat shows what just happened (buttons hidden).
             if (result.data.forwardSchedule) {
-                setForwardSchedule(result.data.forwardSchedule);
+                planStore.setForwardSchedule(result.data.forwardSchedule);
             }
+            // E3.1 — the proposal is now the committed plan; drop the
+            // PENDING canvas overlay so the sidebar shows the committed
+            // schedule (clear AFTER setForwardSchedule so there is no
+            // flash of the pre-confirm plan).
+            planStore.clearPendingPreview();
             patchMessage(messageId, {
                 bubbleResolved: true,
                 content: "✓ Applied.",
@@ -910,6 +1241,14 @@ export default function ChatPage() {
     /** Keep-as-is — discard the bubble without applying. */
     const handleBubbleKeepAsIs = useCallback((messageId: string): void => {
         abortBubbleEnrichers(messageId);
+        // E3.1 — Cancel/Keep-as-is drops the PENDING canvas overlay
+        // WITHOUT committing: the sidebar reverts to the (untouched)
+        // committed plan.
+        planStore.clearPendingPreview();
+        // E3.4 — Keep-as-is on a feasible:false bubble must ALSO clear
+        // the E3.3 red card that renders alongside it, so dismissing the
+        // bubble doesn't leave the red card hanging.
+        planStore.clearInvalidProposal();
         patchMessage(messageId, {
             bubbleResolved: true,
             content: "Kept the plan as-is.",
@@ -930,8 +1269,12 @@ export default function ChatPage() {
                 return;
             }
             if (result.data.forwardSchedule) {
-                setForwardSchedule(result.data.forwardSchedule);
+                planStore.setForwardSchedule(result.data.forwardSchedule);
             }
+            // E3.1 — the bubble is resolved; drop any PENDING overlay so
+            // the sidebar shows the now-committed (student-preferred)
+            // plan rather than a stale preview.
+            planStore.clearPendingPreview();
             patchMessage(messageId, {
                 bubbleResolved: true,
                 content: "⚠ Override applied — plan saved as student-preferred-invalid-draft.",
@@ -943,6 +1286,71 @@ export default function ChatPage() {
             });
         }
     }, [patchMessage, abortBubbleEnrichers]);
+
+    // ----------------------------------------------------------------
+    // Phase 4 Task E3.2 — canvas REVIEW-CARD actions. The review card
+    // (rendered alongside the E3.1 preview overlay in the sidebar)
+    // wires its three buttons to these handlers. They share the SAME
+    // commit path as the chat-bubble Confirm (`planConfirm` →
+    // `setForwardSchedule` → `clearPendingPreview`) via the pure
+    // `applyReviewConfirm` / `applyReviewCancel` helpers, so the two
+    // surfaces can never double-commit (each is one confirm + one
+    // clear). The decision logic lives in `apps/web/lib/reviewCard.ts`.
+    // ----------------------------------------------------------------
+
+    /** Review-card Confirm — apply the staged mutation via the shared
+     *  confirm path. Commits + clears the preview on success; leaves
+     *  the preview staged on failure so the user can retry. */
+    const handleReviewConfirm = useCallback(async (pendingMutationId: string): Promise<void> => {
+        const res = await applyReviewConfirm(planStore, planConfirm, pendingMutationId);
+        if (!res.ok) {
+            // Surface a brief assistant note so the failure is visible;
+            // the preview stays staged (handled inside applyReviewConfirm).
+            const msg: Message = {
+                id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+                role: "assistant",
+                content: "Couldn't apply that change — it may have expired or conflicted. Try again from the canvas.",
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, msg]);
+            setTimeout(scrollToBottom, 50);
+        }
+    }, []);
+
+    /** Review-card Cancel — drop the staged proposal + clear the
+     *  preview WITHOUT a confirm round-trip. */
+    const handleReviewCancel = useCallback((): void => {
+        applyReviewCancel(planStore);
+    }, []);
+
+    /** E3.3 — Dismiss the RED invalid-proposal card. Nothing was ever
+     *  staged or committed, so this just clears the slot; the committed
+     *  plan is untouched. */
+    const handleDismissInvalid = useCallback((): void => {
+        planStore.clearInvalidProposal();
+    }, []);
+
+    /** Review-card Ask-why — route a scoped "why" question into the
+     *  grounded chat agent (basic now; E4 builds the full ⋯ Explain).
+     *  Mirrors the existing `handleProposeSlotChange` injection pattern:
+     *  add a user-visible message, then drop into the v2 tool-use loop. */
+    const handleReviewAskWhy = useCallback(async (_pendingMutationId: string, verb?: string): Promise<void> => {
+        if (isLoading) return;
+        // E4.1 — reuse the shared question-builder so all three Explain
+        // affordances (slot ⋯, term header, review-card Ask-why) share
+        // one surface and run through the same agent loop.
+        const text = buildExplainProposalQuestion(verb);
+        addMessage("user", text);
+        setIsLoading(true);
+        try {
+            await handleSendV2(text);
+        } catch (err) {
+            addMessage("assistant", err instanceof Error ? err.message : "Could not explain the change.");
+        } finally {
+            setIsLoading(false);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isLoading]);
 
     /**
      * Phase 16 Task B — Update-DPR sidebar affordance.
@@ -981,7 +1389,7 @@ export default function ChatPage() {
                 return;
             }
             if (data.schedule) {
-                setForwardSchedule(data.schedule);
+                planStore.setForwardSchedule(data.schedule);
             }
             window.alert("Schedule updated to reflect your new DPR.");
         } catch (err) {
@@ -1013,6 +1421,44 @@ export default function ChatPage() {
             window.location.reload();
         } catch (err) {
             window.alert(`Clear failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }, []);
+
+    /**
+     * Phase 4 Task E6.4 — STANDING self-serve account deletion.
+     * Always available to a signed-in student (NOT gated on the
+     * test-clear env flag). Wired to the always-on, authenticated
+     * DELETE /api/session/delete route, which wipes ALL of the
+     * student's data keyed on their session `auth.sub`. On success we
+     * hard-reload back to the onboarding flow; on failure we surface
+     * the error (mirrors handleClearAll). `deletingAccount` guards
+     * against a double-submit while the request is in flight.
+     */
+    const handleDeleteAccount = useCallback(async (): Promise<void> => {
+        const ok = window.confirm(
+            "Permanently delete your account and ALL your data (plan, preferences, chat history)? This cannot be undone.",
+        );
+        if (!ok) return;
+        setDeletingAccount(true);
+        try {
+            const res = await fetch("/api/session/delete", {
+                method: "DELETE",
+                credentials: "same-origin",
+            });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                window.alert(
+                    `Delete failed: ${(j as { error?: string }).error ?? `HTTP ${res.status}`}`,
+                );
+                setDeletingAccount(false);
+                return;
+            }
+            // Hard reload — re-runs the onboarding flow from a blank
+            // /api/session/restore.
+            window.location.reload();
+        } catch (err) {
+            window.alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
+            setDeletingAccount(false);
         }
     }, []);
 
@@ -1153,6 +1599,16 @@ export default function ChatPage() {
             {/* Messages */}
             <div className={styles.messages}>
                 {messages.map((msg, i) => {
+                    // F1 — wizard cutover. In the `awaiting_dpr` state the
+                    // structured OnboardingWizard (below) is the LIVE
+                    // onboarding surface, so the legacy welcome bubble (its
+                    // ask-and-reply "upload your DPR" prompt) is suppressed
+                    // here to avoid double-prompting. Every OTHER onboarding
+                    // state and the post-upload `complete` v2 path render
+                    // their bubbles unchanged.
+                    if (msg.id === "welcome" && onboardingStep === "awaiting_dpr") {
+                        return null;
+                    }
                     // Phase 17 Task D follow-up — plan_action_bubble has its
                     // own render block. Returns early so the regular
                     // assistant-bubble path below doesn't double-render the
@@ -1391,6 +1847,26 @@ export default function ChatPage() {
                     );
                 })}
 
+                {/* F1 — wizard cutover (the LIVE onboarding). The
+                    structured OnboardingWizard REPLACES the legacy
+                    welcome/upload ask-and-reply flow for the `awaiting_dpr`
+                    state. Its Upload step reuses `/api/onboard`; once
+                    `onReachPlan` fires (`handleWizardReachPlan`) the existing
+                    rail hands off to `onboardingStep="complete"` + the v2 SSE
+                    path automatically. `onPreviewIntendedMajor`
+                    (`handleIntendedMajorPreview`, E5.5) wires the undeclared
+                    student's hedged intended-major RAG-preview arm. No
+                    "use chat instead" fallback this pass — the wizard's
+                    skip-all no-dead-end guarantees a plan is always
+                    reachable. All OTHER onboarding states + the `complete`
+                    v2 path are unchanged. */}
+                {onboardingStep === "awaiting_dpr" && (
+                    <OnboardingWizard
+                        onReachPlan={handleWizardReachPlan}
+                        onPreviewIntendedMajor={handleIntendedMajorPreview}
+                    />
+                )}
+
                 {/* Legacy v1 loader — only shown for onboarding turns
                     that go through the JSON `/api/chat` route (which
                     has no SSE indicator of its own). v2 turns get
@@ -1412,15 +1888,11 @@ export default function ChatPage() {
             {/* Input area */}
             <div className={styles.inputArea}>
                 <div className={styles.inputContainer}>
-                    {onboardingStep === "awaiting_dpr" && (
-                        <button
-                            className={styles.uploadBtn}
-                            onClick={() => fileInputRef.current?.click()}
-                            title="Upload Degree Progress Report PDF"
-                        >
-                            📎
-                        </button>
-                    )}
+                    {/* F1 — the legacy `📎` upload button is removed: in the
+                        `awaiting_dpr` state the OnboardingWizard (above) owns
+                        the Upload step (same `/api/onboard` parse), so the
+                        inline upload affordance is no longer the live path.
+                        The page-level drag-drop handler still accepts a DPR. */}
                     <textarea
                         ref={inputRef}
                         className={styles.textInput}
@@ -1457,6 +1929,8 @@ export default function ChatPage() {
             </div>
             <ScheduleSidebar
                 schedule={forwardSchedule}
+                pendingPreview={pendingPreview}
+                invalidProposal={invalidProposal}
                 student={sidebarStudent}
                 dpr={sidebarDpr}
                 materialization={forwardMaterialization}
@@ -1465,10 +1939,18 @@ export default function ChatPage() {
                 onClose={() => setSidebarOpen(false)}
                 onProposeLoadStyle={handleProposeLoadStyle}
                 onProposeSlotChange={handleProposeSlotChange}
+                onExplainSlot={handleExplainSlot}
+                onExplainTerm={handleExplainTerm}
                 onPlanActionResult={handlePlanActionResult}
+                onReviewConfirm={handleReviewConfirm}
+                onReviewCancel={handleReviewCancel}
+                onReviewAskWhy={handleReviewAskWhy}
+                onDismissInvalid={handleDismissInvalid}
                 onConfirmCombination={handleConfirmSectionCombination}
                 onRefreshDpr={handleRefreshDpr}
                 onClearAll={handleClearAll}
+                onDeleteAccount={handleDeleteAccount}
+                deletingAccount={deletingAccount}
             />
         </div>
     );
