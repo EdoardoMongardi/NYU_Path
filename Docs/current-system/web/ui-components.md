@@ -1,6 +1,6 @@
 # UI Components
 
-> Last verified against code: 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed). Prior: 2026-06-15 (Phase 4 E2: badge row + slot-state glyphs + violet light/dark); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-16 (Phase 4 follow-up F3: in-progress slot-state is now WINDOW-AWARE — IP editable/label/hedge from `classifyIpChangeability`, the prior "deferred open question" resolved). Prior 2026-06-16: Phase 4 E3 (never-instant preview/review card; drag removed). Prior: 2026-06-15 (Phase 4 E2: badge row + slot-state glyphs + violet light/dark); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
@@ -153,9 +153,9 @@ All derivation lives in `apps/web/lib/planBadges.ts` — `computePlanBadges(sche
 
 **Confidence hedge — no-invention derivation (binding §11 / philosophy #3).** There is **no** structured "CAS-approximated" / confidence field on `ForwardSchedule` (the D4.4 hedge lives in the agent's narration, not on the plan object). So the confidence badge **derives** its hedge only from real engine-produced fields (`planBadges.ts:80-86`): it is hedged when `schedule.optimality` is `"best-effort"` or `"feasibility-unconfirmed"`, OR `schedule.assumptions[]` is non-empty, OR the state is an invalid draft. It computes **no new number** and fabricates **no CAS-coupling claim** — when any of those markers holds, the label carries a "verify with your adviser" hedge.
 
-### Slot-state glyphs — `sidebar/slotState.ts` (Phase 4 E2.2)
+### Slot-state glyphs — `sidebar/slotState.ts` (Phase 4 E2.2; IP window-aware F3)
 
-Each slot pill renders a design-§8 state glyph (🔒 / ◐ / none) sourced from a pure helper. `computeSlotState(slot, { isFrozen, semesterLocked })` (`apps/web/app/chat/sidebar/slotState.ts:98`) is the **single source of truth** for the glyph + human label + aria-label + an `editable` flag; `SlotRow` consumes it (`SlotRow.tsx:75`) and holds no slot-state decision logic of its own. It is unit-tested directly in node (`apps/web/tests/slotStates.test.ts`).
+Each slot pill renders a design-§8 state glyph (🔒 / ◐ / none) sourced from a pure helper. `computeSlotState(slot, { isFrozen, semesterLocked, ipChangeability? })` (`apps/web/app/chat/sidebar/slotState.ts`) is the **single source of truth** for the glyph + human label + aria-label + an `editable` flag (+ an optional `title` tooltip for the F3 hedge); `SlotRow` consumes it and holds no slot-state decision logic of its own. It is unit-tested directly in node (`apps/web/tests/slotStates.test.ts` + `ipSlotChangeability.test.ts`).
 
 The helper resolves by precedence (highest first — `slotState.ts:98-152`):
 
@@ -164,13 +164,13 @@ The helper resolves by precedence (highest first — `slotState.ts:98-152`):
 | 🔒 | `kind === "completed"` (checked **kind-first**) | "Taken (final)" | false |
 | 🔒 | `semesterLocked` (the bucket's `ForwardSemester.locked` — DPR history / in-progress term) | "Locked — past or in-progress term" | false |
 | 🔒 | `isFrozen` (student-pinned via `SchedulePreferences.pins[]`) | "Locked by you" | true (unlock / move via the ⋯ menu; the lock travels with it) |
-| ◐ | `kind === "in_progress"` | "In progress (fixed in its term)" | true (see open question below) |
+| ◐ | `kind === "in_progress"` (window-aware — see F3 below) | window-honest label (e.g. "within add/drop", "withdraw/pass-fail only", "change windows closed") | from `ipChangeability.editable` (closed → false; else true) |
 | _(none)_ | `specific_planned` / `placeholder` | "Planned (movable)" | true |
 
 Notes worth flagging:
 - **The ◐ in-progress glyph is NEW** — before E2.2 an in-progress slot showed no state glyph. This makes the `core_philosophy.md` IP rule visible on the canvas.
 - **`completed` is checked kind-first**, BEFORE the generic `semesterLocked` branch, so a completed course shows the design-§8 "Taken (final)" label even though it always renders inside a `locked: true` history bucket — otherwise the generic term-lock label would mask it.
-- **Open question — in_progress movability (deferred to the owner).** `editable` mirrors the component's *actual* gating today, where an in-progress slot is still clickable (its ⋯ menu opens — drag was removed in E3.4), so `editable` for `in_progress` is `true`. The design labels IP "fixed in its term"; E2.2 deliberately only makes the ◐ state **visible** and does NOT strip IP's move verb (a non-obvious behavior change). Whether IP should lose its move verb is left for the owner — this doc does **not** claim IP is non-movable.
+- **IP movability is now WINDOW-AWARE (Phase 4 follow-up F3) — the prior "deferred open question" is RESOLVED.** When an `in_progress` slot carries an `ipChangeability` classification (threaded from `TermBucket.ipChangeability`, computed once per IP bucket in `groupCoursesByTerm` from the engine's `classifyIpChangeability` + `deriveTemporalContext` + `campusForHomeSchool` + the academic-calendar config — see `Docs/current-system/engine/dpr.md`), the ◐ slot's `editable` + label come from the real NYU registration window: a **future** (pre-registered) IP term is freely changeable; a **current** term inside add/drop is changeable; inside the withdraw/pass-fail window it surfaces those options (editable, hedged — a W doesn't fulfill the requirement, P/F may not satisfy a letter-grade major rule); **past the withdraw window it is NOT editable** (effectively locked); when the calendar lacks that term/campus's dates it stays editable with a generic "verify with your adviser" hedge (we never falsely lock for lack of data). The full hedge rides through as the slot `title` tooltip; the agent surfaces it in chat (`systemPrompt.ts` CORE RULE 15). Any *claimed* current-term change (drop/withdraw/pass-fail) is an UNVERIFIED assumption, planned as a draft/what-if, never recorded as fact (only a new DPR confirms it). When `ipChangeability` is absent (e.g. the no-DPR transcript fallback), the slot keeps the back-compat ◐ "fixed in its term" / editable behavior.
 
 ### NYU-violet light/dark theme — `globals.css` + `chat.module.css` (Phase 4 E2.3)
 

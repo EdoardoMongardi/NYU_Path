@@ -1,6 +1,6 @@
 # Session Builders and Boot-time RAG
 
-> Last verified against code: 2026-06-16 (Phase 4 E5: onboarding/preference wizard — built + tested, mount deferred). `homeSchoolOverride` is now SENT by a client (the wizard / chat page posts `body.homeSchool`, validated via `isValidSchoolCode`), and `deriveDeclaredProgramsFromDpr` is now an EXPORTED pre-fallback classification core the wizard reuses (§2). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-16 (Phase 4 follow-ups F1-F3 — DPR-field authority, IP-window model, wizard mounted). **`deriveHomeSchool` is now EXPORTED** (`buildSession.ts:238`) and is the confident-vs-`"unknown"` **AUTHORITY signal** for the DPR-derived-field rule (F2): a confident return means the DPR deterministically shows the home school → READ-ONLY; only `"unknown"` lets a student pick one. The SAME signal gates both the v2 route home-school override (`route.ts:260-263`) and the wizard's `computeHomeSchoolProposal.derivedFromDpr` (§`homeSchool` derivation). Prior: 2026-06-16 (Phase 4 E5 — `homeSchoolOverride` now SENT by a client; `deriveDeclaredProgramsFromDpr` exported as the pre-fallback classification core the wizard reuses, §2); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## Purpose
 
@@ -103,7 +103,7 @@ The classification rule is now **two functions** so the wizard and the session p
 
 ### `homeSchool` derivation
 
-`deriveHomeSchool`, `buildSession.ts:226-252`. Joins all program labels into one lowercased string, then matches substrings **in this order** (order matters because Steinhardt's published name contains "...the Arts" and would false-positive on Tisch):
+`deriveHomeSchool`, `buildSession.ts:238-264`. **EXPORTED as of F2** (it was previously a file-local helper). Joins all program labels into one lowercased string, then matches substrings **in this order** (order matters because Steinhardt's published name contains "...the Arts" and would false-positive on Tisch):
 
 1. `"steinhardt"` → `"steinhardt"`.
 2. `"tisch"` → `"tisch"`.
@@ -116,6 +116,8 @@ The classification rule is now **two functions** so the wizard and the session p
 9. **No match → logs a `console.warn` and returns `"unknown"`** (NOT `"cas"`).
 
 > **Correction from the prior doc:** the fallback is `"unknown"`, not `"cas"`. When the home school is `"unknown"`, `loadSchoolConfig("unknown")` yields no school-specific config and the planner runs in **school-agnostic mode** (DPR-only caps; falls back to `schoolDefaults` constants — no per-school requirement rules). The home school is meant to be confirmed at onboarding via `homeSchoolOverride`. **As of Phase 4 E5.2 the wizard / chat page DOES post a confirmed value** (`body.homeSchool`, validated by the v2 route via `isValidSchoolCode` before it threads here) — so the earlier "no production client posts that value" statement no longer holds for the wizard/chat path. The wizard's Confirm-profile step PROPOSES the derived school via `computeHomeSchoolProposal` (which reuses THIS `deriveHomeSchool`), and an `"unknown"` derivation surfaces as an explicit prompt — **never silently CAS** (see [session-and-onboarding-routes.md §6.3](session-and-onboarding-routes.md#63-confirm-profile--homeschool-propose--confirm-e52--visastatus-persist-e53) and [chat-route-sse.md §5.2](chat-route-sse.md#52-home-school-derivation-and-the-unknown-fallback)).
+
+> **F2 — `deriveHomeSchool` is the DPR-derived-field AUTHORITY signal (exported).** Its return value decides whether the home school is overridable: a **confident** code means the DPR deterministically shows the school → it is a DPR-derived, **READ-ONLY** field; only the **`"unknown"`** fallback ("the DPR can't show it") lets the student pick one. This single signal is consumed in lockstep by (a) the v2 route gate — `dprConfidentlyDerivedSchool = deriveHomeSchool(parsedDpr) !== "unknown"`; when confident, the route **ignores + never persists** a `body.homeSchool` override (`route.ts:260-274`); and (b) the wizard via `computeHomeSchoolProposal(dpr).derivedFromDpr` (`homeSchool.ts:99-112`), which renders the school read-only when `true`. UI and server therefore never disagree on what's overridable. See [session-and-onboarding-routes.md §6.6](session-and-onboarding-routes.md#66-dpr-derived-field-enforcement-read-only--re-upload-redirect-f2).
 
 ### `catalogYear` derivation
 

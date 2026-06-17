@@ -1,6 +1,6 @@
 # DPR Subsystem — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-16 (Phase 4 follow-up F3 — §13 IP-course changeability temporal model: `academicCalendar.ts` + `classifyIpChangeability.ts`, cite-or-hedge dates, verification-grounded). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
@@ -527,6 +527,15 @@ Any grade outside `GRADE_ORDER` → `false` from `meetsGradeThreshold` (fail-clo
 
 The final `degreeProgressReportSchema.safeParse` fails the whole parse with `ParseDprFailure` even when all intermediate steps "succeeded" — the guard against parser-vs-schema drift.
 
+## 13. IP-course changeability — temporal model (Phase 4 follow-up F3)
+
+The DPR marks a course `IP` (in-progress) for BOTH a current-term enrollment and a future-term pre-registration. They are NOT equally changeable, and the difference is real-world registration policy, not planning:
+
+- `deriveTemporalContext(dpr)` (`temporalContext.ts`) separates an IP row into the **current** term (`enrolledNowTerm`, reconciled with wall-clock `termInSession(now)`) vs **future** pre-registered terms (`preRegisteredTerms`) — the two sets are disjoint by construction.
+- **`academicCalendar.ts`** is an owner-correctable per-campus config (`Campus` = `ny` / `shanghai` / `abudhabi`, via `campusForHomeSchool`) of NYU registration windows: `termStart` · `addDropDeadline` · `withdrawDeadline`. **Dates are sourced-and-cited or ABSENT — never invented** (binding `core_philosophy.md`): NY Fall-2026 is fully sourced (cites cs.nyu.edu / bulletins.nyu.edu / the registrar); NY Summer-2026 + Spring-2027 deadlines and the Shanghai/Abu Dhabi maps are intentionally ABSENT → the classifier falls back to a generic hedge. ⚑ Owner: fill the absent dates from the registrar each year (the data is separate from the logic).
+- **`classifyIpChangeability(...)`** (`ipCourseChangeability.ts`, pure, `now`/`calendar`-injectable) → `{ window: "future" | "add_drop" | "withdraw_pf" | "closed" | "unknown", editable, hedge?, rationale }`. Decision order: future → freely changeable (no hedge); current within add/drop → changeable; current within the withdraw/pass-fail window → editable + a hedge naming the W/PF consequences; current past a KNOWN withdraw deadline → NOT editable (effectively locked); current past add/drop with NO withdraw date OR no dates at all → `unknown` (editable + generic hedge — it NEVER falsely locks for lack of data); past/stale → closed.
+- **Consumed by** the sidebar (`apps/web/lib/groupCoursesByTerm.ts` classifies each IP bucket → `TermBucket.ipChangeability` → `slotState.ts`; see [ui-components.md](../web/ui-components.md)) and the agent (`systemPrompt.ts` CORE RULE 15 — a claimed current-term change is an unverified assumption, never recorded as fact; only a new DPR confirms it). **DEFERRED (own task):** the precise W/pass-fail → requirement-satisfaction modeling (the classifier hedges that consequence in prose; the solver/validator are untouched — the frozen-engine contract holds).
+
 ## Known limitations
 
 - **Non-CAS parsing is untested**: both fixtures (`packages/engine/tests/fixtures/dpr_sample.redacted.txt`, `dpr_whatif_sample.redacted.txt`) are CAS reports. The parser's middle-dot folding, residency heuristic, and cumulative R-ID set were verified against the canonical CAS DPR; other schools' DPRs have not been exercised in tests.
@@ -543,6 +552,8 @@ The final `degreeProgressReportSchema.safeParse` fails the whole parse with `Par
 - `packages/engine/src/dpr/gradeComparison.ts`
 - `packages/engine/src/dpr/prereqSatisfaction.ts`
 - `packages/engine/src/dpr/temporalContext.ts`
+- `packages/engine/src/dpr/academicCalendar.ts` (F3 — owner-correctable NYU registration-window config)
+- `packages/engine/src/dpr/ipCourseChangeability.ts` (F3 — `classifyIpChangeability`)
 - `packages/engine/src/dpr/visaValidator.ts`
 - `packages/engine/src/dpr/spsDivision.ts`
 - `packages/engine/src/dpr/index.ts`
