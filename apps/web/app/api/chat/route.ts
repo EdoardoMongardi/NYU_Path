@@ -7,7 +7,7 @@
 //   1. Onboarding state-machine steps (confirming_data → correcting_data
 //      → asking_visa → asking_graduation → complete).
 //   2. Pre-onboarding chitchat (the user typed a message before
-//      uploading a transcript).
+//      uploading their DPR).
 //
 // Any post-onboarding POST that lands here returns 410 Gone with a
 // pointer at /api/chat/v2. The legacy `handleAIChat` path + the
@@ -42,13 +42,12 @@ export async function POST(req: NextRequest) {
         }
 
         // Onboarding state-machine steps. Phase 7-E pivoted onboarding
-        // from "upload transcript" to "upload DPR"; both states route
+        // to "upload DPR": the awaiting-DPR / pre-message states route
         // here as no-ops so the chat page's drag-drop / button-click
         // upload UI handles the actual ingestion (the legacy LLM-based
         // text → state-transition flow is gone).
         const waitingForUpload =
             onboardingStep === "awaiting_dpr"
-            || onboardingStep === "awaiting_transcript"
             || !onboardingStep; // initial chat-page state pre-message
         if (onboardingStep && onboardingStep !== "complete" && !waitingForUpload) {
             return handleOnboardingStep(message, onboardingStep);
@@ -110,7 +109,7 @@ function handleOnboardingStep(message: string, step: string) {
         }
 
         case "correcting_data": {
-            const isReupload = lower.includes("upload") || lower.includes("new dpr") || lower.includes("new transcript") || lower.includes("try again");
+            const isReupload = lower.includes("upload") || lower.includes("new dpr") || lower.includes("try again");
             if (isReupload) {
                 return NextResponse.json({
                     message: "Sure! Go ahead and upload the corrected DPR using the 📎 button.",
@@ -165,22 +164,21 @@ function handleOnboardingStep(message: string, step: string) {
         }
 
         default:
-            // Phase 7-E: do NOT downgrade the chat page's onboardingStep
-            // to a stale "awaiting_transcript" — the chat page already
-            // tells the student to upload a DPR via the welcome message
-            // + drag-and-drop UI. Pass through to chitchat.
+            // Phase 7-E: the chat page tells the student to upload a DPR
+            // via the welcome message + drag-and-drop UI; unrecognized
+            // steps just pass through to chitchat.
             return handleBasicChat(message, step);
     }
 }
 
 // ============================================================
-// Pre-onboarding chitchat (no transcript yet)
+// Pre-onboarding chitchat (no DPR yet)
 // ============================================================
 
 async function handleBasicChat(message: string, onboardingStep?: string) {
     const apiKey = process.env.OPENAI_API_KEY;
     // Phase 7-E: pre-upload onboarding asks for the DPR (Degree Progress
-    // Report) — the legacy "transcript" path is a fallback only.
+    // Report); the DPR is the only accepted artifact.
     const needsDpr = onboardingStep !== "complete";
 
     // If we have an API key, run a 1-shot completion via the engine
@@ -205,7 +203,7 @@ Keep responses concise (2-3 sentences). Be warm, natural, and conversational. Ma
             // CRITICAL: do NOT return an onboardingStep here. The chat
             // page already manages the upload state via the welcome
             // message + drag-drop UI — overriding it would clobber the
-            // DPR-first flow back into the legacy transcript path.
+            // DPR-first upload flow.
             return NextResponse.json({ message: response.text });
         } catch {
             // Fall through to hardcoded responses if LLM fails.
