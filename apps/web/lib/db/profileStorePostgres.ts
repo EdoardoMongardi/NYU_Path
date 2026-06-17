@@ -13,6 +13,7 @@ import type { StudentProfile } from "@nyupath/shared";
 import { eq } from "drizzle-orm";
 import type { Database } from "./client.js";
 import { auditLog, students } from "./schema.js";
+import { assertAuthoritativeDpr } from "./assertAuthoritativeDpr.js";
 
 export class PostgresProfileStore implements ProfileStore {
     constructor(private readonly db: Database) {}
@@ -33,6 +34,12 @@ export class PostgresProfileStore implements ProfileStore {
         audit: ProfileMutationAuditEntry,
         parsedDpr?: DegreeProgressReport,
     ): Promise<void> {
+        // G0.2 — snapshot-integrity guard: refuse to persist a non-authoritative
+        // (what_if or synthetic) DPR as the canonical students.parsed_dpr snapshot.
+        // Must be checked BEFORE the transaction is opened so the DB is never touched.
+        if (parsedDpr !== undefined) {
+            assertAuthoritativeDpr(parsedDpr);
+        }
         await this.db.transaction(async (tx) => {
             // Phase 16 Task A — when `parsedDpr` is supplied, it is
             // co-persisted onto students.parsed_dpr via the same upsert.

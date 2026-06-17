@@ -133,7 +133,7 @@ describe("/api/session/restore (Phase 16 Task B)", () => {
         // Seed: profile + parsed DPR (stored via persistMutation's
         // optional arg added in 16.A)
         const profile = mkProfile(studentId);
-        const fakeDpr = { _meta: { warnings: [] }, header: { studentName: "Test" }, programs: [], advisorNotations: [], cumulative: { creditsRequired: 128, creditsUsed: 64, cumulativeGpa: 3.5, cumulativeGpaRequired: 2.0, residencyRequired: 64, residencyUsed: 64, passFailUsedUnits: 0, passFailCapUnits: 32, outsideHomeUsedUnits: 0, outsideHomeCapUnits: 16, timeLimitYears: 8 }, requirementGroups: [], courseHistory: [] };
+        const fakeDpr = { _meta: { warnings: [] }, reportKind: "dpr" as const, header: { studentName: "Test" }, programs: [], advisorNotations: [], cumulative: { creditsRequired: 128, creditsUsed: 64, cumulativeGpa: 3.5, cumulativeGpaRequired: 2.0, residencyRequired: 64, residencyUsed: 64, passFailUsedUnits: 0, passFailCapUnits: 32, outsideHomeUsedUnits: 0, outsideHomeCapUnits: 16, timeLimitYears: 8 }, requirementGroups: [], courseHistory: [] };
         await profileStore.persistMutation(
             profile,
             { pendingMutationId: "pm_test", field: "homeSchool", before: null, after: "cas", confirmedAt: new Date().toISOString() },

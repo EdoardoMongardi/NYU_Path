@@ -15,6 +15,22 @@ import type { StudentProfile } from "@nyupath/shared";
 import type { PendingProfileMutation } from "../agent/tool.js";
 import type { DegreeProgressReport } from "../dpr/schema.js";
 
+// ── Snapshot-integrity guard (G0.2) ──────────────────────────
+// Inline here so the engine package has no web dependency.
+// The web layer has its own importable wrapper in
+// apps/web/lib/db/assertAuthoritativeDpr.ts that re-exports
+// from @nyupath/engine once this is published, but for now
+// both call the same logic independently.
+function assertAuthoritativeDpr(dpr: DegreeProgressReport): void {
+    if (dpr.reportKind !== "dpr") {
+        throw new Error(
+            `[snapshot-integrity] refusing to persist a non-authoritative (${dpr.reportKind}) DPR as the student snapshot. ` +
+            `Only reportKind === "dpr" may be written to students.parsed_dpr. ` +
+            `Use a what-if session context instead — never overwrite the authoritative DPR column.`,
+        );
+    }
+}
+
 export interface ProfileMutationAuditEntry {
     /** Stable id from the original `PendingProfileMutation`. */
     pendingMutationId: string;
@@ -77,6 +93,9 @@ export class InMemoryProfileStore implements ProfileStore {
         audit: ProfileMutationAuditEntry,
         parsedDpr?: DegreeProgressReport,
     ): Promise<void> {
+        if (parsedDpr !== undefined) {
+            assertAuthoritativeDpr(parsedDpr);
+        }
         this.profiles.set(profile.id, profile);
         this.auditLog.push(audit);
         if (parsedDpr !== undefined) {
