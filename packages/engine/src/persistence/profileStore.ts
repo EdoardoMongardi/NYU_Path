@@ -15,13 +15,16 @@ import type { StudentProfile } from "@nyupath/shared";
 import type { PendingProfileMutation } from "../agent/tool.js";
 import type { DegreeProgressReport } from "../dpr/schema.js";
 
-// ── Snapshot-integrity guard (G0.2) ──────────────────────────
-// Inline here so the engine package has no web dependency.
-// The web layer has its own importable wrapper in
-// apps/web/lib/db/assertAuthoritativeDpr.ts that re-exports
-// from @nyupath/engine once this is published, but for now
-// both call the same logic independently.
-function assertAuthoritativeDpr(dpr: DegreeProgressReport): void {
+// ── Snapshot-integrity guard (G0.2) — single source of truth ──
+// The binding R1 guardrail: only a faithfully-parsed real DPR
+// (reportKind === "dpr") may be written to students.parsed_dpr.
+// A what-if upload (reportKind === "what_if") or an in-memory
+// assumption transform must NEVER overwrite the authoritative
+// snapshot. This canonical guard lives in the engine and is
+// re-exported from @nyupath/engine; the web persistence layer
+// imports it (web → engine is the normal dependency direction),
+// so there is exactly one copy of the rule + message.
+export function assertAuthoritativeDpr(dpr: DegreeProgressReport): void {
     if (dpr.reportKind !== "dpr") {
         throw new Error(
             `[snapshot-integrity] refusing to persist a non-authoritative (${dpr.reportKind}) DPR as the student snapshot. ` +
