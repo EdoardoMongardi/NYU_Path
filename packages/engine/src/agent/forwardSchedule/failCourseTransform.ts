@@ -37,18 +37,10 @@ import {
     type DPRRequirement,
     type DPRRequirementGroup,
 } from "../../dpr/schema.js";
+import { rowKey } from "./transformUtils.js";
 
 /** A clearly-FAILING grade: below the "D" pass threshold the solver uses. */
 const FAILING_GRADE = "F";
-
-/**
- * The canonical course-id key for a course row, matching buildSolverInput's
- * `${row.subject} ${row.catalogNbr}` keying (buildSolverInput.ts:198), run
- * through `canonicalizeCourseId` so zero-padded / unpadded forms unify.
- */
-function rowKey(row: { subject: string; catalogNbr: string }): string {
-    return canonicalizeCourseId(`${row.subject} ${row.catalogNbr}`);
-}
 
 /**
  * Return a DEEP-COPIED `DegreeProgressReport` in which `courseId` is treated
