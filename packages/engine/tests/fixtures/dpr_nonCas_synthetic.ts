@@ -88,6 +88,7 @@ export function makeNonCasShanghaiDpr(
             parseDurationMs: 0,
             warnings: ["SYNTHETIC FIXTURE — not parsed from a real DPR PDF"],
         },
+        reportKind: "dpr",
         header: {
             studentName: "Synthetic Shanghai Student (fabricated)",
             preparedDate: "01/01/2026",

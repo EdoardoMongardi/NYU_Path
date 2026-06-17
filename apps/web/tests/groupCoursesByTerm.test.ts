@@ -114,6 +114,7 @@ function mkDpr(rows: DPRCourseRow[]): DegreeProgressReport {
             parseDurationMs: 0,
             warnings: [],
         },
+        reportKind: "dpr",
         header: { studentName: "Test Student", preparedDate: "04/27/2026" },
         programs: [],
         advisorNotations: [],

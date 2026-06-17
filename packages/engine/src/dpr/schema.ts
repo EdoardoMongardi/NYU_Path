@@ -257,6 +257,11 @@ export type DPRMeta = z.infer<typeof dprMetaSchema>;
 
 export const degreeProgressReportSchema = z.object({
     _meta: dprMetaSchema,
+    /** Whether this PDF is a standard Degree Progress Report or an Albert
+     *  What-If / Career Simulation Report. Set by the parser from the title
+     *  line; used by upload routes to route hypothetical reports separately
+     *  and never overwrite a student's real DPR with what-if data. */
+    reportKind: z.enum(["dpr", "what_if"]),
     header: dprHeaderSchema,
     programs: z.array(dprProgramSchema),
     advisorNotations: z.array(dprAdvisorNotationSchema),

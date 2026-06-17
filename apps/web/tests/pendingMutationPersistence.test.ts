@@ -67,6 +67,7 @@ function makeMeta() {
 function makeDpr(): DegreeProgressReport {
     return {
         _meta: makeMeta(),
+        reportKind: "dpr",
         header: { studentName: "Test Student", preparedDate: "01/01/2026" },
         programs: [],
         advisorNotations: [],

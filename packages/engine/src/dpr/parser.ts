@@ -82,11 +82,12 @@ export function parseDpr(rawText: string, opts: ParseDprOptions = {}): ParseDprR
     const text = normalizeText(rawText);
     const lines = text.split("\n");
 
-    // 2. Header — first ~5 lines.
+    // 2. Header — first ~5 lines. Also detect report kind from the title.
     const header = extractHeader(lines);
     if (!header) {
         return failure("Could not find DPR header (expected `Degree Progress Report` + `For <name> prepared on <date>`).", lines.slice(0, 10));
     }
+    const reportKind = detectReportKind(lines);
 
     // 3. Programs — table that starts at "Program Requirement Term Requirement Status".
     const programs = extractPrograms(lines, warnings);
@@ -123,6 +124,7 @@ export function parseDpr(rawText: string, opts: ParseDprOptions = {}): ParseDprR
             parseDurationMs: Date.now() - startedAt,
             warnings,
         },
+        reportKind,
         header,
         programs,
         advisorNotations,
@@ -173,6 +175,50 @@ function normalizeText(raw: string): string {
         .split("\n")
         .map((l) => l.replace(/\s+$/, ""))
         .join("\n");
+}
+
+// ============================================================
+// Report-kind detection
+// ============================================================
+
+/**
+ * Determine whether the PDF is a standard DPR or a What-If / Career
+ * Simulation Report. Mirrors the title-scanning logic in `extractHeader`
+ * (same first-20-line window, same `Page N of M` stripping) but focuses
+ * solely on the what-if signal:
+ *
+ *   • Title line ends with "What-If Report" (e.g.
+ *     "Page 1 of 8Degree Progress Report What-If Report"), OR
+ *   • The line immediately after the title (allowing blanks) is the
+ *     "Career Simulation Report" sub-title, which appears only in
+ *     What-If PDFs.
+ *
+ * Returns `"what_if"` if either signal is present, otherwise `"dpr"`.
+ */
+function detectReportKind(lines: string[]): "dpr" | "what_if" {
+    for (let i = 0; i < Math.min(lines.length, 20); i++) {
+        const trimmed = lines[i]!.trim();
+        const stripped = trimmed.replace(/^Page\s+\d+\s+of\s+\d+\s*/i, "");
+        if (/^Degree Progress Report/i.test(stripped)) {
+            // Title line contains the What-If variant suffix.
+            if (/what-if report/i.test(stripped)) {
+                return "what_if";
+            }
+            // Check for the Career Simulation Report sub-title line that
+            // immediately follows the DPR title in What-If PDFs (skip blanks).
+            for (let j = i + 1; j < lines.length; j++) {
+                const next = lines[j]!.trim();
+                if (next === "") continue;
+                if (/^career simulation report$/i.test(next)) {
+                    return "what_if";
+                }
+                break; // first non-blank, non-CSR line → not a what-if
+            }
+            return "dpr";
+        }
+    }
+    // Title not found — extractHeader would also fail; caller will handle it.
+    return "dpr";
 }
 
 // ============================================================

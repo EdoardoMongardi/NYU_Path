@@ -200,6 +200,7 @@ export function mkDpr(input: MkDprInput = {}): DegreeProgressReport {
             parseDurationMs: 0,
             warnings,
         },
+        reportKind: "dpr" as const,
         header,
         programs,
         advisorNotations,

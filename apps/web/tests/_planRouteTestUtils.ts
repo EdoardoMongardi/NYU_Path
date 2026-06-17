@@ -26,6 +26,7 @@ export function makeDpr(): DegreeProgressReport {
             parseDurationMs: 0,
             warnings: [],
         },
+        reportKind: "dpr",
         header: { studentName: "Test Student", preparedDate: "01/01/2026" },
         programs: [],
         advisorNotations: [],

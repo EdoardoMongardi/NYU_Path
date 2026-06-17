@@ -62,6 +62,7 @@ function makeMeta() {
 function makePlannableDpr(overrides: Partial<DegreeProgressReport> = {}): DegreeProgressReport {
     const dpr: DegreeProgressReport = {
         _meta: makeMeta(),
+        reportKind: "dpr",
         header: { studentName: "Synthetic Student (fabricated)", preparedDate: "01/01/2026" },
         programs: [
             {
