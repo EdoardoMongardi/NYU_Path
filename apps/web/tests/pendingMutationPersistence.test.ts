@@ -37,7 +37,11 @@ import {
     _pendingMutationsSizeForTests,
 } from "../lib/planActionOrchestrator";
 import { resetStoresForTests, getStores } from "../lib/db/store";
-import { InMemoryPendingMutationStore } from "../lib/db/pendingMutationStore";
+import {
+    InMemoryPendingMutationStore,
+    encodePendingPayload,
+    decodePendingPayload,
+} from "../lib/db/pendingMutationStore";
 import {
     InMemoryProfileStore,
     InMemoryScheduleStore,
@@ -67,6 +71,7 @@ function makeMeta() {
 function makeDpr(): DegreeProgressReport {
     return {
         _meta: makeMeta(),
+        reportKind: "dpr",
         header: { studentName: "Test Student", preparedDate: "01/01/2026" },
         programs: [],
         advisorNotations: [],
@@ -278,5 +283,56 @@ describe("pendingMutation staging persistence (E6.3)", () => {
 
         _resetPendingMutationsForTests();
         expect(_pendingMutationsSizeForTests()).toBe(0);
+    });
+
+    // -- G3.1 — the shared `mutations` JSONB carries BOTH kinds (no migration) --
+
+    it("encode/decode round-trips a plan-mutation batch as the bare array (back-compat)", () => {
+        const entry = {
+            pendingMutationId: "id-pm",
+            studentId: "owner",
+            mutations: PIN,
+            createdAt: Date.now(),
+        };
+        const encoded = encodePendingPayload(entry);
+        // A plan-mutation batch encodes as the BARE array — pre-G3.1 rows decode
+        // identically, so the column is migration-free.
+        expect(Array.isArray(encoded)).toBe(true);
+        const decoded = decodePendingPayload(encoded);
+        expect(decoded.mutations).toEqual(PIN);
+        expect(decoded.assumption).toBeUndefined();
+    });
+
+    it("encode/decode round-trips a what-if assumption via the tagged wrapper", () => {
+        const entry = {
+            pendingMutationId: "id-wa",
+            studentId: "owner",
+            mutations: [],
+            assumption: { courseId: "CSCI-UA 102", outcome: "withdraw" as const },
+            createdAt: Date.now(),
+        };
+        const encoded = encodePendingPayload(entry);
+        // A what-if assumption encodes as a tagged object — NOT an array — so the
+        // decode disambiguates it from a plan-mutation batch.
+        expect(Array.isArray(encoded)).toBe(false);
+        const decoded = decodePendingPayload(encoded);
+        expect(decoded.assumption).toEqual({ courseId: "CSCI-UA 102", outcome: "withdraw" });
+        expect(decoded.mutations).toEqual([]);
+    });
+
+    it("InMemoryPendingMutationStore carries a staged assumption through take", async () => {
+        const store = new InMemoryPendingMutationStore();
+        await store.stage({
+            pendingMutationId: "id-wa",
+            studentId: "owner",
+            mutations: [],
+            assumption: { courseId: "CSCI-UA 102", outcome: "fail" },
+            createdAt: Date.now(),
+        });
+        const got = await store.take("id-wa", "owner");
+        expect(got.status).toBe("ok");
+        if (got.status === "ok") {
+            expect(got.entry.assumption).toEqual({ courseId: "CSCI-UA 102", outcome: "fail" });
+        }
     });
 });

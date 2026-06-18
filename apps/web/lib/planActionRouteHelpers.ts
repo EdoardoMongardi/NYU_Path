@@ -23,11 +23,13 @@ import { readSessionFromRequest } from "./auth/session.js";
 import { consumeRequest } from "./rateLimit.js";
 import {
     runProposeStage,
+    runProposeWhatIfStage,
     runConfirmStage,
     type RunConfirmError,
     type RunProposeError,
 } from "./planActionOrchestrator.js";
 import type { PlanMutation } from "@nyupath/shared";
+import type { WhatIfOutcome } from "@nyupath/engine";
 
 /** Per-student daily cap on plan-action mutations. Distinct bucket
  *  from chat-rate so a flurry of clicks doesn't burn the chat quota
@@ -104,6 +106,8 @@ function mapProposeError(err: RunProposeError): NextResponse {
         case "no_dpr":
         case "no_schedule":
             return NextResponse.json({ error: err.message, kind: err.kind }, { status: 409 });
+        case "bad_input":
+            return NextResponse.json({ error: err.message, kind: err.kind }, { status: 400 });
         case "engine_error":
             return NextResponse.json({ error: err.message, kind: err.kind }, { status: 500 });
     }
@@ -119,6 +123,8 @@ function mapConfirmError(err: RunConfirmError): NextResponse {
         case "no_dpr":
         case "no_schedule":
             return NextResponse.json({ error: err.message, kind: err.kind }, { status: 409 });
+        case "bad_input":
+            return NextResponse.json({ error: err.message, kind: err.kind }, { status: 400 });
         case "engine_error":
             return NextResponse.json({ error: err.message, kind: err.kind }, { status: 500 });
     }
@@ -162,6 +168,40 @@ export async function handleProposeRoute<T>(
     }
 
     const result = await runProposeStage(pre.studentId, mutations);
+    if (!result.ok) return mapProposeError(result.error);
+
+    return NextResponse.json(result.response);
+}
+
+/**
+ * G3.1 — the propose-stage handler for a current-term IP-course WHAT-IF
+ * ASSUMPTION ("I withdrew / I'll take pass-fail for course X"). `schema`
+ * validates the body shape; `buildAssumption` lifts it to `{courseId, outcome}`
+ * the orchestrator stages. Mirrors `handleProposeRoute` (auth + rate-limit +
+ * JSON parse via `preflight`), but the staged payload is a DPR assumption, not
+ * a PlanMutation[]. The SAME `/api/plan/confirm` route confirms it (the
+ * orchestrator's confirm branches on the staged kind).
+ */
+export async function handleProposeWhatIfRoute<T>(
+    req: NextRequest,
+    schema: ZodTypeAny,
+    buildAssumption: (input: T) => { courseId: string; outcome: WhatIfOutcome },
+): Promise<NextResponse> {
+    const pre = await preflight(req);
+    if (!pre.ok) return pre.response;
+
+    let parsed: T;
+    try {
+        parsed = schema.parse(pre.body) as T;
+    } catch (err) {
+        return NextResponse.json(
+            { error: `Invalid request body: ${formatZodIssues(err)}` },
+            { status: 400 },
+        );
+    }
+
+    const assumption = buildAssumption(parsed);
+    const result = await runProposeWhatIfStage(pre.studentId, assumption);
     if (!result.ok) return mapProposeError(result.error);
 
     return NextResponse.json(result.response);

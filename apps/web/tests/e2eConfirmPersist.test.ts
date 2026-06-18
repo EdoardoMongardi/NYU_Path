@@ -84,6 +84,7 @@ function makeDpr(): DegreeProgressReport {
             parseDurationMs: 0,
             warnings: [],
         },
+        reportKind: "dpr",
         header: { studentName: "E2E Fixture", preparedDate: "01/01/2026" },
         programs: [],
         advisorNotations: [],

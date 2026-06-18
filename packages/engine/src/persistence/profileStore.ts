@@ -15,6 +15,25 @@ import type { StudentProfile } from "@nyupath/shared";
 import type { PendingProfileMutation } from "../agent/tool.js";
 import type { DegreeProgressReport } from "../dpr/schema.js";
 
+// ── Snapshot-integrity guard (G0.2) — single source of truth ──
+// The binding R1 guardrail: only a faithfully-parsed real DPR
+// (reportKind === "dpr") may be written to students.parsed_dpr.
+// A what-if upload (reportKind === "what_if") or an in-memory
+// assumption transform must NEVER overwrite the authoritative
+// snapshot. This canonical guard lives in the engine and is
+// re-exported from @nyupath/engine; the web persistence layer
+// imports it (web → engine is the normal dependency direction),
+// so there is exactly one copy of the rule + message.
+export function assertAuthoritativeDpr(dpr: DegreeProgressReport): void {
+    if (dpr.reportKind !== "dpr") {
+        throw new Error(
+            `[snapshot-integrity] refusing to persist a non-authoritative (${dpr.reportKind}) DPR as the student snapshot. ` +
+            `Only reportKind === "dpr" may be written to students.parsed_dpr. ` +
+            `Use a what-if session context instead — never overwrite the authoritative DPR column.`,
+        );
+    }
+}
+
 export interface ProfileMutationAuditEntry {
     /** Stable id from the original `PendingProfileMutation`. */
     pendingMutationId: string;
@@ -77,6 +96,9 @@ export class InMemoryProfileStore implements ProfileStore {
         audit: ProfileMutationAuditEntry,
         parsedDpr?: DegreeProgressReport,
     ): Promise<void> {
+        if (parsedDpr !== undefined) {
+            assertAuthoritativeDpr(parsedDpr);
+        }
         this.profiles.set(profile.id, profile);
         this.auditLog.push(audit);
         if (parsedDpr !== undefined) {

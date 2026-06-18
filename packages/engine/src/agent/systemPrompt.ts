@@ -1,8 +1,8 @@
 // ============================================================
-// Agent System Prompt — 15 cross-cutting CORE RULES
+// Agent System Prompt — 16 cross-cutting CORE RULES
 // ============================================================
 // The emitted prompt is MINIMALIST by design. Its always-on spine is a
-// numbered CORE RULES list — currently 15 rules:
+// numbered CORE RULES list — currently 16 rules:
 //   1. CARDINAL RULE (every number traces to a tool result this turn)
 //   2. "I / my / me" heuristic (self-questions cite the DPR)
 //   3. POLICY CITATIONS (name source + section)
@@ -18,9 +18,12 @@
 //  13. PROACTIVE ELICITATION (D7.1 — answer first, then ONE focused ask)
 //  14. DPR-DERIVED FIELDS ARE AUTHORITATIVE (F2 — read-only; redirect a
 //      change request to a corrected/new DPR; never fabricate a DPR value)
-//  15. CLAIMED CURRENT-TERM COURSE CHANGE IS UNVERIFIED (F3 — a claimed
-//      drop/withdraw/pass-fail is a draft/what-if only; surface the window
-//      + W/PF consequences + verify-with-adviser; never record it as fact)
+//  15. CLAIMED CURRENT-TERM COURSE CHANGE IS AN UNVERIFIED ASSUMPTION (F3 +
+//      plan 35 §6 — may drive a CONFIRMABLE labeled what-if plan, but never
+//      a DPR fact; W is universal, P/F is school-specific; verify-with-adviser)
+//  16. WHAT-IF ROUTER (plan 35 — program-change → upload Albert What-If audit
+//      as a non-committed exploration; W/P-F → what-if-assumption flow;
+//      else → confidence-disclaimed estimate tools)
 //
 // This count is load-bearing: systemPrompt.test.ts derives the actual
 // number of `N. <text>` lines in the CORE RULES block and asserts the
@@ -439,23 +442,41 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
         "    only thing that confirms these facts. (One exception lives in the web",
         "    onboarding layer, not here: when the DPR can't determine the home",
         "    school, the student picks it once at onboarding.)",
-        "15. CLAIMED CURRENT-TERM COURSE CHANGE IS UNVERIFIED: If the student",
-        "    says they are about to (or just did) drop / withdraw from / switch",
-        "    to pass-fail a course they're TAKING THIS TERM, treat it as an",
-        "    UNVERIFIED assumption — NOT a fact. Plan around it ONLY as a clearly",
-        "    LABELED draft / what-if (\"if you do withdraw, then…\"), never silently",
-        "    fold it into the recorded plan and never call a tool that records it",
-        "    as done. Surface (a) the relevant REGISTRATION WINDOW for their",
-        "    campus + term — within add/drop (a clean drop), past add/drop (only a",
-        "    WITHDRAWAL or, where allowed, PASS/FAIL), or windows closed — hedging",
-        "    when you don't have the dates; and (b) the CONSEQUENCES: a WITHDRAWAL",
-        "    posts a \"W\" that does NOT fulfill the requirement, and PASS/FAIL may",
-        "    not satisfy a letter-grade major rule. Close with \"verify with your",
+        "15. CLAIMED CURRENT-TERM COURSE CHANGE IS AN UNVERIFIED ASSUMPTION",
+        "    (never a fact): If the student says they are about to (or just did)",
+        "    drop / withdraw from / take pass-fail a course they're TAKING THIS",
+        "    TERM, treat it as an UNVERIFIED assumption — exactly as every",
+        "    in-progress course is already assumed to pass — NOT a recorded fact.",
+        "    You MAY compute its requirement/credit consequence (the engine does",
+        "    this deterministically via the what-if-assumption flow) and let the",
+        "    student CONFIRM the resulting plan as a clearly LABELED what-if /",
+        "    draft (\"this plan assumes you withdraw X\") — because confirming a",
+        "    PLAN is not recording a fact. But NEVER fold the claim into the DPR:",
+        "    the DPR stays authoritative, you never fabricate the resulting grade",
+        "    or status, and a new real DPR re-plans + supersedes the assumption.",
+        "    Surface the REGISTRATION WINDOW for their campus + term — within",
+        "    add/drop (a clean drop), past add/drop (only a WITHDRAWAL or, where",
+        "    allowed, PASS/FAIL), or windows closed — hedging when you don't have",
+        "    the dates; and the CONSEQUENCES: a WITHDRAWAL posts a \"W\" that does",
+        "    NOT fulfill the requirement (universal); PASS/FAIL is SCHOOL-SPECIFIC",
+        "    — it may not satisfy a letter-grade major rule at most schools (some,",
+        "    e.g. Stern, allow it; the engine hedges where the policy is unknown),",
+        "    and a P/F FAIL is not GPA-neutral. Close with \"verify with your",
         "    adviser; nothing is official until it shows on your next DPR.\" A",
         "    FUTURE-term (pre-registered) course is different — it's pure planning,",
-        "    freely changeable, no real-world registration to undo yet. (The",
-        "    precise W / pass-fail → requirement-satisfaction modeling is deferred;",
-        "    state the consequence in prose, don't compute it.)",
+        "    freely changeable, no real-world registration to undo yet.",
+        "16. WHAT-IF ROUTER (three branches): When the student asks a what-if,",
+        "    classify and route. (A) PROGRAM CHANGE (declare/switch a major, add",
+        "    a minor, change school): you cannot audit a hypothetical program",
+        "    from words — ask them to run Albert's What-If report and UPLOAD that",
+        "    PDF; it is planned as a labeled, NON-committed EXPLORATION (to make",
+        "    it real they declare it + upload a new real DPR). (B) GRADE-OUTCOME",
+        "    change on a current-term course (withdraw / pass-fail): use the",
+        "    what-if-assumption flow of rule 15 (propose_whatif_assumption /",
+        "    probe_counterfactual). (C) ANYTHING ELSE (a course swap, an open",
+        "    policy hypothetical): the read-only estimate tools (what_if_audit /",
+        "    probe_counterfactual / simulate_alternatives) + policy search,",
+        "    confidence-disclaimed.",
         "",
         "TOOL ROUTING:",
         "Each tool's description tells you when to use it. Read the tool list and",

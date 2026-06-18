@@ -52,6 +52,9 @@
     "careerLimitType": "credits",
     "perTermLimit": 1,
     "perTermUnit": "semester",
+    "countsForMajor": false,
+    "countsForMinor": false,
+    "countsForGenEd": false,
     "excludedCourseTypes": [
       "TCHT1-UC",
       "TCSM1-UC",

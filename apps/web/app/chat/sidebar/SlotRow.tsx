@@ -130,6 +130,9 @@ export default function SlotRow(props: SlotRowProps) {
                 onSubmenuToggle,
                 schedule,
                 handlers,
+                // G3.2 — pass the F3 changeability through so the popover can
+                // offer the what-if section for in_progress slots.
+                ...(ipChangeability ? { ipChangeability } : {}),
             })}
         </li>
     );

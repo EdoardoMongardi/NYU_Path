@@ -119,18 +119,18 @@ describe("D4 honesty-rail CORE RULES", () => {
     });
 
     describe("D4.3 — banner count matches reality", () => {
-        it("emits exactly 15 numbered CORE RULES", () => {
-            expect(numberedRuleCount(prompt)).toBe(15);
+        it("emits exactly 16 numbered CORE RULES", () => {
+            expect(numberedRuleCount(prompt)).toBe(16);
         });
 
         it("the file's BANNER states a rule count EQUAL to the actual numbered-rule count", () => {
             const src = readFileSync(SYSTEM_PROMPT_SRC, "utf8");
             const actual = numberedRuleCount(prompt);
             // The banner must NOT claim the stale "25 rules" once the real
-            // numbered list is 15. Derive: assert the actual count's number-word
+            // numbered list is 16. Derive: assert the actual count's number-word
             // appears in the banner and the stale 25 claim is gone.
-            expect(actual).toBe(15);
-            expect(src).toMatch(/\b15\b/);
+            expect(actual).toBe(16);
+            expect(src).toMatch(/\b16\b/);
             expect(src).not.toMatch(/25 rules|25-rule|25 rules verbatim/);
         });
     });
@@ -166,20 +166,21 @@ describe("D4 honesty-rail CORE RULES", () => {
             expect(r).toMatch(/preferences?/i);
         });
 
-        it("now emits exactly 15 numbered CORE RULES, and the banner agrees", () => {
-            expect(numberedRuleCount(prompt)).toBe(15);
+        it("now emits exactly 16 numbered CORE RULES, and the banner agrees", () => {
+            expect(numberedRuleCount(prompt)).toBe(16);
             const src = readFileSync(SYSTEM_PROMPT_SRC, "utf8");
-            expect(src).toMatch(/\b15\b/);
+            expect(src).toMatch(/\b16\b/);
         });
     });
 
     describe("F3 — CORE RULE 15 (CLAIMED CURRENT-TERM COURSE CHANGE IS UNVERIFIED)", () => {
-        /** Slice rule 15 from its number to the end of the CORE RULES block. */
+        /** Slice rule 15 from its number to the start of rule 16. */
         function rule15(p: string): string {
             const block = coreRulesBlock(p);
             const idx = block.indexOf("15.");
             expect(idx).toBeGreaterThanOrEqual(0);
-            return block.slice(idx);
+            const end = block.indexOf("16.", idx);
+            return block.slice(idx, end >= 0 ? end : undefined);
         }
 
         it("frames a claimed current-term drop/withdraw/pass-fail as UNVERIFIED — a draft / what-if, not a recorded fact", () => {
@@ -225,6 +226,47 @@ describe("D4 honesty-rail CORE RULES", () => {
                 })();
                 expect(r).toMatch(/unverified/i);
                 expect(r).toMatch(/verify[\s\S]*adviser/i);
+            }
+        });
+    });
+
+    describe("Plan 35 — CORE RULE 15 §6 (confirmable assumption) + CORE RULE 16 (what-if router)", () => {
+        function rule16(p: string): string {
+            const block = coreRulesBlock(p);
+            const idx = block.indexOf("16.");
+            expect(idx).toBeGreaterThanOrEqual(0);
+            return block.slice(idx);
+        }
+
+        it("rule 15 now allows CONFIRMING the assumption as a plan — but never as a DPR fact", () => {
+            const block = coreRulesBlock(prompt);
+            const r = block.slice(block.indexOf("15."), block.indexOf("16."));
+            expect(r).toMatch(/confirm/i);
+            // ...but the DPR stays authoritative / the claim is never folded in.
+            expect(r).toMatch(/never (fold|fabricate)|DPR stays authoritative|authoritative/i);
+            // P/F is school-specific (not a blanket rule).
+            expect(r).toMatch(/school-?specific|Stern/i);
+        });
+
+        it("rule 16 routes the three what-if branches", () => {
+            const r = rule16(prompt);
+            // (A) program change → upload the Albert What-If audit as an exploration.
+            expect(r).toMatch(/program change|major|minor|school/i);
+            expect(r).toMatch(/upload/i);
+            expect(r).toMatch(/what-?if/i);
+            // (B) grade-outcome → the what-if-assumption flow.
+            expect(r).toMatch(/withdraw|pass-?fail/i);
+            expect(r).toMatch(/propose_whatif_assumption|probe_counterfactual|assumption/i);
+            // (C) anything else → confidence-disclaimed estimate tools.
+            expect(r).toMatch(/estimate|what_if_audit|simulate_alternatives|policy search/i);
+        });
+
+        it("rule 16 present for CAS + non-CAS (Shanghai / Abu Dhabi) students", () => {
+            for (const school of ["cas", "shanghai", "nyuad"]) {
+                const p = buildSystemPrompt({ student: { ...baseStudent, homeSchool: school } });
+                const block = p.slice(p.indexOf("CORE RULES (mandatory"), p.indexOf("TOOL ROUTING:"));
+                const r = block.slice(block.indexOf("16."));
+                expect(r).toMatch(/upload/i);
             }
         });
     });

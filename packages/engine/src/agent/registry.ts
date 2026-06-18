@@ -1,5 +1,5 @@
 // ============================================================
-// Default ToolRegistry — wires the 21 LIVE NYU Path tools
+// Default ToolRegistry — wires the 22 LIVE NYU Path tools
 // ============================================================
 // §7.1 tools (Phase 0–11):
 //   run_full_audit, what_if_audit,
@@ -58,6 +58,7 @@ import { planForwardDegreeTool } from "./tools/planForwardDegree.js";
 import { viewForwardPlanTool } from "./tools/viewForwardPlan.js";
 import { proposePlanChangeTool } from "./tools/proposePlanChange.js";
 import { probeCounterfactualTool } from "./tools/probeCounterfactual.js";
+import { proposeWhatIfAssumptionTool } from "./tools/proposeWhatIfAssumption.js";
 import { confirmPlanChangeTool } from "./tools/confirmPlanChange.js";
 import { simulateAlternativesTool } from "./tools/simulateAlternatives.js";
 import { bindFreeElectiveTool } from "./tools/bindFreeElective.js";
@@ -84,6 +85,7 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     viewForwardPlanTool as unknown as Tool<ZodTypeAny, unknown>,
     proposePlanChangeTool as unknown as Tool<ZodTypeAny, unknown>,
     probeCounterfactualTool as unknown as Tool<ZodTypeAny, unknown>,
+    proposeWhatIfAssumptionTool as unknown as Tool<ZodTypeAny, unknown>,
     confirmPlanChangeTool as unknown as Tool<ZodTypeAny, unknown>,
     simulateAlternativesTool as unknown as Tool<ZodTypeAny, unknown>,
     bindFreeElectiveTool as unknown as Tool<ZodTypeAny, unknown>,
@@ -116,6 +118,7 @@ export {
     viewForwardPlanTool,
     proposePlanChangeTool,
     probeCounterfactualTool,
+    proposeWhatIfAssumptionTool,
     confirmPlanChangeTool,
     simulateAlternativesTool,
     bindFreeElectiveTool,

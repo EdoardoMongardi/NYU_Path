@@ -16,8 +16,10 @@ import {
     planDrop,
     planLock,
     planMove,
+    planWhatIf,
     type PlanActionResult,
     type PlanActionRouteResponse,
+    type WhatIfAssumptionRouteResponse,
 } from "../../lib/planActionClient";
 import styles from "./chat.module.css";
 import TermCard from "./sidebar/TermCard";
@@ -189,6 +191,13 @@ interface ScheduleSidebarProps {
         verb: "add" | "swap" | "drop" | "lock" | "move",
         result: PlanActionResult<PlanActionRouteResponse>,
     ) => void;
+    /** G3.2 — fired after a what-if assumption route returns. The page
+     *  handles the `WhatIfAssumptionRouteResponse` to stage the pending
+     *  preview (with the `whatIfAssumption` marker) for the review card.
+     *  Optional so pre-onboarding renders can omit it. */
+    onWhatIfResult?: (
+        result: PlanActionResult<WhatIfAssumptionRouteResponse>,
+    ) => void;
     /**
      * Phase 4 Task E3.2 — review-card actions. The card renders the
      * verdict (✓/⚠/✗) + trade-off lines alongside the E3.1 preview
@@ -238,6 +247,7 @@ export default function ScheduleSidebar({
     onExplainSlot,
     onExplainTerm,
     onPlanActionResult,
+    onWhatIfResult,
     onReviewConfirm,
     onReviewCancel,
     onReviewAskWhy,
@@ -566,12 +576,44 @@ export default function ScheduleSidebar({
         onExplainSlot?.(slot, term);
     };
 
+    /** G3.2 — what-if assumption handler. POSTs to /api/plan/whatif and
+     *  surfaces the typed result to the page via `onWhatIfResult` (mirrors
+     *  the `announceResult` → `onPlanActionResult` pattern for regular verbs).
+     *  Closes the popover on completion (success OR failure). */
+    const handleWhatIf = async (
+        slot: ScheduleSlot,
+        term: string,
+        outcome: "withdraw" | "pass" | "fail",
+    ): Promise<void> => {
+        const courseId =
+            slot.kind === "in_progress" ? slot.courseId : null;
+        if (!courseId) return;
+        const key = slotKey(slot, term);
+        markSlotPending(key, true);
+        try {
+            const result = await planWhatIf({ courseId, outcome });
+            if (!result.ok) {
+                console.error(`[plan/whatif] HTTP ${result.status}: ${result.error}`);
+            } else {
+                console.info(`[plan/whatif] ok`, result.data);
+            }
+            onWhatIfResult?.(result);
+        } finally {
+            markSlotPending(key, false);
+            setOpenPopover(null);
+            setOpenSubmenu(null);
+        }
+    };
+
     const slotPopoverHandlers: SlotPopoverHandlers = {
         onSwap: handleSwap,
         onMove: handleMove,
         onDrop: handleDrop,
         onLock: handleLockToggle,
         onExplain: handleExplain,
+        // G3.2 — only wire onWhatIf when the page has opted in via
+        // `onWhatIfResult`; when absent the popover suppresses the section.
+        ...(onWhatIfResult ? { onWhatIf: handleWhatIf } : {}),
     };
 
     return (
@@ -721,6 +763,8 @@ export default function ScheduleSidebar({
                                 // reads (feasible + consequences + planDiff +
                                 // pendingMutationId) from the preview's own
                                 // engine-sourced fields — no fabrication.
+                                // G3.2 — thread the whatIfAssumption marker so
+                                // the card can show the assumption label/hedges.
                                 const card = computeReviewCard({
                                     feasible: true,
                                     diff: { added: [], removed: [] },
@@ -729,10 +773,19 @@ export default function ScheduleSidebar({
                                     pendingMutationId: previewView.pendingMutationId,
                                     futureTerms: [],
                                     ...(previewView.planDiff ? { planDiff: previewView.planDiff } : {}),
+                                    ...(pendingPreview?.whatIfAssumption
+                                        ? { whatIfAssumption: pendingPreview.whatIfAssumption }
+                                        : {}),
                                 });
-                                const verbLabel = pendingPreview?.verb
-                                    ? `Review: ${pendingPreview.verb} change`
-                                    : "Review proposed change";
+                                // G3.2 — for a what-if assumption the heading names
+                                // the assumption ("Review what-if assumption") rather
+                                // than the verb. For ordinary proposals the existing
+                                // verb label is used.
+                                const verbLabel = card.whatIfAssumption
+                                    ? "Review what-if assumption"
+                                    : pendingPreview?.verb
+                                        ? `Review: ${pendingPreview.verb} change`
+                                        : "Review proposed change";
                                 return (
                                     <div
                                         className={styles.reviewCard}
@@ -740,6 +793,38 @@ export default function ScheduleSidebar({
                                         aria-label="Review proposed plan change"
                                     >
                                         <p className={styles.reviewCardHeading}>{verbLabel}</p>
+
+                                        {/* G3.2 — what-if assumption label + assumption
+                                            disclaimer. Displayed BEFORE the verdict so
+                                            the student sees "this is an assumption, not
+                                            a fact" before seeing ✓/⚠. Source: the engine's
+                                            own WhatIfAssumptionMarker — never invented. */}
+                                        {card.whatIfAssumption && (
+                                            <div className={styles.reviewWhatIfAssumption}>
+                                                <p className={styles.reviewWhatIfLabel}>
+                                                    <span aria-hidden="true">◈</span>{" "}
+                                                    {card.whatIfAssumption.label}
+                                                </p>
+                                                {card.whatIfAssumption.windowCaveat && (
+                                                    <p className={styles.reviewWhatIfCaveat}>
+                                                        {card.whatIfAssumption.windowCaveat}
+                                                    </p>
+                                                )}
+                                                {card.whatIfAssumption.hedges.length > 0 && (
+                                                    <ul className={styles.reviewWhatIfHedges}>
+                                                        {card.whatIfAssumption.hedges.map((h, i) => (
+                                                            <li key={i}>{h}</li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                                <p className={styles.reviewWhatIfDisclaimer}>
+                                                    Confirming records a plan under this assumption — not a fact.
+                                                    Your DPR is never changed. When your next official DPR
+                                                    arrives it supersedes this assumption.
+                                                </p>
+                                            </div>
+                                        )}
+
                                         <p
                                             className={
                                                 card.verdict === "valid"

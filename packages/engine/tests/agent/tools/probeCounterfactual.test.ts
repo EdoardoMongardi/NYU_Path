@@ -62,6 +62,7 @@ function makeMeta() {
 function makePlannableDpr(overrides: Partial<DegreeProgressReport> = {}): DegreeProgressReport {
     const dpr: DegreeProgressReport = {
         _meta: makeMeta(),
+        reportKind: "dpr",
         header: { studentName: "Synthetic Student (fabricated)", preparedDate: "01/01/2026" },
         programs: [
             {
@@ -432,5 +433,353 @@ describe("probe_counterfactual — infeasible probe surfaces the binding constra
         expect(typeof detail).toBe("string");
         expect(detail.length).toBeGreaterThan(0);
         expect(detail).toMatch(/Axes failed|requirementGroupsSatisfied|graduationTargetMet/);
+    });
+});
+
+// ===========================================================================
+// G2.1 — withdraw + pass_fail arms (read-only IP-course what-if)
+// ===========================================================================
+//
+// The student asks "what if I WITHDRAW / take PASS-FAIL for this current-term
+// course?" The tool transforms the DPR in-memory (applyWithdrawalToDpr /
+// applyPassFailToDpr), re-solves through the SAME frozen pipeline as
+// fail_completed, and surfaces: the engine-computed requirement consequence,
+// the pass_fail hedges, the F3 window caveat (classifyIpChangeability), and
+// the universal "unverified assumption — verify with your adviser; nothing is
+// official until your next DPR" rail. STRICTLY READ-ONLY.
+
+/**
+ * A DPR where the target course (the one the student wants to withdraw / P-F)
+ * is an IN-PROGRESS (IP) row in the CURRENT term, satisfying a MAJOR leaf.
+ *
+ *   - CSCI-UA 102 is IP (in progress) in the current term and SATISFIES leaf
+ *     SR/10 (a major-required leaf — its group is the "Computer Science Major"
+ *     group, so classifyLeafCategory → "major").
+ *   - With grade "IP" the row is current-term, so classifyIpChangeability sees
+ *     an enrolled-now IP course and (depending on `now` vs the season window)
+ *     emits a withdraw/PF hedge — the F3 window caveat.
+ *
+ * `nowForCtx` (a UTC Date past add/drop but inside the withdraw window of the
+ * relevant season) is the `now` the handler must thread into both
+ * deriveTemporalContext and classifyIpChangeability so the result is
+ * deterministic. We pick the course's term = a fall term and a `now` in late
+ * October of that year (inside fall's typical withdraw window, past add/drop).
+ */
+const IP_COURSE_TERM = "2026 Fall";
+/** Late October — past fall add/drop, inside fall withdraw/PF window. */
+const NOW_IN_WITHDRAW_WINDOW = new Date(Date.UTC(2026, 9, 25));
+
+function makeIpMajorDpr(overrides: Partial<DegreeProgressReport> = {}): DegreeProgressReport {
+    const dpr: DegreeProgressReport = {
+        _meta: makeMeta(),
+        reportKind: "dpr",
+        header: { studentName: "Synthetic Student (fabricated)", preparedDate: "10/01/2026" },
+        programs: [
+            {
+                programType: "Undergraduate Career",
+                label: "UA-Coll of Arts & Sci",
+                requirementTerm: "Fall 2024",
+                requirementStatus: "not_satisfied",
+            },
+            {
+                programType: "Major",
+                label: "Computer Science",
+                requirementTerm: "Fall 2024",
+                requirementStatus: "not_satisfied",
+            },
+        ],
+        advisorNotations: [],
+        cumulative: {
+            creditsRequired: 128,
+            creditsUsed: 120,
+            cumulativeGpa: 3.5,
+            cumulativeGpaRequired: 2.0,
+            residencyRequired: 64,
+            residencyUsed: 64,
+            passFailUsedUnits: 0,
+            passFailCapUnits: 32,
+            outsideHomeUsedUnits: 0,
+            outsideHomeCapUnits: 16,
+            timeLimitYears: 8,
+        },
+        requirementGroups: [
+            {
+                rgId: "RG1",
+                title: "Computer Science Major",
+                status: "not_satisfied",
+                statusText: "Not Satisfied: Complete the Computer Science major.",
+                children: [
+                    {
+                        rId: "SR/10",
+                        title: "Intro Requirement",
+                        status: "satisfied",
+                        statusText: "Satisfied: Intro completed (in progress).",
+                        counter: { kind: "courses", required: 1, used: 1, needed: 0 },
+                        coursesUsed: [
+                            {
+                                term: IP_COURSE_TERM,
+                                subject: "CSCI-UA",
+                                catalogNbr: "102",
+                                courseTitle: "Data Structures",
+                                grade: "IP",
+                                units: 4,
+                                type: "IP",
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+        courseHistory: [
+            {
+                term: IP_COURSE_TERM,
+                subject: "CSCI-UA",
+                catalogNbr: "102",
+                courseTitle: "Data Structures",
+                grade: "IP",
+                units: 4,
+                type: "IP",
+            },
+        ],
+        ...overrides,
+    };
+    return degreeProgressReportSchema.parse(dpr);
+}
+
+/** Candidate the solver could re-place to re-cover the reopened SR/10. */
+function makeIpCourses(): Course[] {
+    return [
+        {
+            id: "CSCI-UA 102",
+            title: "Data Structures",
+            credits: 4,
+            termsOffered: ["fall", "spring"],
+        },
+    ];
+}
+
+/** A session whose DPR has the IP current-term major course + a real solve. */
+function makeIpSession(overrides: Partial<ToolSession> = {}): ToolSession {
+    const base = makeSession({
+        degreeProgressReport: makeIpMajorDpr(),
+        courses: makeIpCourses(),
+        ...overrides,
+    });
+    const forwardSchedule = buildForwardSchedule({
+        session: base,
+        dpr: base.degreeProgressReport!,
+        graduationTermOverride: "2027-spring",
+    });
+    return { ...base, forwardSchedule };
+}
+
+/** The universal verification rail every withdraw/PF probe must carry. */
+const VERIFY_RAIL_RE = /unverified assumption|verify with your adviser|not.*official.*until.*DPR/i;
+
+/** Does any consequence/hedge line carry the verify/not-official rail? */
+function carriesVerifyRail(output: { consequences: string[]; hedges?: string[]; windowCaveat?: string }): boolean {
+    const lines = [
+        ...output.consequences,
+        ...(output.hedges ?? []),
+        ...(output.windowCaveat ? [output.windowCaveat] : []),
+    ];
+    return lines.some((l) => VERIFY_RAIL_RE.test(l));
+}
+
+describe("probe_counterfactual — Arm C (withdraw)", () => {
+    it("withdrawing a course that covers a satisfied major leaf re-opens it + carries the verify rail", async () => {
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const output = await probeCounterfactualTool.call(
+            { kind: "withdraw", courseId: "CSCI-UA 102", now: NOW_IN_WITHDRAW_WINDOW.toISOString() } as never,
+            ctx,
+        );
+
+        expect(output.arm).toBe("withdraw");
+        // SR/10 re-opens: a new unmet requirement, a cascaded shift, a re-placed
+        // CSCI-UA 102 future slot, OR a non-empty diff.
+        const reopened = output.schedule.semesters.some((sem) =>
+            sem.slots.some(
+                (s) => s.kind === "specific_planned" && s.courseId === "CSCI-UA 102",
+            ),
+        );
+        const diffNonEmpty = output.diff.added.length > 0 || output.diff.removed.length > 0;
+        const newUnmet = (output.planDiff?.newUnmetRequirements?.length ?? 0) > 0;
+        const cascaded = (output.planDiff?.cascadedShifts?.length ?? 0) > 0;
+        expect(reopened || diffNonEmpty || newUnmet || cascaded).toBe(true);
+
+        // The universal rail must be present.
+        expect(carriesVerifyRail(output)).toBe(true);
+    });
+});
+
+describe("probe_counterfactual — Arm D (pass_fail, pass)", () => {
+    it("pass on a CAS major course re-opens the requirement + emits no 'counts' verdict (hedged)", async () => {
+        // CAS countsForMajor:false → "elective_only" → the major leaf re-opens.
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const output = await probeCounterfactualTool.call(
+            {
+                kind: "pass_fail",
+                courseId: "CSCI-UA 102",
+                outcome: "pass",
+                now: NOW_IN_WITHDRAW_WINDOW.toISOString(),
+            } as never,
+            ctx,
+        );
+
+        expect(output.arm).toBe("pass_fail");
+        // The major leaf re-opens (P only earns elective credit at CAS).
+        const reopened = output.schedule.semesters.some((sem) =>
+            sem.slots.some(
+                (s) => s.kind === "specific_planned" && s.courseId === "CSCI-UA 102",
+            ),
+        );
+        const diffNonEmpty = output.diff.added.length > 0 || output.diff.removed.length > 0;
+        const newUnmet = (output.planDiff?.newUnmetRequirements?.length ?? 0) > 0;
+        const cascaded = (output.planDiff?.cascadedShifts?.length ?? 0) > 0;
+        expect(reopened || diffNonEmpty || newUnmet || cascaded).toBe(true);
+
+        // The verify rail is present.
+        expect(carriesVerifyRail(output)).toBe(true);
+    });
+
+    it("pass where pfEligibility=counts (Stern major) KEEPS the requirement satisfied", async () => {
+        // Stern countsForMajor:true → "counts" → the major leaf stays satisfied,
+        // so the synthetic-DPR re-solve does NOT re-open / re-place CSCI-UA 102.
+        const session = makeIpSession({
+            student: {
+                id: "test-student",
+                catalogYear: "2024",
+                homeSchool: "stern",
+                declaredPrograms: [{ programId: "computer_science", programType: "major" }],
+                coursesTaken: [],
+                visaStatus: "f1",
+            },
+            schoolConfig: {
+                schoolId: "stern",
+                name: "Stern School of Business",
+                degreeType: "BS",
+                courseSuffix: ["-UB"],
+                totalCreditsRequired: 128,
+                overallGpaMin: 2.0,
+                acceptsTransferCredit: true,
+                maxCreditsPerSemester: 18,
+                f1FullTimeMinCredits: 12,
+                residency: { minCredits: 64, note: null },
+            },
+        });
+        const ctx = makeCtx(session);
+
+        const output = await probeCounterfactualTool.call(
+            {
+                kind: "pass_fail",
+                courseId: "CSCI-UA 102",
+                outcome: "pass",
+                now: NOW_IN_WITHDRAW_WINDOW.toISOString(),
+            } as never,
+            ctx,
+        );
+
+        // KEPT satisfied → CSCI-UA 102 is NOT re-placed as a future requirement
+        // and there is no newly-unmet requirement from the re-open path.
+        const rePlaced = output.schedule.semesters.some((sem) =>
+            sem.slots.some(
+                (s) => s.kind === "specific_planned" && s.courseId === "CSCI-UA 102",
+            ),
+        );
+        expect(rePlaced).toBe(false);
+        expect(output.planDiff?.newUnmetRequirements ?? []).toHaveLength(0);
+    });
+});
+
+describe("probe_counterfactual — Arm D (pass_fail, fail)", () => {
+    it("fail re-opens the requirement and carries a GPA hedge", async () => {
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const output = await probeCounterfactualTool.call(
+            {
+                kind: "pass_fail",
+                courseId: "CSCI-UA 102",
+                outcome: "fail",
+                now: NOW_IN_WITHDRAW_WINDOW.toISOString(),
+            } as never,
+            ctx,
+        );
+
+        // Re-open consequence.
+        const reopened = output.schedule.semesters.some((sem) =>
+            sem.slots.some(
+                (s) => s.kind === "specific_planned" && s.courseId === "CSCI-UA 102",
+            ),
+        );
+        const diffNonEmpty = output.diff.added.length > 0 || output.diff.removed.length > 0;
+        const newUnmet = (output.planDiff?.newUnmetRequirements?.length ?? 0) > 0;
+        const cascaded = (output.planDiff?.cascadedShifts?.length ?? 0) > 0;
+        expect(reopened || diffNonEmpty || newUnmet || cascaded).toBe(true);
+
+        // A GPA hedge from applyPassFailToDpr is surfaced.
+        const hedges = output.hedges ?? [];
+        expect(hedges.some((h) => /GPA/i.test(h))).toBe(true);
+    });
+});
+
+describe("probe_counterfactual — F3 window caveat", () => {
+    it("surfaces the registrar-window caveat for the current-term IP course", async () => {
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const output = await probeCounterfactualTool.call(
+            { kind: "withdraw", courseId: "CSCI-UA 102", now: NOW_IN_WITHDRAW_WINDOW.toISOString() } as never,
+            ctx,
+        );
+
+        expect(output.windowCaveat).toBeDefined();
+        expect(typeof output.windowCaveat).toBe("string");
+        // Past add/drop, inside the withdraw window → the classifier's
+        // withdraw/PF hedge mentions the withdrawal/typical-deadline framing.
+        expect(output.windowCaveat!).toMatch(/withdraw|typical|deadline|add\/drop/i);
+    });
+});
+
+describe("probe_counterfactual — withdraw/pass_fail are READ-ONLY", () => {
+    it("withdraw leaves session.forwardSchedule / DPR byte-identical", async () => {
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const beforeFs = JSON.parse(JSON.stringify(session.forwardSchedule));
+        const beforeDpr = JSON.parse(JSON.stringify(session.degreeProgressReport));
+
+        await probeCounterfactualTool.call(
+            { kind: "withdraw", courseId: "CSCI-UA 102", now: NOW_IN_WITHDRAW_WINDOW.toISOString() } as never,
+            ctx,
+        );
+
+        expect(JSON.parse(JSON.stringify(session.forwardSchedule))).toEqual(beforeFs);
+        expect(JSON.parse(JSON.stringify(session.degreeProgressReport))).toEqual(beforeDpr);
+    });
+
+    it("pass_fail leaves session.forwardSchedule / DPR byte-identical", async () => {
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const beforeFs = JSON.parse(JSON.stringify(session.forwardSchedule));
+        const beforeDpr = JSON.parse(JSON.stringify(session.degreeProgressReport));
+
+        await probeCounterfactualTool.call(
+            {
+                kind: "pass_fail",
+                courseId: "CSCI-UA 102",
+                outcome: "pass",
+                now: NOW_IN_WITHDRAW_WINDOW.toISOString(),
+            } as never,
+            ctx,
+        );
+
+        expect(JSON.parse(JSON.stringify(session.forwardSchedule))).toEqual(beforeFs);
+        expect(JSON.parse(JSON.stringify(session.degreeProgressReport))).toEqual(beforeDpr);
     });
 });

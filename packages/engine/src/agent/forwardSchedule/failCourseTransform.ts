@@ -37,18 +37,10 @@ import {
     type DPRRequirement,
     type DPRRequirementGroup,
 } from "../../dpr/schema.js";
+import { rowKey } from "./transformUtils.js";
 
 /** A clearly-FAILING grade: below the "D" pass threshold the solver uses. */
 const FAILING_GRADE = "F";
-
-/**
- * The canonical course-id key for a course row, matching buildSolverInput's
- * `${row.subject} ${row.catalogNbr}` keying (buildSolverInput.ts:198), run
- * through `canonicalizeCourseId` so zero-padded / unpadded forms unify.
- */
-function rowKey(row: { subject: string; catalogNbr: string }): string {
-    return canonicalizeCourseId(`${row.subject} ${row.catalogNbr}`);
-}
 
 /**
  * Return a DEEP-COPIED `DegreeProgressReport` in which `courseId` is treated
@@ -109,7 +101,14 @@ export function applyFailedCourseToDpr(
     };
     for (const g of next.requirementGroups) visit(g);
 
-    // ---- 3. Validate the synthetic DPR is still schema-valid. ----
+    // ---- 3. Mark the output as a hypothetical (R1 defense-in-depth). ----
+    // This is a SYNTHETIC DPR (a "what if I failed X" view), so tag it
+    // reportKind:"what_if" — matching its sibling transforms (withdraw/passFail)
+    // so the snapshot-integrity guard (assertAuthoritativeDpr) refuses to persist
+    // it to students.parsed_dpr even if a future caller routed it to a write.
+    next.reportKind = "what_if";
+
+    // ---- 4. Validate the synthetic DPR is still schema-valid. ----
     // A failing grade + not_satisfied status + adjusted counter are all valid
     // values, so this only fires if the transform produced a malformed shape —
     // i.e. fail loudly rather than ship a broken synthetic DPR. parse() also

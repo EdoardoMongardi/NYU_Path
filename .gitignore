@@ -45,6 +45,9 @@ data/
 
 # PII-containing source DPR PDFs and unredacted text extracts.
 # Only the .redacted.txt + .expected.json fixtures may be committed.
+# Blanket *.pdf so any future uploaded DPR / What-If audit can never be
+# committed (real DPRs are PII); the repo intentionally ships no PDFs.
+*.pdf
 SAA_STD_DS.pdf
 SAA_STD_DS_WHATIF.pdf
 packages/engine/tests/fixtures/dpr_sample.txt

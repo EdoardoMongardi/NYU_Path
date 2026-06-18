@@ -743,6 +743,46 @@ button.reasoningHeader:focus-visible {
 }
 
 /* ------------------------------------------------------------------
+   G3.2 — what-if assumption block inside the review card. Displayed
+   BEFORE the ✓/⚠ verdict so the student sees the assumption context
+   before confirming. Uses a muted amber/warning tone to distinguish
+   it from the normal trade-off list (assumption ≠ plan fact).
+   The disclaimer text is kept small and subdued — it is informational,
+   not alarming. The hedges list reuses the reviewTradeOffList pattern.
+   ------------------------------------------------------------------ */
+.reviewWhatIfAssumption {
+    margin: 0 0 10px 0;
+    padding: 8px 10px;
+    border: 1px solid var(--badge-hedged-border);
+    border-radius: 6px;
+    background: var(--badge-hedged-bg);
+    font-size: 0.82em;
+}
+.reviewWhatIfLabel {
+    margin: 0 0 4px 0;
+    font-weight: 700;
+    color: var(--badge-hedged-text);
+}
+.reviewWhatIfCaveat {
+    margin: 0 0 4px 0;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+.reviewWhatIfHedges {
+    margin: 0 0 6px 16px;
+    padding: 0;
+    color: var(--text-secondary);
+}
+.reviewWhatIfDisclaimer {
+    margin: 4px 0 0 0;
+    color: var(--text-tertiary);
+    font-size: 0.9em;
+    font-style: italic;
+    border-top: 1px dashed var(--border-light);
+    padding-top: 4px;
+}
+
+/* ------------------------------------------------------------------
    Phase 4 Task E3.3 — RED invalid-proposal card. An engine-REJECTED
    (feasible:false) proposal renders here instead of the violet preview
    overlay, naming the binding constraint(s) from the response's own
@@ -1377,6 +1417,46 @@ button.reasoningHeader:focus-visible {
     display: flex;
     flex-direction: column;
     gap: 4px;
+}
+
+/* ------------------------------------------------------------------
+   G3.2 — what-if assumption section in the slot popover. Only shown
+   for in_progress slots when the F3 window permits (add_drop or
+   withdraw_pf). Uses a muted amber tone matching the review card's
+   assumption block. The hedge text (when the window is closed) is
+   subdued — informational, not an error.
+   ------------------------------------------------------------------ */
+.slotPopoverWhatIf {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--border-light);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.slotPopoverWhatIfBtn {
+    display: block;
+    background: var(--badge-hedged-bg) !important;
+    border: 1px solid var(--badge-hedged-border) !important;
+    color: var(--badge-hedged-text) !important;
+    border-radius: 4px;
+    padding: 5px 10px;
+    text-align: left;
+    font-size: 0.82em;
+    cursor: pointer;
+    width: 100%;
+}
+.slotPopoverWhatIfBtn:hover {
+    background: var(--badge-hedged-border) !important;
+}
+.slotPopoverWhatIfHedge {
+    margin: 2px 0 0 0;
+    padding: 4px 6px;
+    font-size: 0.78em;
+    color: var(--text-tertiary);
+    font-style: italic;
+    border-radius: 4px;
+    background: var(--bg-secondary);
 }
 
 .addCourseAffordance {

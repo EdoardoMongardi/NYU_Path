@@ -82,11 +82,12 @@ export function parseDpr(rawText: string, opts: ParseDprOptions = {}): ParseDprR
     const text = normalizeText(rawText);
     const lines = text.split("\n");
 
-    // 2. Header — first ~5 lines.
+    // 2. Header — first ~5 lines. Also detect report kind from the title.
     const header = extractHeader(lines);
     if (!header) {
         return failure("Could not find DPR header (expected `Degree Progress Report` + `For <name> prepared on <date>`).", lines.slice(0, 10));
     }
+    const reportKind = detectReportKind(lines);
 
     // 3. Programs — table that starts at "Program Requirement Term Requirement Status".
     const programs = extractPrograms(lines, warnings);
@@ -123,6 +124,7 @@ export function parseDpr(rawText: string, opts: ParseDprOptions = {}): ParseDprR
             parseDurationMs: Date.now() - startedAt,
             warnings,
         },
+        reportKind,
         header,
         programs,
         advisorNotations,
@@ -173,6 +175,48 @@ function normalizeText(raw: string): string {
         .split("\n")
         .map((l) => l.replace(/\s+$/, ""))
         .join("\n");
+}
+
+// ============================================================
+// Report-kind detection
+// ============================================================
+
+/**
+ * Determine whether the PDF is a standard DPR or a What-If / Career
+ * Simulation Report. Mirrors the title-scanning logic in `extractHeader`
+ * (same first-20-line window, same `Page N of M` stripping) but focuses
+ * solely on the what-if signal:
+ *
+ *   • Title line ends with "What-If Report" (e.g.
+ *     "Page 1 of 8Degree Progress Report What-If Report"), OR
+ *   • The line immediately after the title (allowing blanks) is the
+ *     "Career Simulation Report" sub-title, which appears only in
+ *     What-If PDFs.
+ *
+ * Returns `"what_if"` if either signal is present, otherwise `"dpr"`.
+ */
+function detectReportKind(lines: string[]): "dpr" | "what_if" {
+    for (let i = 0; i < Math.min(lines.length, 20); i++) {
+        const trimmed = lines[i]!.trim();
+        const stripped = trimmed.replace(/^Page\s+\d+\s+of\s+\d+\s*/i, "");
+        if (/^Degree Progress Report/i.test(stripped)) {
+            // Title line contains the What-If variant suffix.
+            if (/what-if report/i.test(stripped)) {
+                return "what_if";
+            }
+            // Otherwise the FIRST non-blank line after the title decides it:
+            // the "Career Simulation Report" sub-title (present only in What-If
+            // PDFs) → what_if; anything else → a normal DPR.
+            for (let j = i + 1; j < lines.length; j++) {
+                const next = lines[j]!.trim();
+                if (next === "") continue;
+                return /^career simulation report$/i.test(next) ? "what_if" : "dpr";
+            }
+            return "dpr"; // title only, no following content → normal DPR
+        }
+    }
+    // Title not found — extractHeader would also fail; caller will handle it.
+    return "dpr";
 }
 
 // ============================================================
@@ -365,7 +409,13 @@ function findSectionHeaders(lines: string[], end: number): SectionHeader[] {
         // Skip false positives: course-table column headers, table
         // body lines that happen to end with "(...)" topic suffixes.
         if (line === "Term Subject Catalog Nbr Course Title Grade Units Type") continue;
-        const title = m[1]!.trim();
+        // Real What-If PDFs occasionally concatenate the page-number runner
+        // ("Page N of M") onto the front of a section-header title because
+        // both share the same y-coordinate in the source PDF — e.g.
+        // "Page 7 of 8Policy Concentration (R1103)". Strip the leading prefix
+        // (the same one DPR-title detection already strips) so the title
+        // matches/stores cleanly; otherwise the group keeps a corrupted title.
+        const title = m[1]!.trim().replace(/^Page\s+\d+\s+of\s+\d+\s*/i, "").trim();
         const id = m[2]!;
         headers.push({ lineIdx: i, title, id, isGroup: id.startsWith("RG") });
     }
