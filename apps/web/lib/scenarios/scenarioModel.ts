@@ -90,8 +90,12 @@ export function initialState(committed: ForwardSchedule | null): ScenarioState {
  * Replace the committed anchor schedule.
  * Does NOT clear `scenarios`. `activeId` is unchanged (it may now point at a
  * scenario id that still exists, or at "committed" — both fine).
+ *
+ * NO-OP guard: returns `s` unchanged (same reference) when the schedule is
+ * already the same object, so `useSyncExternalStore` sees no spurious change.
  */
 export function setCommitted(s: ScenarioState, schedule: ForwardSchedule): ScenarioState {
+    if (schedule === s.committed) return s;
     return { ...s, committed: schedule };
 }
 
@@ -128,6 +132,10 @@ export function addScenario(s: ScenarioState, scenario: Scenario): ScenarioState
  * Clears compare.
  *
  * Throws if id is neither "committed" nor an existing scenario id.
+ *
+ * NO-OP guard: returns `s` unchanged (same reference) when id is already the
+ * active tab AND compare is already null, so `useSyncExternalStore` sees no
+ * spurious change.
  */
 export function setActive(s: ScenarioState, id: string): ScenarioState {
     if (!isValidActiveTarget(s, id)) {
@@ -135,6 +143,8 @@ export function setActive(s: ScenarioState, id: string): ScenarioState {
             `setActive: unknown id "${id}". Must be "committed" or an existing scenario id.`,
         );
     }
+    // No-op: already the active tab and compare is already null.
+    if (id === s.activeId && s.compare === null) return s;
     return { ...s, activeId: id, compare: null };
 }
 
@@ -158,8 +168,12 @@ export function openCompare(s: ScenarioState, leftId: string, rightId: string): 
 
 /**
  * Close the compare view (set compare to null).
+ *
+ * NO-OP guard: returns `s` unchanged (same reference) when compare is already
+ * null, so `useSyncExternalStore` sees no spurious change.
  */
 export function closeCompare(s: ScenarioState): ScenarioState {
+    if (s.compare === null) return s;
     return { ...s, compare: null };
 }
 

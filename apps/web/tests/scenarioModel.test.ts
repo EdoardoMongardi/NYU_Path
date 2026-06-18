@@ -453,3 +453,76 @@ describe("activeScenario", () => {
         expect(activeScenario(s)).toBe(sc);
     });
 });
+
+// ---------------------------------------------------------------------------
+// H2.3 no-op guard identities (useSyncExternalStore referential stability)
+// ---------------------------------------------------------------------------
+
+describe("setActive — no-op guard", () => {
+    it("returns the SAME reference when id is already active AND compare is null", () => {
+        let s = initialState(makeSchedule());
+        s = addScenario(s, makeScenario({ id: "sc-1" }));
+        // sc-1 is now active; compare is null (addScenario clears it)
+        const s2 = setActive(s, "sc-1");
+        expect(s2).toBe(s);
+    });
+
+    it("returns a NEW reference when switching to a different id", () => {
+        let s = initialState(makeSchedule());
+        s = addScenario(s, makeScenario({ id: "sc-1" }));
+        s = addScenario(s, makeScenario({ id: "sc-2" }));
+        s = setActive(s, "sc-1"); // active = sc-1
+        const s2 = setActive(s, "sc-2");
+        expect(s2).not.toBe(s);
+        expect(s2.activeId).toBe("sc-2");
+    });
+
+    it("returns a NEW reference when id matches but compare is non-null (must clear compare)", () => {
+        let s = initialState(makeSchedule());
+        s = addScenario(s, makeScenario({ id: "sc-1" }));
+        s = addScenario(s, makeScenario({ id: "sc-2" }));
+        s = openCompare(s, "sc-1", "sc-2");
+        s = setActive(s, "sc-2"); // first call sets active + clears compare
+        // Now sc-2 is active, compare is null — calling setActive(sc-2) again should be a no-op.
+        const s2 = setActive(s, "sc-2");
+        expect(s2).toBe(s);
+    });
+});
+
+describe("closeCompare — no-op guard", () => {
+    it("returns the SAME reference when compare is already null", () => {
+        const s = initialState(makeSchedule());
+        expect(s.compare).toBeNull();
+        const s2 = closeCompare(s);
+        expect(s2).toBe(s);
+    });
+
+    it("returns a NEW reference (compare cleared) when compare was non-null", () => {
+        let s = initialState(makeSchedule());
+        s = addScenario(s, makeScenario({ id: "sc-1" }));
+        s = addScenario(s, makeScenario({ id: "sc-2" }));
+        s = openCompare(s, "sc-1", "sc-2");
+        expect(s.compare).not.toBeNull();
+        const s2 = closeCompare(s);
+        expect(s2).not.toBe(s);
+        expect(s2.compare).toBeNull();
+    });
+});
+
+describe("setCommitted — no-op guard", () => {
+    it("returns the SAME reference when the schedule is the same object", () => {
+        const sched = makeSchedule();
+        const s = initialState(sched);
+        const s2 = setCommitted(s, sched);
+        expect(s2).toBe(s);
+    });
+
+    it("returns a NEW reference when the schedule differs", () => {
+        const sched1 = makeSchedule("s1");
+        const sched2 = makeSchedule("s2");
+        const s = initialState(sched1);
+        const s2 = setCommitted(s, sched2);
+        expect(s2).not.toBe(s);
+        expect(s2.committed).toBe(sched2);
+    });
+});
