@@ -32,6 +32,38 @@ interface UnauthoredProgramEstimate {
     /** What the student CAN learn from the DPR + RAG corpus, even
      *  without an audit-grade verdict for the hypothetical. */
     guidance: string;
+    /** Explicit structured flag: the client should offer the student a
+     *  Branch-A Albert What-If audit upload for these programs.
+     *  Always `true` — every estimate offer should surface the upload card. */
+    offerAuditUpload: true;
+    /** Human-readable label derived from requestedProgramIds, used in the
+     *  upload card prompt (e.g. "Economics BA, Mathematics Minor"). */
+    hypotheticalProgramLabel: string;
+}
+
+/**
+ * Converts a program id to a human-readable label.
+ * Rules: replace underscores with spaces, Title-Case each word.
+ * Exported for unit testing.
+ * Examples:
+ *   "economics_ba"          → "Economics Ba"
+ *   "mathematics_minor"     → "Mathematics Minor"
+ *   "stern_finance_bs"      → "Stern Finance Bs"
+ */
+export function prettifyProgramId(id: string): string {
+    return id
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(" ");
+}
+
+/**
+ * Builds a comma-joined human-readable label from an array of program ids.
+ * Exported for unit testing.
+ * Example: ["economics_ba","mathematics_minor"] → "Economics Ba, Mathematics Minor"
+ */
+export function buildProgramLabel(ids: string[]): string {
+    return ids.map(prettifyProgramId).join(", ");
 }
 
 const DISCLAIMER =
@@ -106,6 +138,8 @@ export const whatIfAuditTool = buildTool({
             requestedProgramIds: input.hypotheticalPrograms,
             disclaimer: DISCLAIMER,
             guidance,
+            offerAuditUpload: true,
+            hypotheticalProgramLabel: buildProgramLabel(input.hypotheticalPrograms),
         };
     },
     summarizeResult(result) {
@@ -116,6 +150,10 @@ export const whatIfAuditTool = buildTool({
         // The disclaimer is also returned via extractVerbatim; it's
         // included here so the model sees the exact text it must include.
         lines.push(`  REQUIRED DISCLAIMER (must appear verbatim in your reply): ${result.disclaimer}`);
+        // Machine-extractable marker: the v2 route regexes this line (like
+        // extractPendingMutationId) and forwards it as an SSE event so the
+        // client renders a Branch-A Albert What-If audit upload card.
+        lines.push(`AUDIT_UPLOAD_OFFER: ${result.hypotheticalProgramLabel}`);
         return lines.join("\n");
     },
     extractVerbatim(result) {
