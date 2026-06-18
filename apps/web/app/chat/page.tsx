@@ -45,6 +45,9 @@ import { buildPreferenceTurns } from "../../lib/wizard/preferenceTurns";
 import { buildIntendedMajorPreviewTurn } from "../../lib/wizard/intendedMajor";
 import type { WizardValues } from "../../lib/wizard/wizardMachine";
 import OnboardingWizard from "./wizard/OnboardingWizard";
+import ScheduleCard from "./ScheduleCard";
+import { buildScheduleCardMessage } from "./buildScheduleCardMessage";
+import type { ScenarioKind } from "./workspace/scenarioBadges";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -88,8 +91,21 @@ interface Message {
     /** Phase 17 Task D follow-up — discriminator for the new
      *  `plan_action_bubble` kind. `undefined` = a regular chat
      *  bubble (the existing render path); `"plan_action_bubble"`
-     *  swaps the render to the bubble + buttons block. */
-    kind?: "plan_action_bubble";
+     *  swaps the render to the bubble + buttons block.
+     *  H4.2a — `"schedule_card"` swaps the render to the ScheduleCard
+     *  component, showing an openable/comparable artifact in the chat
+     *  thread whenever the engine produces a new proposed schedule. */
+    kind?: "plan_action_bubble" | "schedule_card";
+    /** H4.2a — populated only when `kind === "schedule_card"`. Holds
+     *  the scenario id, kind, label, optional summary, and optional
+     *  verdict to render as a ScheduleCard in the chat thread. */
+    scheduleCard?: {
+        scenarioId: string;
+        kind: ScenarioKind;
+        label: string;
+        summary?: string;
+        verdict?: "valid" | "trade-offs" | "invalid";
+    };
     /** Phase 17 Task D follow-up — populated only when
      *  `kind === "plan_action_bubble"`. Holds the bubble's
      *  template/polished text, the verb, the pendingMutationId
@@ -1172,6 +1188,15 @@ export default function ChatPage() {
             planStore.setPendingPreview(surfaces.preview);
             // A feasible preview supersedes any stale red card.
             planStore.clearInvalidProposal();
+            // H4.2a — emit a ScheduleCard into the chat thread so the
+            // student can open/compare the new proposed scenario from
+            // the conversation (feasible path ONLY; invalid stays card-only).
+            const activeSc = planStore.getActiveScenario();
+            if (activeSc && activeSc.kind === "proposed") {
+                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                setMessages(prev => [...prev, buildScheduleCardMessage(activeSc, cardMsgId, new Date()) as Message]);
+                setTimeout(scrollToBottom, 50);
+            }
         }
         // E3.4 bubble↔card dedup — mint the chat bubble ONLY for the
         // feasible:false path (showBubble). The feasible path's sole
@@ -1232,6 +1257,15 @@ export default function ChatPage() {
         } else if (surfaces.preview) {
             planStore.setPendingPreview(surfaces.preview);
             planStore.clearInvalidProposal();
+            // H4.2a — emit a ScheduleCard into the chat thread so the
+            // student can open/compare the new what-if scenario from the
+            // conversation (feasible path ONLY; invalid stays card-only).
+            const activeSc = planStore.getActiveScenario();
+            if (activeSc && activeSc.kind === "proposed") {
+                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                setMessages(prev => [...prev, buildScheduleCardMessage(activeSc, cardMsgId, new Date()) as Message]);
+                setTimeout(scrollToBottom, 50);
+            }
         }
     }, []);
 
@@ -1822,6 +1856,48 @@ export default function ChatPage() {
                                             )}
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    // H4.2a — schedule_card: render a ScheduleCard artifact
+                    // in the chat thread so the student can Open or Compare
+                    // the new scenario from the conversation.
+                    if (msg.kind === "schedule_card" && msg.scheduleCard) {
+                        const sc = msg.scheduleCard;
+                        return (
+                            <div
+                                key={msg.id}
+                                className={`${styles.messageBubble} ${styles.assistant}`}
+                                style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}
+                                data-kind="schedule_card"
+                            >
+                                <div className={styles.avatar}>🎓</div>
+                                <div className={styles.bubbleContent}>
+                                    <ScheduleCard
+                                        scenarioId={sc.scenarioId}
+                                        kind={sc.kind}
+                                        label={sc.label}
+                                        summary={sc.summary}
+                                        verdict={sc.verdict}
+                                        onOpen={(id) => planStore.setActive(id)}
+                                        onCompare={(id) => {
+                                            // Guard: committed must be non-null and
+                                            // the scenario must not equal "committed"
+                                            // (openCompare throws on equal ids).
+                                            const state = planStore.getScenarioState();
+                                            if (state.committed === null) return;
+                                            if (id === "committed") return;
+                                            try {
+                                                planStore.openCompare("committed", id);
+                                            } catch {
+                                                // Safety: if openCompare rejects (e.g.
+                                                // scenario was already discarded), do
+                                                // nothing — the workspace handles it.
+                                            }
+                                        }}
+                                    />
                                 </div>
                             </div>
                         );
