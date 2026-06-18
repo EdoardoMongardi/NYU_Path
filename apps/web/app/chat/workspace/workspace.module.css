@@ -1,0 +1,52 @@
+/* ============================================================
+ * workspace.module.css — scenarios workspace surfaces
+ * ============================================================
+ * H2.2 — diff-highlight classes for the ScheduleView compare column.
+ * Design note: H6 is the full visual pass; these are functional tints
+ * using NYU-violet-consistent CSS variables for now.
+ *
+ * All diff annotations wrap the <li> that SlotRow renders, so the
+ * slot's own tier/state classes remain unaffected — we only add a
+ * background/decoration layer.
+ * ============================================================ */
+
+/* ---- Diff-highlight row wrappers --------------------------------- */
+
+/* added: new course in this scenario — green tint */
+.diffAdded {
+    background-color: var(--diff-added-bg, rgba(34, 139, 34, 0.12));
+    border-left: 3px solid var(--diff-added-border, #22a060);
+    border-radius: 3px;
+}
+
+/* removed: course present in base but absent here — red with strike */
+.diffRemoved {
+    background-color: var(--diff-removed-bg, rgba(180, 40, 40, 0.10));
+    border-left: 3px solid var(--diff-removed-border, #b42828);
+    border-radius: 3px;
+    opacity: 0.75;
+    text-decoration: line-through;
+}
+
+/* retake: same course pushed to a later term — violet tint */
+.diffRetake {
+    background-color: var(--diff-retake-bg, rgba(87, 6, 140, 0.10));
+    border-left: 3px solid var(--nyu-violet, #57068c);
+    border-radius: 3px;
+}
+
+/* moved: course shifted between terms — subtle amber */
+.diffMoved {
+    background-color: var(--diff-moved-bg, rgba(180, 130, 10, 0.10));
+    border-left: 3px solid var(--diff-moved-border, #b4820a);
+    border-radius: 3px;
+}
+
+/* ---- Schedule grid container ------------------------------------- */
+
+.scheduleGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+}
