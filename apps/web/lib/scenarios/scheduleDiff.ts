@@ -45,7 +45,10 @@
  * two placeholders only match if their `placeholderId` is identical.
  */
 
-import { canonicalizeCourseId } from "@nyupath/engine";
+// Client-safe entry (NOT the "@nyupath/engine" barrel) — scheduleDiff runs in
+// the browser via ScheduleView; the barrel drags node:fs/url/crypto into the
+// client bundle. See packages/engine/src/client.ts.
+import { canonicalizeCourseId } from "@nyupath/engine/client";
 import type { ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
 
 // ---------------------------------------------------------------------------

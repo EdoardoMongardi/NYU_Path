@@ -9,39 +9,21 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["unpdf", "pdfjs-dist"],
   // Use Webpack instead of Turbopack for dev (Turbopack can't resolve
   // ESM .js extension imports in TypeScript packages)
-  webpack: (config, { isServer, webpack }) => {
+  webpack: (config) => {
     config.resolve = config.resolve || {};
     config.resolve.extensionAlias = {
       ".js": [".ts", ".tsx", ".js", ".jsx"],
       ".mjs": [".mts", ".mjs"],
     };
-    // The @nyupath/engine barrel (src/index.ts) re-exports server-only modules
-    // (dpr/fingerprint.ts → "node:crypto"; catalog/RAG loaders → "node:fs", etc.).
-    // Several CLIENT modules (e.g. lib/wizard/homeSchool.ts → SCHOOL_DISPLAY_NAMES,
-    // lib/scenarios/scheduleDiff.ts → canonicalizeCourseId) import OTHER symbols
-    // from that barrel, which dragged those node: builtins into the client bundle
-    // and 500'd /chat with an UnhandledSchemeError (the engine has no
-    // `sideEffects:false`, so the unused server re-exports aren't tree-shaken).
-    // Those server-only code paths (computeDprFingerprint, loadCourses, RAG setup,
-    // …) are NEVER executed in the browser — only their pure-data/pure-fn siblings
-    // are — so stub Node core modules out of the CLIENT bundle: rewrite the `node:`
-    // scheme to the bare specifier, then resolve each builtin to an empty module
-    // client-side. The SERVER bundle is untouched (isServer), so the real
-    // fingerprint/catalog calls in /api/* + orchestrator still work.
-    if (!isServer) {
-      config.plugins.push(
-        new webpack.NormalModuleReplacementPlugin(/^node:/, (resource: { request: string }) => {
-          resource.request = resource.request.replace(/^node:/, "");
-        }),
-      );
-      config.resolve.fallback = {
-        ...(config.resolve.fallback || {}),
-        crypto: false, fs: false, path: false, os: false, stream: false,
-        util: false, url: false, zlib: false, http: false, https: false,
-        net: false, tls: false, child_process: false, async_hooks: false,
-        buffer: false, events: false, assert: false, querystring: false,
-      };
-    }
+    // NOTE: client code must NOT import the "@nyupath/engine" barrel — it
+    // eagerly pulls server-only modules (schoolConfigLoader/dataLoader →
+    // node:fs/url; dpr/fingerprint → node:crypto) that run Node APIs at import
+    // time and break the browser bundle. Client modules import the pure,
+    // Node-free subset from "@nyupath/engine/client" instead (see
+    // packages/engine/src/client.ts). That keeps node: builtins out of the
+    // client bundle WITHOUT stubbing them (stubbing turned the compile error
+    // into a runtime `fileURLToPath is not a function`), so no resolve.fallback
+    // hack is needed here.
     return config;
   },
 };

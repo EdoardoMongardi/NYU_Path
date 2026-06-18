@@ -23,7 +23,11 @@
 // a home school to "cas".
 // ============================================================
 
-import { SCHOOL_DISPLAY_NAMES } from "@nyupath/engine";
+// Client-safe entry (NOT the "@nyupath/engine" barrel) — homeSchool runs in the
+// browser via the OnboardingWizard; the barrel drags node:fs/url/crypto into the
+// client bundle. See packages/engine/src/client.ts. (The DegreeProgressReport
+// type below is a type-only import — erased at build, no runtime pull.)
+import { SCHOOL_DISPLAY_NAMES } from "@nyupath/engine/client";
 import type { DegreeProgressReport } from "@nyupath/engine";
 import { buildStudentProfileFromDpr } from "../buildSession";
 

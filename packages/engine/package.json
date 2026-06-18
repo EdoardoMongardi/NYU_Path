@@ -19,6 +19,7 @@
     },
     "exports": {
         ".": "./src/index.ts",
+        "./client": "./src/client.ts",
         "./audit/degreeAudit": "./src/audit/degreeAudit.ts",
         "./planner/semesterPlanner": "./src/planner/semesterPlanner.ts",
         "./data/courses.json": "./src/data/courses.json",
