@@ -227,7 +227,6 @@ export default function ChatPage() {
     const planStore = useMemo(() => createPlanStore(), []);
     const { forwardSchedule, schedulePreferences, forwardMaterialization, pendingPreview, invalidProposal } =
         useSyncExternalStore(planStore.subscribe, planStore.getSnapshot, planStore.getSnapshot);
-    const [sidebarOpen, setSidebarOpen] = useState(false);
     // Phase 4 Task E6.4 — in-flight guard for the standing
     // self-serve account-deletion control (disables the button so a
     // student can't fire DELETE /api/session/delete twice).
@@ -1653,6 +1652,7 @@ export default function ChatPage() {
                 changed?: boolean;
                 schedule?: ForwardSchedule;
                 state?: string;
+                dpr?: { kind: "dpr"; report: import("@nyupath/engine").DegreeProgressReport };
                 error?: string;
             };
             if (!res.ok) {
@@ -1665,6 +1665,16 @@ export default function ChatPage() {
             }
             if (data.schedule) {
                 planStore.setForwardSchedule(data.schedule);
+            }
+            // FIX 2 — update parsedData so SummaryCard re-derives from the
+            // fresh DPR immediately (without a page reload). Shape mirrors
+            // the discriminated ParsedTranscript the restore path uses:
+            //   setParsedData({ kind: "dpr", report: <DegreeProgressReport> })
+            // CORE RULE 14 safe: this is the REAL corrected DPR (reportKind
+            // "dpr"), not a synthetic/what-if DPR. assertAuthoritativeDpr
+            // is not touched.
+            if (data.dpr) {
+                setParsedData(data.dpr);
             }
             window.alert("Schedule updated to reflect your new DPR.");
         } catch (err) {
@@ -1819,24 +1829,9 @@ export default function ChatPage() {
             <header className={styles.header}>
                 <a href="/" className={styles.headerLogo}>🎓 NYU Path</a>
                 <span className={styles.headerBadge}>AI Advisor</span>
-                {/* Schedule toggle is ALWAYS visible (May 2026 post-mortem
-                    fix). Even before a forward plan exists, the sidebar
-                    surfaces the empty state ("Ask me what to take next
-                    semester to compute one"), the Update DPR / Clear
-                    affordances, and — once a DPR is loaded — the
-                    historical + IP term cards. The Phase 13 gate that
-                    hid the button until `forwardSchedule !== null` left
-                    students with no obvious way to inspect what data
-                    the agent already had. */}
-                <button
-                    type="button"
-                    className={styles.scheduleToggle}
-                    onClick={() => setSidebarOpen(o => !o)}
-                    aria-label="Toggle schedule sidebar"
-                    aria-expanded={sidebarOpen}
-                >
-                    📅 Schedule
-                </button>
+                {/* H5 (plan 36): the sidebar toggle is gone — the 3 zones are
+                    always visible (no collapse; no mobile). The ProfileRail
+                    is permanently mounted in ThreeZoneShell's .zoneRight. */}
             </header>
 
             {/* Phase 7-E W10.3 — persistent disclaimer banner.

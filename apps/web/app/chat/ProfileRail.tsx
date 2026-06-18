@@ -121,7 +121,7 @@ export default function ProfileRail({
     }
 
     return (
-        <aside className={styles.scheduleSidebar} aria-label="Your profile">
+        <aside className={styles.profileRail} aria-label="Your profile">
             <div className={styles.scheduleSidebarHeader}>
                 <h2 className={styles.scheduleSidebarTitle}>Your profile</h2>
             </div>

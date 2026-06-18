@@ -1860,11 +1860,20 @@ button.reasoningHeader:focus-visible {
 /* ============================================================
    ProfileRail — H5.1 (plan 36 scenarios workspace UI)
    The RIGHT-zone profile-only rail: SummaryCard + DPR-refresh +
-   the scenarios list + the privacy note + account actions. Reuses
-   the sidebar shell classes (.scheduleSidebar / .sidebarToolbar /
-   .sidebarClearBtn) for the chrome; these add the scenarios-list
-   styling. Full visual polish is H6 — this is the functional layout.
+   the scenarios list + the privacy note + account actions.
+
+   .profileRail is the ROOT class — it MUST be IN NORMAL FLOW so it
+   fills the ThreeZoneShell's .zoneRight grid cell. No position:fixed,
+   no fixed width, no z-index, no animation. Full visual polish H6.
+   Inner chrome reuses the sidebar shell classes (.scheduleSidebarHeader /
+   .scheduleSidebarBody / .sidebarToolbar / .sidebarClearBtn).
    ============================================================ */
+.profileRail {
+    height: 100%;
+    overflow-y: auto;
+    background: var(--bg-primary);
+    border-left: 1px solid var(--border-light);
+}
 .profileRailNote {
     margin: 16px 20px 4px;
     padding: 10px 12px;

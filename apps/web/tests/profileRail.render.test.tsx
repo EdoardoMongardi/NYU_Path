@@ -20,7 +20,7 @@
 // ============================================================
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ForwardSchedule, StudentProfile } from "@nyupath/shared";
 import type { DegreeProgressReport } from "@nyupath/engine";
 import { createPlanStore, type Scenario } from "../app/chat/planState";
@@ -303,6 +303,64 @@ describe("ProfileRail — profile-level concerns", () => {
         const del = screen.getByRole("button", { name: /delete my account/i });
         fireEvent.click(del);
         expect(props.onDeleteAccount).toHaveBeenCalled();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// (5b) useSyncExternalStore re-render invariant — store mutation post-mount
+// ---------------------------------------------------------------------------
+
+describe("ProfileRail — live store re-render", () => {
+    it("re-renders when a new scenario is added to the store after mount", async () => {
+        const { store, proposed } = buildStore();
+        const props = defaultProps(store);
+        const { container } = render(<ProfileRail {...props} />);
+
+        // Before mutation: the proposed scenario row is present but the new
+        // whatif scenario doesn't exist yet.
+        expect(container.querySelector(`[data-scenario-row='${proposed.id}']`)).not.toBeNull();
+        const newWhatif = makeWhatifScenario({ label: "Switch to double major" });
+        expect(container.querySelector(`[data-scenario-row='${newWhatif.id}']`)).toBeNull();
+
+        // Mutate the store AFTER mount — the rail must re-render via
+        // useSyncExternalStore and show the new row without any prop change.
+        await act(async () => {
+            store.addScenario(newWhatif);
+        });
+
+        const newRow = container.querySelector(`[data-scenario-row='${newWhatif.id}']`);
+        expect(newRow).not.toBeNull();
+        expect(newRow?.textContent).toMatch(/Switch to double major/i);
+    });
+
+    it("re-renders and moves the active-row highlight when setActive is called post-mount", async () => {
+        const { store, proposed, whatif } = buildStore();
+        const { container } = render(<ProfileRail {...defaultProps(store)} />);
+
+        // Initially "committed" is active.
+        expect(
+            container.querySelector("[data-scenario-row='committed']")?.getAttribute("aria-current"),
+        ).toBe("true");
+        expect(
+            container.querySelector(`[data-scenario-row='${whatif.id}']`)?.getAttribute("aria-current"),
+        ).toBeNull();
+
+        // Move active to the whatif scenario AFTER mount.
+        await act(async () => {
+            store.setActive(whatif.id);
+        });
+
+        // The committed anchor loses aria-current; the whatif row gains it.
+        expect(
+            container.querySelector("[data-scenario-row='committed']")?.getAttribute("aria-current"),
+        ).toBeNull();
+        expect(
+            container.querySelector(`[data-scenario-row='${whatif.id}']`)?.getAttribute("aria-current"),
+        ).toBe("true");
+
+        // Suppress unused-variable lint for `proposed` (it's still in the
+        // rendered list; we only care about the active-highlight move).
+        void proposed;
     });
 });
 
