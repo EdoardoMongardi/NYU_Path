@@ -79,8 +79,11 @@ export interface ScheduleDiff {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/** Extract a stable diff-key and display label from a slot. */
-function slotKey(slot: ScheduleSlot): { key: string; label: string } {
+/** Extract a stable diff-key and display label from a slot. Exported so the
+ *  compare/workspace renderer (ScheduleView) keys courses IDENTICALLY — a
+ *  divergent key would silently drop diff highlights (canonical vs raw, or
+ *  placeholder category vs placeholderId). Single source of truth. */
+export function slotKey(slot: ScheduleSlot): { key: string; label: string } {
     if (slot.kind === "placeholder") {
         return {
             key: `placeholder:${slot.placeholderId}`,

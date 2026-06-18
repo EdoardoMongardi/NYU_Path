@@ -27,6 +27,7 @@ import type { ReactElement } from "react";
 import { useState } from "react";
 import type { ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
 import type { AnnotatedColumn, CourseDiff } from "../../../lib/scenarios/scheduleDiff";
+import { slotKey } from "../../../lib/scenarios/scheduleDiff";
 import { renderSlotInner, slotGradeText } from "../sidebar/slotRenderHelpers";
 import { formatTermLabel, slotCredits } from "../sidebar/sidebarFormatters";
 import { slotTierClassName } from "../sidebar/slotTier";
@@ -91,18 +92,15 @@ function workspaceDiffClass(name: string | null): string {
 }
 
 // ============================================================
-// Slot identity helper (mirrors scheduleSidebar.slotKey)
+// Slot identity helper
 // ============================================================
+// Delegate to scheduleDiff's slotKey so the diff-lookup key here is BYTE-
+// IDENTICAL to the key scheduleDiff stored (canonicalizeCourseId for courses,
+// `placeholder:${placeholderId}` for placeholders). A divergent key (raw vs
+// canonical course id, or placeholder-by-category) silently drops highlights.
 
 function slotCourseKey(slot: ScheduleSlot): string {
-    if (
-        slot.kind === "specific_planned" ||
-        slot.kind === "completed" ||
-        slot.kind === "in_progress"
-    ) {
-        return slot.courseId;
-    }
-    return `placeholder(${slot.category})`;
+    return slotKey(slot).key;
 }
 
 // ============================================================

@@ -172,6 +172,27 @@ describe("ScheduleView — diff annotations", () => {
         const { container } = render(<ScheduleView schedule={SCHEDULE} />);
         expect(container.querySelectorAll("[data-diff]").length).toBe(0);
     });
+
+    it("matches a ZERO-PADDED slot courseId against a CANONICAL-keyed diff row", () => {
+        // scheduleDiff stores keys via canonicalizeCourseId; ScheduleView must key
+        // slots identically, else a padded id ("CSCI-UA 0101") silently misses the
+        // canonical diff row ("CSCI-UA 101") and the highlight is dropped.
+        const paddedSchedule = {
+            ...SCHEDULE,
+            semesters: [{
+                term: "2026-fall", locked: false, plannedCredits: 4, notes: [],
+                loadRationale: LOAD_RATIONALE,
+                slots: [specificSlot("CSCI-UA 0101")], // zero-padded
+            }],
+        } as unknown as ForwardSchedule;
+        const canonicalDiff: AnnotatedColumn = {
+            terms: [{ term: "2026-fall", rows: [
+                { courseId: "CSCI-UA 101", label: "Intro CS", term: "2026-fall", diff: "added" },
+            ] }],
+        };
+        const { container } = render(<ScheduleView schedule={paddedSchedule} diff={canonicalDiff} />);
+        expect(container.querySelectorAll("[data-diff='diff-added']").length).toBe(1);
+    });
 });
 
 // ---- (3) readOnly hides ⋯ affordance ----------------------------------------
