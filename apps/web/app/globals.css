@@ -439,11 +439,20 @@ html, body {
     padding: var(--sp-12) var(--sp-16) 0;
     flex-shrink: 0;
 }
+/* Toolbar row: tablist + Compare button as siblings.
+   The Compare <button> must NOT be inside role="tablist"
+   (a tablist must contain only role="tab" children — ARIA fix). */
+.ws-head .tabs-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--sp-6);
+}
 .ws-head .tabs {
     display: flex;
     align-items: flex-end;
     gap: var(--sp-6);
     flex-wrap: wrap;
+    flex: 1 1 auto;
 }
 
 /* A tab is a flex container (select-button + optional close-button as
@@ -498,7 +507,7 @@ html, body {
     margin-left: 2px;
     border: none;
     background: transparent;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     border-radius: var(--radius-sm);
     font-size: var(--fs-12);
     line-height: 1;

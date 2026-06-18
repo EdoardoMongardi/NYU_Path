@@ -249,13 +249,17 @@ describe("ScheduleWorkspace — proposed scenario body", () => {
 // ---------------------------------------------------------------------------
 
 describe("ScheduleWorkspace — whatif scenario body", () => {
-    it("shows Keep and Discard buttons for a whatif scenario", () => {
+    it("shows Discard button (and NOT a Keep button) for a whatif scenario", () => {
         const { store, whatif } = buildStore();
         // Activate the whatif scenario
         store.setActive(whatif.id);
         render(<ScheduleWorkspace planStore={store} onConfirmProposed={vi.fn()} onAskWhy={vi.fn()} />);
-        expect(screen.getByRole("button", { name: /keep/i })).toBeTruthy();
+        // Keep button is GONE — it was a dead no-op (FIX 3, H6 polish)
+        expect(screen.queryByRole("button", { name: /keep/i })).toBeNull();
+        // Discard is the sole action
         expect(screen.getByRole("button", { name: /discard/i })).toBeTruthy();
+        // Static note about session-only semantics is present
+        expect(screen.getByText(/stays in your session until you discard it/i)).toBeTruthy();
     });
 
     it("shows the read-only note for a whatif scenario", () => {

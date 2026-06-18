@@ -118,6 +118,29 @@ export default function ScheduleWorkspace({
         }
     }
 
+    // ---- tab id helpers (for ARIA panel wiring) ----
+    // Stable id for each tab element and the single panel.
+    const tabId  = (id: string) => `ws-tab-${id}`;
+    const panelId = "ws-tabpanel";
+
+    // Ordered list of tab ids — used for roving tabindex + arrow-key nav.
+    const tabOrder = ["committed", ...scenarios.map((sc) => sc.id)];
+
+    // ---- arrow-key navigation on the tablist ----
+    function handleTablistKeyDown(e: React.KeyboardEvent<HTMLDivElement>): void {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        const currentIndex = tabOrder.indexOf(activeId ?? "committed");
+        if (currentIndex === -1) return;
+        e.preventDefault();
+        const delta = e.key === "ArrowRight" ? 1 : -1;
+        const nextIndex = (currentIndex + delta + tabOrder.length) % tabOrder.length;
+        const nextId = tabOrder[nextIndex];
+        planStore.setActive(nextId);
+        // Move DOM focus to the newly-active tab element.
+        const tabEl = document.getElementById(tabId(nextId));
+        tabEl?.focus();
+    }
+
     return (
         <div className="schedule-workspace">
             {/* ---- Tab bar ----
@@ -127,77 +150,96 @@ export default function ScheduleWorkspace({
                 (invalid HTML + a React hydration warning). The container carries
                 data-tab + the select handler; the close <button> carries
                 data-close and stops propagation. Mirrors the ProfileRail row
-                pattern (data-select / data-compare siblings). */}
-            <div className="ws-head">
-                <div className="tabs" role="tablist" aria-label="Scenario tabs">
-                    {/* Pinned committed tab — always first, no close button */}
-                    <div
-                        className={[
-                            "tab",
-                            "tab-committed",
-                            activeId === "committed" && !compareMode ? "active" : "",
-                        ].filter(Boolean).join(" ")}
-                        data-tab="committed"
-                        role="tab"
-                        tabIndex={0}
-                        aria-selected={activeId === "committed" && !compareMode}
-                        onClick={() => handleTabClick("committed")}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                handleTabClick("committed");
-                            }
-                        }}
-                    >
-                        <span className="tab-pin" aria-hidden="true">📌</span>
-                        <span className="tab-label">My Plan</span>
-                        <span className={kindBadgeClass("committed")}>
-                            {kindBadgeLabel("committed")}
-                        </span>
-                        {/* NO close button on committed tab */}
-                    </div>
+                pattern (data-select / data-compare siblings).
 
-                    {/* One tab per proposed/whatif scenario */}
-                    {scenarios.map((sc) => (
+                ARIA tabs pattern (FIX 2, H6 polish):
+                  - The tablist owns the ArrowLeft/Right handler (roving tabindex).
+                  - Active tab: tabIndex=0; all others: tabIndex=-1.
+                  - Each tab has id + aria-controls pointing to the single panel.
+                  - The Compare <button> is a SIBLING of the tablist (NOT inside
+                    role="tablist") — a tablist must contain only role="tab" children. */}
+            <div className="ws-head">
+                <div className="tabs-toolbar">
+                    <div
+                        className="tabs"
+                        role="tablist"
+                        aria-label="Scenario tabs"
+                        onKeyDown={handleTablistKeyDown}
+                    >
+                        {/* Pinned committed tab — always first, no close button */}
                         <div
-                            key={sc.id}
+                            id={tabId("committed")}
                             className={[
                                 "tab",
-                                `tab-${sc.kind}`,
-                                activeId === sc.id && !compareMode ? "active" : "",
+                                "tab-committed",
+                                activeId === "committed" && !compareMode ? "active" : "",
                             ].filter(Boolean).join(" ")}
-                            data-tab={sc.id}
+                            data-tab="committed"
                             role="tab"
-                            tabIndex={0}
-                            aria-selected={activeId === sc.id && !compareMode}
-                            onClick={() => handleTabClick(sc.id)}
+                            tabIndex={activeId === "committed" && !compareMode ? 0 : -1}
+                            aria-selected={activeId === "committed" && !compareMode}
+                            aria-controls={panelId}
+                            onClick={() => handleTabClick("committed")}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
                                     e.preventDefault();
-                                    handleTabClick(sc.id);
+                                    handleTabClick("committed");
                                 }
                             }}
                         >
-                            <span className={kindBadgeClass(sc.kind)}>
-                                {kindBadgeLabel(sc.kind).split(" ")[0]}
+                            <span className="tab-pin" aria-hidden="true">📌</span>
+                            <span className="tab-label">My Plan</span>
+                            <span className={kindBadgeClass("committed")}>
+                                {kindBadgeLabel("committed")}
                             </span>
-                            <span className="tab-label">{sc.label}</span>
-                            {/* Close — a real sibling <button> (no longer nested
-                                in an outer <button>). */}
-                            <button
-                                type="button"
-                                className="tab-close"
-                                data-close={sc.id}
-                                title={`Close ${sc.label}`}
-                                aria-label={`Close ${sc.label}`}
-                                onClick={(e) => handleClose(e, sc.id)}
-                            >
-                                ✕
-                            </button>
+                            {/* NO close button on committed tab */}
                         </div>
-                    ))}
 
-                    {/* Compare toggle — right side */}
+                        {/* One tab per proposed/whatif scenario */}
+                        {scenarios.map((sc) => (
+                            <div
+                                key={sc.id}
+                                id={tabId(sc.id)}
+                                className={[
+                                    "tab",
+                                    `tab-${sc.kind}`,
+                                    activeId === sc.id && !compareMode ? "active" : "",
+                                ].filter(Boolean).join(" ")}
+                                data-tab={sc.id}
+                                role="tab"
+                                tabIndex={activeId === sc.id && !compareMode ? 0 : -1}
+                                aria-selected={activeId === sc.id && !compareMode}
+                                aria-controls={panelId}
+                                onClick={() => handleTabClick(sc.id)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        handleTabClick(sc.id);
+                                    }
+                                }}
+                            >
+                                <span className={kindBadgeClass(sc.kind)}>
+                                    {kindBadgeLabel(sc.kind).split(" ")[0]}
+                                </span>
+                                <span className="tab-label">{sc.label}</span>
+                                {/* Close — a real sibling <button> (no longer nested
+                                    in an outer <button>). */}
+                                <button
+                                    type="button"
+                                    className="tab-close"
+                                    data-close={sc.id}
+                                    title={`Close ${sc.label}`}
+                                    aria-label={`Close ${sc.label}`}
+                                    onClick={(e) => handleClose(e, sc.id)}
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Compare toggle — SIBLING of tablist, NOT inside it.
+                        (A tablist must contain only role="tab" children.) */}
                     <button
                         type="button"
                         className={["compare-btn", compareMode ? "compare-btn-on" : ""].filter(Boolean).join(" ")}
@@ -210,8 +252,14 @@ export default function ScheduleWorkspace({
                 </div>
             </div>
 
-            {/* ---- Body ---- */}
-            <div className="ws-body">
+            {/* ---- Body / Panel ---- */}
+            <div
+                id={panelId}
+                className="ws-body"
+                role="tabpanel"
+                aria-labelledby={tabId(activeId ?? "committed")}
+                tabIndex={0}
+            >
                 {compareMode ? (
                     <CompareBody planStore={planStore} />
                 ) : activeScenario ? (
@@ -382,18 +430,15 @@ function ScenarioBody({
                 <>
                     <div className="actionbar">
                         <button
-                            className="btn btn-subtle"
-                            onClick={() => { /* no-op: keep the scenario open */ }}
-                        >
-                            Keep this scenario
-                        </button>
-                        <button
                             className="btn btn-ghost"
                             onClick={() => planStore.discardScenario(scenario.id)}
                         >
                             Discard
                         </button>
                     </div>
+                    <p className="whatif-readonly-note">
+                        {"This what-if stays in your session until you discard it — nothing is saved unless you adopt it as your plan."}
+                    </p>
                     <p className="whatif-readonly-note">
                         {"Read-only — a what-if never changes your plan. To adopt it, declare it in Albert & upload a new DPR."}
                     </p>
