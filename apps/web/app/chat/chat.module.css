@@ -17,6 +17,49 @@
     position: relative;
 }
 
+/* ---- H2.1 (plan 36) — 3-zone shell ----------------------------------
+   chat (LEFT) | ScheduleWorkspace (CENTER) | existing sidebar (RIGHT).
+   Sits BELOW the header + disclaimer banner and fills the remaining
+   height. Web-only / desktop (≥1100px); no mobile breakpoint per the
+   plan-36 owner decision. The full visual pass is H6 — this is the
+   functional layout only.
+
+   The RIGHT zone is a layout placeholder: the existing ScheduleSidebar
+   is a `position: fixed` overlay drawer (returns null when closed), so
+   it floats over this cell exactly as it does today. H5 replaces it
+   with an in-flow profile-only rail. */
+.threeZone {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.4fr) minmax(280px, 0.9fr);
+    overflow: hidden;
+}
+
+.zoneLeft {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--border-light);
+}
+
+.zoneCenter {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    border-right: 1px solid var(--border-light);
+}
+
+.zoneRight {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* ---- Header ---- */
 .header {
     display: flex;

@@ -32,7 +32,8 @@ import {
     type PlanActionRouteResponse,
     type WhatIfAssumptionRouteResponse,
 } from "../../lib/planActionClient";
-import { createPlanStore } from "./planState";
+import { createPlanStore, type Scenario } from "./planState";
+import ThreeZoneShell from "./workspace/ThreeZoneShell";
 import { applyReviewConfirm, applyReviewCancel } from "../../lib/reviewCard";
 import { planActionSurfaces } from "../../lib/planActionSurfaces";
 import {
@@ -1390,6 +1391,64 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isLoading]);
 
+    // ----------------------------------------------------------------
+    // H2.1 (plan 36) — CENTER-zone ScheduleWorkspace callbacks.
+    // The workspace surfaces proposed scenarios with Confirm / Ask-why
+    // buttons keyed by a `Scenario`. We map each back onto the EXISTING
+    // confirm round-trip / Ask-why chat injection so the workspace and
+    // the (still-mounted) review card share ONE commit path — neither
+    // can double-commit, and R1 holds (planConfirm persists only the
+    // forward_schedule; `parsed_dpr` is never written).
+    // ----------------------------------------------------------------
+
+    /** Workspace Confirm — a proposed scenario carries the same
+     *  `pendingMutationId` the review card uses. Reuse `applyReviewConfirm`
+     *  (the shared `planConfirm` → `setForwardSchedule` → `clearPendingPreview`
+     *  path); on success ALSO promote the scenario in the model
+     *  (`confirmProposed`) so a scenario created via the NEW addScenario
+     *  API — not the compat preview path — is committed + dropped. */
+    const handleWorkspaceConfirm = useCallback(async (scenario: Scenario): Promise<void> => {
+        const pendingMutationId = scenario.pendingMutationId;
+        if (!pendingMutationId) {
+            // A proposed scenario with no mutation id cannot be confirmed
+            // server-side; nothing to commit. (Defensive — proposed
+            // scenarios always carry one in the live flow.)
+            return;
+        }
+        const res = await applyReviewConfirm(planStore, planConfirm, pendingMutationId);
+        if (!res.ok) {
+            // Retry-able failure: the preview/scenario stays staged
+            // (handled inside applyReviewConfirm). Surface a brief note.
+            const msg: Message = {
+                id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+                role: "assistant",
+                content: "Couldn't apply that change — it may have expired or conflicted. Try again from the canvas.",
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, msg]);
+            setTimeout(scrollToBottom, 50);
+            return;
+        }
+        // Commit succeeded. `applyReviewConfirm` already committed the new
+        // forward_schedule (which, via the compat facade, supersedes ALL
+        // scenarios + resets active to "committed"). Promoting the scenario
+        // explicitly is a no-op in that case, but covers the path where the
+        // confirm route returned no `forwardSchedule` so scenarios survived.
+        planStore.confirmProposed(scenario.id);
+    }, []);
+
+    /** Workspace Ask-why — route into the grounded chat agent via the
+     *  SAME shared question-builder the review card uses. Derive a verb
+     *  hint from the proposed scenario label (the compat facade labels a
+     *  staged preview `Proposed: <verb>`); falls back to a generic
+     *  proposal question when no verb is present. */
+    const handleWorkspaceAskWhy = useCallback((scenario: Scenario): void => {
+        const verb = scenario.label.startsWith("Proposed: ")
+            ? scenario.label.slice("Proposed: ".length)
+            : undefined;
+        void handleReviewAskWhy(scenario.pendingMutationId ?? "", verb);
+    }, [handleReviewAskWhy]);
+
     /**
      * Phase 16 Task B — Update-DPR sidebar affordance.
      * POSTs the new PDF to /api/onboard/refresh-dpr; the route
@@ -1634,6 +1693,20 @@ export default function ChatPage() {
                 </div>
             )}
 
+            {/* H2.1 (plan 36) — 3-zone shell:
+                chat (LEFT) | ScheduleWorkspace (CENTER) | sidebar (RIGHT).
+                The chat thread + composer become the LEFT zone; the new
+                ScheduleWorkspace is mounted in the CENTER fed the SAME
+                `planStore`; the existing ScheduleSidebar is passed UNCHANGED
+                as the RIGHT zone (it stays a `position: fixed` overlay drawer
+                toggled by the 📅 header button — H5 repurposes it into an
+                in-flow profile-only rail). */}
+            <ThreeZoneShell
+                planStore={planStore}
+                onConfirmProposed={handleWorkspaceConfirm}
+                onAskWhy={handleWorkspaceAskWhy}
+                left={
+                    <>
             {/* Messages */}
             <div className={styles.messages}>
                 {messages.map((msg, i) => {
@@ -1965,31 +2038,36 @@ export default function ChatPage() {
                     }}
                 />
             </div>
-            <ScheduleSidebar
-                schedule={forwardSchedule}
-                pendingPreview={pendingPreview}
-                invalidProposal={invalidProposal}
-                student={sidebarStudent}
-                dpr={sidebarDpr}
-                materialization={forwardMaterialization}
-                schedulePreferences={schedulePreferences}
-                open={sidebarOpen}
-                onClose={() => setSidebarOpen(false)}
-                onProposeLoadStyle={handleProposeLoadStyle}
-                onProposeSlotChange={handleProposeSlotChange}
-                onExplainSlot={handleExplainSlot}
-                onExplainTerm={handleExplainTerm}
-                onPlanActionResult={handlePlanActionResult}
-                onWhatIfResult={handleWhatIfResult}
-                onReviewConfirm={handleReviewConfirm}
-                onReviewCancel={handleReviewCancel}
-                onReviewAskWhy={handleReviewAskWhy}
-                onDismissInvalid={handleDismissInvalid}
-                onConfirmCombination={handleConfirmSectionCombination}
-                onRefreshDpr={handleRefreshDpr}
-                onClearAll={handleClearAll}
-                onDeleteAccount={handleDeleteAccount}
-                deletingAccount={deletingAccount}
+                    </>
+                }
+                right={
+                    <ScheduleSidebar
+                        schedule={forwardSchedule}
+                        pendingPreview={pendingPreview}
+                        invalidProposal={invalidProposal}
+                        student={sidebarStudent}
+                        dpr={sidebarDpr}
+                        materialization={forwardMaterialization}
+                        schedulePreferences={schedulePreferences}
+                        open={sidebarOpen}
+                        onClose={() => setSidebarOpen(false)}
+                        onProposeLoadStyle={handleProposeLoadStyle}
+                        onProposeSlotChange={handleProposeSlotChange}
+                        onExplainSlot={handleExplainSlot}
+                        onExplainTerm={handleExplainTerm}
+                        onPlanActionResult={handlePlanActionResult}
+                        onWhatIfResult={handleWhatIfResult}
+                        onReviewConfirm={handleReviewConfirm}
+                        onReviewCancel={handleReviewCancel}
+                        onReviewAskWhy={handleReviewAskWhy}
+                        onDismissInvalid={handleDismissInvalid}
+                        onConfirmCombination={handleConfirmSectionCombination}
+                        onRefreshDpr={handleRefreshDpr}
+                        onClearAll={handleClearAll}
+                        onDeleteAccount={handleDeleteAccount}
+                        deletingAccount={deletingAccount}
+                    />
+                }
             />
         </div>
     );
