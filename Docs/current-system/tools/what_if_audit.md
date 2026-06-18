@@ -1,6 +1,8 @@
 # `what_if_audit` — Tool Audit
 
 > Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+>
+> **Place in the plan-35 what-if taxonomy (2026-06-18):** `what_if_audit` is **Branch C** — the confidence-disclaimed read-only ESTIMATE for an open hypothetical (it never ingests a file). Two sibling branches now exist: **Branch A** = a hypothetical PROGRAM change resolved by UPLOADING the student's Albert What-If report (`/api/whatif-audit` → parses as a synthetic DPR → labeled NON-committed exploration; never overwrites `students.parsed_dpr`); **Branch B** = a current-term withdraw/pass-fail modeled deterministically via the `probe_counterfactual` what-if arms + the confirmable `propose_whatif_assumption` flow (see [../engine/dpr.md](../engine/dpr.md)). CORE RULE 16 routes between them.
 
 Source files:
 - Tool definition (the whole tool): `packages/engine/src/agent/tools/whatIfAudit.ts`
