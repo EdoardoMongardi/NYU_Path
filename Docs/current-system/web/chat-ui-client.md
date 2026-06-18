@@ -152,7 +152,7 @@ Why it matters: chat-driven updates (SSE events + `/api/plan/*` HTTP responses) 
 
 ### The send path
 
-`handleSend()` (`page.tsx:565-589`) is the entry point for both the Enter key and the send button. It:
+`handleSend()` (`page.tsx:709-733`) is the entry point for both the Enter key and the send button. It:
 1. Adds a user `Message` immediately.
 2. Sets `isLoading = true`.
 3. Branches on `useV2 = onboardingStep === "complete" && parsedData`:
@@ -161,7 +161,7 @@ Why it matters: chat-driven updates (SSE events + `/api/plan/*` HTTP responses) 
 4. Catches errors and adds a fallback assistant message.
 5. Resets `isLoading` and refocuses the input.
 
-`handleSendV2(userText)` (`page.tsx:386-412`) is the SSE driver:
+`handleSendV2(userText)` (`page.tsx:492-533`) is the SSE driver:
 1. Builds `recentHistory` from the last 10 non-welcome messages.
 2. Pre-creates an empty assistant `Message` so tokens stream INTO it (sets `startedAt`, empty `thinkingText`, `thinkingRevealed=0`, `contentRevealed=0`).
 3. Iterates `streamChatV2({ message, parsedData, visaStatus, graduationTarget, history, userId: getOrCreateClientId() })`.
@@ -169,21 +169,22 @@ Why it matters: chat-driven updates (SSE events + `/api/plan/*` HTTP responses) 
 
 `getOrCreateClientId()` (`page.tsx:48-61`) reads/creates a UUID from `localStorage` under the key `nyupath:client-id`. Falls back to a `cohortA-<timestamp>-<random>` if `crypto.randomUUID` is unavailable; falls back to `"anonymous"` when `localStorage` itself throws.
 
-`handleSendV1(userText)` (`page.tsx:541-563`) is the legacy onboarding path. It POSTs to `/api/chat` (JSON, not SSE), receives a single response, and adds the assistant message plus any returned `onboardingStep`, `visaStatus`, or `graduationTarget` updates.
+`handleSendV1(userText)` (`page.tsx:685-707`) is the legacy onboarding path. It POSTs to `/api/chat` (JSON, not SSE), receives a single response, and adds the assistant message plus any returned `onboardingStep`, `visaStatus`, or `graduationTarget` updates.
 
 ### The `applyEvent` reducer
 
-`applyEvent` (`page.tsx:414-538`) is a per-event mutator that updates the active assistant `Message`. Note: there is **no** `template_match` case in the live reducer — the `ChatV2Event` union (`chatV2Client.ts:47-56`) has no `template_match` member, so the page never receives one. The handled kinds are:
+`applyEvent` (`page.tsx:536-683`) is a per-event mutator that updates the active assistant `Message`. Note: there is **no** `template_match` case in the live reducer — the `ChatV2Event` union (`chatV2Client.ts:47-56`) has no `template_match` member, so the page never receives one. The handled kinds are:
 
-- `tool_invocation_start` → push the tool onto `toolStatuses` with state `"running"`. Look up the tool's "thought sentence" via `getThoughtSentence(toolName)` from `lib/agentStatusVerbs.ts` and append it to `thinkingText` (with single-space joiner, deduped against the last sentence) — UNLESS `hasRealThinking` is set, in which case the canned sentences would conflict with the model's actual chain-of-thought (`page.tsx:416-444`).
-- `tool_invocation_done` → patch the matching running status with `state: "done"` or `"error"`, plus `summary` and `error` fields. If the tool was `update_profile`, run `extractPendingMutationId(summary)` and set the message's `pendingMutationId` (`page.tsx:445-461`).
-- `token` → APPEND the text to `content`. The handler comment notes the route emits a single block-streamed token today; the append-rather-than-overwrite pattern is forward-compatible with a future intra-token streaming upgrade (`page.tsx:462-471`).
-- `thinking` → first event sets `hasRealThinking = true` and REPLACES any synthesized sentence narration (resets `thinkingRevealed = 0` so the typewriter restarts on the new text). Subsequent events append (`page.tsx:472-493`).
-- `forward_schedule_update` → call `planStore.setForwardSchedule(ev.schedule)` (`page.tsx:503-505`).
-- `forward_materialization_update` → call `planStore.setForwardMaterialization(ev.result)` (`page.tsx:506-512`).
-- `validator_block` → set `validatorViolations` on the message (`page.tsx:505-513`).
-- `done` → server's `finalText` is authoritative; set `content = ev.finalText` and `completedAt = Date.now()`. Guards against any future partial-chunk artifact in the accumulated tokens (`page.tsx:514-520`).
-- `error` → don't leak the raw exception to the student. Log `ev.message` to console (for operator correlation), then either keep any partial content that arrived or fall back to a generic "something went wrong, email the operator" copy. Set `failedAt = Date.now()` (`page.tsx:521-536`).
+- `tool_invocation_start` → push the tool onto `toolStatuses` with state `"running"`. Look up the tool's "thought sentence" via `getThoughtSentence(toolName)` from `lib/agentStatusVerbs.ts` and append it to `thinkingText` (with single-space joiner, deduped against the last sentence) — UNLESS `hasRealThinking` is set, in which case the canned sentences would conflict with the model's actual chain-of-thought (`page.tsx:538-566`).
+- `tool_invocation_done` → patch the matching running status with `state: "done"` or `"error"`, plus `summary` and `error` fields. If the tool was `update_profile`, run `extractPendingMutationId(summary)` and set the message's `pendingMutationId` (`page.tsx:567-583`).
+- `token` → APPEND the text to `content`. The handler comment notes the route emits a single block-streamed token today; the append-rather-than-overwrite pattern is forward-compatible with a future intra-token streaming upgrade (`page.tsx:584-592`).
+- `thinking` → first event sets `hasRealThinking = true` and REPLACES any synthesized sentence narration (resets `thinkingRevealed = 0` so the typewriter restarts on the new text). Subsequent events append (`page.tsx:594-615`).
+- `forward_schedule_update` → call `planStore.setForwardSchedule(ev.schedule)` (`page.tsx:616-618`).
+- `whatif_audit_request` → appends a `whatif_upload_card` Message to the thread (Branch-A upload card; `page.tsx:619-640`).
+- `forward_materialization_update` → call `planStore.setForwardMaterialization(ev.result)` (`page.tsx:641-648`).
+- `validator_block` → set `validatorViolations` on the message (`page.tsx:649-657`).
+- `done` → server's `finalText` is authoritative; set `content = ev.finalText` and `completedAt = Date.now()`. Guards against any future partial-chunk artifact in the accumulated tokens (`page.tsx:658-664`).
+- `error` → don't leak the raw exception to the student. Log `ev.message` to console (for operator correlation), then either keep any partial content that arrived or fall back to a generic "something went wrong, email the operator" copy. Set `failedAt = Date.now()` (`page.tsx:665-683`).
 
 ### The typewriter ticker
 
@@ -357,7 +358,7 @@ Everything else is treated as soft (Decision #32's `student-preferred-invalid-dr
 
 ### Page-side wiring
 
-The chat page (`page.tsx:696-877`) owns the bubble lifecycle:
+The chat page (`page.tsx:1112-1625`) owns the bubble lifecycle:
 
 1. **Injection (E3-reworked; Plan 36 — chat-triggered)** — `handlePlanActionResult(verb, result)` (`page.tsx:1190`) handles a plan-action route response. **Plan 36 note:** the live trigger is now CHAT (the agent's tool call), NOT a sidebar ⋯-menu — there is no `<ScheduleSidebar>` mount any more. On route failure (HTTP / network), inject a plain assistant message with the verb + status. On success it runs the pure `planActionSurfaces(result.data)` to decide the surfaces (and, on the feasible path, emits a `schedule_card` into the chat thread — see §7):
    - **feasible (clean OR trade-offs)** → stage the E3.1 preview into the store (`planStore.setPendingPreview`) and clear any stale red card; **return without a bubble** (`showBubble:false`) — the canvas review card is the sole surface. (There is NO `kind === "clean"` early return any more; a clean apply now previews like every feasible verb instead of silently committing.)
@@ -370,16 +371,16 @@ The chat page (`page.tsx:696-877`) owns the bubble lifecycle:
    - When `bubble.futureTerms.length > 0` AND `bubble.kind !== "hard_refusal"`, fires `streamPlanActionStage2`, dispatching each event through `applyStage2Event`.
    - Both fetches respect the controller's `signal`; aborted streams return silently. (Post-E3 this only runs on the `feasible:false` path, which is the only path that mints a bubble.)
 
-3. **Resolution — the chat-bubble handlers** (`page.tsx:922-1010`):
+3. **Resolution — the chat-bubble handlers** (`page.tsx:1322-1503`):
    - `handleBubbleConfirm(messageId, pendingMutationId)` — set `bubbleResolved: true` immediately (lock buttons), abort enrichers, POST `/api/plan/confirm` via `planConfirm`. On success: persist any returned `forwardSchedule` (`planStore.setForwardSchedule`) and `clearPendingPreview`; set `content = "✓ Applied."`. On failure: re-enable buttons (`bubbleResolved: false`) and put the failure copy in `content`.
    - `handleBubbleKeepAsIs(messageId)` — abort enrichers, `clearPendingPreview` + `clearInvalidProposal` (so dismissing a `feasible:false` bubble also drops its red card), set `bubbleResolved: true`, `content = "Kept the plan as-is."`.
    - `handleBubbleOverrideAnyway(messageId, pendingMutationId)` — same as Confirm but POSTs with `force: true`. Success copy: `"⚠ Override applied — plan saved as student-preferred-invalid-draft."`.
 
-4. **Resolution — the canvas review/red-card handlers (E3)** (`page.tsx:1026-1073`): the feasible path's surface is the sidebar review card, whose three buttons wire to:
-   - `handleReviewConfirm(pendingMutationId)` — delegates to the pure `applyReviewConfirm(planStore, planConfirm, …)` (`reviewCard.ts:223`), which shares the SAME commit path as the bubble Confirm (`planConfirm` → `setForwardSchedule` → `clearPendingPreview`) so the two surfaces can't double-commit. On failure the preview stays staged and a brief assistant note is injected.
-   - `handleReviewCancel()` — `applyReviewCancel(planStore)` (`reviewCard.ts:247`): drops the staged preview without a confirm round-trip; the committed plan was never touched.
-   - `handleReviewAskWhy(_id, verb?)` — injects a scoped "why … trade-offs" user message and runs the v2 tool-use loop (basic now; E4 builds the full ⋯ Explain).
-   - `handleDismissInvalid()` — `planStore.clearInvalidProposal()`: clears the red card (nothing was staged or committed).
+4. **Resolution — the canvas review/red-card handlers (E3)** (`page.tsx:1517-1580`): the feasible path's surface is the sidebar review card, whose three buttons wire to:
+   - `handleReviewConfirm(pendingMutationId)` (`page.tsx:1517`) — delegates to the pure `applyReviewConfirm(planStore, planConfirm, …)` (`reviewCard.ts:223`), which shares the SAME commit path as the bubble Confirm (`planConfirm` → `setForwardSchedule` → `clearPendingPreview`) so the two surfaces can't double-commit. On failure the preview stays staged and a brief assistant note is injected.
+   - `handleReviewCancel()` (`page.tsx:1535`) — `applyReviewCancel(planStore)` (`reviewCard.ts:247`): drops the staged preview without a confirm round-trip; the committed plan was never touched.
+   - `handleReviewAskWhy(_id, verb?)` (`page.tsx:1550`) — injects a scoped "why … trade-offs" user message and runs the v2 tool-use loop (basic now; E4 builds the full ⋯ Explain).
+   - `handleDismissInvalid()` (`page.tsx:1542`) — `planStore.clearInvalidProposal()`: clears the red card (nothing was staged or committed).
 
 ### Bubble render path
 
@@ -431,7 +432,7 @@ The helper performs no LLM synthesis and no fabrication — when upstream data i
 
 The page is **mostly NOT optimistic on the chat side** — the regular chat flow only renders state the server has confirmed. The pre-created assistant `Message` is empty until `token` / `thinking` / `done` events arrive; content is set on `done` (server-authoritative), not optimistically.
 
-There is one explicit optimistic UI affordance: **plan-action bubble button locking**. When the user clicks Confirm / Override-anyway, `handleBubbleConfirm` and `handleBubbleOverrideAnyway` immediately call `patchMessage(messageId, { bubbleResolved: true })` BEFORE awaiting the `/api/plan/confirm` round-trip (`page.tsx:884`, `929`). This locks the buttons so a double-click can't double-submit. If the route fails, the buttons re-enable (`bubbleResolved: false`) and the failure copy lands in `content`.
+There is one explicit optimistic UI affordance: **plan-action bubble button locking**. When the user clicks Confirm / Override-anyway, `handleBubbleConfirm` and `handleBubbleOverrideAnyway` immediately call `patchMessage(messageId, { bubbleResolved: true })` BEFORE awaiting the `/api/plan/confirm` round-trip (`page.tsx:1324`, `1473`). This locks the buttons so a double-click can't double-submit. If the route fails, the buttons re-enable (`bubbleResolved: false`) and the failure copy lands in `content`.
 
 The schedule workspace IS optimistic-on-the-server-side: when `/api/plan/confirm` returns a fresh `forwardSchedule`, the page calls `planStore.setForwardSchedule(result.data.forwardSchedule)` directly — no waiting for the next chat-turn `forward_schedule_update` event. This bridges the gap between the route's HTTP-JSON response and the chat-side SSE channel; because the workspace + profile rail read the same `createPlanStore` snapshot, the commit lands in the render immediately.
 
@@ -455,7 +456,7 @@ The CENTER zone (`<ScheduleWorkspace>`, mounted inside `ThreeZoneShell`) and the
 - **`handleWorkspaceAskWhy(scenario)`** (`page.tsx:1619`) — derives a verb hint from the scenario label and routes into the grounded chat agent via the SAME `handleReviewAskWhy` / `explainQuestion.ts` module the review card used.
 - **`handleWhatIfAuditUpload(file, cardMessageId)`** (`page.tsx:1377`) — the Branch-A path. POSTs the student's Albert What-If audit PDF (multipart field `dpr`) to `/api/whatif-audit`; on success builds a READ-ONLY 🔍 what-if scenario via `buildWhatIfScenarioFromAudit` (no `pendingMutationId` ⇒ NOT confirmable), calls `planStore.addScenario`, and emits a `schedule_card` + a narration message. **R1:** this NEVER calls `/api/plan/confirm` and NEVER writes `parsed_dpr`; the file bytes / PII are never logged.
 - The `whatif_audit_request` SSE event is handled in `applyEvent` (`page.tsx:619`): it appends a `whatif_upload_card` message naming the `hypotheticalProgram` (the upload round-trip is owned by `handleWhatIfAuditUpload`).
-- `onConfirmCombination(proposalId)` — the materialization picker path: injects `"Yes, please apply section combination <id> …"` and runs v2.
+- **Note:** `onConfirmCombination` (materialization-apply path) is not wired into `page.tsx` — it exists only in the unmounted `scheduleSidebar.tsx` / `sidebar/SectionsView.tsx` / `sidebar/TermCard.tsx` tree, which is slated for deletion. The Sections-view combination-picker path went dark with the sidebar unmount (Plan 36 H5).
 
 ### ProfileRail callbacks
 
@@ -488,11 +489,11 @@ The legacy bouncing-dots indicator (`page.tsx:1398-1407`) only renders for v1 tu
 
 ### Send-path errors
 
-If `handleSendV2` or `handleSendV1` throws (rare — the v2 generator yields synthetic error events instead of throwing), `handleSend` catches and adds a fallback assistant `Message` with `err.message` (`page.tsx:582-585`).
+If `handleSendV2` or `handleSendV1` throws (rare — the v2 generator yields synthetic error events instead of throwing), `handleSend` catches and adds a fallback assistant `Message` with `err.message` (`page.tsx:726-729`).
 
 ### SSE error events
 
-The `error` SSE event is handled by `applyEvent` (`page.tsx:521-536`). The raw `ev.message` is logged to `console.error` for operator correlation but never shown verbatim to the student. Instead, the message's content is set to:
+The `error` SSE event is handled by `applyEvent` (`page.tsx:665-683`). The raw `ev.message` is logged to `console.error` for operator correlation but never shown verbatim to the student. Instead, the message's content is set to:
 - Any partial content that already arrived (when available), OR
 - The friendly copy: `"Something went wrong on our side handling that turn. Try resending — if it keeps happening, email the operator at edoardo.mongardi18@gmail.com."`
 
