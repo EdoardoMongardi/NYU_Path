@@ -409,7 +409,13 @@ function findSectionHeaders(lines: string[], end: number): SectionHeader[] {
         // Skip false positives: course-table column headers, table
         // body lines that happen to end with "(...)" topic suffixes.
         if (line === "Term Subject Catalog Nbr Course Title Grade Units Type") continue;
-        const title = m[1]!.trim();
+        // Real What-If PDFs occasionally concatenate the page-number runner
+        // ("Page N of M") onto the front of a section-header title because
+        // both share the same y-coordinate in the source PDF — e.g.
+        // "Page 7 of 8Policy Concentration (R1103)". Strip the leading prefix
+        // (the same one DPR-title detection already strips) so the title
+        // matches/stores cleanly; otherwise the group keeps a corrupted title.
+        const title = m[1]!.trim().replace(/^Page\s+\d+\s+of\s+\d+\s*/i, "").trim();
         const id = m[2]!;
         headers.push({ lineIdx: i, title, id, isGroup: id.startsWith("RG") });
     }
