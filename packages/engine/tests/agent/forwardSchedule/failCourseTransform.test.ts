@@ -207,10 +207,13 @@ describe("applyFailedCourseToDpr", () => {
         expect(row?.grade).toBe("F");
     });
 
-    it("no-op for an unmatched courseId returns a structurally-equal copy", () => {
+    it("no-op for an unmatched courseId returns a structurally-equal copy (tagged what_if)", () => {
         const dpr = makeDpr();
         const out = applyFailedCourseToDpr(dpr, "CSCI-UA 999");
-        expect(out).toEqual(dpr);
+        // The synthetic clone is always tagged what_if (R1 defense-in-depth)…
+        expect(out.reportKind).toBe("what_if");
+        // …and is otherwise structurally identical to the input.
+        expect({ ...out, reportKind: dpr.reportKind }).toEqual(dpr);
         // …but it is a fresh object, not the same reference.
         expect(out).not.toBe(dpr);
         expect(out.courseHistory).not.toBe(dpr.courseHistory);

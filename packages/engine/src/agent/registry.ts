@@ -1,5 +1,5 @@
 // ============================================================
-// Default ToolRegistry — wires the 21 LIVE NYU Path tools
+// Default ToolRegistry — wires the 22 LIVE NYU Path tools
 // ============================================================
 // §7.1 tools (Phase 0–11):
 //   run_full_audit, what_if_audit,

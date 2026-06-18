@@ -13,7 +13,7 @@
   - `Docs/specs/2026-06-05-planning-engine-rebuild-design.md` — the canonical architecture.
   - `Docs/plans/` — implementation plans in planned order. **Latest implemented:** `35-2026-06-17-whatif-and-wpf-requirement-modeling.md` (the 3-branch what-if taxonomy + W/pass-fail requirement modeling — COMPLETE on `feat/plan35-whatif-wpf`, not yet merged). Prior: `33` (Phase 4) + `34` (F1–F3 + F3-revise/F3-campus), merged to `main` from `feat/phase4-experience`.
   - `Docs/audits/` · `Docs/reports/` · `Docs/reference/` · `Docs/deprecated/`.
-- Code: `apps/web` (Next.js), `packages/engine` (agent loop + 21 tools + constraint-search planner + 7-axis validator), `packages/shared`, `data/`, `tools/`, `evals/`.
+- Code: `apps/web` (Next.js), `packages/engine` (agent loop + 22 tools + constraint-search planner + 7-axis validator), `packages/shared`, `data/`, `tools/`, `evals/`.
 
 ## Current status
 
