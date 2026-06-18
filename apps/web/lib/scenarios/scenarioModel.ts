@@ -167,13 +167,15 @@ export function closeCompare(s: ScenarioState): ScenarioState {
  * Remove a scenario by id.
  * - If activeId was that scenario, fall back to "committed".
  * - If compare referenced it, clear compare.
- * - No-op (returns a shallow clone or s unchanged) if id not found.
+ * - No-op (returns the SAME state reference) if id not found, so a
+ *   `useSyncExternalStore` wrapper (H0.2) sees no spurious change.
  */
 export function discardScenario(s: ScenarioState, id: string): ScenarioState {
     const exists = s.scenarios.some((sc) => sc.id === id);
     if (!exists) {
-        // No-op — return a shallow clone to keep referential semantics consistent.
-        return { ...s };
+        // No-op — return `s` unchanged (NOT a clone) so referential-equality
+        // consumers (the store's useSyncExternalStore) don't re-render.
+        return s;
     }
     const newScenarios = s.scenarios.filter((sc) => sc.id !== id);
     const newActiveId = s.activeId === id ? "committed" : s.activeId;
@@ -240,8 +242,11 @@ export function setInvalidProposal(
  * Resolve an id to a Scenario (or a synthesized committed-anchor view).
  *
  * - "committed" → synthesizes `{ id:"committed", kind:"committed", label:"My Plan",
- *   schedule: s.committed, verdict:"valid" }` when committed is non-null.
- *   Returns undefined when committed is null.
+ *   schedule: s.committed, verdict:"valid", createdAt: 0 }` when committed is
+ *   non-null. `createdAt: 0` is a SENTINEL — the committed plan has no single
+ *   creation timestamp (it's been confirmed/refreshed many times); consumers
+ *   must NOT treat it as a real epoch (e.g. for ordering). Returns undefined
+ *   when committed is null.
  * - Any other id → looks up in scenarios[]. Returns undefined if not found.
  */
 export function getScenario(s: ScenarioState, id: string): Scenario | undefined {
@@ -253,7 +258,7 @@ export function getScenario(s: ScenarioState, id: string): Scenario | undefined 
             label: "My Plan",
             schedule: s.committed,
             verdict: "valid",
-            createdAt: 0,
+            createdAt: 0, // sentinel — committed has no single createdAt (see JSDoc)
         };
     }
     return s.scenarios.find((sc) => sc.id === id);

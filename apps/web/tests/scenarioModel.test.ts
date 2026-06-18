@@ -292,9 +292,12 @@ describe("discardScenario", () => {
         expect(s.compare).toBeNull();
     });
 
-    it("is a no-op (does not throw) if id not found", () => {
+    it("is a no-op (does not throw) if id not found, returning the SAME reference", () => {
         const s = initialState(makeSchedule());
         expect(() => discardScenario(s, "does-not-exist")).not.toThrow();
+        // Returns `s` unchanged (NOT a clone) so a useSyncExternalStore wrapper
+        // (H0.2) sees no spurious change → no re-render.
+        expect(discardScenario(s, "does-not-exist")).toBe(s);
     });
 });
 
