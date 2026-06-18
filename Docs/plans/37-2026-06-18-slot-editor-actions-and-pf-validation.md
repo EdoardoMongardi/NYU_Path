@@ -669,9 +669,92 @@ The wizard's `visa` defaults to `"domestic"`. We need an EXPLICIT choice. Add a 
 
 ---
 
+# PART 4 — Live-mock fixes (added 2026-06-18 from a real chat-typed test on the sample DPR)
+
+> Root-caused by the triage workflow against the real code. None touches the frozen seam. These are prerequisites for the slot-editor feeling correct, so they sit in this plan. Phase J is a tiny standalone engine bugfix that should land FIRST (Phases C/D/F + the slot-editor "add"/bind action depend on it).
+
+## Phase I — Chat-proposed changes must surface the Confirm button (Issue A)
+
+**Finding (verified):** in a fully chat-typed conversation the agent's `propose_plan_change` NEVER produces a proposed scenario or the workspace "Confirm — make this My Plan" button. The tool is `isReadOnly` and returns the proposed schedule only on its tool output; the v2 route emits NO propose-carrying SSE event (only `forward_schedule_update` on commit, `whatif_audit_request` for Branch-A, and `update_profile`→pendingMutationId); the client's `applyEvent` never calls `setPendingPreview`/`addScenario` from a chat tool result. So the plan-36 scenario+Confirm rail is reachable only from the (unmounted) `/api/plan/*` route path — chat changes fall back to prose + typed-"yes" → `confirm_plan_change`. We want chat proposals to ALSO land on the Confirm button (the deterministic commit chokepoint), matching what the student expects and what D-8 specifies for the slot-editor.
+
+### Task I1: v2 route emits a `plan_proposal` SSE event for a chat propose
+
+**Files:** Modify `apps/web/app/api/chat/v2/route.ts` (after the `whatif_audit_request` block ~`:1026-1035`); reuse the orchestrator's pending store. Add `plan_proposal` to the SSE event union (`apps/web/lib/sseStream.ts` + `apps/web/lib/chatV2Client.ts`). Test: `apps/web/tests/chatV2PlanProposal.test.ts` (create).
+
+- [ ] **Step 1 — failing test:** mock `runAgentTurnStreaming` to return a `propose_plan_change` invocation carrying a feasible `proposedSchedule` + `planDiff` + `consequences`; assert the route emits exactly one `plan_proposal` event `{ kind:"plan_proposal", pendingMutationId, proposedSchedule, planDiff, consequences, feasible:true }` before `done`, and that a turn with NO propose invocation emits none.
+- [ ] **Step 2 — run, expect FAIL.**
+- [ ] **Step 3 — implement:** after the agent loop, `const proposeInv = finalResult.invocations.find(i => i.toolName === "propose_plan_change")`. If present and it carried mutations, STAGE those mutations into the SAME pending store the route's confirm path consumes (mirror `planActionOrchestrator.ts:501-521` — `randomUUID()` + `pendingStore.put(studentId, { mutations, … })`) to mint a `pendingMutationId`, and `writer.write({ kind:"plan_proposal", pendingMutationId, proposedSchedule, planDiff, consequences, feasible })`. The tool's output already carries `proposedSchedule`/`planDiff`/`consequences` (no engine recompute). Emit at most once (the last propose of the turn). Add the event to both SSE unions.
+- [ ] **Step 4 — run PASS + full suite. Step 5 — commit.**
+
+### Task I2: client renders the chat proposal as a proposed scenario + Confirm button
+
+**Files:** Modify `apps/web/app/chat/page.tsx` `applyEvent` (`:536-664`). Test: extend a page render test (or a focused `applyEvent` unit if extracted).
+
+- [ ] **Step 1 — failing test:** feeding a `plan_proposal` event to the client stages a proposed scenario (`planStore.getActiveScenario().kind === "proposed"` with the event's `pendingMutationId`) and renders the workspace "Confirm — make this My Plan" button.
+- [ ] **Step 2/3 — implement:** add `case "plan_proposal":` that builds a `PlanActionRouteResponse`-shaped object from the event (`{ feasible, proposedSchedule, planDiff, consequences, pendingMutationId }`) and calls the EXISTING `handlePlanActionResult`-equivalent path → `planActionSurfaces(...)` → `planStore.setPendingPreview(surfaces.preview)` (feasible) / `setInvalidProposal` (infeasible) + emit the chat ScheduleCard. `handleWorkspaceConfirm` (`:1584`) already commits via `applyReviewConfirm(planStore, planConfirm, scenario.pendingMutationId)` — unchanged. Do NOT route through `forward_schedule_update` (that commits + drops scenarios, `planState.ts:283-305`).
+- [ ] **Step 4 — run PASS + full suite. Step 5 — commit.**
+
+### Task I3: reconcile the two confirm chokepoints (no double-commit) + fix stale prompt
+
+**Files:** `packages/engine/src/agent/systemPrompt.ts` (the PREFERENCE_EXTRACTION_RULES confirm step + `:555`); the pending-store confirm path. Test: `apps/web/tests/planProposalNoDoubleCommit.test.ts` (create).
+
+**Why:** today the agent confirms a chat change by calling `confirm_plan_change({ mutations })` on a typed "yes" (a DIFFERENT chokepoint from the UI button's staged `pendingMutationId`). With I1/I2 a Confirm button now also appears — so a mutation could be committed TWICE (button + typed-yes), and `systemPrompt.ts:555` even tells the agent to "call confirm_plan_change with the pendingMutationId," but that tool's input schema has NO `pendingMutationId` param (stale, hallucination-prone).
+
+- [ ] **Step 1 — decide + failing test:** the chosen model — **the surfaced Confirm button is THE confirm for a proposed change; the agent does NOT auto-confirm.** After `propose_plan_change`, the agent's system-prompt step changes from "wait for yes → call confirm_plan_change" to "surface the change as a proposed plan the student can Confirm on the canvas (or say 'confirm'); I will NOT apply it until they do." A typed "confirm" routes to the SAME staged `pendingMutationId` (the route consumes the pending store), so the commit is idempotent — confirming an already-consumed `pendingMutationId` is a no-op. Write a test that proposing once then confirming twice (button then typed) commits exactly once.
+- [ ] **Step 2/3 — implement:** make the pending-store confirm idempotent (consume-once: a confirmed `pendingMutationId` is removed; a second confirm returns "already applied"). Update `systemPrompt.ts` PREFERENCE_EXTRACTION_RULES (the confirm step) + delete/fix the `:555` `pendingMutationId`-param line so the agent narrates the canvas Confirm affordance, not a non-existent tool param. (If unifying fully is too large, the MINIMUM is: the system prompt stops the agent from auto-confirming on "yes" when a `plan_proposal` is pending, and the pending store is consume-once.)
+- [ ] **Step 4 — run PASS + full suite. Step 5 — commit.**
+
+## Phase J — `bind_pool_slot` / `bind_free_elective` must accept an infeasible draft plan (Issue B)
+
+**Finding (verified):** when a plan is infeasible it is stored in `session.studentDraftPlan` (Decision #32), and `forwardSchedule` is `undefined`. `bind_pool_slot` is the ONLY plan-edit tool that keys exclusively on `session.forwardSchedule` (its `validateInput` hard-fails "No forward plan exists in this session" and its `call()` does `session.forwardSchedule!`), so a student CANNOT bind a concrete course (e.g. CORE-UA 402 → Texts & Ideas) to repair an infeasible plan — a chicken-and-egg, since binding is exactly what makes it feasible. The "No forward plan exists" message is literally wrong (a draft exists). `bind_free_elective` shares the defect. NOT FOSE, NOT agent hallucination — the tool's deterministic refusal. This is the root cause behind the test's CORE-UA 402 "doesn't satisfy Texts & Ideas."
+
+### Task J1: accept the draft plan in both bind tools
+
+**Files:** Modify `packages/engine/src/agent/tools/bindPoolSlot.ts` (`validateInput` ~`:245-252`; `call` ~`:268`) + `packages/engine/src/agent/tools/bindFreeElective.ts` (`:175`, `:197`). Test: extend `packages/engine/tests/agent/bindPoolSlot.test.ts`.
+
+- [ ] **Step 1 — failing test:** a session with NO `forwardSchedule` but a `studentDraftPlan` (infeasible) containing a `CORE-UA 400–499` pool placeholder → `bindPoolSlotTool.validateInput({ … })` returns `{ ok:true }` (today `{ ok:false, "No forward plan exists" }`), and `call(...)` binds against the draft plan's slot.
+- [ ] **Step 2 — run, expect FAIL.**
+- [ ] **Step 3 — implement:** `validateInput`: `if (!session.forwardSchedule && !session.studentDraftPlan) return { ok:false, … }` (update the message to "I don't have a plan to bind into yet — let me build your forward plan first."). `call`: `const schedule = session.forwardSchedule ?? session.studentDraftPlan!;` (the canonical active-plan accessor used by `proposePlanChange.ts:125` / `confirmPlanChange.ts:148`). Apply the identical two-line change to `bindFreeElective.ts`.
+- [ ] **Step 4 — run PASS + full suite. Step 5 — commit:** `git commit -m "fix(engine): bind_pool_slot/bind_free_elective accept the infeasible draft plan (unblocks repairing an infeasible plan by binding a course)"`.
+
+### Task J2: verify the binding STICKS through confirm (investigate-first)
+
+**Files:** read `confirmPlanChange.ts` + `bindPoolSlot.ts` `call()` + the pool-binding → preferences/mutation path. Test: an integration test that binds CORE-UA 402 to the Texts & Ideas leaf on a draft plan, then confirms, and asserts the COMMITTED plan has the leaf satisfied (axis-1 passes).
+
+- [ ] **Step 1 — INVESTIGATE:** `confirm_plan_change` re-runs the solver from `schedulePreferences` (mutations), NOT from the bound preview slot. Determine whether a `bind_pool_slot` binding is persisted as a `pin` (course→term) + a pool-binding the solver honors on re-plan, or whether it is discarded at confirm. Grep how `bindPoolSlot.call` records the choice (a `pin` mutation? a `bindPoolSlot` mutation in `SchedulePreferences`?) and whether `applyMutationsToPreferences` / the solver consume it.
+- [ ] **Step 2 — failing integration test** per the finding (the binding must survive confirm).
+- [ ] **Step 3 — implement IF needed:** if the binding does not stick, persist it as a `pin` of the chosen course into the requirement's term (the `pin` mutation already flows through propose→confirm + accepts the draft plan) and/or thread a `bindPoolSlot`-kind mutation into `SchedulePreferences` that the solver honors. (Do NOT change the frozen solver/validator — only the preferences/mutation plumbing that feeds it.)
+- [ ] **Step 4 — run PASS + full suite. Step 5 — commit.**
+
+> Routing note for the slot-editor (Phase F): the "PLANNED placeholder → pick a concrete course" action and the term-level "add" should express the student's choice through the path that survives confirm (per J2) — likely a `pin` mutation via propose→confirm (which already accepts the draft plan), rather than a bind that gets dropped. Resolve J2 before wiring F's add/bind.
+
+## Phase K — Resolvable placeholders are NOT infeasible; FOSE ≠ requirement satisfaction (Issue C)
+
+**Finding (verified):** the engine's design is ALREADY correct — a RESOLVABLE pool placeholder (a `placeholder` slot carrying a `poolBinding` with `candidates.length > 0`) PASSES axis-1 (`checkRequirementGroupsSatisfied`) and axis-4 (`checkThresholdsMet`) with NO concrete course bound, and `derivePlanStateFromValidator` returns `valid-with-trade-offs` (not infeasible) for resolvable placeholders. Only an EMPTY placeholder (no `poolBinding` / empty candidates) is hard-infeasible. So the user's instinct is right (a "pick the exact course" placeholder should NOT be a hard blocker) — and it already isn't, WHEN the placeholder is resolvable. The test's "infeasible" + "major credits 4 < 36" both trace to the two requirement leaves emitting as EMPTY placeholders (downstream of Issue B's binding failure and/or a missing pool descriptor). The agent's "FOSE has no Spring 2027 sections, so I can't confirm CORE-UA 402 satisfies Texts & Ideas" is a FALSE rationalization — requirement membership is built purely from the catalog (`poolMembersFor`: dept + level range), FOSE-independent; `materialize_sections` is a separate, optional, downstream section-time step that never feeds the validator.
+
+### Task K1: ensure the requirement leaves emit as RESOLVABLE pool placeholders (investigate-first)
+
+**Files:** read `packages/engine/src/agent/forwardSchedule/materializePlan.ts:482-517` (the `POOL-<rId>` placeholder build) + `constraintModel.ts:135-163` (`poolMembersFor`) + the requirement→pool-descriptor derivation in `buildSolverInput.ts` + the DPR requirement schema for R1004/10 (Texts & Ideas) + R1142/20 (CS Required). Test: a fixture test on the failing requirements.
+
+- [ ] **Step 1 — INVESTIGATE the exact failure:** on the sample-DPR fixture (or a synthetic copy of the two leaves), determine whether the Texts & Ideas leaf (`CORE-UA 400–499`) and the CS-Required leaf materialize as (a) a resolvable `POOL-<rId>` placeholder with `poolBinding.candidates.length > 0`, or (b) an EMPTY placeholder. If empty, find WHY: does the leaf carry a `pool` descriptor (`dept:"CORE-UA", levelMin:400, levelMax:499`) reaching `poolMembersFor`, or is it a plain `specific` requirement with empty `candidateCourses`? Is `CORE-UA 402` present in the loaded catalog for the student's catalog year (a catalog-coverage gap also yields empty candidates)?
+- [ ] **Step 2 — failing test** capturing the real mechanism (e.g. "the Texts & Ideas leaf materializes with a non-empty `poolBinding.candidates` including CORE-UA 402").
+- [ ] **Step 3 — fix the derivation/coverage** (NOT the frozen validator): add/repair the `pool` descriptor for the CORE-UA Texts & Ideas range (and the CS-Required pool) so `poolMembersFor` returns the catalog candidates, OR fill the catalog gap. The resolvable placeholder then auto-passes axes 1+2+4 → the plan is `valid-with-trade-offs`, and "major 4 < 36" clears.
+- [ ] **Step 4 — run PASS + full suite. Step 5 — commit.**
+
+### Task K2: system-prompt guardrail — FOSE availability is never a requirement-satisfaction input
+
+**Files:** Modify `packages/engine/src/agent/systemPrompt.ts` (near `:538-539`, the FOSE 6-month note). Test: the existing prompt/eval guards (no new runtime test required; this is prompt text).
+
+- [ ] **Step 1 — implement:** add an explicit rule near the FOSE note: "FOSE section availability governs ONLY `materialize_sections` (meeting times/CRNs for the near term). It is NEVER an input to whether a course satisfies a requirement or whether a plan is feasible. Requirement membership is determined from the catalog (department + course-level range) and is FOSE-independent — do NOT tell a student that missing Spring/far-future FOSE sections mean a course 'can't be confirmed' for a requirement." Remove any prose that implies otherwise.
+- [ ] **Step 2 — sanity-run** the gated agent evals if present (`evals/`); commit (prompt-only).
+
+---
+
 ## Self-review checklist (run before handing off)
 
-**Spec coverage:** ✓ slot-editor + 4 actions (F1–F4) · 3-state matrix engine-enforced (D1 + E1) · P/F 8th validator axis with per-school limits derived from the bulletin for ALL schools, default-no-limit+hedge when unsourced (A1/A2/C1/C2, tier table D-4) · per-action deadlines via the existing F3 windows for IP AND planned-current-term slots, hedged + cautious about per-school divergence (D-3, matrix) · F-1 withdraw warning (E2) · sidebar deletion (G1/G2) · visa-mandatory (H1) · design-spec revision for the frozen-seam change (C3). Grad-term feasibility is explicitly DEFERRED (not in this plan).
+**Spec coverage:** ✓ slot-editor + 4 actions (F1–F4) · 3-state matrix engine-enforced (D1 + E1) · P/F 8th validator axis with per-school limits derived from the bulletin for ALL schools, default-no-limit+hedge when unsourced (A1/A2/C1/C2, tier table D-4) · per-action deadlines via the existing F3 windows for IP AND planned-current-term slots, hedged + cautious about per-school divergence (D-3, matrix) · F-1 withdraw warning (E2) · sidebar deletion (G1/G2) · visa-mandatory (H1) · design-spec revision for the frozen-seam change (C3). **Live-mock fixes (Part 4):** chat-proposed changes surface the Confirm button (I1–I3) · `bind_*` tools accept the infeasible draft plan (J1–J2) · resolvable placeholders aren't hard-infeasible + FOSE≠requirement-satisfaction (K1–K2). Grad-term feasibility is explicitly DEFERRED (not in this plan).
+
+**Sequencing:** Phase J (the 2-line bind-on-draft fix) lands FIRST — it's a standalone defect and Phases C/D/F + K depend on bind-on-draft working. Then J2/K1 (the placeholder/binding investigation, which needs the live fixture), then the rest. Phases I + K2 (chat-confirm bridge + the prompt guardrail) are independent and can run in parallel.
 
 **Placeholder scan:** the only deliberately-scoped omission is the FOSE section-picker (called out in the Phase E note as a follow-on, with the v1 behavior — validated structural add — fully specified). No "TBD"/"add validation"/"similar to" placeholders remain.
 
