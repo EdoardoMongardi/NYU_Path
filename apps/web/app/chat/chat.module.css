@@ -1781,3 +1781,78 @@ button.reasoningHeader:focus-visible {
     background: var(--nyu-violet);
     color: #fff;
 }
+
+/* ============================================================
+   WhatIfUploadCard — H4.2b-3 (Branch-A audit-upload offer)
+   Visually consistent with .scheduleCard: NYU-violet left accent,
+   same border / radius. Heading + body + an Upload button.
+   ============================================================ */
+.whatifUploadCard {
+    align-self: stretch;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--bg-primary, #fff);
+    overflow: hidden;
+    margin: 4px 0 8px 0;
+    border-left: 3px solid var(--nyu-violet);
+    padding: 10px 12px;
+}
+
+.whatifUploadHeading {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--nyu-violet);
+}
+
+.whatifUploadBody {
+    margin: 0 0 10px 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
+.whatifUploadBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--nyu-violet);
+    background: var(--nyu-violet);
+    color: #fff;
+    transition: background 0.1s, border-color 0.1s, opacity 0.1s;
+}
+.whatifUploadBtn:hover:not(:disabled) {
+    background: var(--nyu-violet-light, #7b21b3);
+    border-color: var(--nyu-violet-light, #7b21b3);
+}
+.whatifUploadBtn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+/* Inline spinner shown while an upload is in flight. */
+.whatifUploadSpinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: whatifSpin 0.7s linear infinite;
+}
+@keyframes whatifSpin {
+    to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .whatifUploadSpinner { animation: none; }
+}
+
+.whatifUploadError {
+    margin: 8px 0 0 0;
+    font-size: 12px;
+    color: var(--danger, #c0392b);
+}

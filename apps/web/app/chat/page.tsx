@@ -46,7 +46,12 @@ import { buildIntendedMajorPreviewTurn } from "../../lib/wizard/intendedMajor";
 import type { WizardValues } from "../../lib/wizard/wizardMachine";
 import OnboardingWizard from "./wizard/OnboardingWizard";
 import ScheduleCard from "./ScheduleCard";
+import WhatIfUploadCard from "./WhatIfUploadCard";
 import { buildScheduleCardMessage } from "./buildScheduleCardMessage";
+import {
+    buildWhatIfScenarioFromAudit,
+    type WhatIfAuditResponse,
+} from "./buildWhatIfScenarioFromAudit";
 import type { ScenarioKind } from "./workspace/scenarioBadges";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
@@ -94,8 +99,11 @@ interface Message {
      *  swaps the render to the bubble + buttons block.
      *  H4.2a — `"schedule_card"` swaps the render to the ScheduleCard
      *  component, showing an openable/comparable artifact in the chat
-     *  thread whenever the engine produces a new proposed schedule. */
-    kind?: "plan_action_bubble" | "schedule_card";
+     *  thread whenever the engine produces a new proposed schedule.
+     *  H4.2b-3 — `"whatif_upload_card"` swaps the render to the
+     *  WhatIfUploadCard, offering a Branch-A Albert What-If audit upload
+     *  for a hypothetical PROGRAM (→ a read-only 🔍 what-if scenario). */
+    kind?: "plan_action_bubble" | "schedule_card" | "whatif_upload_card";
     /** H4.2a — populated only when `kind === "schedule_card"`. Holds
      *  the scenario id, kind, label, optional summary, and optional
      *  verdict to render as a ScheduleCard in the chat thread. */
@@ -106,6 +114,10 @@ interface Message {
         summary?: string;
         verdict?: "valid" | "trade-offs" | "invalid";
     };
+    /** H4.2b-3 — populated only when `kind === "whatif_upload_card"`.
+     *  Holds the hypothetical program the agent offered to explore via a
+     *  Branch-A Albert What-If audit upload. */
+    whatifUpload?: { hypotheticalProgram: string };
     /** Phase 17 Task D follow-up — populated only when
      *  `kind === "plan_action_bubble"`. Holds the bubble's
      *  template/polished text, the verb, the pendingMutationId
@@ -215,6 +227,11 @@ export default function ChatPage() {
     // self-serve account-deletion control (disables the button so a
     // student can't fire DELETE /api/session/delete twice).
     const [deletingAccount, setDeletingAccount] = useState(false);
+    // H4.2b-3 — per-card busy/error state for the Branch-A What-If audit
+    // upload cards, keyed by the card message id (so multiple offer cards
+    // in the thread track independently).
+    const [whatifUploadBusy, setWhatifUploadBusy] = useState<Record<string, boolean>>({});
+    const [whatifUploadError, setWhatifUploadError] = useState<Record<string, string>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -589,6 +606,28 @@ export default function ChatPage() {
             case "forward_schedule_update":
                 planStore.setForwardSchedule(ev.schedule);
                 break;
+            case "whatif_audit_request": {
+                // H4.2b-3 — the agent offered a Branch-A "explore precisely"
+                // path this turn (hypothetical PROGRAM change). Inject a
+                // WhatIfUploadCard into the thread so the student can upload
+                // their Albert What-If audit → a read-only 🔍 what-if
+                // scenario. No store/DPR write happens here; the upload
+                // round-trip is owned by handleWhatIfAuditUpload.
+                const uploadCardId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                setMessages(prev => [
+                    ...prev,
+                    {
+                        id: uploadCardId,
+                        role: "assistant",
+                        content: "",
+                        timestamp: new Date(),
+                        kind: "whatif_upload_card",
+                        whatifUpload: { hypotheticalProgram: ev.hypotheticalProgram },
+                    },
+                ]);
+                setTimeout(scrollToBottom, 50);
+                break;
+            }
             case "forward_materialization_update":
                 // Phase 15 Task 8 — `materialize_sections` produced a
                 // result this turn. Hold it in state so the sidebar
@@ -1311,6 +1350,94 @@ export default function ChatPage() {
         }
     }, [patchMessage, abortBubbleEnrichers]);
 
+    /**
+     * H4.2b-3 — Branch-A "explore precisely" upload handler.
+     *
+     * POSTs the student's Albert What-If audit PDF (multipart field `dpr`,
+     * matching the wizard's /api/onboard shape) to /api/whatif-audit. On
+     * success, builds a READ-ONLY 🔍 what-if scenario from the response,
+     * adds it to the workspace, emits a schedule_card into the chat, and
+     * appends a narration message clearly framing it as a hypothetical
+     * (NOT committed).
+     *
+     * R1: this NEVER calls /api/plan/confirm and NEVER writes parsed_dpr.
+     * The scenario it builds has no pendingMutationId — it cannot be
+     * confirmed/committed. We never log the file bytes or any PII.
+     */
+    const handleWhatIfAuditUpload = useCallback(
+        async (file: File, cardMessageId: string): Promise<void> => {
+            // Client-side PDF guard mirrors the wizard + the route.
+            if (!file.name.toLowerCase().endsWith(".pdf")) {
+                setWhatifUploadError(prev => ({
+                    ...prev,
+                    [cardMessageId]: "Please upload your Albert What-If report as a PDF.",
+                }));
+                return;
+            }
+            setWhatifUploadBusy(prev => ({ ...prev, [cardMessageId]: true }));
+            setWhatifUploadError(prev => {
+                const next = { ...prev };
+                delete next[cardMessageId];
+                return next;
+            });
+            try {
+                const formData = new FormData();
+                formData.append("dpr", file);
+                const res = await fetch("/api/whatif-audit", { method: "POST", body: formData });
+                let data: WhatIfAuditResponse & { message?: string };
+                try {
+                    data = (await res.json()) as WhatIfAuditResponse & { message?: string };
+                } catch {
+                    data = {} as WhatIfAuditResponse & { message?: string };
+                }
+                if (!res.ok || !data.exploration) {
+                    setWhatifUploadError(prev => ({
+                        ...prev,
+                        [cardMessageId]: data?.message ?? "Upload failed. Please try again.",
+                    }));
+                    return;
+                }
+
+                // Build the read-only what-if scenario + register it.
+                const scenarioId = "whatif-audit-" + Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                const scenario = buildWhatIfScenarioFromAudit(data, scenarioId, Date.now());
+                planStore.addScenario(scenario);
+
+                // 🔍 schedule card so the student can Open/Compare it.
+                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                const narrationId = Date.now().toString() + Math.random().toString(36).slice(2, 6) + "-n";
+                setMessages(prev => [
+                    ...prev,
+                    buildScheduleCardMessage(scenario, cardMsgId, new Date()) as Message,
+                    {
+                        id: narrationId,
+                        role: "assistant",
+                        content:
+                            `${data.exploration.summary}\n\n` +
+                            `_${data.label}_ This is a **read-only hypothetical** — it is NOT your committed plan. ` +
+                            `${data.cta} To make it real, upload a corrected DPR.`,
+                        timestamp: new Date(),
+                    },
+                ]);
+                setTimeout(scrollToBottom, 50);
+            } catch {
+                // Network / unexpected failure — surface a friendly error,
+                // never crash. Do NOT log the file or its contents.
+                setWhatifUploadError(prev => ({
+                    ...prev,
+                    [cardMessageId]: "I had trouble processing that file. Please try again.",
+                }));
+            } finally {
+                setWhatifUploadBusy(prev => {
+                    const next = { ...prev };
+                    delete next[cardMessageId];
+                    return next;
+                });
+            }
+        },
+        [planStore],
+    );
+
     /** Keep-as-is — discard the bubble without applying. */
     const handleBubbleKeepAsIs = useCallback((messageId: string): void => {
         abortBubbleEnrichers(messageId);
@@ -1856,6 +1983,31 @@ export default function ChatPage() {
                                             )}
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    // H4.2b-3 — whatif_upload_card: render the Branch-A
+                    // "explore precisely" upload offer. Uploading the
+                    // student's Albert What-If audit produces a read-only
+                    // 🔍 what-if scenario (never confirmable).
+                    if (msg.kind === "whatif_upload_card" && msg.whatifUpload) {
+                        return (
+                            <div
+                                key={msg.id}
+                                className={`${styles.messageBubble} ${styles.assistant}`}
+                                style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}
+                                data-kind="whatif_upload_card"
+                            >
+                                <div className={styles.avatar}>🎓</div>
+                                <div className={styles.bubbleContent}>
+                                    <WhatIfUploadCard
+                                        hypotheticalProgram={msg.whatifUpload.hypotheticalProgram}
+                                        onUpload={(file) => void handleWhatIfAuditUpload(file, msg.id)}
+                                        uploading={whatifUploadBusy[msg.id]}
+                                        error={whatifUploadError[msg.id]}
+                                    />
                                 </div>
                             </div>
                         );
