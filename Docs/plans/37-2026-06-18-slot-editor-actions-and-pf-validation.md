@@ -29,14 +29,20 @@
 | **REGISTERED** (in progress) | `in_progress` | a `courseHistory` row with `type === "IP"` |
 | **PLANNED** (agent-planned) | `specific_planned` (bound) or `placeholder` (unbound) | not on the DPR |
 
-### D-2. Per-state allowed actions (the matrix)
-| State | add | drop | withdraw | pass/fail | Notes |
-|---|---|---|---|---|---|
-| FINAL | ✗ | ✗ | ✗ | ✗ | immutable — it already happened |
-| REGISTERED | ✗ (it exists) | window-gated | window-gated | window-gated + school-eligibility | the F3 window decides: `future`→drop/change freely · `add_drop`→drop (no W) · `withdraw_pf`→withdraw + (P/F where the school allows) · `closed`→none · `unknown`→allowed + hedge |
-| PLANNED | n/a (the slot's add IS its existence; "add" creates a NEW slot) | ✓ (it's just a plan) | ✗ (just drop it — there's nothing to withdraw from) | ✗ (not in progress; you don't pass/fail a plan) | a planned slot in the CURRENT term is still subject to the add/drop registration deadline (hedged) |
+### D-2. Allowed actions — ADD is term-level, the other three are per-slot
 
-"**add**" is a TERM-level action (add a new course to a term), not a per-slot one — it is offered on the term, gated by the term's add/drop window when the term is current.
+**ADD is a TERM-level action** (add a NEW course to a term), NOT a per-slot one — so a student WITH registered (IP) courses can still add another course to the current term. It is allowed on:
+- a **FUTURE / planned term** → freely (it's a plan).
+- the **CURRENT term while it is inside its add/drop window** → allowed + hedged ("typical add/drop deadline for this season; verify — registering a course this late is deadline-gated").
+- a current term whose **add/drop window has closed** → NOT allowed (registration for that term is over).
+The add course-id is validated against the catalog (Task E3).
+
+**Per-slot actions** (drop / withdraw / pass-fail on an EXISTING course), by state:
+| State (`slot.kind`) | drop | withdraw | pass/fail | Notes |
+|---|---|---|---|---|
+| **FINAL** (`completed`) | ✗ | ✗ | ✗ | immutable — already graded |
+| **REGISTERED** (`in_progress`) | window-gated | window-gated | window-gated + school-eligibility | F3 window decides: `future`→change freely · `add_drop`→clean drop (no W) · `withdraw_pf`→withdraw + (P/F where the school allows) · `closed`→none · `unknown`→allowed + hedge |
+| **PLANNED** (`specific_planned`/`placeholder`) | ✓ — just removes it from the plan (no deadline; it isn't registered) | ✗ (nothing to withdraw from — drop it) | ✗ (not in progress; you don't pass/fail a plan) | "registering" a planned course in the current term IS the term-level ADD above (deadline-gated); dropping it from the plan is free |
 
 ### D-3. Deadlines — reuse `classifyIpChangeability` (no new calendar work)
 The F3 classifier (`ipCourseChangeability.ts`) already maps an IP course's term → `future | add_drop | withdraw_pf | closed | unknown` from the per-campus `academicCalendar.ts` (`addDropMonthDay` / `withdrawMonthDay`; P/F election shares the withdraw window). The matrix consumes that window. Deadlines are PER-CAMPUS (ny / shanghai / abudhabi); the NY default's withdraw date (≈ week 14) over-states the window for the week-9 schools (Steinhardt/LS/Nursing/GPH/SPS) — the owner chose NOT to add a per-school overlay, so we KEEP the per-campus model and ALWAYS carry the hedge ("typical NYU deadline for this season; the exact date shifts each year and can be earlier for your school — verify with your adviser/registrar"). For a PLANNED slot in the current term, the same campus/season window gates add/drop (hedged).
@@ -763,6 +769,8 @@ The wizard's `visa` defaults to `"domestic"`. We need an EXPLICIT choice. Add a 
 
 **Finding (verified): NO real NYU rule violation.** A J-term of free electives is valid — J-term is optional, NOT needed to graduate, the F-1 full-time floor applies per fall/spring semester (a J-term/winter session does not carry the 12-credit floor), and the per-semester credit ceiling is a fall/spring ceiling. The "infeasible" the test produced is a SOLVER ARTIFACT: opening J-term (`SchedulePreferences.includeJTerm` / a `{kind:"addTerm"}` mutation) let the solver relocate the UNBOUND Texts & Ideas placeholder (a leftover of Issue B's binding failure) into January, where CORE-UA courses are not offered. The offering-pattern constraint is REAL and correct (`course.termsOffered` excludes january for CORE-UA — `packages/shared/src/types.ts:20,717`); the artifact is the solver's freedom to drop a MOVABLE/unbound placeholder into a non-offering term. The correct output: "valid — a J-term is NOT needed for your requirements, but you may take one for interest courses." This dissolves once Issue B binds the requirement (no movable placeholder) + the requirement courses are pinned to their terms; it is NOT a frozen-solver change.
 
+**OWNER REFINEMENT (2026-06-18):** the deeper behavior is that the planner, by default, **distributes the remaining REQUIRED courses across the available terms** — so opening a new term invites the solver to place a requirement into it. That default is correct/normal. BUT a student may EXPLICITLY want a term of **only free electives** (satisfying no requirement), which is **technically valid** and must be allowed — never flagged invalid. So the fix is twofold: (1) when the student designates an added optional term as free-electives (or the remaining requirements are already placeable in their existing terms), the planner must NOT force a requirement into that term — pin the requirements where they belong so the optional term gets only free-elective slots; (2) the agent must then report it VALID with an explicit note: **"This term doesn't satisfy any remaining requirement — it's optional/extra courses you can take for interest."** A term satisfying no requirement is valid; it just isn't *needed*.
+
 ### Task L1: confirm additive-J-term is VALID after Issue B + pinning (investigate-first)
 
 **Files:** read the J-term path (`includeJTerm` in `buildSolverInput.ts`; `{kind:"addTerm"}` in `planChangeHelpers.ts`) + the pin layer. Test: an integration test on the sample-DPR shape.
@@ -776,7 +784,7 @@ The wizard's `visa` defaults to `"domestic"`. We need an EXPLICIT choice. Add a 
 
 **Files:** `packages/engine/src/agent/systemPrompt.ts`. Test: gated agent evals if present; otherwise prompt-only.
 
-- [ ] **Step 1 — implement:** add a system-prompt rule: when a student proposes an OPTIONAL term (J-term / summer) that is NOT required to satisfy any remaining requirement, report it as VALID and say "this term is optional — you don't need it to graduate, but you can take it for interest courses or a lighter load," rather than framing it as infeasible. Anchor this to the requirement state (if all remaining requirements are already placeable in fall/spring terms, an added optional term is additive + valid). ALSO fix the `verbatim_drift` the test hit: when the reply uses `get_credit_caps`, it must QUOTE the tool's text verbatim (e.g. "College of Arts and Science per-semester ceiling: 18 credits. F-1 full-time floor: 12 credits per semester.") rather than paraphrasing the number.
+- [ ] **Step 1 — implement:** add a system-prompt rule: when a student proposes an OPTIONAL term (J-term / summer) that is NOT required to satisfy any remaining requirement, report it as VALID and say "this term is optional — you don't need it to graduate, but you can take it for interest courses or a lighter load," rather than framing it as infeasible. Anchor this to the requirement state (if all remaining requirements are already placeable in fall/spring terms, an added optional term is additive + valid). When a term contains ONLY free electives / no requirement-satisfying course, the agent must ALSO state it EXPLICITLY: "this term doesn't satisfy any remaining requirement — it's extra." A term satisfying no requirement is valid; it must NEVER be flagged invalid for that reason alone. ALSO fix the `verbatim_drift` the test hit: when the reply uses `get_credit_caps`, it must QUOTE the tool's text verbatim (e.g. "College of Arts and Science per-semester ceiling: 18 credits. F-1 full-time floor: 12 credits per semester.") rather than paraphrasing the number.
 - [ ] **Step 2 — commit** (prompt-only; run gated evals if present).
 
 ---
