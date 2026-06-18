@@ -4,6 +4,29 @@
 >
 > **Status: PLAN — approved design (mockup confirmed 2026-06-18: `Docs/mockups/scenarios-ui-mockup.html`), ready to implement.** Branch off `main` (after plan 35 merges) → `feat/plan36-scenarios-ui`.
 
+---
+
+> ## ✅ COMPLETE — 2026-06-18 (on `feat/plan36-scenarios-ui`, not yet merged)
+>
+> All tasks **H0–H7 are DONE + self-verified** on branch `feat/plan36-scenarios-ui`. Commit range `614656a` (plan + mockup) … `b946cc7` (HEAD); 22 commits. **Full suite: 2453 passed / 15 skipped** (`npx vitest run` at repo root); engine + web `tsc --noEmit` clean.
+>
+> **What shipped (verified against the live code):**
+> - **H0** `lib/scenarios/scenarioModel.ts` (pure `Scenario` + reducers; `confirmProposed` = the commit chokepoint) + `planState.ts` refactored onto it via a **compat facade** (legacy `PlanState` snapshot derived + cached, object-identity preserved via a `previewObjects` side-table; new scenario API added; existing consumers/tests untouched + green).
+> - **H1** `lib/scenarios/scheduleDiff.ts` — pure two-column `diffSchedules` (`same|added|removed|moved|retake`; J-term ordinal matches engine `SEASON_ORD`).
+> - **H2** `workspace/ThreeZoneShell.tsx` (chat · `ScheduleWorkspace` · right-zone) mounted in `page.tsx`; `workspace/ScheduleView.tsx` (read-only diff-aware grid); `workspace/ScheduleWorkspace.tsx` (pinned 📌 committed tab + scenario tabs, NO +new, per-kind action bodies, ARIA tabs pattern).
+> - **H3** `workspace/CompareView.tsx` — pick ANY two scenarios (incl. committed) → two `ScheduleView` columns via `diffSchedules` + a diff legend; wired into the workspace's compare mode.
+> - **H4** chat `ScheduleCard.tsx` + `buildScheduleCardMessage.ts` (`schedule_card` Message → Open/Compare); `handlePlanActionResult` / `handleWhatIfResult` emit a card; Confirm → `applyReviewConfirm` (`/api/plan/confirm`) + `confirmProposed`. **3-branch what-if:** Branch-A = the `what_if_audit` engine tool emits an `offerAuditUpload` marker + `AUDIT_UPLOAD_OFFER:` summary line → the v2 route emits a `whatif_audit_request` SSE event → the client renders `WhatIfUploadCard.tsx` → `/api/whatif-audit` → `buildWhatIfScenarioFromAudit.ts` builds a READ-ONLY `kind:"whatif"` scenario (no `pendingMutationId` ⇒ never confirmable). Branch-B = `propose_whatif_assumption` → `/api/plan/whatif` → a confirmable proposed scenario.
+> - **H5** `ProfileRail.tsx` — the RIGHT zone (profile-only): reuses `SummaryCard` (fed the COMMITTED schedule), the ↻ Update-DPR refresh (on success updates BOTH committed schedule + parsed DPR), the scenarios list (committed pinned + per-row Compare), the privacy note, and the delete-account / env-gated clear-all actions. **`scheduleSidebar.tsx` is now UNMOUNTED** (slated for deletion).
+> - **H6** professional visual pass (§9) + the M3 tab/close nested-button restructure + the ARIA tabs polish.
+> - **H7** this doc + the two `Docs/current-system/web/` docs (`ui-components.md` + `chat-ui-client.md`) revised.
+>
+> **Record / notable findings:**
+> - **H4.2b probe→Branch-A finding + agent-tool decision:** a read-only `probe_counterfactual` PROGRAM-change exploration cannot produce an exact schedule without the Albert What-If audit, so the agent tool (`what_if_audit`) emits a structured `offerAuditUpload` marker that routes the student to the Branch-A audit **upload** (a labeled non-committed exploration), rather than guessing a synthetic program plan. The marker rides through as an `AUDIT_UPLOAD_OFFER:` summary line + a `whatif_audit_request` SSE event.
+> - **node: client-bundle fix (`next.config.ts`):** a pre-existing `/chat` 500 (the `@nyupath/engine` barrel dragged `node:crypto`/`node:fs` into the CLIENT bundle via `scheduleDiff.ts → canonicalizeCourseId`) is fixed by stubbing `node:` core modules out of the CLIENT bundle only (`isServer` guard); the server bundle is untouched.
+> - **Engine / R1 / frozen contract — UNTOUCHED.** Plan 36 is web-only. The ONLY engine touch was the `what_if_audit` tool's added `offerAuditUpload` marker + summary line (`packages/engine/src/agent/tools/whatIfAudit.ts` + its test) — the solver, the 7-axis validator, `finalizeForwardSchedule`, the DPR transforms, and `assertAuthoritativeDpr` were NOT modified. **R1 holds:** a what-if / synthetic DPR is never written to `students.parsed_dpr`; confirming a proposed scenario persists only the `forward_schedule`.
+>
+> ⚑ **Next:** owner review + merge `feat/plan36-scenarios-ui` → `main`, then push. Follow-on: delete the unmounted `scheduleSidebar.tsx`; persist computed what-ifs server-side (§12 deferred).
+
 **Goal:** Replace the single-slot sidebar (one committed plan + one transient preview) with a **scenarios workspace**: a 3-zone shell (chat · schedule workspace · profile) where the committed plan is always anchored, every derived schedule is a clearly-labeled scenario you can open and **compare any two side-by-side**, and what-ifs are spawned only from the conversation.
 
 **Architecture:** Web-only (Next.js/React). The engine, the frozen contract, the R1 guardrail, and DB persistence are **unchanged** — this is a state-store + presentation refactor. The current `planState` store (`{forwardSchedule, pendingPreview, invalidProposal}`) becomes a **scenarios store** (`committed` plan + a list of `Scenario` artifacts + an `activeId` + a `compare` pair). The committed plan still persists to `forward_schedules`; what-ifs are session-state re-derivable from their persistent chat card; confirming a proposed scenario promotes it to committed via the existing `/api/plan/confirm`.
