@@ -34,44 +34,19 @@ import type { ScenarioState } from "../../../lib/scenarios/scenarioModel";
 import { getScenario } from "../../../lib/scenarios/scenarioModel";
 import ScheduleView from "./ScheduleView";
 import CompareView from "./CompareView";
+import {
+    kindBadgeLabel,
+    kindBadgeClass,
+    verdictDisplay,
+} from "./scenarioBadges";
 
 // ============================================================
-// Pure helpers — badge label, badge class, verdict glyph
+// Re-export helpers + ScenarioKind from the shared module so
+// existing consumers that import from ScheduleWorkspace keep
+// working without change (backward-compat re-export).
 // ============================================================
-// Exported so they can be unit-tested in isolation (node env).
-
-export type ScenarioKind = "committed" | "proposed" | "whatif";
-
-/** Human-readable badge label (icon + name). */
-export function kindBadgeLabel(kind: ScenarioKind): string {
-    switch (kind) {
-        case "committed": return "✓ Committed";
-        case "proposed":  return "⏳ Proposed";
-        case "whatif":    return "🔍 What-if";
-    }
-}
-
-/** CSS class name to use for the kind badge. Must be a plain string for JSX classNames. */
-export function kindBadgeClass(kind: ScenarioKind): string {
-    switch (kind) {
-        case "committed": return "badge badge-committed";
-        case "proposed":  return "badge badge-proposed";
-        case "whatif":    return "badge badge-whatif";
-    }
-}
-
-/** Verdict glyph + readable label. */
-export function verdictDisplay(verdict: "valid" | "trade-offs" | "invalid"): {
-    glyph: string;
-    label: string;
-    className: string;
-} {
-    switch (verdict) {
-        case "valid":      return { glyph: "✓", label: "Valid", className: "verdict verdict-ok" };
-        case "trade-offs": return { glyph: "⚠", label: "Valid with trade-offs", className: "verdict verdict-warn" };
-        case "invalid":    return { glyph: "✗", label: "Invalid", className: "verdict verdict-invalid" };
-    }
-}
+export type { ScenarioKind } from "./scenarioBadges";
+export { kindBadgeLabel, kindBadgeClass, verdictDisplay };
 
 // ============================================================
 // Props
