@@ -36,7 +36,8 @@ import {
     applyReviewConfirm,
     applyReviewCancel,
 } from "../lib/reviewCard";
-import type { PlanActionResponse } from "../lib/planActionOrchestrator";
+import type { PlanActionResponse, WhatIfAssumptionResponse } from "../lib/planActionOrchestrator";
+import type { WhatIfAssumptionMarker } from "@nyupath/engine";
 import {
     makeFeasibleScheduleWithSemesters,
     specificSlot,
@@ -246,5 +247,82 @@ describe("applyReviewCancel — cancel path (E3.2)", () => {
         expect(store.getSnapshot().forwardSchedule).toBe(committed);
         // …and we NEVER hit the confirm round-trip.
         expect(confirmSpy).not.toHaveBeenCalled();
+    });
+});
+
+// ===========================================================================
+// (d) G3.2 — computeReviewCard with a WhatIfAssumptionResponse
+// ===========================================================================
+
+describe("computeReviewCard — what-if assumption marker (G3.2)", () => {
+    function makeWhatIfMarker(
+        outcome: WhatIfAssumptionMarker["outcome"] = "withdraw",
+    ): WhatIfAssumptionMarker {
+        return {
+            courseId: "CSCI-UA 102",
+            outcome,
+            label: outcome === "withdraw"
+                ? `Assumes you withdraw from CSCI-UA 102 (a "W" — GPA-neutral; the requirement re-opens).`
+                : `Assumes you take CSCI-UA 102 pass/fail and PASS (unverified until your next DPR).`,
+            hedges: ["This claim is unverified — verify with your adviser."],
+            ...(outcome === "withdraw"
+                ? { windowCaveat: "Registration window may be closed — verify with your adviser." }
+                : {}),
+        };
+    }
+
+    function makeWhatIfResponse(
+        feasible: boolean,
+        consequences: string[],
+        marker: WhatIfAssumptionMarker,
+    ): WhatIfAssumptionResponse {
+        return {
+            feasible,
+            diff: { added: [], removed: [] },
+            consequences,
+            explanation: "what-if",
+            pendingMutationId: PMID,
+            futureTerms: [],
+            whatIfAssumption: marker,
+        };
+    }
+
+    it("a WhatIfAssumptionResponse → card carries the whatIfAssumption marker", () => {
+        const marker = makeWhatIfMarker("withdraw");
+        const card = computeReviewCard(makeWhatIfResponse(true, [], marker));
+        expect(card.whatIfAssumption).toBeDefined();
+        expect(card.whatIfAssumption!.courseId).toBe("CSCI-UA 102");
+        expect(card.whatIfAssumption!.outcome).toBe("withdraw");
+        expect(card.whatIfAssumption!.label).toMatch(/withdraw/i);
+    });
+
+    it("a WhatIfAssumptionResponse preserves the verdict + canConfirm logic unchanged", () => {
+        const marker = makeWhatIfMarker("pass");
+        const withConsequences = computeReviewCard(
+            makeWhatIfResponse(true, ["Grad shifts 1 term."], marker),
+        );
+        expect(withConsequences.verdict).toBe("trade-offs");
+        expect(withConsequences.canConfirm).toBe(true);
+
+        const clean = computeReviewCard(makeWhatIfResponse(true, [], marker));
+        expect(clean.verdict).toBe("valid");
+        expect(clean.canConfirm).toBe(true);
+
+        const infeasible = computeReviewCard(makeWhatIfResponse(false, [], marker));
+        expect(infeasible.verdict).toBe("invalid");
+        expect(infeasible.canConfirm).toBe(false);
+    });
+
+    it("hedges + windowCaveat are carried through on the marker (no truncation)", () => {
+        const marker = makeWhatIfMarker("withdraw");
+        const card = computeReviewCard(makeWhatIfResponse(true, [], marker));
+        expect(card.whatIfAssumption!.hedges).toHaveLength(1);
+        expect(card.whatIfAssumption!.windowCaveat).toBeDefined();
+    });
+
+    it("a normal (non-what-if) PlanActionResponse leaves whatIfAssumption absent", () => {
+        const card = computeReviewCard(makeResponse({ feasible: true, consequences: [] }));
+        // Normal proposals MUST NOT carry a whatIfAssumption — no accidental override.
+        expect(card.whatIfAssumption).toBeUndefined();
     });
 });

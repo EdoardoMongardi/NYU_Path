@@ -32,6 +32,7 @@ import type {
     PlanDiff,
     ForwardSchedule,
 } from "@nyupath/shared";
+import type { WhatIfAssumptionMarker } from "@nyupath/engine";
 
 /**
  * Stage-1 success payload. Mirrors `PlanActionResponse` in
@@ -45,6 +46,19 @@ export interface PlanActionRouteResponse extends PlanChangeOutcome {
     pendingMutationId: string;
     futureTerms: string[];
     forwardSchedule?: ForwardSchedule;
+}
+
+/** G3.2 — what-if assumption success payload. A superset of
+ *  `PlanActionRouteResponse` with the `whatIfAssumption` marker so the
+ *  review card / canvas badge can label the proposal as an assumption. */
+export interface WhatIfAssumptionRouteResponse extends PlanActionRouteResponse {
+    whatIfAssumption: WhatIfAssumptionMarker;
+}
+
+/** G3.2 — what-if assumption input. */
+export interface PlanWhatIfInput {
+    courseId: string;
+    outcome: "withdraw" | "pass" | "fail";
 }
 
 /** Confirm-stage success payload. */
@@ -210,6 +224,14 @@ export async function planMove(
     init: { signal?: AbortSignal } = {},
 ): Promise<PlanActionResult<PlanActionRouteResponse>> {
     return postJson<PlanActionRouteResponse>("/api/plan/move", input, init);
+}
+
+/** G3.2 — propose a what-if assumption (W/P-F) for a current-term IP course. */
+export async function planWhatIf(
+    input: PlanWhatIfInput,
+    init: { signal?: AbortSignal } = {},
+): Promise<PlanActionResult<WhatIfAssumptionRouteResponse>> {
+    return postJson<WhatIfAssumptionRouteResponse>("/api/plan/whatif", input, init);
 }
 
 export async function planConfirm(

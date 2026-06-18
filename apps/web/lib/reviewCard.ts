@@ -20,9 +20,10 @@
 // consequences and no diff, there are zero trade-off lines.
 // ============================================================
 
-import type { PlanActionResponse } from "./planActionOrchestrator";
+import type { PlanActionResponse, WhatIfAssumptionResponse } from "./planActionOrchestrator";
 import type { PlanStore } from "../app/chat/planState";
 import type { ForwardSchedule, PlanDiff } from "@nyupath/shared";
+import type { WhatIfAssumptionMarker } from "@nyupath/engine";
 
 // ---------------------------------------------------------------------------
 // Verdict view.
@@ -48,6 +49,15 @@ export interface ReviewCardView {
     canConfirm: boolean;
     /** The id the Confirm round-trip hands to /api/plan/confirm. */
     pendingMutationId: string;
+    /** G3.2 — present when this proposal is a WHAT-IF ASSUMPTION (Branch B:
+     *  W/P-F). The review card uses this to display:
+     *   - the assumption label (e.g. "Assumes you withdraw from CSCI-UA 102"),
+     *   - the hedges (school-specific P/F warnings + the universal verify rail),
+     *   - the windowCaveat (F3 registration-window note), and
+     *   - a "Confirming records a PLAN under this assumption — not a fact"
+     *     disclaimer.
+     *  Absent for ordinary add/swap/drop/lock/move proposals. */
+    whatIfAssumption?: WhatIfAssumptionMarker;
 }
 
 /**
@@ -78,6 +88,12 @@ function planDiffSummaryLines(diff: PlanDiff): string[] {
  * Compute the review-card view from a deterministic plan-action
  * response. Pure: reads only engine fields, allocates nothing on the
  * store, never mutates the response.
+ *
+ * G3.2: when `response` is a `WhatIfAssumptionResponse` (has a
+ * `whatIfAssumption` field), the returned view carries the assumption
+ * marker so the review card can display the label + hedges + caveat +
+ * the "plan under assumption — not a fact" disclaimer. For an ordinary
+ * response the field is absent — normal card, unchanged.
  */
 export function computeReviewCard(response: PlanActionResponse): ReviewCardView {
     const feasible = response.feasible === true;
@@ -106,6 +122,11 @@ export function computeReviewCard(response: PlanActionResponse): ReviewCardView 
         label = "Valid";
     }
 
+    // G3.2 — if this response is a WhatIfAssumptionResponse, carry the
+    // assumption marker through so the review card can label the proposal
+    // as an assumption ("Assumes you withdraw from X — not yet on your DPR").
+    const whatIfAssumption = (response as Partial<WhatIfAssumptionResponse>).whatIfAssumption;
+
     return {
         verdict,
         glyph,
@@ -115,6 +136,7 @@ export function computeReviewCard(response: PlanActionResponse): ReviewCardView 
         // reuses this helper with canConfirm:false).
         canConfirm: feasible,
         pendingMutationId: response.pendingMutationId,
+        ...(whatIfAssumption ? { whatIfAssumption } : {}),
     };
 }
 

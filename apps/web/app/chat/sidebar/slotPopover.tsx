@@ -17,6 +17,8 @@
 import { useState } from "react";
 import type { ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
 import styles from "../chat.module.css";
+import type { SlotIpChangeability } from "./slotState";
+import { whatIfSlotControl, type WhatIfOption } from "../../../lib/whatIfSlotControl";
 
 type SlotVerb = "swap" | "drop" | "lock" | "move" | "explain";
 
@@ -38,6 +40,9 @@ export interface SlotPopoverHandlers {
     onLock: (slot: ScheduleSlot, term: string) => Promise<void>;
     /** Phase 4 Task E4.1 — inject a scoped "Explain why" chat question. */
     onExplain: (slot: ScheduleSlot, term: string) => void;
+    /** G3.2 — propose a what-if assumption (W/P-F) for a current-term IP course.
+     *  Only called when the F3 window permits it (whatIfSlotControl gates this). */
+    onWhatIf?: (slot: ScheduleSlot, term: string, outcome: "withdraw" | "pass" | "fail") => Promise<void>;
 }
 
 interface RenderSlotPopoverArgs {
@@ -50,10 +55,23 @@ interface RenderSlotPopoverArgs {
     onSubmenuToggle: (verb: "swap" | "move" | null) => void;
     schedule: ForwardSchedule | null;
     handlers: SlotPopoverHandlers;
+    /** G3.2 — F3 IP changeability classification for this slot. When present
+     *  and the slot is `in_progress`, the popover offers what-if controls
+     *  (or a grounded hedge when the window is closed). When absent, no
+     *  what-if section is rendered. */
+    ipChangeability?: SlotIpChangeability;
 }
 
 export function renderSlotPopover(args: RenderSlotPopoverArgs) {
-    const { slot, term, submenu, onSubmenuToggle, schedule, handlers, isFrozen } = args;
+    const { slot, term, submenu, onSubmenuToggle, schedule, handlers, isFrozen, ipChangeability } = args;
+
+    // G3.2 — derive the what-if control section for in_progress slots. The
+    // pure `whatIfSlotControl` helper gates this on the F3 window; the
+    // React render below is a thin consumer.
+    const whatIfView = slot.kind === "in_progress"
+        ? whatIfSlotControl(ipChangeability)
+        : null;
+
     return (
         <div className={styles.slotPopover} onClick={(e) => e.stopPropagation()}>
             {SLOT_VERBS.map((v) => (
@@ -76,6 +94,35 @@ export function renderSlotPopover(args: RenderSlotPopoverArgs) {
             ))}
             {submenu === "swap" && renderSwapSubmenu(slot, term, schedule, handlers.onSwap)}
             {submenu === "move" && renderMoveSubmenu(slot, term, schedule, handlers.onMove)}
+
+            {/* G3.2 — what-if assumption section (F3-gated; only for in_progress
+                slots). When the F3 window permits, offer Withdraw / Pass-fail
+                options that POST to /api/plan/whatif. When the window is closed or
+                unknown, show a grounded hedge instead of an actionable control.
+                CRITICAL: when onWhatIf is not wired, the section is suppressed
+                entirely (the parent component opts in by providing the handler). */}
+            {whatIfView && handlers.onWhatIf && (
+                <div className={styles.slotPopoverWhatIf}>
+                    <div className={styles.slotPopoverSubmenuHeading}>
+                        What-if (unverified assumption)
+                    </div>
+                    {whatIfView.offer ? (
+                        whatIfView.options.map((opt: WhatIfOption) => (
+                            <button
+                                key={opt.outcome}
+                                type="button"
+                                className={styles.slotPopoverWhatIfBtn}
+                                title={`Record as assumption — not a fact. Confirm records a plan under this assumption; your DPR is never changed.`}
+                                onClick={() => void handlers.onWhatIf!(slot, term, opt.outcome)}
+                            >
+                                {opt.label}
+                            </button>
+                        ))
+                    ) : whatIfView.hedge ? (
+                        <p className={styles.slotPopoverWhatIfHedge}>{whatIfView.hedge}</p>
+                    ) : null}
+                </div>
+            )}
         </div>
     );
 }

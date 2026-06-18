@@ -37,6 +37,7 @@
 import type { ForwardSchedule, PlanDiff, SchedulePreferences } from "@nyupath/shared";
 import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import type { InvalidProposalCard } from "../../lib/reviewCard";
+import type { WhatIfAssumptionMarker } from "@nyupath/engine";
 
 /**
  * Phase 4 Task E3.1 — a STAGED (not-yet-committed) plan proposal the
@@ -60,6 +61,12 @@ export interface PendingPreview {
     planDiff?: PlanDiff;
     /** Which verb staged this proposal (add | swap | drop | lock | move). */
     verb?: string;
+    /** G3.2 — present when this proposal is a WHAT-IF ASSUMPTION (Branch B:
+     *  W/P-F). The review card shows this marker as a clearly-labelled
+     *  assumption ("Assumes you withdraw from X — not yet on your DPR") so
+     *  the student knows they are confirming a plan UNDER an assumption, not
+     *  recording a fact. Absent for ordinary add/swap/drop/lock/move proposals. */
+    whatIfAssumption?: WhatIfAssumptionMarker;
 }
 
 /**
