@@ -349,16 +349,22 @@ describe("ScheduleWorkspace — compare toggle", () => {
         expect(placeholder).not.toBeNull();
     });
 
-    it("Compare mode shows a placeholder (CompareView H3 not yet built)", () => {
+    it("Compare mode renders CompareView with two columns (H3 implemented)", () => {
         const { store } = buildStore();
         const { container } = render(
             <ScheduleWorkspace planStore={store} onConfirmProposed={vi.fn()} onAskWhy={vi.fn()} />
         );
         fireEvent.click(screen.getByRole("button", { name: /compare/i }));
-        // The placeholder paragraph should mention H3
-        const placeholder = container.querySelector(".compare-placeholder");
-        expect(placeholder).not.toBeNull();
-        expect(placeholder?.textContent).toMatch(/H3/i);
+        // The compare region wraps CompareView (still uses compare-placeholder class
+        // for the outer region so aria-label + role still work).
+        const compareRegion = container.querySelector("[aria-label='Compare view']");
+        expect(compareRegion).not.toBeNull();
+        // CompareView renders two <select> pickers
+        const selects = compareRegion?.querySelectorAll("select");
+        expect(selects && selects.length).toBeGreaterThanOrEqual(2);
+        // CompareView renders the diff legend
+        const legend = compareRegion?.querySelector("[aria-label='Diff legend']");
+        expect(legend).not.toBeNull();
     });
 });
 

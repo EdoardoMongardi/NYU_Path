@@ -30,7 +30,10 @@
 
 import { type ReactElement, useSyncExternalStore } from "react";
 import type { PlanStore, Scenario } from "../planState";
+import type { ScenarioState } from "../../../lib/scenarios/scenarioModel";
+import { getScenario } from "../../../lib/scenarios/scenarioModel";
 import ScheduleView from "./ScheduleView";
+import CompareView from "./CompareView";
 
 // ============================================================
 // Pure helpers — badge label, badge class, verdict glyph
@@ -241,24 +244,66 @@ export default function ScheduleWorkspace({
 }
 
 // ============================================================
-// CompareBody — H3 placeholder
+// CompareBody — H3 implementation
 // ============================================================
-// H3 (CompareView) is a separate task. Until it lands this renders a
-// labelled placeholder so the Compare toggle is useable in the UI and
-// the H2.3 render test can assert "H3" text is present.
+// Resolves the compare pair from the store, builds the options list, and
+// renders the presentational CompareView. Handles the onPick callback:
+// when the student changes a picker, compute the new (leftId, rightId)
+// pair — keeping the UNCHANGED side stable — guard against equal ids
+// (pick would select the same id that's already on the other side), then
+// call openCompare with the valid pair.
 
 function CompareBody({ planStore }: { planStore: PlanStore }): ReactElement {
-    const state = planStore.getScenarioState();
+    const state: ScenarioState = planStore.getScenarioState();
     if (!state.compare) return <></>;
+
+    const { leftId, rightId } = state.compare;
+
+    // Resolve both sides. Either can be "committed" (the committed anchor).
+    const leftScenario  = getScenario(state, leftId);
+    const rightScenario = getScenario(state, rightId);
+
+    // Graceful fallback: if either side can't be resolved (e.g. committed was
+    // null, or a scenario was removed while compare was open), show a message
+    // rather than crashing.
+    if (!leftScenario || !rightScenario) {
+        return (
+            <div className="compare-empty" style={{ padding: "24px 16px", color: "#6b6577" }}>
+                <p>Select two plans to compare. Use the ⇄ Compare button to choose them.</p>
+            </div>
+        );
+    }
+
+    // Build the selectable options: the committed anchor (when non-null) plus
+    // all proposed/whatif scenarios — in order.
+    const committedAnchor = getScenario(state, "committed");
+    const options = [
+        ...(committedAnchor ? [committedAnchor] : []),
+        ...state.scenarios,
+    ];
+
+    function handlePick(side: "left" | "right", id: string): void {
+        // Compute the new pair for the changed side.
+        const newLeftId  = side === "left"  ? id : leftId;
+        const newRightId = side === "right" ? id : rightId;
+
+        // Guard: never call openCompare with equal ids (it would throw).
+        // If the new pick equals the OTHER side, ignore — the user must
+        // pick a different scenario (the picker already disables it, but
+        // guard defensively).
+        if (newLeftId === newRightId) return;
+
+        planStore.openCompare(newLeftId, newRightId);
+    }
+
     return (
         <div className="compare-placeholder" role="region" aria-label="Compare view">
-            {/* H3 will replace this block with the real CompareView */}
-            <p style={{ padding: "24px 16px", color: "#6b6577", fontStyle: "italic" }}>
-                {"Compare view (H3) — coming in the next task. Left: "}
-                <strong>{state.compare.leftId}</strong>
-                {" vs right: "}
-                <strong>{state.compare.rightId}</strong>
-            </p>
+            <CompareView
+                left={leftScenario}
+                right={rightScenario}
+                options={options}
+                onPick={handlePick}
+            />
         </div>
     );
 }
