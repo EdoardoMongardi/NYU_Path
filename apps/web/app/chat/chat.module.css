@@ -88,22 +88,27 @@
     border-radius: var(--radius-full);
 }
 
-/* ---- Messages ---- */
+/* ---- Messages ----
+   Plan 36 §9 (H6.1): the chat is the LEFT supporting RAIL, not a centred
+   chatbot. Bubbles are compact (smaller radius, no violet shadow flood,
+   wider max-width so text uses the narrow rail), the avatar is a small
+   quiet glyph, and the rail backdrop is the secondary surface so the
+   centre workspace reads as the hero. The old centred max-width:800px is
+   dropped — the rail width governs. */
 .messages {
     flex: 1;
     overflow-y: auto;
-    padding: 24px 24px 16px;
+    padding: 16px 16px 12px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    max-width: 800px;
+    gap: 12px;
     width: 100%;
-    margin: 0 auto;
+    background: var(--bg-secondary);
 }
 
 .messageBubble {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     animation: fadeInUp 0.3s ease-out both;
 }
 
@@ -112,27 +117,27 @@
 }
 
 .avatar {
-    width: 36px;
-    height: 36px;
+    width: 26px;
+    height: 26px;
     border-radius: var(--radius-full);
     background: var(--nyu-violet-faint);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
+    font-size: 0.8rem;
     flex-shrink: 0;
     border: 1px solid var(--border-light);
 }
 
 .bubbleContent {
-    max-width: 70%;
+    max-width: 88%;
 }
 
 .bubbleText {
-    padding: 14px 18px;
-    border-radius: var(--radius-lg);
-    font-size: 0.925rem;
-    line-height: 1.6;
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    font-size: var(--fs-13);
+    line-height: 1.5;
     word-wrap: break-word;
 }
 
@@ -141,14 +146,12 @@
     color: var(--text-primary);
     border: 1px solid var(--border-light);
     border-bottom-left-radius: 4px;
-    box-shadow: var(--shadow-sm);
 }
 
 .user .bubbleText {
     background: var(--nyu-violet);
     color: #fff;
     border-bottom-right-radius: 4px;
-    box-shadow: var(--shadow-violet);
 }
 
 .bubbleText strong {
@@ -171,10 +174,10 @@
 .typing {
     display: flex;
     gap: 5px;
-    padding: 14px 18px;
+    padding: 10px 14px;
     background: var(--bg-primary);
     border: 1px solid var(--border-light);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     border-bottom-left-radius: 4px;
 }
 
@@ -196,22 +199,21 @@
 
 /* ---- Input Area ---- */
 .inputArea {
-    padding: 16px 24px 24px;
+    padding: 12px 16px 16px;
     background: var(--bg-primary);
     border-top: 1px solid var(--border-light);
     flex-shrink: 0;
 }
 
 .inputContainer {
-    max-width: 800px;
-    margin: 0 auto;
+    width: 100%;
     display: flex;
     align-items: flex-end;
-    gap: 8px;
+    gap: 6px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-light);
-    border-radius: var(--radius-xl);
-    padding: 6px 6px 6px 16px;
+    border-radius: var(--radius-lg);
+    padding: 5px 5px 5px 12px;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -239,13 +241,13 @@
 }
 
 .uploadBtn {
-    width: 40px;
-    height: 40px;
+    width: 34px;
+    height: 34px;
     border-radius: var(--radius-full);
     border: none;
     background: var(--nyu-violet-faint);
     cursor: pointer;
-    font-size: 1.1rem;
+    font-size: 1rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -259,14 +261,14 @@
 }
 
 .sendBtn {
-    width: 40px;
-    height: 40px;
+    width: 34px;
+    height: 34px;
     border-radius: var(--radius-full);
     border: none;
     background: var(--nyu-violet);
     color: #fff;
     cursor: pointer;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 700;
     display: flex;
     align-items: center;
@@ -1960,6 +1962,23 @@ button.reasoningHeader:focus-visible {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* The verdict inside a rail row is a bare COLOURED GLYPH, not a pill — a
+   full pill (padding + tinted bg) would over-weight the compact row. Strip
+   the global .verdict pill chrome and keep only the status colour. The same
+   .verdict class keeps its pill treatment in the workspace header. */
+.profileRailScenarioSelect :global(.verdict) {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    font-size: 0.9em;
+    flex: none;
+}
+
+/* The kind badge in a rail row stays a small pill, sized down to read quietly. */
+.profileRailScenarioSelect :global(.badge) {
+    flex: none;
 }
 
 .profileRailScenarioCompare {

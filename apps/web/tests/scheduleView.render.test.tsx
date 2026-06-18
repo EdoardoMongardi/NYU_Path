@@ -195,24 +195,37 @@ describe("ScheduleView — diff annotations", () => {
     });
 });
 
-// ---- (3) readOnly hides ⋯ affordance ----------------------------------------
+// ---- (3) non-interactive slot grid (Cleanup A) ------------------------------
+// Plan 36 H6.1 removed the dead slot popover + the "Click to open verbs"
+// clickable affordance: ScheduleView is a purely-presentational grid (workspace
+// editing is chat-only). NO slot is clickable, in EITHER readOnly mode, and the
+// "Actions coming in H6" placeholder no longer ships.
 
-describe("ScheduleView — readOnly prop", () => {
-    it("readOnly=true: no slot ⋯ button or popover trigger rendered", () => {
+describe("ScheduleView — non-interactive slot grid", () => {
+    it("readOnly=true: no slot click affordance and no popover", () => {
         render(<ScheduleView schedule={SCHEDULE} readOnly={true} />);
-        // The ⋯ button is only present in editable mode; with readOnly we should
-        // see no element with aria-label containing "open verbs" or the ⋯ char.
         const dotsButtons = screen.queryAllByRole("button", { name: /⋯/ });
         expect(dotsButtons.length).toBe(0);
-        // Also confirm no popover affordances (title "Click to open verbs")
-        const clickableSlots = document.querySelectorAll('[title="Click to open verbs"]');
-        expect(clickableSlots.length).toBe(0);
+        expect(document.querySelectorAll('[title="Click to open verbs"]').length).toBe(0);
+        expect(screen.queryByRole("dialog", { name: /slot actions/i })).toBeNull();
     });
 
-    it("readOnly=false (default): slots ARE clickable (title contains 'Click to open verbs')", () => {
+    it("readOnly=false (default): slots are STILL non-interactive (no clickable affordance)", () => {
         render(<ScheduleView schedule={SCHEDULE} readOnly={false} />);
-        // specific_planned slots in a non-locked term should be clickable
-        const clickableSlots = document.querySelectorAll('[title="Click to open verbs"]');
-        expect(clickableSlots.length).toBeGreaterThan(0);
+        // The workspace has no slot editor — editing is chat-only — so even the
+        // default (non-readOnly) render exposes no clickable slot affordance.
+        expect(document.querySelectorAll('[title="Click to open verbs"]').length).toBe(0);
+    });
+
+    it("never renders the dead 'Actions coming in H6' placeholder", () => {
+        render(<ScheduleView schedule={SCHEDULE} readOnly={false} />);
+        expect(screen.queryByText(/Actions coming in H6/i)).toBeNull();
+    });
+
+    it("singleColumn prop renders without error (compare-column layout)", () => {
+        const { container } = render(<ScheduleView schedule={SCHEDULE} singleColumn />);
+        // The grid still renders both terms' courses.
+        expect(container.querySelector("ul")).not.toBeNull();
+        expect(screen.getByText(/CSCI-UA 101/)).toBeTruthy();
     });
 });

@@ -81,7 +81,7 @@ export default function CompareView({
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <label
                         htmlFor="compare-left-picker"
-                        style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted, #6b6577)", textTransform: "uppercase", letterSpacing: "0.04em" }}
+                        style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}
                     >
                         Left
                     </label>
@@ -89,7 +89,7 @@ export default function CompareView({
                         id="compare-left-picker"
                         value={left.id}
                         onChange={(e) => onPick("left", e.target.value)}
-                        style={{ fontSize: 13, padding: "4px 6px", borderRadius: 4, border: "1px solid var(--border, #ddd)" }}
+                        style={{ fontSize: 13, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--border-medium)", background: "var(--surface-raised)", color: "var(--text-primary)", fontFamily: "var(--font-body)" }}
                     >
                         {options.map((opt) => (
                             <option
@@ -107,7 +107,7 @@ export default function CompareView({
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <label
                         htmlFor="compare-right-picker"
-                        style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted, #6b6577)", textTransform: "uppercase", letterSpacing: "0.04em" }}
+                        style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}
                     >
                         Right
                     </label>
@@ -115,7 +115,7 @@ export default function CompareView({
                         id="compare-right-picker"
                         value={right.id}
                         onChange={(e) => onPick("right", e.target.value)}
-                        style={{ fontSize: 13, padding: "4px 6px", borderRadius: 4, border: "1px solid var(--border, #ddd)" }}
+                        style={{ fontSize: 13, padding: "5px 8px", borderRadius: 6, border: "1px solid var(--border-medium)", background: "var(--surface-raised)", color: "var(--text-primary)", fontFamily: "var(--font-body)" }}
                     >
                         {options.map((opt) => (
                             <option
@@ -145,6 +145,7 @@ export default function CompareView({
                         schedule={left.schedule}
                         diff={d.base}
                         readOnly
+                        singleColumn
                     />
                 </div>
 
@@ -155,6 +156,7 @@ export default function CompareView({
                         schedule={right.schedule}
                         diff={d.other}
                         readOnly
+                        singleColumn
                     />
                 </div>
             </div>
@@ -177,14 +179,14 @@ function ScenarioColumnHeader({ scenario }: { scenario: Scenario }): ReactElemen
                 gap: 8,
                 padding: "6px 0",
                 marginBottom: 4,
-                borderBottom: "1px solid var(--border, #e5e5e5)",
+                borderBottom: "1px solid var(--border-light)",
             }}
         >
             <span
                 style={{
                     fontWeight: 600,
                     fontSize: 14,
-                    color: "var(--text-primary, #1a1523)",
+                    color: "var(--text-primary)",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -226,8 +228,8 @@ function DiffLegend(): ReactElement {
                 gap: "6px 16px",
                 padding: "6px 12px",
                 fontSize: 11,
-                color: "var(--text-muted, #6b6577)",
-                borderBottom: "1px solid var(--border, #e5e5e5)",
+                color: "var(--text-secondary)",
+                borderBottom: "1px solid var(--border-light)",
             }}
             aria-label="Diff legend"
         >

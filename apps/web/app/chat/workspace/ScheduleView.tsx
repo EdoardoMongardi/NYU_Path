@@ -24,7 +24,6 @@
 "use client";
 
 import type { ReactElement } from "react";
-import { useState } from "react";
 import type { ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
 import type { AnnotatedColumn, CourseDiff } from "../../../lib/scenarios/scheduleDiff";
 import { slotKey } from "../../../lib/scenarios/scheduleDiff";
@@ -44,9 +43,15 @@ export interface ScheduleViewProps {
      *  present, each course gets a diff class (same|added|removed|moved|retake)
      *  so the compare view can highlight changes. Absent → plain render. */
     diff?: AnnotatedColumn;
-    /** When true, render non-interactive (no ⋯ menus / popovers) — used for
-     *  what-if / compare columns. Default false (the committed plan is editable). */
+    /** When true, render non-interactive (no slot click affordance) — used by
+     *  the workspace (all kinds) + compare columns. Plan 36 has NO workspace
+     *  slot editor (editing is chat-only: propose → scenario → confirm), so
+     *  workspace schedules pass readOnly. Default false keeps ScheduleView a
+     *  general display grid; in readOnly it is purely presentational. */
     readOnly?: boolean;
+    /** When true, force a single-column term layout (one term per row) — used
+     *  by the compare columns so two side-by-side grids stay readable. */
+    singleColumn?: boolean;
 }
 
 // ============================================================
@@ -111,20 +116,18 @@ export default function ScheduleView({
     schedule,
     diff,
     readOnly = false,
+    singleColumn = false,
 }: ScheduleViewProps): ReactElement {
-    // Controlled popover state — only meaningful when readOnly=false.
-    // Key format: `${semIdx}-${slotIdx}` (mirrors TermCard's approach).
-    const [openPopoverKey, setOpenPopoverKey] = useState<string | null>(null);
-
-    const handleSlotClick = (key: string, slot: ScheduleSlot): void => {
-        if (readOnly) return;
-        if (slot.kind === "completed") return;
-        setOpenPopoverKey((prev) => (prev === key ? null : key));
-    };
+    const gridClass = [
+        workspaceStyles.scheduleGrid,
+        singleColumn ? workspaceStyles.scheduleGridSingle : "",
+    ]
+        .filter(Boolean)
+        .join(" ");
 
     return (
-        <div className={workspaceStyles.scheduleGrid}>
-            {schedule.semesters.map((sem, semIdx) => {
+        <div className={gridClass}>
+            {schedule.semesters.map((sem) => {
                 const termLabel = formatTermLabel(sem.term);
                 const termCredits = sem.plannedCredits;
 
@@ -155,7 +158,6 @@ export default function ScheduleView({
 
                         <ul className={styles.slotList}>
                             {sem.slots.map((slot, slotIdx) => {
-                                const key = `${semIdx}-${slotIdx}`;
                                 const isLocked = slot.kind === "completed";
                                 const tierClass = slotTierClassName(slot);
 
@@ -164,9 +166,15 @@ export default function ScheduleView({
                                 const diffName = diffClassFor(diff, sem.term, courseId);
                                 const diffModule = workspaceDiffClass(diffName);
 
-                                // In readOnly mode: no click title, no popover.
-                                const interactive = !readOnly && !sem.locked && !isLocked;
-
+                                // Cleanup A (H6.1): the workspace has NO slot editor —
+                                // editing happens in chat (propose → scenario → confirm).
+                                // ScheduleView is therefore a purely-PRESENTATIONAL grid:
+                                // no slot click handler, no popover, no false "clickable"
+                                // affordance. The `readOnly` prop is retained for API
+                                // compatibility (all workspace + compare usages pass it)
+                                // but the grid is non-interactive at the slot level either
+                                // way. The lock/in-progress glyph is the only per-slot
+                                // status signal.
                                 return (
                                     <li
                                         key={slotIdx}
@@ -176,29 +184,26 @@ export default function ScheduleView({
                                             slot.kind === "placeholder" && slot.optional
                                                 ? styles.slotOptional
                                                 : "",
-                                            isLocked ? styles.slotLocked : interactive ? styles.slotClickable : "",
+                                            isLocked ? styles.slotLocked : "",
                                             tierClass ? styles.slotTier : "",
                                             tierClass ?? "",
                                             diffModule,
                                         ]
                                             .filter(Boolean)
                                             .join(" ")}
-                                        onClick={interactive ? () => handleSlotClick(key, slot) : undefined}
                                         title={
                                             isLocked
                                                 ? "Completed — locked"
                                                 : slot.kind === "in_progress"
                                                     ? "In progress"
-                                                    : interactive
-                                                        ? "Click to open verbs"
-                                                        : undefined
+                                                    : undefined
                                         }
                                     >
                                         {renderSlotInner(slot)}
                                         <span className={styles.slotGradeCell}>
                                             {slotGradeText(slot)}
                                         </span>
-                                        {/* Minimal lock/IP glyph (readOnly: no full slotState) */}
+                                        {/* Minimal lock/IP glyph (presentational status signal). */}
                                         <span className={styles.slotLockIcon} aria-hidden="true">
                                             {isLocked
                                                 ? "🔒"
@@ -206,24 +211,6 @@ export default function ScheduleView({
                                                     ? "◐"
                                                     : ""}
                                         </span>
-
-                                        {/* Popover: only in editable mode when this slot is open.
-                                            H6 will add the full SlotRow popover integration; for
-                                            now the indicator shows the slot is selected. */}
-                                        {!readOnly && openPopoverKey === key && !isLocked && (
-                                            <div
-                                                className={styles.slotPopover}
-                                                role="dialog"
-                                                aria-label="Slot actions"
-                                            >
-                                                {/* The full popover (swap/drop/lock/move/explain/what-if)
-                                                    is wired in the sidebar via SlotRow; here we render a
-                                                    placeholder until H6 integrates the full workspace toolbar. */}
-                                                <span className={styles.slotPopoverContent}>
-                                                    Actions coming in H6
-                                                </span>
-                                            </div>
-                                        )}
                                     </li>
                                 );
                             })}

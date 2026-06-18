@@ -120,31 +120,46 @@ export default function ScheduleWorkspace({
 
     return (
         <div className="schedule-workspace">
-            {/* ---- Tab bar ---- */}
+            {/* ---- Tab bar ----
+                M3 restructure (H6.1): a tab is a NON-interactive container
+                (role="tab") holding a label-select control + an optional close
+                control as SIBLINGS — never a <button> nested inside a <button>
+                (invalid HTML + a React hydration warning). The container carries
+                data-tab + the select handler; the close <button> carries
+                data-close and stops propagation. Mirrors the ProfileRail row
+                pattern (data-select / data-compare siblings). */}
             <div className="ws-head">
-                <div className="tabs">
+                <div className="tabs" role="tablist" aria-label="Scenario tabs">
                     {/* Pinned committed tab — always first, no close button */}
-                    <button
+                    <div
                         className={[
                             "tab",
                             "tab-committed",
                             activeId === "committed" && !compareMode ? "active" : "",
                         ].filter(Boolean).join(" ")}
                         data-tab="committed"
+                        role="tab"
+                        tabIndex={0}
+                        aria-selected={activeId === "committed" && !compareMode}
                         onClick={() => handleTabClick("committed")}
-                        aria-pressed={activeId === "committed" && !compareMode}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleTabClick("committed");
+                            }
+                        }}
                     >
                         <span className="tab-pin" aria-hidden="true">📌</span>
-                        {" My Plan"}
-                        <span className={kindBadgeClass("committed")} style={{ marginLeft: 6 }}>
+                        <span className="tab-label">My Plan</span>
+                        <span className={kindBadgeClass("committed")}>
                             {kindBadgeLabel("committed")}
                         </span>
                         {/* NO close button on committed tab */}
-                    </button>
+                    </div>
 
                     {/* One tab per proposed/whatif scenario */}
                     {scenarios.map((sc) => (
-                        <button
+                        <div
                             key={sc.id}
                             className={[
                                 "tab",
@@ -152,37 +167,39 @@ export default function ScheduleWorkspace({
                                 activeId === sc.id && !compareMode ? "active" : "",
                             ].filter(Boolean).join(" ")}
                             data-tab={sc.id}
+                            role="tab"
+                            tabIndex={0}
+                            aria-selected={activeId === sc.id && !compareMode}
                             onClick={() => handleTabClick(sc.id)}
-                            aria-pressed={activeId === sc.id && !compareMode}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    handleTabClick(sc.id);
+                                }
+                            }}
                         >
                             <span className={kindBadgeClass(sc.kind)}>
                                 {kindBadgeLabel(sc.kind).split(" ")[0]}
                             </span>
-                            {" "}
-                            {sc.label}
-                            {/* Close button — scenario tabs only */}
-                            <span
+                            <span className="tab-label">{sc.label}</span>
+                            {/* Close — a real sibling <button> (no longer nested
+                                in an outer <button>). */}
+                            <button
+                                type="button"
                                 className="tab-close"
                                 data-close={sc.id}
                                 title={`Close ${sc.label}`}
-                                onClick={(e) => handleClose(e, sc.id)}
-                                role="button"
-                                tabIndex={0}
                                 aria-label={`Close ${sc.label}`}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                        e.stopPropagation();
-                                        planStore.discardScenario(sc.id);
-                                    }
-                                }}
+                                onClick={(e) => handleClose(e, sc.id)}
                             >
-                                {" ✕"}
-                            </span>
-                        </button>
+                                ✕
+                            </button>
+                        </div>
                     ))}
 
                     {/* Compare toggle — right side */}
                     <button
+                        type="button"
                         className={["compare-btn", compareMode ? "compare-btn-on" : ""].filter(Boolean).join(" ")}
                         onClick={handleCompare}
                         aria-pressed={compareMode}
@@ -243,7 +260,7 @@ function CompareBody({ planStore }: { planStore: PlanStore }): ReactElement {
     // rather than crashing.
     if (!leftScenario || !rightScenario) {
         return (
-            <div className="compare-empty" style={{ padding: "24px 16px", color: "#6b6577" }}>
+            <div className="compare-empty">
                 <p>Select two plans to compare. Use the ⇄ Compare button to choose them.</p>
             </div>
         );
@@ -385,11 +402,13 @@ function ScenarioBody({
 
             {/* committed: no action buttons — it IS the plan */}
 
-            {/* Schedule grid */}
+            {/* Schedule grid — ALL kinds render read-only (Cleanup A, H6.1):
+                the workspace has no slot editor; edits flow through chat
+                (propose → scenario → confirm). Committed included. */}
             <div className="scenario-schedule">
                 <ScheduleView
                     schedule={scenario.schedule}
-                    readOnly={kind !== "committed"}
+                    readOnly={true}
                 />
             </div>
         </div>
