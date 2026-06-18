@@ -371,9 +371,17 @@ export function diffSchedules(base: ForwardSchedule, other: ForwardSchedule): Sc
 
 /**
  * Convert a "YYYY-season" string to a numeric ordinal for temporal comparison.
- * Season ordering within a year: spring=0, summer=1, fall=2, january(next)=3.
- * january is treated as belonging to the NEXT calendar year (it is a winter
- * intersession before the spring of YYYY).
+ *
+ * Mirrors the ENGINE's canonical season ordering (`SEASON_ORD` in
+ * packages/engine/.../planChangeHelpers.ts: spring=0, summer=1, fall=2,
+ * january=3), comparing `(year, seasonOrd)`. The label's year is taken as-is —
+ * the J-term `"YYYY-january"` is the intersession that FOLLOWS `"YYYY-fall"`
+ * (calendar January of YYYY+1) and so sorts AFTER fall of the same label-year
+ * and BEFORE `"(YYYY+1)-spring"`. (No +1-year rollover — january=3 already
+ * places it after fall within the same label-year, matching the solver.)
+ * Example order: 2026-fall(20262) < 2026-january(20263) < 2027-spring(20270).
+ * "YYYY-season" is the only term format the solver emits (and the only one the
+ * engine's parseTerm accepts), so a hyphen split is sufficient.
  */
 function termOrdinal(term: string): number {
     const [yearStr, season] = term.split("-");
@@ -382,10 +390,8 @@ function termOrdinal(term: string): number {
         spring: 0,
         summer: 1,
         fall: 2,
-        january: 3, // treated as belonging to the NEXT calendar year
+        january: 3, // J-term follows fall of the SAME label-year (engine SEASON_ORD)
     };
     const s = seasonMap[season] ?? 0;
-    // january is effectively NEXT year's very start
-    const effectiveYear = season === "january" ? year + 1 : year;
-    return effectiveYear * 10 + s;
+    return year * 10 + s;
 }

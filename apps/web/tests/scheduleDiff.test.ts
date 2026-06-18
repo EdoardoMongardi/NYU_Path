@@ -202,6 +202,28 @@ describe("diffSchedules — retake", () => {
         expect(retakeRow!.diff).toBe("retake");
     });
 
+    it("J-term ordering: dropped from a january term, retaken the FOLLOWING spring → retake", () => {
+        // Engine SEASON_ORD convention: "YYYY-january" follows "YYYY-fall" and
+        // precedes "(YYYY+1)-spring". So 2027-january (20273) < 2028-spring (20280)
+        // → the spring retake is LATER → "retake". (The earlier +1-year-rollover
+        // bug computed 2027-january as 20283 > 2028-spring 20280 → wrongly "moved".)
+        const jSlot = specificSlot("CSCI-UA 7");
+        const unrelated = specificSlot("MATH-UA 121");
+        const base = makeFeasibleScheduleWithSemesters(S, [
+            { term: "2027-january", slots: [jSlot, unrelated] },
+            { term: "2028-spring", slots: [] },
+        ]);
+        const other = makeFeasibleScheduleWithSemesters(S, [
+            { term: "2027-january", slots: [unrelated] },
+            { term: "2028-spring", slots: [jSlot] },
+        ]);
+        const diff = diffSchedules(base, other);
+        const baseJan = diff.base.terms.find((t) => t.term === "2027-january");
+        expect(baseJan!.rows.find((r) => r.courseId.includes("CSCI-UA 7"))!.diff).toBe("removed");
+        const otherSpring = diff.other.terms.find((t) => t.term === "2028-spring");
+        expect(otherSpring!.rows.find((r) => r.courseId.includes("CSCI-UA 7"))!.diff).toBe("retake");
+    });
+
     it("course added fresh in a later term (not in base at all) → plain 'added', not retake", () => {
         const freshSlot = specificSlot("CSCI-UA 999");
         const sharedSlot = specificSlot("MATH-UA 121");
