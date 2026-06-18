@@ -49,28 +49,22 @@
 
 import { z } from "zod";
 import { buildTool } from "../tool.js";
-import type { ToolSession } from "../tool.js";
-import { solveForwardSchedule } from "../forwardSchedule/solver.js";
-import { finalizeForwardSchedule } from "../forwardSchedule/build.js";
-import { runGraduationPathValidator } from "../forwardSchedule/graduationPathValidator.js";
 import { applyFailedCourseToDpr } from "../forwardSchedule/failCourseTransform.js";
 import { applyWithdrawalToDpr } from "../forwardSchedule/withdrawTransform.js";
 import { applyPassFailToDpr } from "../forwardSchedule/passFailTransform.js";
-import { rowKey } from "../forwardSchedule/transformUtils.js";
-import { canonicalizeCourseId } from "../../courseId.js";
 import {
     applyMutationsToPreferences,
-    buildSolverInputWithRulesFromSession,
-    computeSlotDiff,
-    buildPlanDiff,
     PlanMutationSchema,
 } from "../forwardSchedule/planChangeHelpers.js";
+// G3.1 — the transform→solve→diff machinery + the F3 window caveat + the
+// verify rail now live in ONE shared module (whatIfAssumption.ts), reused by
+// both this read-only probe and the propose_whatif_assumption propose/confirm
+// path. probe_counterfactual just CALLS them — behavior is unchanged.
 import {
-    classifyIpChangeability,
-    deriveTemporalContext,
-    campusForHomeSchool,
-    NYU_ACADEMIC_CALENDAR,
-} from "../../dpr/index.js";
+    solveAndDiff,
+    ipWindowCaveat,
+    VERIFY_RAIL,
+} from "../forwardSchedule/whatIfAssumption.js";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import type {
     ForwardSchedule,
@@ -79,13 +73,6 @@ import type {
     PlanMutation,
     SchedulePreferences,
 } from "@nyupath/shared";
-
-/** The universal rail every IP-course what-if (withdraw / pass_fail) carries:
- *  a claimed current-term change is an UNVERIFIED assumption (CORE RULE 15 /
- *  core_philosophy.md) — nothing is official until the next DPR. */
-const VERIFY_RAIL =
-    "This is an unverified assumption — verify with your adviser; nothing is " +
-    "official until your next DPR.";
 
 // ---------------------------------------------------------------------------
 // Output type
@@ -164,176 +151,14 @@ const ProbeInputSchema = z.discriminatedUnion("kind", [
 ]);
 
 // ---------------------------------------------------------------------------
-// Shared transform→solve→diff machinery (reused by every arm)
+// Shared transform→solve→diff machinery — imported from whatIfAssumption.ts
 // ---------------------------------------------------------------------------
-
-/** The fields every arm assembles after re-solving its (dpr, prefs)
- *  counterfactual — i.e. the `PlanChangeOutcome`-shaped core plus the probe's
- *  schedule/state/planDiff. The arm-specific fields (`arm`, `hedges`,
- *  `windowCaveat`) are merged by the handler. */
-interface SolveAndDiffResult {
-    feasible: boolean;
-    diff: PlanChangeOutcome["diff"];
-    consequences: string[];
-    conflicts?: Array<{ kind: string; detail: string }>;
-    schedule: ForwardSchedule;
-    state: ForwardSchedule["state"];
-    planDiff?: PlanDiff;
-}
-
-/**
- * Re-solve a counterfactual `(solveDpr, solvePrefs)` through the SAME frozen
- * pipeline the build path uses (`buildSolverInputWithRulesFromSession` →
- * `solveForwardSchedule` → `finalizeForwardSchedule` + the 7-axis validator),
- * then compute the diff / rich planDiff / binding-constraint conflicts vs the
- * CURRENT plan. PURE re-solve — NOTHING here writes to session. Shared by all
- * four arms so the solve/diff logic lives in exactly ONE place.
- *
- * @param originalDpr The student's REAL DPR (the "before" world the planDiff
- *                    is measured against — always the original, never the
- *                    synthetic clone).
- * @param solveDpr    The DPR to solve against (the synthetic clone for the
- *                    fail/withdraw/pass_fail arms; === originalDpr for
- *                    future_course).
- */
-function solveAndDiff(
-    session: ToolSession,
-    currentPlan: ForwardSchedule,
-    originalDpr: DegreeProgressReport,
-    solveDpr: DegreeProgressReport,
-    solvePrefs: SchedulePreferences,
-    noOpConsequences: string[],
-): SolveAndDiffResult {
-    // Identical seam to proposePlanChange: one buildProgramRules call yields
-    // BOTH the solverInput and the validatorRules; solve; then route through
-    // the SAME authoritative 7-axis finalize the build path uses. NONE of
-    // this writes to session.
-    const { solverInput, validatorRules } = buildSolverInputWithRulesFromSession(
-        session,
-        solveDpr,
-        solvePrefs,
-    );
-    const solverOutput = solveForwardSchedule(solverInput);
-    const { schedule: probedSchedule, validatorResult } = finalizeForwardSchedule(
-        solverOutput,
-        solverInput,
-        solveDpr,
-        validatorRules,
-    );
-
-    // Validate the BEFORE plan too (cheap, pure) so the planDiff can report
-    // per-axis transitions. The before plan is validated against the
-    // ORIGINAL dpr — that is the world the student is in today.
-    const beforeAxes = runGraduationPathValidator({
-        plan: currentPlan,
-        dpr: originalDpr,
-        programRules: validatorRules,
-    }).axisResults;
-
-    // -- Diff + rich planDiff vs the CURRENT plan --------------------------
-    const diff = computeSlotDiff(currentPlan, probedSchedule);
-    const planDiff = buildPlanDiff(currentPlan, probedSchedule, {
-        before: beforeAxes,
-        after: validatorResult.axisResults,
-    });
-
-    // -- Conflicts from the VALIDATOR (not the solver's coarse boolean) ----
-    //
-    // When the validator deems the counterfactual infeasible, surface the
-    // BINDING constraint: the failing-axis + reason string from the
-    // infeasibilityReport (conflictSource + conflictDetail). D2.2 frames this
-    // as the "why-not" reason in summarizeResult. HONEST SCOPE: conflictSource
-    // is always "other" and conflictDetail is `Axes failed: <axis>: <reason>`
-    // — axis-level, NOT course-causal (see summarizeResult + the file header).
-    const conflicts: Array<{ kind: string; detail: string }> = [];
-    if (!validatorResult.feasible && validatorResult.infeasibilityReport) {
-        conflicts.push({
-            kind: validatorResult.infeasibilityReport.conflictSource,
-            detail: validatorResult.infeasibilityReport.conflictDetail,
-        });
-    }
-
-    // -- Consequences (plain-English) --------------------------------------
-    const consequences: string[] = [...noOpConsequences];
-    if (validatorResult.feasible) {
-        consequences.push("Counterfactual re-solves to a VALID plan.");
-    } else {
-        consequences.push("Counterfactual is INFEASIBLE — see the binding constraint(s).");
-    }
-    if (diff.added.length > 0) {
-        consequences.push(
-            "Added: " +
-                diff.added
-                    .map(({ term, slot }) =>
-                        `${"courseId" in slot ? slot.courseId : "placeholder"} → ${term}`,
-                    )
-                    .join(", "),
-        );
-    }
-    if (diff.removed.length > 0) {
-        consequences.push(
-            "Removed: " +
-                diff.removed
-                    .map(({ term, slot }) =>
-                        `${"courseId" in slot ? slot.courseId : "placeholder"} (was in ${term})`,
-                    )
-                    .join(", "),
-        );
-    }
-
-    return {
-        feasible: validatorResult.feasible,
-        diff,
-        consequences,
-        conflicts: conflicts.length > 0 ? conflicts : undefined,
-        schedule: probedSchedule,
-        state: probedSchedule.state,
-        planDiff,
-    };
-}
-
-/**
- * Resolve the F3 registrar-window caveat for an IP-course arm (withdraw /
- * pass_fail). Finds the target course's term from the DPR's courseHistory,
- * derives the temporal context + campus, and asks `classifyIpChangeability`
- * whether the student is even inside the add/drop or withdraw/PF window NOW.
- *
- * READ-ONLY + window-INDEPENDENT consequence: this is surfaced as a CAVEAT
- * only — the requirement consequence (a "W" never satisfies the requirement)
- * is computed regardless of the window. Returns the classifier's hedge when
- * one applies (closed / withdraw_pf / unknown), else a benign in-window note;
- * when the course's term can't be found, returns `undefined`.
- */
-function ipWindowCaveat(
-    dpr: DegreeProgressReport,
-    courseId: string,
-    homeSchool: string | undefined,
-    now?: Date,
-): string | undefined {
-    // Find the course's term from courseHistory under the SAME keying the
-    // transforms use: canonicalizeCourseId(courseId) equals rowKey(row) =
-    // canonicalizeCourseId(`${row.subject} ${row.catalogNbr}`).
-    const targetId = canonicalizeCourseId(courseId);
-    const row = dpr.courseHistory.find((r) => rowKey(r) === targetId);
-    if (!row) return undefined;
-
-    const temporalContext = deriveTemporalContext(dpr, now ? { now } : {});
-    const campus = campusForHomeSchool(homeSchool);
-    const result = classifyIpChangeability({
-        ipTerm: row.term,
-        temporalContext,
-        campus,
-        calendar: NYU_ACADEMIC_CALENDAR,
-        ...(now ? { now } : {}),
-    });
-    // Prefer the classifier's hedge (closed / withdraw_pf / unknown). For a
-    // freely-changeable window (future / add_drop) there is no hedge — surface
-    // a short benign note so the caller always has a window caveat string.
-    if (result.hedge) return result.hedge;
-    return result.window === "future"
-        ? "This is a pre-registered future term — freely changeable; no real-world registration to undo yet."
-        : "You appear to be within the add/drop window for this term, so this course can still be dropped/changed; confirm the exact deadline with your registrar.";
-}
+//
+// `solveAndDiff` (the frozen-pipeline re-solve + diff/planDiff/conflicts) and
+// `ipWindowCaveat` (the F3 registrar-window caveat) + the `VERIFY_RAIL`
+// constant now live in ONE place (whatIfAssumption.ts) and are imported above,
+// so the propose_whatif_assumption tool + the web confirm path reuse the EXACT
+// same logic. This file's behavior is unchanged.
 
 // ---------------------------------------------------------------------------
 // Tool definition

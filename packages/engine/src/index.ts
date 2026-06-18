@@ -87,8 +87,19 @@ export {
     // Drop/Lock/Move/Confirm verbs.
     proposePlanChangeTool,
     confirmPlanChangeTool,
+    // G3.1 — the deterministic what-if-assumption propose tool + the shared
+    // re-plan helper the web confirm path calls (re-apply transform → re-solve
+    // → persist ONLY the forward_schedule, never the synthetic DPR).
+    proposeWhatIfAssumptionTool,
+    solveWhatIfAssumption,
+    whatIfAssumptionLabel,
 } from "./agent/index.js";
 export type {
+    // G3.1 — what-if-assumption types surfaced for the web orchestrator + UI.
+    WhatIfOutcome,
+    WhatIfAssumptionResult,
+    ProposeWhatIfAssumptionOutput,
+    WhatIfAssumptionMarker,
     AgentTurnOptions,
     AgentStreamEvent,
     ChatTurnResult,

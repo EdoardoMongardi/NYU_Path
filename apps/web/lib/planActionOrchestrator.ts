@@ -35,11 +35,17 @@ import { randomUUID } from "node:crypto";
 import {
     proposePlanChangeTool,
     confirmPlanChangeTool,
+    proposeWhatIfAssumptionTool,
     loadSchoolConfig,
     loadCourses,
     loadPrereqs,
+    computeDprFingerprint,
+    solveWhatIfAssumption,
+    whatIfAssumptionLabel,
     type ToolSession,
     type DegreeProgressReport,
+    type WhatIfOutcome,
+    type WhatIfAssumptionMarker,
 } from "@nyupath/engine";
 import type {
     Course,
@@ -52,7 +58,10 @@ import type {
     StudentProfile,
 } from "@nyupath/shared";
 import { getStores } from "./db/store.js";
-import { InMemoryPendingMutationStore } from "./db/pendingMutationStore.js";
+import {
+    InMemoryPendingMutationStore,
+    type WhatIfAssumptionStaged,
+} from "./db/pendingMutationStore.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -86,22 +95,42 @@ export interface PlanActionResponse extends PlanChangeOutcome {
     forwardSchedule?: ForwardSchedule;
 }
 
-/** Confirm-stage outcome — the actual apply via confirm_plan_change. */
+/**
+ * G3.1 — the propose-stage outcome for a WHAT-IF ASSUMPTION
+ * ("I withdrew / I'll take pass-fail for course X"). A superset of
+ * `PlanActionResponse` plus the `whatIfAssumption` marker the web review
+ * card / canvas badge (G3.2) reads to LABEL the proposal as an unverified
+ * assumption. `forwardSchedule` is the proposed (un-persisted) plan; CONFIRM
+ * persists ONLY that schedule, never the synthetic DPR.
+ */
+export interface WhatIfAssumptionResponse extends PlanActionResponse {
+    whatIfAssumption: WhatIfAssumptionMarker;
+}
+
+/** Confirm-stage outcome — the actual apply via confirm_plan_change (or, for
+ *  G3.1, a re-applied what-if assumption persisting only the schedule). */
 export interface PlanConfirmResponse extends PlanChangeOutcome {
     planDiff?: PlanDiff;
-    /** Where confirm_plan_change wrote the resulting schedule. */
+    /** Where the resulting schedule was stored. A plan-change confirm reports
+     *  the engine's Decision-#32 slot; a what-if confirm reports
+     *  `forwardSchedule` (valid) or `studentDraftPlan` (infeasible). */
     storedIn: "forwardSchedule" | "studentDraftPlan";
     /** The persisted ForwardSchedule (whichever slot it landed in). */
     forwardSchedule?: ForwardSchedule;
     /** The staging-map entry was consumed; the mutationId is no longer
      *  resolvable. */
     consumedMutationId: string;
+    /** G3.1 — present iff this confirm applied a what-if ASSUMPTION (so the UI
+     *  can re-label the now-committed plan "assumes you withdraw / P-F X").
+     *  CRITICAL: this confirm persisted only the schedule — never parsed_dpr. */
+    whatIfAssumption?: WhatIfAssumptionMarker;
 }
 
 export type RunProposeError =
     | { kind: "no_profile";  message: string }
     | { kind: "no_dpr";      message: string }
     | { kind: "no_schedule"; message: string }
+    | { kind: "bad_input";   message: string }
     | { kind: "engine_error"; message: string };
 
 export type RunConfirmError =
@@ -498,6 +527,110 @@ export async function runProposeStage(
 }
 
 // ---------------------------------------------------------------------------
+// Stage 1 — propose a WHAT-IF ASSUMPTION (G3.1)
+// ---------------------------------------------------------------------------
+
+const VALID_WHATIF_OUTCOMES: readonly WhatIfOutcome[] = ["withdraw", "pass", "fail"];
+
+/**
+ * G3.1 — propose a current-term IP-course WHAT-IF ASSUMPTION ("I withdrew /
+ * I'll take pass-fail for course X"). READ-ONLY at propose time:
+ *
+ *   1. Load + build the session (same path as `runProposeStage`).
+ *   2. Run `proposeWhatIfAssumptionTool.call` — builds a SYNTHETIC in-memory
+ *      DPR via the matching transform, re-solves through the frozen pipeline,
+ *      and returns the proposed (un-persisted) plan + the `whatIfAssumption`
+ *      marker. Writes NOTHING.
+ *   3. Mint a `pendingMutationId` and STAGE the assumption ({courseId, outcome})
+ *      via the SAME pendingMutationStore the plan-mutation propose path uses
+ *      (carried in the shared `mutations` JSONB as a tagged wrapper — no schema
+ *      migration). The follow-up `/api/plan/confirm` re-applies the transform +
+ *      persists ONLY the resulting forward_schedule (never the synthetic DPR).
+ *
+ * Returns the `WhatIfAssumptionResponse` carrying the marker so the web review
+ * card / canvas badge can label the proposal as an unverified assumption.
+ */
+export async function runProposeWhatIfStage(
+    studentId: string,
+    assumption: { courseId: string; outcome: WhatIfOutcome },
+    opts: { env?: Record<string, string | undefined>; now?: Date } = {},
+): Promise<{ ok: true; response: WhatIfAssumptionResponse } | { ok: false; error: RunProposeError }> {
+    const env = opts.env ?? process.env;
+
+    // Defensive input validation (the route's Zod schema is the first gate;
+    // this is the orchestrator-level backstop).
+    if (!assumption.courseId || assumption.courseId.trim().length === 0) {
+        return { ok: false, error: { kind: "bad_input", message: "Missing courseId." } };
+    }
+    if (!VALID_WHATIF_OUTCOMES.includes(assumption.outcome)) {
+        return {
+            ok: false,
+            error: { kind: "bad_input", message: `Invalid outcome '${assumption.outcome}'.` },
+        };
+    }
+
+    const loaded = await loadSessionState(studentId, env);
+    if (!loaded.ok) return { ok: false, error: loaded.error };
+
+    const session = buildSession(loaded.state, env);
+    const ctx = { signal: new AbortController().signal, session };
+
+    let outcome: Awaited<ReturnType<typeof proposeWhatIfAssumptionTool.call>>;
+    try {
+        outcome = await proposeWhatIfAssumptionTool.call(
+            {
+                courseId: assumption.courseId,
+                outcome: assumption.outcome,
+                ...(opts.now ? { now: opts.now.toISOString() } : {}),
+            } as Parameters<typeof proposeWhatIfAssumptionTool.call>[0],
+            ctx,
+        );
+    } catch (err) {
+        return {
+            ok: false,
+            error: {
+                kind: "engine_error",
+                message: `proposeWhatIfAssumptionTool failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+        };
+    }
+
+    const proposedForwardSchedule = (outcome as { proposedSchedule?: ForwardSchedule }).proposedSchedule;
+
+    // Stage the ASSUMPTION (not a PlanMutation[]) so the confirm re-applies the
+    // SAME transform. The store carries it in the shared `mutations` JSONB.
+    const pendingMutationId = randomUUID();
+    const stagedAssumption: WhatIfAssumptionStaged = {
+        courseId: assumption.courseId,
+        outcome: assumption.outcome,
+    };
+    await getStores(env).pendingMutationStore.stage({
+        pendingMutationId,
+        studentId,
+        mutations: [],
+        assumption: stagedAssumption,
+        createdAt: Date.now(),
+    });
+
+    const response: WhatIfAssumptionResponse = {
+        feasible: outcome.feasible,
+        diff: outcome.diff,
+        consequences: outcome.consequences,
+        ...(outcome.conflicts ? { conflicts: outcome.conflicts } : {}),
+        ...(outcome.planDiff ? { planDiff: outcome.planDiff } : {}),
+        explanation: outcome.whatIfAssumption.label,
+        pendingMutationId,
+        // A what-if assumption touches an EXISTING current-term enrollment; the
+        // "future terms" FOSE hint is not meaningful here.
+        futureTerms: [],
+        ...(proposedForwardSchedule ? { forwardSchedule: proposedForwardSchedule } : {}),
+        whatIfAssumption: outcome.whatIfAssumption,
+    };
+
+    return { ok: true, response };
+}
+
+// ---------------------------------------------------------------------------
 // Stage Confirm — actually apply
 // ---------------------------------------------------------------------------
 
@@ -579,6 +712,31 @@ export async function runConfirmStage(
     const session = buildSession(loaded.state, env);
     const ctx = { signal: new AbortController().signal, session };
 
+    // ---- G3.1 — what-if ASSUMPTION confirm branch ------------------------
+    //
+    // A staged assumption is NOT a PlanMutation[] — it is a DPR TRANSFORM
+    // ("I withdrew / I'll take pass-fail for course X"). We re-apply the
+    // transform to the loaded session DPR + re-solve through the SAME frozen
+    // pipeline, then persist ONLY the resulting forward_schedule.
+    //
+    // CRITICAL (R1 guardrail): this path NEVER writes the synthetic DPR to
+    // students.parsed_dpr. It calls scheduleStore.persistSchedule (schedule
+    // only) — NOT profileStore.persistMutation with the synthetic DPR. So
+    // the assertAuthoritativeDpr guard (which throws on a non-"dpr"
+    // reportKind write) is never reached. "Confirming a plan ≠ recording a
+    // fact" — the next real DPR re-plans + supersedes via the normal flow.
+    if (entry.assumption) {
+        const result = await runConfirmWhatIfAssumption(
+            studentId,
+            entry.assumption,
+            loaded.state,
+            session,
+            pendingMutationId,
+            restageBestEffort,
+        );
+        return result;
+    }
+
     let outcome: Awaited<ReturnType<typeof confirmPlanChangeTool.call>>;
     try {
         outcome = await confirmPlanChangeTool.call(
@@ -653,6 +811,112 @@ export async function runConfirmStage(
         storedIn: outcome.storedIn,
         ...(persistedSchedule ? { forwardSchedule: persistedSchedule } : {}),
         consumedMutationId: pendingMutationId,
+    };
+    return { ok: true, response };
+}
+
+// ---------------------------------------------------------------------------
+// Confirm a WHAT-IF ASSUMPTION (G3.1) — persist the schedule, NEVER parsed_dpr
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-apply a staged what-if assumption to the loaded session DPR, re-solve
+ * through the SAME frozen pipeline (`solveWhatIfAssumption`), and persist ONLY
+ * the resulting forward_schedule. The authoritative DPR snapshot
+ * (`students.parsed_dpr`) is NEVER overwritten — "confirming a plan ≠ recording
+ * a fact." A later real DPR upload re-plans + supersedes via the normal flow.
+ *
+ * On a persist failure we re-stage the entry (mirrors the plan-change confirm's
+ * single-use-only-on-success semantic) and surface an engine_error.
+ *
+ * R1 GUARDRAIL: this function calls ONLY `scheduleStore.persistSchedule` (the
+ * schedule) — it deliberately never calls `profileStore.persistMutation` with
+ * the synthetic DPR, so the assertAuthoritativeDpr guard is never reached.
+ */
+async function runConfirmWhatIfAssumption(
+    studentId: string,
+    assumption: WhatIfAssumptionStaged,
+    state: LoadedSessionState,
+    session: ToolSession,
+    pendingMutationId: string,
+    restageBestEffort: () => Promise<void>,
+): Promise<{ ok: true; response: PlanConfirmResponse } | { ok: false; error: RunConfirmError }> {
+    const currentPlan = state.forwardSchedule ?? state.studentDraftPlan;
+    if (!currentPlan) {
+        // The propose-time validateInput already required a plan; if it's gone
+        // by confirm time, restage + surface a no_schedule error.
+        await restageBestEffort();
+        return {
+            ok: false,
+            error: { kind: "no_schedule", message: "No forward plan to confirm the what-if assumption against." },
+        };
+    }
+
+    // Re-apply the transform + re-solve READ-ONLY through the shared seam. This
+    // builds a SYNTHETIC in-memory DPR; session.degreeProgressReport is never
+    // mutated (the transforms deep-copy).
+    let result: ReturnType<typeof solveWhatIfAssumption>;
+    try {
+        result = solveWhatIfAssumption(session, currentPlan, {
+            courseId: assumption.courseId,
+            outcome: assumption.outcome,
+        });
+    } catch (err) {
+        await restageBestEffort();
+        return {
+            ok: false,
+            error: {
+                kind: "engine_error",
+                message: `solveWhatIfAssumption failed: ${err instanceof Error ? err.message : String(err)}`,
+            },
+        };
+    }
+
+    const newSchedule = result.schedule;
+    const storedIn: PlanConfirmResponse["storedIn"] = result.feasible
+        ? "forwardSchedule"
+        : "studentDraftPlan";
+
+    // Persist ONLY the resulting forward_schedule. The fingerprint is of the
+    // student's REAL DPR (state.dpr) — so a later REAL DPR upload with a
+    // different fingerprint supersedes this assumption plan via the normal
+    // re-plan-and-supersede flow. The synthetic DPR is NEVER persisted.
+    if (session.scheduleStore) {
+        try {
+            const fingerprint = computeDprFingerprint(state.dpr);
+            await session.scheduleStore.persistSchedule(studentId, newSchedule, fingerprint);
+        } catch (err) {
+            // Persist failed — restage so the assumption stays confirmable on a
+            // retry (single-use-only-on-success), and surface the error.
+            await restageBestEffort();
+            return {
+                ok: false,
+                error: {
+                    kind: "engine_error",
+                    message: `persistSchedule (what-if) failed: ${err instanceof Error ? err.message : String(err)}`,
+                },
+            };
+        }
+    }
+
+    const marker: WhatIfAssumptionMarker = {
+        courseId: assumption.courseId,
+        outcome: assumption.outcome,
+        label: whatIfAssumptionLabel(assumption.courseId, assumption.outcome),
+        hedges: result.hedges,
+        ...(result.windowCaveat ? { windowCaveat: result.windowCaveat } : {}),
+    };
+
+    const response: PlanConfirmResponse = {
+        feasible: result.feasible,
+        diff: result.diff,
+        consequences: result.consequences,
+        ...(result.conflicts ? { conflicts: result.conflicts } : {}),
+        ...(result.planDiff ? { planDiff: result.planDiff } : {}),
+        storedIn,
+        forwardSchedule: newSchedule,
+        consumedMutationId: pendingMutationId,
+        whatIfAssumption: marker,
     };
     return { ok: true, response };
 }

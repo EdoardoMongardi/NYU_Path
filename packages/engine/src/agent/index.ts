@@ -31,7 +31,26 @@ export {
     // the agent loop.
     proposePlanChangeTool,
     confirmPlanChangeTool,
+    // G3.1 — the deterministic what-if-assumption propose path
+    // (/api/plan/whatif → propose; /api/plan/confirm → re-apply + persist).
+    proposeWhatIfAssumptionTool,
 } from "./registry.js";
+
+// G3.1 — the shared what-if-assumption re-plan helper + its label/types. The
+// web orchestrator's confirm path calls `solveWhatIfAssumption` to re-apply the
+// transform + re-solve, then persists ONLY the resulting forward_schedule.
+export {
+    solveWhatIfAssumption,
+    whatIfAssumptionLabel,
+} from "./forwardSchedule/whatIfAssumption.js";
+export type {
+    WhatIfOutcome,
+    WhatIfAssumptionResult,
+} from "./forwardSchedule/whatIfAssumption.js";
+export type {
+    ProposeWhatIfAssumptionOutput,
+    WhatIfAssumptionMarker,
+} from "./tools/proposeWhatIfAssumption.js";
 
 export { createSemanticCourseSearchFn } from "./tools/semanticCourseSearch.js";
 export type {

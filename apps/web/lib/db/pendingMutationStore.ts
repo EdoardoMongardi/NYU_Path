@@ -25,6 +25,7 @@
 
 import { and, eq, lte } from "drizzle-orm";
 import type { PlanMutation } from "@nyupath/shared";
+import type { WhatIfOutcome } from "@nyupath/engine";
 import type { Database } from "./client.js";
 import { pendingMutations as pendingMutationsTable } from "./schema.js";
 
@@ -32,16 +33,83 @@ import { pendingMutations as pendingMutationsTable } from "./schema.js";
 export const PENDING_MUTATION_TTL_MS = 10 * 60 * 1000;
 
 /**
- * The staged proposal a confirm needs to re-apply the same mutation
- * array atomically. `studentId` powers the cross-tenant guard;
- * `createdAt` (epoch ms) powers the 10-min TTL.
+ * G3.1 — a staged WHAT-IF ASSUMPTION ("I withdrew / I'll take pass-fail for
+ * course X"). Unlike a `PlanMutation` (which mutates PREFERENCES + re-solves
+ * the session DPR), an assumption TRANSFORMS the DPR in-memory (withdraw /
+ * pass / fail) and re-solves against the synthetic clone. The confirm path
+ * re-applies the transform and persists ONLY the resulting forward_schedule —
+ * never the synthetic DPR (the R1 snapshot-integrity guardrail).
+ */
+export interface WhatIfAssumptionStaged {
+    courseId: string;
+    outcome: WhatIfOutcome;
+}
+
+/**
+ * The staged proposal a confirm needs to re-apply atomically. `studentId`
+ * powers the cross-tenant guard; `createdAt` (epoch ms) powers the 10-min TTL.
+ *
+ * G3.1 — the payload is a DISCRIMINATED UNION carried in the SAME
+ * `pending_mutations.mutations` JSONB column (no migration):
+ *   - the existing plan-change payload: `mutations: PlanMutation[]`
+ *     (`assumption` absent), OR
+ *   - a what-if assumption: `assumption: { courseId, outcome }`
+ *     (`mutations` is `[]`).
+ * `take`/`stage` are agnostic to which kind; the orchestrator's confirm reads
+ * `assumption` first and falls back to `mutations`.
  */
 export interface PendingMutationEntry {
     pendingMutationId: string;
     studentId: string;
     mutations: PlanMutation[];
+    /** G3.1 — present iff this is a staged what-if ASSUMPTION (not a
+     *  PlanMutation batch). Mutually exclusive with a non-empty `mutations`. */
+    assumption?: WhatIfAssumptionStaged;
     /** Epoch ms the entry was staged. */
     createdAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// JSONB (de)serialisation for the shared `mutations` column (G3.1)
+// ---------------------------------------------------------------------------
+//
+// The `pending_mutations.mutations` JSONB column historically stored a bare
+// `PlanMutation[]`. To carry a what-if assumption WITHOUT a schema migration we
+// store it as a tagged WRAPPER OBJECT `{ __whatif: { courseId, outcome } }`
+// only when an assumption is present; a plan-mutation entry still serialises as
+// the bare array, so EXISTING rows decode unchanged (back-compat).
+
+interface WhatIfWrapper {
+    __whatif: WhatIfAssumptionStaged;
+}
+
+function isWhatIfWrapper(v: unknown): v is WhatIfWrapper {
+    return (
+        typeof v === "object" &&
+        v !== null &&
+        !Array.isArray(v) &&
+        "__whatif" in v &&
+        typeof (v as { __whatif?: unknown }).__whatif === "object"
+    );
+}
+
+/** Encode an entry's payload into the JSONB column value. A what-if assumption
+ *  → the tagged wrapper; a plan-mutation batch → the bare array (back-compat). */
+export function encodePendingPayload(entry: PendingMutationEntry): unknown {
+    if (entry.assumption) return { __whatif: entry.assumption } satisfies WhatIfWrapper;
+    return entry.mutations;
+}
+
+/** Decode a JSONB column value back into `{ mutations, assumption? }`. The
+ *  bare-array form (every pre-G3.1 row + every plan-mutation entry) decodes to
+ *  `mutations`; the tagged wrapper decodes to a what-if `assumption`. */
+export function decodePendingPayload(
+    raw: unknown,
+): { mutations: PlanMutation[]; assumption?: WhatIfAssumptionStaged } {
+    if (isWhatIfWrapper(raw)) {
+        return { mutations: [], assumption: raw.__whatif };
+    }
+    return { mutations: (raw as PlanMutation[] | null) ?? [] };
 }
 
 /**
@@ -159,12 +227,17 @@ export class PostgresPendingMutationStore implements PendingMutationStore {
         await this.sweepExpired(entry.createdAt);
         const createdAt = new Date(entry.createdAt);
         const expiresAt = new Date(entry.createdAt + PENDING_MUTATION_TTL_MS);
+        // G3.1 — `encodePendingPayload` writes a what-if assumption as a tagged
+        // wrapper + a plan-mutation batch as the bare array, so the same JSONB
+        // column carries both kinds with no schema migration + no break of
+        // pre-G3.1 rows.
+        const payload = encodePendingPayload(entry) as object;
         await this.db
             .insert(pendingMutationsTable)
             .values({
                 pendingMutationId: entry.pendingMutationId,
                 studentId: entry.studentId,
-                mutations: entry.mutations as unknown as object,
+                mutations: payload,
                 createdAt,
                 expiresAt,
             })
@@ -172,7 +245,7 @@ export class PostgresPendingMutationStore implements PendingMutationStore {
                 target: pendingMutationsTable.pendingMutationId,
                 set: {
                     studentId: entry.studentId,
-                    mutations: entry.mutations as unknown as object,
+                    mutations: payload,
                     createdAt,
                     expiresAt,
                 },
@@ -208,12 +281,16 @@ export class PostgresPendingMutationStore implements PendingMutationStore {
             if (row.expiresAt instanceof Date && row.expiresAt.getTime() <= now.getTime()) {
                 return { status: "not_found" };
             }
+            // G3.1 — decode the shared JSONB column back into either a
+            // plan-mutation batch or a what-if assumption.
+            const { mutations, assumption } = decodePendingPayload(row.mutations);
             return {
                 status: "ok",
                 entry: {
                     pendingMutationId: row.pendingMutationId,
                     studentId: row.studentId,
-                    mutations: row.mutations as PlanMutation[],
+                    mutations,
+                    ...(assumption ? { assumption } : {}),
                     createdAt:
                         row.createdAt instanceof Date
                             ? row.createdAt.getTime()
