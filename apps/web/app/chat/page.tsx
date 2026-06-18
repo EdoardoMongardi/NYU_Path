@@ -30,6 +30,7 @@ import {
     planConfirm,
     type PlanActionResult,
     type PlanActionRouteResponse,
+    type WhatIfAssumptionRouteResponse,
 } from "../../lib/planActionClient";
 import { createPlanStore } from "./planState";
 import { applyReviewConfirm, applyReviewCancel } from "../../lib/reviewCard";
@@ -1196,6 +1197,43 @@ export default function ChatPage() {
         spawnBubbleEnrichers(id, bubble);
     }, [spawnBubbleEnrichers]);
 
+    /**
+     * Plan 35 G3.2 — a what-if-assumption result from the sidebar's per-IP-course
+     * control (POST /api/plan/whatif). Mirrors `handlePlanActionResult`: stages
+     * the violet canvas preview + the review card, here carrying the
+     * `whatIfAssumption` marker so the card shows the "assumes you withdraw / take
+     * pass-fail X — not yet on your DPR; verify" badge. The committed plan is
+     * NEVER mutated; Confirm reuses the normal pendingMutationId round-trip and
+     * the engine persists ONLY the forward_schedule, never the DPR (R1).
+     */
+    const handleWhatIfResult = useCallback((
+        result: PlanActionResult<WhatIfAssumptionRouteResponse>,
+    ): void => {
+        if (!result.ok) {
+            const friendly = result.status === 0
+                ? `Network error during what-if: ${result.error}`
+                : `What-if failed (${result.status}): ${result.error}`;
+            setMessages(prev => [...prev, {
+                id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+                role: "assistant",
+                content: friendly,
+                timestamp: new Date(),
+            }]);
+            setTimeout(scrollToBottom, 50);
+            return;
+        }
+        // A what-if assumption is a feasible preview carrying the
+        // whatIfAssumption marker → stage the preview + labeled review card.
+        const surfaces = planActionSurfaces(result.data);
+        if (surfaces.invalidCard) {
+            planStore.setInvalidProposal(surfaces.invalidCard);
+            planStore.clearPendingPreview();
+        } else if (surfaces.preview) {
+            planStore.setPendingPreview(surfaces.preview);
+            planStore.clearInvalidProposal();
+        }
+    }, []);
+
     /** Confirm — apply the staged mutation. */
     const handleBubbleConfirm = useCallback(async (messageId: string, pendingMutationId: string): Promise<void> => {
         // Lock buttons immediately so a double-click can't double-submit.
@@ -1942,6 +1980,7 @@ export default function ChatPage() {
                 onExplainSlot={handleExplainSlot}
                 onExplainTerm={handleExplainTerm}
                 onPlanActionResult={handlePlanActionResult}
+                onWhatIfResult={handleWhatIfResult}
                 onReviewConfirm={handleReviewConfirm}
                 onReviewCancel={handleReviewCancel}
                 onReviewAskWhy={handleReviewAskWhy}

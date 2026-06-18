@@ -39,6 +39,7 @@
 import type { PlanActionResponse } from "./planActionOrchestrator";
 import type { PendingPreview } from "../app/chat/planState";
 import { computeInvalidCard, type InvalidProposalCard } from "./reviewCard";
+import type { WhatIfAssumptionMarker } from "@nyupath/engine";
 
 export interface PlanActionSurfaces {
     /** Feasible (clean OR trade-offs) + a proposed `forwardSchedule`
@@ -78,12 +79,19 @@ export function planActionSurfaces(
     // staged preview (E3.1) + the review card (E3.2). NO bubble — the
     // canvas review card is the sole surface for the feasible path.
     if (response.forwardSchedule) {
+        // Plan 35 G3.2 — a what-if-assumption response (from /api/plan/whatif)
+        // carries a `whatIfAssumption` marker; thread it onto the preview so
+        // the review card renders the "assumes you withdraw/PF X — not a fact"
+        // badge. Absent for ordinary plan-action verbs.
+        const whatIfAssumption = (response as { whatIfAssumption?: WhatIfAssumptionMarker })
+            .whatIfAssumption;
         const preview: PendingPreview = {
             proposedSchedule: response.forwardSchedule,
             pendingMutationId: response.pendingMutationId,
             consequences: response.consequences,
             ...(response.planDiff ? { planDiff: response.planDiff } : {}),
             ...(verb !== undefined ? { verb } : {}),
+            ...(whatIfAssumption ? { whatIfAssumption } : {}),
         };
         return { preview, invalidCard: null, showBubble: false };
     }
