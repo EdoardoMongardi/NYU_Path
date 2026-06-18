@@ -44,16 +44,16 @@ function emptySession(): ToolSession {
 // ---------------------------------------------------------------------------
 
 describe("prettifyProgramId — pure prettifier", () => {
-    it("converts economics_ba → 'Economics Ba'", () => {
-        expect(prettifyProgramId("economics_ba")).toBe("Economics Ba");
+    it("converts economics_ba → 'Economics BA'", () => {
+        expect(prettifyProgramId("economics_ba")).toBe("Economics BA");
     });
 
     it("converts mathematics_minor → 'Mathematics Minor'", () => {
         expect(prettifyProgramId("mathematics_minor")).toBe("Mathematics Minor");
     });
 
-    it("converts stern_finance_bs → 'Stern Finance Bs'", () => {
-        expect(prettifyProgramId("stern_finance_bs")).toBe("Stern Finance Bs");
+    it("converts stern_finance_bs → 'Stern Finance BS'", () => {
+        expect(prettifyProgramId("stern_finance_bs")).toBe("Stern Finance BS");
     });
 
     it("converts a single-word id → Title-Cased", () => {
@@ -67,18 +67,18 @@ describe("prettifyProgramId — pure prettifier", () => {
 
 describe("buildProgramLabel — array → joined label", () => {
     it("single id → single label", () => {
-        expect(buildProgramLabel(["economics_ba"])).toBe("Economics Ba");
+        expect(buildProgramLabel(["economics_ba"])).toBe("Economics BA");
     });
 
     it("two ids → comma-separated labels", () => {
         expect(buildProgramLabel(["economics_ba", "mathematics_minor"])).toBe(
-            "Economics Ba, Mathematics Minor",
+            "Economics BA, Mathematics Minor",
         );
     });
 
     it("three ids → comma-separated labels", () => {
         expect(buildProgramLabel(["stern_finance_bs", "economics_ba", "mathematics_minor"])).toBe(
-            "Stern Finance Bs, Economics Ba, Mathematics Minor",
+            "Stern Finance BS, Economics BA, Mathematics Minor",
         );
     });
 
@@ -108,7 +108,7 @@ describe("what_if_audit call — upload offer fields", () => {
             { hypotheticalPrograms: ["economics_ba"], compareWithCurrent: true },
             { signal: ABORT, session },
         );
-        expect(out.hypotheticalProgramLabel).toBe("Economics Ba");
+        expect(out.hypotheticalProgramLabel).toBe("Economics BA");
     });
 
     it("returns correct hypotheticalProgramLabel for multiple ids", async () => {
@@ -117,7 +117,7 @@ describe("what_if_audit call — upload offer fields", () => {
             { hypotheticalPrograms: ["economics_ba", "mathematics_minor"], compareWithCurrent: true },
             { signal: ABORT, session },
         );
-        expect(out.hypotheticalProgramLabel).toBe("Economics Ba, Mathematics Minor");
+        expect(out.hypotheticalProgramLabel).toBe("Economics BA, Mathematics Minor");
     });
 
     it("returns offerAuditUpload === true with no DPR in session", async () => {
@@ -129,7 +129,7 @@ describe("what_if_audit call — upload offer fields", () => {
             { signal: ABORT, session },
         );
         expect(out.offerAuditUpload).toBe(true);
-        expect(out.hypotheticalProgramLabel).toBe("Stern Finance Bs");
+        expect(out.hypotheticalProgramLabel).toBe("Stern Finance BS");
     });
 });
 
@@ -145,7 +145,7 @@ describe("what_if_audit summarizeResult — AUDIT_UPLOAD_OFFER line", () => {
             { signal: ABORT, session },
         );
         const summary = whatIfAuditTool.summarizeResult(out);
-        expect(summary).toMatch(/^AUDIT_UPLOAD_OFFER: Economics Ba$/m);
+        expect(summary).toMatch(/^AUDIT_UPLOAD_OFFER: Economics BA$/m);
     });
 
     it("includes the exact AUDIT_UPLOAD_OFFER: <label> line for multiple ids", async () => {
@@ -155,7 +155,7 @@ describe("what_if_audit summarizeResult — AUDIT_UPLOAD_OFFER line", () => {
             { signal: ABORT, session },
         );
         const summary = whatIfAuditTool.summarizeResult(out);
-        expect(summary).toMatch(/^AUDIT_UPLOAD_OFFER: Economics Ba, Mathematics Minor$/m);
+        expect(summary).toMatch(/^AUDIT_UPLOAD_OFFER: Economics BA, Mathematics Minor$/m);
     });
 
     it("still includes the existing WHAT-IF header line", async () => {

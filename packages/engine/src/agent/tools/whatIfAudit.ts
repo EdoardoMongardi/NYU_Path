@@ -42,18 +42,34 @@ interface UnauthoredProgramEstimate {
 }
 
 /**
+ * Degree-abbreviation tokens that read as ALL-CAPS, not Title-Case
+ * (so "economics_ba" → "Economics BA", not "Economics Ba"). This label
+ * is only the upload-card prompt; the precise program name comes from the
+ * uploaded Albert What-If PDF (`exploration.hypotheticalProgram`).
+ */
+const DEGREE_ABBREVIATIONS = new Set([
+    "ba", "bs", "bfa", "ba", "bse", "beng", "bsba",
+    "ma", "ms", "mba", "mfa", "phd", "ab", "llm", "edm",
+]);
+
+/**
  * Converts a program id to a human-readable label.
- * Rules: replace underscores with spaces, Title-Case each word.
+ * Rules: replace underscores with spaces; ALL-CAPS known degree
+ * abbreviations (BA/BS/MS/…), Title-Case every other word.
  * Exported for unit testing.
  * Examples:
- *   "economics_ba"          → "Economics Ba"
+ *   "economics_ba"          → "Economics BA"
  *   "mathematics_minor"     → "Mathematics Minor"
- *   "stern_finance_bs"      → "Stern Finance Bs"
+ *   "stern_finance_bs"      → "Stern Finance BS"
  */
 export function prettifyProgramId(id: string): string {
     return id
         .split("_")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .map((word) =>
+            DEGREE_ABBREVIATIONS.has(word.toLowerCase())
+                ? word.toUpperCase()
+                : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+        )
         .join(" ");
 }
 

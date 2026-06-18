@@ -284,43 +284,29 @@ describe("F1 fix — wizard→chat handoff completes onboarding", () => {
         expect(v1PostTurns(calls).length).toBe(0);
     });
 
-    it("NO DPR (Skip all) → handoff surfaces the upload-needed message + does NOT complete (no fabricated plan)", async () => {
+    it("NO DPR → 'Skip all' is gated, so the student cannot reach 'Build my plan' without uploading (DPR mandatory)", async () => {
         const { calls } = installFetchMock();
         const { container } = render(<ChatPage />);
         await screen.findByText("Upload your DPR");
 
-        // The no-dead-end "Skip all" path jumps straight to plan with NO
-        // upload (parsedDpr stays null). Reaching plan is a pure transition —
-        // the handoff fires on the "Build my plan" click, with a null DPR.
-        await act(async () => {
-            fireEvent.click(screen.getByText("Skip all → see my plan"));
-        });
-        await screen.findByText("Your plan");
-        await act(async () => {
-            fireEvent.click(screen.getByText("Build my plan"));
-        });
+        // The DPR is MANDATORY (no DPR → no personalized plan). The no-dead-end
+        // "Skip all → see my plan" affordance is therefore NOT offered until a
+        // DPR is uploaded, so there is no UI path to the plan step / "Build my
+        // plan" with a null DPR (which would derive no plan — the bug this
+        // gate fixes). Uploading is the only way forward (a successful parse
+        // auto-advances past Upload).
+        expect(screen.queryByText("Skip all → see my plan")).toBeNull();
+        expect(screen.queryByText("Build my plan")).toBeNull();
 
-        // The upload-needed assistant message is surfaced. (Asserted via
-        // body textContent because the bubble renders the copy through
-        // dangerouslySetInnerHTML, so a regex findByText would match every
-        // ancestor element, not a single node.)
-        await waitFor(() => {
-            expect(document.body.textContent).toContain(
-                "I need your Degree Progress Report to build your plan",
-            );
-        });
-
-        // Onboarding did NOT complete: NO v2 turn fired (no fabricated
-        // plan), and /api/onboard was never called on this path (no upload).
+        // No plan was fabricated, and /api/onboard was never called (no upload).
         expect(v2Turns(calls).length).toBe(0);
         expect(calls.some((c) => c.url.startsWith("/api/onboard"))).toBe(false);
         expect(v1PostTurns(calls).length).toBe(0);
 
-        // The wizard stayed mounted (we remained in awaiting_dpr) so the
-        // student can still upload — its terminal "Build my plan" persists.
+        // The wizard stays mounted on Upload (awaiting_dpr) so the student can
+        // upload their DPR.
         expect(
             container.querySelector('section[aria-label="Onboarding wizard"]'),
         ).not.toBeNull();
-        expect(screen.queryByText("Build my plan")).not.toBeNull();
     });
 });

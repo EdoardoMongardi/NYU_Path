@@ -51,34 +51,22 @@ describe("F1 — mounted OnboardingWizard render", () => {
         expect(screen.queryByText("Step 1/5")).not.toBeNull();
     });
 
-    it("reaches Plan via the no-dead-end 'Skip all' path WITHOUT a DPR, then 'Build my plan' is the SOLE onReachPlan trigger", () => {
+    it("does NOT offer 'Skip all' on the Upload step without a DPR — the DPR is mandatory", () => {
         const onReachPlan = vi.fn<(values: WizardValues, dpr: DegreeProgressReport | null) => void>();
         render(<OnboardingWizard onReachPlan={onReachPlan} />);
 
-        // From the Upload step, the no-dead-end affordance jumps straight to
-        // Plan with all defaults — no DPR, no network, no dead end.
-        fireEvent.click(screen.getByText("Skip all → see my plan"));
-
-        // We're on the terminal Plan step now — the student SEES the plan
-        // confirmation + the "Build my plan" button (consistent with the
-        // "Skip all → see my plan" label). Reaching plan does NOT fire the
-        // handoff: the transition is a pure state change, never a parent
-        // update during render. `onReachPlan` is the button's sole trigger.
-        expect(screen.queryByText("Your plan")).not.toBeNull();
-        expect(screen.queryByText("Step 5/5")).not.toBeNull();
+        // We start on the Upload step (1/5). The DPR is MANDATORY (no DPR → no
+        // personalized plan; core philosophy), so the no-dead-end
+        // "Skip all → see my plan" affordance is NOT rendered here — uploading
+        // is the only way forward (a successful parse auto-advances past
+        // Upload). Without this gate, Skip-all jumped straight to "Build my
+        // plan" with a null DPR, which derives no plan.
+        expect(screen.queryByText("Step 1/5")).not.toBeNull();
+        expect(screen.queryByText("Skip all → see my plan")).toBeNull();
+        // The Upload step also has no "Next" (the upload itself advances), so
+        // there is no path past Upload without a DPR.
+        expect(screen.queryByText("Next")).toBeNull();
         expect(onReachPlan).not.toHaveBeenCalled();
-
-        // The terminal "Build my plan" button is present and, when clicked,
-        // fires onReachPlan ONCE with the collected (all-default) values.
-        const buildBtn = screen.getByText("Build my plan");
-        fireEvent.click(buildBtn);
-        expect(onReachPlan).toHaveBeenCalledTimes(1);
-        const [values] = onReachPlan.mock.calls[0]!;
-        // No DPR was uploaded on this path → home school stays the
-        // never-silent-CAS empty default, and defaults flow through.
-        expect(values.homeSchool).toBe("");
-        expect(values.visa).toBe("domestic");
-        expect(values.workload).toBe("balanced");
     });
 
     it("advances past Upload by parsing a DPR, then Skips each optional step to reach 'Build my plan'", async () => {
