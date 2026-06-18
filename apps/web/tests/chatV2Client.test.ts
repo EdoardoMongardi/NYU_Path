@@ -204,4 +204,13 @@ AUDIT_UPLOAD_OFFER: Economics (BA)`;
         expect(extractAuditUploadOffer(undefined)).toBeNull();
         expect(extractAuditUploadOffer("")).toBeNull();
     });
+
+    it("returns null for an empty or whitespace-only label (no blank-program event)", () => {
+        // review sse-correctness-1: the lazy `(.+?)` could capture a lone
+        // space from an all-whitespace label; the trim collapses it to null.
+        expect(extractAuditUploadOffer("AUDIT_UPLOAD_OFFER:")).toBeNull();
+        expect(extractAuditUploadOffer("AUDIT_UPLOAD_OFFER: ")).toBeNull();
+        expect(extractAuditUploadOffer("AUDIT_UPLOAD_OFFER:      ")).toBeNull();
+        expect(extractAuditUploadOffer("AUDIT_UPLOAD_OFFER:\t \t")).toBeNull();
+    });
 });

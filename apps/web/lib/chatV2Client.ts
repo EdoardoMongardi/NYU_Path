@@ -219,7 +219,13 @@ export function extractPendingMutationId(summary: string | undefined): string | 
 export function extractAuditUploadOffer(summary: string | undefined): string | null {
     if (!summary) return null;
     const m = summary.match(/^AUDIT_UPLOAD_OFFER:\s*(.+?)\s*$/m);
-    return m ? m[1]! : null;
+    // Trim + re-null-check: the lazy `(.+?)` can capture a lone whitespace
+    // char from an all-whitespace label (the trailing `\s*$` absorbs the
+    // rest), which would otherwise return " " and emit a blank-program
+    // upload card. Collapse any empty/whitespace-only label to null so the
+    // route never emits an empty-program event (matches this docstring).
+    const label = m ? m[1]!.trim() : null;
+    return label ? label : null;
 }
 
 /**

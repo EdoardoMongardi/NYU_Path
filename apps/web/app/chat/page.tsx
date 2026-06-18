@@ -1412,10 +1412,13 @@ export default function ChatPage() {
                     {
                         id: narrationId,
                         role: "assistant",
+                        // `data.label` already ends with "— not your committed
+                        // plan." and `data.cta` already carries the upload-a-DPR
+                        // instruction, so let each be the sole voice for its
+                        // point — no redundant/duplicated CTA (review scope-ux-1).
                         content:
                             `${data.exploration.summary}\n\n` +
-                            `_${data.label}_ This is a **read-only hypothetical** — it is NOT your committed plan. ` +
-                            `${data.cta} To make it real, upload a corrected DPR.`,
+                            `_${data.label}_ This is a **read-only hypothetical**. ${data.cta}`,
                         timestamp: new Date(),
                     },
                 ]);
