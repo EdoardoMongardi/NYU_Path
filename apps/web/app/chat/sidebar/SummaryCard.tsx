@@ -36,9 +36,14 @@ export default function SummaryCard({ student, dpr, schedule }: SummaryCardProps
     const school = (student.homeSchool || "").toUpperCase();
     const visa = formatVisa(student.visaStatus);
 
-    const gpa = dpr?.cumulative.cumulativeGpa ?? null;
-    const creditsUsed = dpr?.cumulative.creditsUsed ?? null;
-    const creditsRequired = dpr?.cumulative.creditsRequired ?? null;
+    // H5.1 — `cumulative` is optional-guarded (`?.`) so a PARTIAL DPR (one
+    // parsed without a cumulative block — e.g. an early/degraded parse) does
+    // not crash. The ProfileRail mounts this card whenever a `student` exists
+    // (it is no longer hidden behind a closed sidebar drawer), so the card
+    // must degrade gracefully on missing fields rather than throw.
+    const gpa = dpr?.cumulative?.cumulativeGpa ?? null;
+    const creditsUsed = dpr?.cumulative?.creditsUsed ?? null;
+    const creditsRequired = dpr?.cumulative?.creditsRequired ?? null;
     const progressPct = creditsUsed !== null && creditsRequired !== null && creditsRequired > 0
         ? Math.min(100, Math.max(0, (creditsUsed / creditsRequired) * 100))
         : null;

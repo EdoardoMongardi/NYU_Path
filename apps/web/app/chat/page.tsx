@@ -16,7 +16,12 @@ import { renderMarkdown } from "../../lib/renderMarkdown";
 import type { ForwardSchedule, SchedulePreferences, StudentProfile } from "@nyupath/shared";
 import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@nyupath/engine";
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
-import ScheduleSidebar from "./scheduleSidebar";
+// H5.1 (plan 36) — the RIGHT zone is now the profile-only ProfileRail.
+// `scheduleSidebar.tsx` lingers UNMOUNTED (its grid + slot popovers +
+// review/preview card moved to the CENTER-zone ScheduleWorkspace; its
+// G3.2 what-if control is intentionally removed — what-ifs are chat-only).
+// H7 decides the dead file's fate.
+import ProfileRail from "./ProfileRail";
 import {
     bubbleSlotKey,
     bubbleHasButtons,
@@ -227,6 +232,12 @@ export default function ChatPage() {
     // self-serve account-deletion control (disables the button so a
     // student can't fire DELETE /api/session/delete twice).
     const [deletingAccount, setDeletingAccount] = useState(false);
+    // H5.1 (plan 36) — in-flight guard for the ProfileRail "↻ Update DPR"
+    // control. The scheduleSidebar formerly held this `refreshing` state
+    // internally; with the profile-level concerns lifted to the rail, the
+    // page owns it (the rail's `refreshing` prop only disables + relabels
+    // the button — the actual fetch lives in handleRefreshDpr below).
+    const [refreshingDpr, setRefreshingDpr] = useState(false);
     // H4.2b-3 — per-card busy/error state for the Branch-A What-If audit
     // upload cards, keyed by the card message id (so multiple offer cards
     // in the thread track independently).
@@ -1627,6 +1638,9 @@ export default function ChatPage() {
             window.alert("DPR file must be a PDF.");
             return;
         }
+        // H5.1 — drive the ProfileRail's busy state for the duration of the
+        // round-trip (the rail relabels "↻ Update DPR" → "Updating…").
+        setRefreshingDpr(true);
         const formData = new FormData();
         formData.append("dpr", file);
         try {
@@ -1655,6 +1669,8 @@ export default function ChatPage() {
             window.alert("Schedule updated to reflect your new DPR.");
         } catch (err) {
             window.alert(`Update DPR failed: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setRefreshingDpr(false);
         }
     }, []);
 
@@ -2272,31 +2288,41 @@ export default function ChatPage() {
                     </>
                 }
                 right={
-                    <ScheduleSidebar
-                        schedule={forwardSchedule}
-                        pendingPreview={pendingPreview}
-                        invalidProposal={invalidProposal}
+                    /* H5.1 (plan 36) — the RIGHT zone is the profile-only
+                       ProfileRail: SummaryCard DPR-derived read-only fields +
+                       the ↻ Update DPR control + the scenarios list (reading
+                       the SAME `planStore`) + the privacy note + account
+                       actions. The schedule grid + slot popovers + the
+                       review/preview card moved to the CENTER-zone
+                       ScheduleWorkspace; what-if creation is chat-only (no
+                       spawn control here). onSelectScenario/onCompareScenario
+                       reuse the chat ScheduleCard pattern: setActive + a
+                       committed-vs-row openCompare guarded against
+                       null-committed / equal ids (openCompare throws). */
+                    <ProfileRail
                         student={sidebarStudent}
                         dpr={sidebarDpr}
-                        materialization={forwardMaterialization}
-                        schedulePreferences={schedulePreferences}
-                        open={sidebarOpen}
-                        onClose={() => setSidebarOpen(false)}
-                        onProposeLoadStyle={handleProposeLoadStyle}
-                        onProposeSlotChange={handleProposeSlotChange}
-                        onExplainSlot={handleExplainSlot}
-                        onExplainTerm={handleExplainTerm}
-                        onPlanActionResult={handlePlanActionResult}
-                        onWhatIfResult={handleWhatIfResult}
-                        onReviewConfirm={handleReviewConfirm}
-                        onReviewCancel={handleReviewCancel}
-                        onReviewAskWhy={handleReviewAskWhy}
-                        onDismissInvalid={handleDismissInvalid}
-                        onConfirmCombination={handleConfirmSectionCombination}
+                        planStore={planStore}
                         onRefreshDpr={handleRefreshDpr}
+                        refreshing={refreshingDpr}
                         onClearAll={handleClearAll}
                         onDeleteAccount={handleDeleteAccount}
                         deletingAccount={deletingAccount}
+                        onSelectScenario={(id) => planStore.setActive(id)}
+                        onCompareScenario={(id) => {
+                            // Guard: committed must be non-null and the
+                            // scenario id must not be "committed" (openCompare
+                            // throws on equal/unresolvable ids).
+                            const state = planStore.getScenarioState();
+                            if (state.committed === null) return;
+                            if (id === "committed") return;
+                            try {
+                                planStore.openCompare("committed", id);
+                            } catch {
+                                /* swallow — defensive; the guards above already
+                                   cover the throwing cases. */
+                            }
+                        }}
                     />
                 }
             />
