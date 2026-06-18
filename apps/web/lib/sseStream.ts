@@ -25,6 +25,14 @@ export type SseEvent =
      * the structural slot list and the Sections-with-picker view.
      */
     | { kind: "forward_materialization_update"; result: ForwardMaterializationPayload }
+    /**
+     * Plan 36 H4.2b — Branch-A audit-upload offer. Emitted once per
+     * assistant turn when the agent calls `what_if_audit` (its summary
+     * carries an `AUDIT_UPLOAD_OFFER: <label>` marker line). Carries the
+     * hypothetical-program label so the client can render the
+     * "upload your Albert What-If audit" card.
+     */
+    | { kind: "whatif_audit_request"; hypotheticalProgram: string }
     | { kind: "done"; finalText: string; modelUsedId: string }
     | { kind: "error"; message: string };
 

@@ -4,8 +4,10 @@
 // New endpoint that drives the Phase 5 agent loop (`runAgentTurn`)
 // against the production `OpenAIEngineClient`. Returns Server-Sent
 // Events: per-tool `tool_invocation_start` / `tool_invocation_done`,
-// `validator_block` when the response validator blocks the reply, and
-// finally `token` + `done`.
+// `validator_block` when the response validator blocks the reply,
+// `whatif_audit_request` (Plan 36 H4.2b — Branch-A audit-upload offer,
+// emitted when the agent called `what_if_audit`), and finally
+// `token` + `done`.
 //
 // NOTE: Phase 6.1 ships a "block-streaming" v2 — events are emitted
 // at coherent boundaries (tool start/done, final reply) rather than
@@ -63,7 +65,7 @@ import { getStores } from "../../../../lib/db/store";
 import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
 import { consumeRequest } from "../../../../lib/rateLimit";
 import { readSessionFromRequest } from "../../../../lib/auth/session";
-import { extractPendingMutationId } from "../../../../lib/chatV2Client";
+import { extractPendingMutationId, extractAuditUploadOffer } from "../../../../lib/chatV2Client";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -1009,6 +1011,27 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
             });
             writer.close();
             return;
+        }
+
+        // Plan 36 H4.2b — Branch-A audit-upload offer. When the agent
+        // called `what_if_audit` this turn, its result summary carries a
+        // machine-extractable `AUDIT_UPLOAD_OFFER: <label>` marker line
+        // (mirrors the `update_profile` → `pendingMutationId` pattern
+        // below). Forward the trimmed label as a single
+        // `whatif_audit_request` SSE event so the client can render the
+        // "upload your Albert What-If audit" card for the hypothetical
+        // PROGRAM. Emitted at most once and BEFORE the final `done`
+        // event. `find` returns the first invocation, so even if the tool
+        // ran more than once this turn we emit exactly one event.
+        const auditInv = finalResult.invocations.find((i) => i.toolName === "what_if_audit");
+        if (auditInv) {
+            const auditLabel = extractAuditUploadOffer(auditInv.summary);
+            if (auditLabel) {
+                writer.write({
+                    kind: "whatif_audit_request",
+                    hypotheticalProgram: auditLabel,
+                });
+            }
         }
 
         // Run the launch-blocking validators per §9.1 Part 9.

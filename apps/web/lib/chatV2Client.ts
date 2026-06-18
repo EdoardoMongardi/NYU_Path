@@ -52,6 +52,15 @@ export type ChatV2Event =
     | { kind: "validator_block"; violations: Array<{ kind: string; detail: string; caveatId?: string; number?: string }> }
     | { kind: "forward_schedule_update"; schedule: ForwardSchedule }
     | { kind: "forward_materialization_update"; result: ForwardMaterializationPayload }
+    /**
+     * Plan 36 H4.2b — Branch-A "upload your Albert What-If audit" offer.
+     * Emitted once per assistant turn when the agent calls the
+     * `what_if_audit` tool (whose summary carries an `AUDIT_UPLOAD_OFFER:
+     * <label>` marker line). The client renders an upload card prompting
+     * the student to attach the Albert What-If audit for the hypothetical
+     * PROGRAM identified by `hypotheticalProgram`.
+     */
+    | { kind: "whatif_audit_request"; hypotheticalProgram: string }
     | { kind: "done"; finalText: string; modelUsedId: string }
     | { kind: "error"; message: string };
 
@@ -193,6 +202,23 @@ function parseBlock(block: string): ChatV2Event | null {
 export function extractPendingMutationId(summary: string | undefined): string | null {
     if (!summary) return null;
     const m = summary.match(/pendingMutationId:\s*(pm_[a-zA-Z0-9_]+)/);
+    return m ? m[1]! : null;
+}
+
+/**
+ * Plan 36 H4.2b — detect the Branch-A audit-upload offer in a
+ * `what_if_audit` tool_invocation_done summary. The engine tool's
+ * `summarizeResult` emits a machine-extractable marker line
+ * `AUDIT_UPLOAD_OFFER: <label>` (see
+ * packages/engine/src/agent/tools/whatIfAudit.ts:summarizeResult). The
+ * v2 route regexes this line — mirroring `extractPendingMutationId` —
+ * and forwards the trimmed label as a `whatif_audit_request` SSE event
+ * so the client can render the upload card. Returns the trimmed label,
+ * or null when the marker is absent.
+ */
+export function extractAuditUploadOffer(summary: string | undefined): string | null {
+    if (!summary) return null;
+    const m = summary.match(/^AUDIT_UPLOAD_OFFER:\s*(.+?)\s*$/m);
     return m ? m[1]! : null;
 }
 
