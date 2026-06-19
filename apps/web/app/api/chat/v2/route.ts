@@ -66,6 +66,7 @@ import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
 import { consumeRequest } from "../../../../lib/rateLimit";
 import { readSessionFromRequest } from "../../../../lib/auth/session";
 import { extractPendingMutationId, extractAuditUploadOffer } from "../../../../lib/chatV2Client";
+import { runProposeStage } from "../../../../lib/planActionOrchestrator";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -1031,6 +1032,63 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                     kind: "whatif_audit_request",
                     hypotheticalProgram: auditLabel,
                 });
+            }
+        }
+
+        // Task I1 — chat-proposed change surfaces the Confirm rail.
+        // When the agent called `propose_plan_change` this turn, stage the
+        // mutations in the SAME pending store the `/api/plan/confirm` path
+        // consumes and emit a single `plan_proposal` SSE event carrying
+        // the minted `pendingMutationId` + the proposed schedule / diff /
+        // consequences / feasibility from the solver run. Emitted at most
+        // ONCE per turn (we take the LAST invocation when the agent
+        // proposed more than once — the final proposal is authoritative).
+        //
+        // Guards:
+        //   - Skip for anonymous users (no durable-store row to key on).
+        //   - Skip if `args.mutations` is missing / not an array.
+        //   - Swallow errors non-fatally (a staging failure must NOT break
+        //     the live turn — the confirm button is a convenience rail, not
+        //     a hard dependency of the chat response).
+        //
+        // R1 holds: staging ≠ committing. The schedule is NOT written to
+        // the DB here — that only happens when the student clicks Confirm,
+        // which routes to the existing `/api/plan/confirm` → `runConfirmStage`
+        // chokepoint.
+        if (userId !== "anonymous") {
+            const proposeInvocations = finalResult.invocations.filter(
+                (i) => i.toolName === "propose_plan_change",
+            );
+            // Take the LAST invocation (most recent proposal is authoritative).
+            const proposeInv = proposeInvocations.at(-1);
+            if (proposeInv) {
+                const mutations = Array.isArray(proposeInv.args?.mutations)
+                    ? (proposeInv.args.mutations as import("@nyupath/shared").PlanMutation[])
+                    : null;
+                if (mutations && mutations.length > 0) {
+                    try {
+                        const proposeResult = await runProposeStage(userId, mutations);
+                        if (proposeResult.ok) {
+                            writer.write({
+                                kind: "plan_proposal",
+                                pendingMutationId: proposeResult.response.pendingMutationId,
+                                feasible: proposeResult.response.feasible,
+                                consequences: proposeResult.response.consequences,
+                                ...(proposeResult.response.forwardSchedule
+                                    ? { proposedSchedule: proposeResult.response.forwardSchedule }
+                                    : {}),
+                                ...(proposeResult.response.planDiff
+                                    ? { planDiff: proposeResult.response.planDiff }
+                                    : {}),
+                            });
+                        }
+                        // If proposeResult.ok is false, the student may not have a
+                        // profile/DPR/plan yet — skip silently (no SSE event).
+                    } catch (err) {
+                        // Non-fatal: a staging failure must not break the turn.
+                        console.error("[v2 route] plan_proposal staging failed:", err);
+                    }
+                }
             }
         }
 

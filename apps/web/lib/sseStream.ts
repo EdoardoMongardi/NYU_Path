@@ -33,6 +33,22 @@ export type SseEvent =
      * "upload your Albert What-If audit" card.
      */
     | { kind: "whatif_audit_request"; hypotheticalProgram: string }
+    /**
+     * Task I1 — chat-proposed change surfaces the Confirm rail. Emitted
+     * at most ONCE per turn when the agent called `propose_plan_change`.
+     * The route calls `runProposeStage` with the mutations from the
+     * invocation args, minting a `pendingMutationId` in the SAME pending
+     * store the `/api/plan/confirm` path consumes. Staging ≠ committing:
+     * the schedule is not written until the student clicks Confirm.
+     */
+    | {
+        kind: "plan_proposal";
+        pendingMutationId: string;
+        feasible: boolean;
+        consequences: string[];
+        proposedSchedule?: import("@nyupath/shared").ForwardSchedule;
+        planDiff?: import("@nyupath/shared").PlanDiff;
+    }
     | { kind: "done"; finalText: string; modelUsedId: string }
     | { kind: "error"; message: string };
 
