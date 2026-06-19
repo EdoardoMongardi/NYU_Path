@@ -484,6 +484,109 @@ function makePlannedSession(): ToolSession {
     return { ...base, forwardSchedule };
 }
 
+// ---------------------------------------------------------------------------
+// (g) D-4 P/F-eligibility guard — canElect:false school must reject pass/fail
+//     but allow withdraw (W is universal)
+// ---------------------------------------------------------------------------
+
+/** A schoolConfig where passFail.canElect is explicitly false (Tandon-style). */
+function tandonSchoolConfig() {
+    return {
+        schoolId: "tandon",
+        name: "NYU Tandon School of Engineering",
+        degreeType: "BS" as const,
+        courseSuffix: ["-UE"],
+        totalCreditsRequired: 128,
+        overallGpaMin: 2.0,
+        acceptsTransferCredit: true,
+        maxCreditsPerSemester: 18,
+        f1FullTimeMinCredits: 12,
+        residency: { minCredits: 64, note: null },
+        passFail: {
+            careerLimitType: "credits" as const,
+            canElect: false,
+        },
+    };
+}
+
+/** Session for a Tandon student with an IP course (CSCI-UA 102). */
+function makeTandonIpSession(): ToolSession {
+    const base: ToolSession = {
+        student: {
+            id: "test-student",
+            catalogYear: "2024",
+            homeSchool: "tandon",
+            declaredPrograms: [{ programId: "computer_science", programType: "major" }],
+            coursesTaken: [],
+            visaStatus: "f1",
+        },
+        schoolConfig: tandonSchoolConfig(),
+        degreeProgressReport: makeIpMajorDpr(),
+        courses: makeIpCourses(),
+    };
+    const forwardSchedule = buildForwardSchedule({
+        session: base,
+        dpr: base.degreeProgressReport!,
+        graduationTermOverride: "2027-spring",
+    });
+    return { ...base, forwardSchedule };
+}
+
+describe("propose_whatif_assumption — D-4 P/F-eligibility guard (canElect:false)", () => {
+    it("(a) outcome:'pass' at canElect:false school → validateInput returns { ok:false } with message matching /pass\\/fail|elect/i", async () => {
+        const session = makeTandonIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "pass" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.userMessage).toMatch(/pass\/?fail|elect/i);
+    });
+
+    it("(b) outcome:'fail' at canElect:false school → validateInput returns { ok:false } with message matching /pass\\/fail|elect/i", async () => {
+        const session = makeTandonIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "fail" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.userMessage).toMatch(/pass\/?fail|elect/i);
+    });
+
+    it("(c) outcome:'pass' at canElect:true (CAS) school → validateInput returns { ok:true }", async () => {
+        // CAS schoolConfig has no passFail block → canElect treated as true (can elect)
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "pass" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(true);
+    });
+
+    it("(d) outcome:'withdraw' at canElect:false school → validateInput returns { ok:true } (W is universal, not gated)", async () => {
+        const session = makeTandonIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "withdraw" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(true);
+    });
+});
+
 describe("propose_whatif_assumption — D-7 IP-membership guard (E1)", () => {
     it("(a) COMPLETED course → validateInput returns { ok:false } with message about in-progress / completed", async () => {
         // CSCI-UA 101 is completed (type:"EN", grade:"A") — withdraw/PF do not apply

@@ -131,6 +131,23 @@ export const proposeWhatIfAssumptionTool = buildTool({
                     "No Degree Progress Report loaded. Cannot propose a what-if assumption without DPR data.",
             };
         }
+        // D-4 P/F-eligibility guard: some schools (e.g. Tandon) do not let
+        // students elect pass/fail at all (canElect:false). Withdraw is
+        // UNIVERSAL — not gated. Only pass/fail outcomes are blocked here.
+        if (input.outcome === "pass" || input.outcome === "fail") {
+            const pf = session.schoolConfig?.passFail;
+            if (pf?.canElect === false) {
+                const schoolName = session.schoolConfig?.name ?? "Your school";
+                return {
+                    ok: false,
+                    userMessage:
+                        `${schoolName} doesn't allow students to elect the pass/fail option — ` +
+                        `only courses that are already graded pass/fail count toward your record. ` +
+                        `If you have questions about your grading options, verify with your adviser.`,
+                };
+            }
+        }
+
         // D-7 IP-membership guard: withdraw/pass/fail apply ONLY to courses the
         // student is currently taking (type "IP" in courseHistory). Reject:
         //   • course not on DPR at all → likely planned; tell student to drop it
