@@ -246,6 +246,12 @@ export const confirmPlanChangeTool = buildTool({
         // authoritative validator deems it feasible (state valid-clean /
         // valid-with-trade-offs). Otherwise it lands in studentDraftPlan and
         // the last valid forwardSchedule is preserved.
+        //
+        // Plan 37 (M1): the studentDraftPlan slot is now a STRICTLY in-memory
+        // scratchpad for the agent's NEXT edit — an infeasible result is NOT
+        // persisted (see the feasibility-gated persistence block below), so it
+        // never becomes the committed `forward_schedule`. "Confirming a plan ≠
+        // committing an invalid one."
         let storedIn: ConfirmPlanChangeOutput["storedIn"];
         if (validatorResult.feasible) {
             session.forwardSchedule = newSchedule;
@@ -262,7 +268,21 @@ export const confirmPlanChangeTool = buildTool({
         // preferences (so pins / load-style / exclusions survive across
         // sessions). Failures do NOT throw — the in-memory mutation
         // already landed and the live turn is the source of truth.
-        if (session.scheduleStore && session.student) {
+        //
+        // Plan 37 (M1) — NEVER commit an invalid plan. We persist the schedule
+        // ONLY when the authoritative validator deems it feasible. An
+        // infeasible result lives ONLY in the in-memory `studentDraftPlan`
+        // scratchpad (set above) for the agent's NEXT edit — it is NOT written
+        // to the DB as the committed `forward_schedule`, so the previously
+        // committed VALID plan stays live and is never superseded by a draft.
+        // (R1 still holds: `parsed_dpr` is never written; and now an INVALID
+        // `forward_schedule` is never written either.) The PREFERENCES write is
+        // also gated on feasibility — an infeasible edit must not durably pin
+        // the mutation that broke the plan (a future re-solve would re-apply it
+        // and re-break). Both `confirm_plan_change` (this tool, the agent path)
+        // and the workspace `confirmProposed` confirm (via the route
+        // orchestrator) therefore reject an infeasible result the same way.
+        if (validatorResult.feasible && session.scheduleStore && session.student) {
             try {
                 const fingerprint = computeDprFingerprint(dpr);
                 await session.scheduleStore.persistSchedule(

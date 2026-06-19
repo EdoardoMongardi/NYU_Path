@@ -12,6 +12,7 @@ import {
     fakeRequest,
     issueTestToken,
     seedStudentState,
+    seedInfeasibleStudentState,
     TEST_SECRET,
 } from "./_planRouteTestUtils";
 import { resetStoresForTests, getStores } from "../lib/db/store";
@@ -119,6 +120,79 @@ describe("/api/plan/confirm (Phase 17 Task B)", () => {
         // The persisted schedule was rewritten (computedAt advanced).
         const after = await scheduleStore.loadLatestSchedule(studentId);
         expect(after?.schedule.computedAt).not.toBe(before?.schedule.computedAt);
+    });
+
+    // -----------------------------------------------------------------------
+    // M1 (plan 37) — the confirm route NEVER commits an invalid plan. An
+    // infeasible re-solve is REFUSED (422); the force override is RETIRED.
+    // -----------------------------------------------------------------------
+    it("returns 422 with a failing-axis reason when the re-solve is infeasible (never commits an invalid plan)", async () => {
+        const studentId = "confirm_infeasible_refused";
+        await seedInfeasibleStudentState(studentId);
+        const stores = getStores({});
+        const scheduleStore = stores.scheduleStore as InMemoryScheduleStore;
+        const before = await scheduleStore.loadLatestSchedule(studentId);
+        expect(before?.dprFingerprint).toBe("fp-valid");
+        expect(before?.schedule.state).toBe("valid-clean");
+
+        // Stage a (catalog-valid) add. The add itself is fine; the re-solve
+        // fails Axis 1 because the unsatisfiable Capstone leaf can only be
+        // covered by an unbound placeholder.
+        const token = await issueTestToken(studentId);
+        const { POST: addPOST } = await import("../app/api/plan/add/route");
+        const addRes = await addPOST(fakeRequest(token, {
+            courseId: "CSCI-UA 101", term: "2026-fall",
+        }) as never);
+        const addJson = await addRes.json();
+        expect(addJson.pendingMutationId).toMatch(/^[0-9a-f-]{36}$/);
+
+        const { POST: confirmPOST } = await import("../app/api/plan/confirm/route");
+        const res = await confirmPOST(fakeRequest(token, {
+            pendingMutationId: addJson.pendingMutationId,
+        }) as never);
+        expect(res.status).toBe(422);
+        const json = await res.json();
+        expect(json.kind).toBe("infeasible");
+        expect(typeof json.error).toBe("string");
+        expect(json.error).toMatch(/invalid|graduation-path|requirement|Capstone/i);
+
+        // The previously-committed VALID plan is UNCHANGED — no invalid draft
+        // was persisted, and the valid row was not superseded.
+        const after = await scheduleStore.loadLatestSchedule(studentId);
+        expect(after?.dprFingerprint).toBe("fp-valid");
+        expect(after?.schedule.state).toBe("valid-clean");
+        expect(after?.schedule.computedAt).toBe(before?.schedule.computedAt);
+    });
+
+    it("a force:true infeasible confirm behaves IDENTICALLY — 422, no override commit (override RETIRED)", async () => {
+        const studentId = "confirm_infeasible_force_retired";
+        await seedInfeasibleStudentState(studentId);
+        const stores = getStores({});
+        const scheduleStore = stores.scheduleStore as InMemoryScheduleStore;
+        const before = await scheduleStore.loadLatestSchedule(studentId);
+
+        const token = await issueTestToken(studentId);
+        const { POST: addPOST } = await import("../app/api/plan/add/route");
+        const addRes = await addPOST(fakeRequest(token, {
+            courseId: "CSCI-UA 101", term: "2026-fall",
+        }) as never);
+        const addJson = await addRes.json();
+
+        const { POST: confirmPOST } = await import("../app/api/plan/confirm/route");
+        const res = await confirmPOST(fakeRequest(token, {
+            pendingMutationId: addJson.pendingMutationId,
+            force: true,
+        }) as never);
+        // force changes NOTHING — still refused.
+        expect(res.status).toBe(422);
+        const json = await res.json();
+        expect(json.kind).toBe("infeasible");
+
+        // No student-preferred-invalid-draft minted; the valid plan stays live.
+        const after = await scheduleStore.loadLatestSchedule(studentId);
+        expect(after?.schedule.state).toBe("valid-clean");
+        expect(after?.schedule.state).not.toBe("student-preferred-invalid-draft");
+        expect(after?.schedule.computedAt).toBe(before?.schedule.computedAt);
     });
 
     it("a second confirm of the same id returns 404 (single-use semantics)", async () => {

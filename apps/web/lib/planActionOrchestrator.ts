@@ -136,6 +136,12 @@ export type RunProposeError =
 export type RunConfirmError =
     | { kind: "unknown_mutation_id"; message: string }
     | { kind: "studentId_mismatch";  message: string }
+    // M1 (plan 37) — the re-solved plan is INFEASIBLE. The confirm path NEVER
+    // commits an invalid plan: nothing is persisted, the prior valid plan is
+    // untouched, and `message` carries the failing-axis explanation so the
+    // caller can surface WHY. The retired `force` override no longer mints a
+    // `student-preferred-invalid-draft` — an infeasible confirm is refused.
+    | { kind: "infeasible";          message: string }
     | RunProposeError;
 
 // ---------------------------------------------------------------------------
@@ -760,47 +766,40 @@ export async function runConfirmStage(
     // second confirm of the same id returns 404 (no accidental
     // double-apply).
 
-    let persistedSchedule = session.forwardSchedule ?? session.studentDraftPlan;
-
-    // Phase 17 Task D — Override-anyway reclassification. The engine's
-    // derivePlanState emits at most `infeasible-draft` for an
-    // infeasible apply; the 4th PlanState member
-    // `student-preferred-invalid-draft` is the route layer's signal
-    // that the student explicitly chose to keep the plan despite
-    // hard violations. We mutate ONLY the persisted schedule's
-    // `state` field (and the studentDraftPlan slot in the session)
-    // so the sidebar's 4-state banner picks it up on the next
-    // restore.
-    if (force && !outcome.feasible && persistedSchedule) {
-        const reclassified: ForwardSchedule = {
-            ...persistedSchedule,
-            state: "student-preferred-invalid-draft",
+    // ---- M1 (plan 37) — NEVER commit an invalid plan -------------------
+    //
+    // The confirm path is the commit chokepoint. When the re-solved plan is
+    // INFEASIBLE the engine (`confirmPlanChangeTool`) already kept the change
+    // OUT of `session.forwardSchedule` (Decision #32 — it landed only in the
+    // in-memory `studentDraftPlan` scratchpad) AND, post-M1, did NOT persist
+    // it. So the previously-committed valid plan is untouched in the DB.
+    //
+    // The route layer's job is to REFUSE the commit and surface WHY: we return
+    // `{ ok:false, kind:"infeasible", message }` carrying the failing-axis
+    // explanation. The caller (workspace `confirmProposed` via
+    // `applyReviewConfirm`, or the chat-bubble Confirm) only commits on
+    // `ok:true`, so an invalid result is never written to the canvas committed
+    // slot or the DB `forward_schedule`.
+    //
+    // The Phase-17 `force` → `student-preferred-invalid-draft` override is
+    // RETIRED: `force` no longer reclassifies/commits an infeasible result.
+    // A `force:true` confirm now behaves IDENTICALLY to a normal confirm — the
+    // infeasible result is refused either way. (The `force` param remains in
+    // the route signature for back-compat but is inert in the confirm path;
+    // referencing it here keeps the no-unused-param lint quiet without
+    // reintroducing any override behavior.)
+    void force;
+    if (!outcome.feasible) {
+        return {
+            ok: false,
+            error: {
+                kind: "infeasible",
+                message: buildInfeasibleReason(outcome),
+            },
         };
-        // Keep the session + persistence layer in lockstep.
-        if (session.studentDraftPlan === persistedSchedule) {
-            session.studentDraftPlan = reclassified;
-        }
-        if (session.forwardSchedule === persistedSchedule) {
-            session.forwardSchedule = reclassified;
-        }
-        persistedSchedule = reclassified;
-        // Persist the reclassified state so login restore agrees with
-        // the live UI. Failures are logged but never throw — the
-        // in-memory mutation already landed.
-        if (session.scheduleStore && session.student) {
-            try {
-                const fingerprint = persistedSchedule.dprCourseHistoryHash;
-                await session.scheduleStore.persistSchedule(
-                    session.student.id,
-                    persistedSchedule,
-                    fingerprint,
-                );
-            } catch (err) {
-                // eslint-disable-next-line no-console
-                console.warn(`[confirm/force] persistSchedule failed: ${err instanceof Error ? err.message : String(err)}`);
-            }
-        }
     }
+
+    const persistedSchedule = session.forwardSchedule ?? session.studentDraftPlan;
 
     const response: PlanConfirmResponse = {
         feasible: outcome.feasible,
@@ -813,6 +812,26 @@ export async function runConfirmStage(
         consumedMutationId: pendingMutationId,
     };
     return { ok: true, response };
+}
+
+/**
+ * M1 — build a human-readable refusal reason from an infeasible
+ * confirm_plan_change outcome. Prefers the failing-axis detail surfaced by the
+ * engine (`conflicts[]` carries the validator's `conflictSource`/`conflictDetail`;
+ * `consequences[]` names the failing axes), falling back to a generic message.
+ */
+function buildInfeasibleReason(outcome: PlanChangeOutcome): string {
+    const conflictDetail = outcome.conflicts?.find((c) => c.detail)?.detail;
+    if (conflictDetail && conflictDetail.trim().length > 0) {
+        return `Can't apply this change — it would make your plan invalid: ${conflictDetail}`;
+    }
+    const axisConsequence = outcome.consequences?.find((c) =>
+        /graduation-path validation|fails/i.test(c),
+    );
+    if (axisConsequence) {
+        return `Can't apply this change — ${axisConsequence}`;
+    }
+    return "Can't apply this change — the resulting plan fails graduation-path validation, so it was not committed. Your current plan is unchanged.";
 }
 
 // ---------------------------------------------------------------------------

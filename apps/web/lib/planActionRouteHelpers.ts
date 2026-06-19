@@ -123,6 +123,14 @@ function mapConfirmError(err: RunConfirmError): NextResponse {
         case "no_dpr":
         case "no_schedule":
             return NextResponse.json({ error: err.message, kind: err.kind }, { status: 409 });
+        // M1 (plan 37) — the re-solved plan is INFEASIBLE; the confirm path
+        // refuses to commit it. 422 Unprocessable Entity: the request was
+        // well-formed but the resulting plan can't be accepted. The
+        // failing-axis explanation rides in `error` so the UI surfaces WHY
+        // (and `applyReviewConfirm`/the bubble Confirm leave the committed
+        // plan untouched because the client sees a non-2xx → ok:false).
+        case "infeasible":
+            return NextResponse.json({ error: err.message, kind: err.kind }, { status: 422 });
         case "bad_input":
             return NextResponse.json({ error: err.message, kind: err.kind }, { status: 400 });
         case "engine_error":

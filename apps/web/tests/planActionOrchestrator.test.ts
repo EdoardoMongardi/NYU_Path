@@ -94,6 +94,59 @@ function makeProfile(studentId: string): StudentProfile {
     };
 }
 
+/**
+ * M1 — a DPR that the solver CANNOT satisfy cleanly: an unmet "Capstone"
+ * requirement leaf whose only candidate course (`ZZZZ-UA 9999`) does NOT
+ * exist in the bundled catalog, so the leaf can only be covered by an UNBOUND
+ * placeholder slot. The 8-axis validator then fails Axis 1
+ * (requirementGroupsSatisfied) and the re-solved plan is INFEASIBLE. Mirrors
+ * the proven recipe in the engine's proposePlanChange.test.ts
+ * "routes a validator-infeasible result" case (adapted to the orchestrator
+ * harness, which uses the REAL bundled catalog).
+ */
+function makeInfeasibleDpr(): DegreeProgressReport {
+    return {
+        _meta: makeMeta(),
+        reportKind: "dpr",
+        header: { studentName: "Test Student", preparedDate: "01/01/2026" },
+        programs: [],
+        advisorNotations: [],
+        cumulative: {
+            creditsRequired: 128,
+            creditsUsed: 124,
+            cumulativeGpa: 3.4,
+            cumulativeGpaRequired: 2.0,
+            residencyRequired: 64,
+            residencyUsed: 64,
+            passFailUsedUnits: 0,
+            passFailCapUnits: 32,
+            outsideHomeUsedUnits: 0,
+            outsideHomeCapUnits: 16,
+            timeLimitYears: 8,
+        },
+        requirementGroups: [
+            {
+                rgId: "RG1",
+                title: "CS Core",
+                status: "not_satisfied",
+                statusText: "Not Satisfied",
+                children: [
+                    {
+                        rId: "R100/1",
+                        title: "Capstone",
+                        status: "not_satisfied",
+                        statusText: "Not Satisfied. Choose ZZZZ-UA 9999.",
+                        coursesUsed: [],
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        counter: { kind: "units", required: 4, used: 0 } as any,
+                    },
+                ],
+            },
+        ],
+        courseHistory: [],
+    };
+}
+
 function makeFeasibleSchedule(studentId: string): ForwardSchedule {
     return {
         studentId,
@@ -134,6 +187,34 @@ async function seedStudentState(studentId: string): Promise<void> {
 
     // Schedule (orchestrator refuses to propose without one).
     await scheduleStore.persistSchedule(studentId, makeFeasibleSchedule(studentId), "fp-test");
+}
+
+/**
+ * M1 — seed a student whose re-solve is INFEASIBLE: the profile + a valid
+ * committed schedule are persisted, but the DPR carries an unsatisfiable
+ * Capstone leaf so any confirmed mutation re-solves to an infeasible plan.
+ * Used to assert the confirm path refuses to commit it (no persist, prior
+ * valid plan unchanged).
+ */
+async function seedInfeasibleStudentState(studentId: string): Promise<void> {
+    const stores = getStores({});
+    const profileStore = stores.profileStore as InMemoryProfileStore;
+    const scheduleStore = stores.scheduleStore as InMemoryScheduleStore;
+
+    await profileStore.persistMutation(
+        makeProfile(studentId),
+        {
+            pendingMutationId: "seed",
+            field: "homeSchool",
+            before: null,
+            after: "cas",
+            confirmedAt: new Date().toISOString(),
+        },
+        makeInfeasibleDpr(),
+    );
+    // A VALID committed schedule already on file — the M1 invariant is that
+    // an infeasible confirm leaves THIS plan untouched.
+    await scheduleStore.persistSchedule(studentId, makeFeasibleSchedule(studentId), "fp-valid");
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +444,99 @@ describe("planActionOrchestrator (Phase 17 Task B)", () => {
             // The schedule was re-persisted (new computedAt).
             expect(after).not.toBeNull();
             expect(after!.schedule.computedAt).not.toBe(before?.schedule.computedAt);
+        });
+
+        // -------------------------------------------------------------------
+        // M1 (plan 37) — the confirm path NEVER commits an invalid plan.
+        // The force → student-preferred-invalid-draft override is RETIRED.
+        // -------------------------------------------------------------------
+        describe("M1 — an infeasible confirm is refused (never commit an invalid plan)", () => {
+            const infeasStudentId = "orch_confirm_infeasible";
+
+            it("returns { ok:false, reason } and leaves the committed plan + DB untouched", async () => {
+                await seedInfeasibleStudentState(infeasStudentId);
+                const stores = getStores({});
+                const scheduleStore = stores.scheduleStore as InMemoryScheduleStore;
+                const before = await scheduleStore.loadLatestSchedule(infeasStudentId);
+                expect(before?.dprFingerprint).toBe("fp-valid");
+                expect(before?.schedule.state).toBe("valid-clean");
+
+                const stage1 = await runProposeStage(infeasStudentId, [
+                    { kind: "loadStyleOverride", style: "balanced" },
+                ]);
+                expect(stage1.ok).toBe(true);
+                if (!stage1.ok) return;
+
+                const out = await runConfirmStage(infeasStudentId, stage1.response.pendingMutationId);
+
+                // Refused: no commit, a failing-axis reason surfaced.
+                expect(out.ok).toBe(false);
+                if (out.ok) return;
+                expect(out.error.kind).toBe("infeasible");
+                expect(out.error.message).toMatch(/requirementGroupsSatisfied|graduation-path|credit|axis/i);
+
+                // The previously-committed VALID plan is UNCHANGED in the DB —
+                // an infeasible draft never superseded it.
+                const after = await scheduleStore.loadLatestSchedule(infeasStudentId);
+                expect(after?.dprFingerprint).toBe("fp-valid");
+                expect(after?.schedule.state).toBe("valid-clean");
+                expect(after?.schedule.computedAt).toBe(before?.schedule.computedAt);
+            });
+
+            it("a force:true infeasible confirm behaves IDENTICALLY — no override commit, no student-preferred-invalid-draft minted", async () => {
+                await seedInfeasibleStudentState(infeasStudentId);
+                const stores = getStores({});
+                const scheduleStore = stores.scheduleStore as InMemoryScheduleStore;
+                const before = await scheduleStore.loadLatestSchedule(infeasStudentId);
+
+                const stage1 = await runProposeStage(infeasStudentId, [
+                    { kind: "loadStyleOverride", style: "balanced" },
+                ]);
+                expect(stage1.ok).toBe(true);
+                if (!stage1.ok) return;
+
+                const out = await runConfirmStage(
+                    infeasStudentId,
+                    stage1.response.pendingMutationId,
+                    { force: true },
+                );
+
+                // The override is RETIRED: force changes nothing — still refused.
+                expect(out.ok).toBe(false);
+                if (out.ok) return;
+                expect(out.error.kind).toBe("infeasible");
+
+                // No student-preferred-invalid-draft was ever persisted; the
+                // valid plan remains the latest live row.
+                const after = await scheduleStore.loadLatestSchedule(infeasStudentId);
+                expect(after?.schedule.state).toBe("valid-clean");
+                expect(after?.schedule.state).not.toBe("student-preferred-invalid-draft");
+                expect(after?.schedule.computedAt).toBe(before?.schedule.computedAt);
+            });
+
+            it("a FEASIBLE confirm still commits normally (regression guard)", async () => {
+                const okStudentId = "orch_confirm_feasible_regression";
+                await seedStudentState(okStudentId);
+                const stores = getStores({});
+                const scheduleStore = stores.scheduleStore as InMemoryScheduleStore;
+                const before = await scheduleStore.loadLatestSchedule(okStudentId);
+
+                const stage1 = await runProposeStage(okStudentId, [
+                    { kind: "pin", courseId: "CSCI-UA 480", term: "2026-fall", freeze: true },
+                ]);
+                expect(stage1.ok).toBe(true);
+                if (!stage1.ok) return;
+
+                const out = await runConfirmStage(okStudentId, stage1.response.pendingMutationId);
+                expect(out.ok).toBe(true);
+                if (!out.ok) return;
+                expect(out.response.feasible).toBe(true);
+                expect(out.response.storedIn).toBe("forwardSchedule");
+
+                // The committed plan WAS rewritten (new computedAt).
+                const after = await scheduleStore.loadLatestSchedule(okStudentId);
+                expect(after?.schedule.computedAt).not.toBe(before?.schedule.computedAt);
+            });
         });
     });
 });
