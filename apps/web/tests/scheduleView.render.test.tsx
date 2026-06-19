@@ -12,7 +12,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ForwardSchedule, ScheduleSlotInProgress } from "@nyupath/shared";
+import type { ForwardSchedule, ScheduleSlotInProgress, ScheduleSlotCompleted, ScheduleSlotPlaceholder } from "@nyupath/shared";
 import type { SlotActionMatrix } from "@nyupath/engine";
 import type { AnnotatedColumn } from "../lib/scenarios/scheduleDiff";
 import ScheduleView from "../app/chat/workspace/ScheduleView";
@@ -438,5 +438,161 @@ describe("ScheduleView — F3 read-only path (no popover)", () => {
         );
         const slots = container.querySelectorAll("[title='Edit this course']");
         expect(slots.length).toBeGreaterThan(0);
+    });
+});
+
+// ---- (6) F3 polish — completed + placeholder slots are NOT clickable ----------
+// Plan 37 F3 polish: per-slot kind gate ensures that `completed` (locked/graded)
+// and `placeholder` (unbound reservation, no courseId to act on) slots do NOT
+// open the popover even when the editor props are mounted. Only `specific_planned`
+// and `in_progress` slots are editable (they have a dispatchable courseId).
+
+/** Minimal completed slot. */
+const COMPLETED_SLOT: ScheduleSlotCompleted = {
+    kind: "completed",
+    courseId: "CSCI-UA 101",
+    title: "Intro CS",
+    credits: 4,
+    grade: "A",
+};
+
+/** Minimal placeholder slot (bound reservation, no courseId). */
+const PLACEHOLDER_SLOT: ScheduleSlotPlaceholder = {
+    kind: "placeholder",
+    category: "Free Elective",
+    credits: 4,
+    satisfiesRules: [],
+    optional: false,
+    reason: "free-elective requirement",
+    rationale: {
+        satisfiesRequirements: [],
+        termConstraints: [],
+        consideredAlternatives: [],
+        decisionsApplied: [],
+    },
+    flexibility: {
+        earliestPossibleTerm: "2026-fall",
+        latestPossibleTerm: "2027-spring",
+        alternativeCourses: [],
+    },
+    downstreamImpact: { courseIds: [], graduationDelay: 0 },
+    workloadTier: "free-elective" as const,
+    workloadWeight: 1.0,
+    bindingState: "placeholder-pending" as const,
+    placeholderId: "ph-1",
+    confidence: "historically_likely" as const,
+    isCriticalPath: false,
+};
+
+const COMPLETED_SCHEDULE = {
+    ...SCHEDULE,
+    semesters: [
+        {
+            term: "2026-fall",
+            locked: true,
+            plannedCredits: 4,
+            notes: [],
+            loadRationale: LOAD_RATIONALE,
+            slots: [COMPLETED_SLOT],
+        },
+    ],
+} as unknown as ForwardSchedule;
+
+const PLACEHOLDER_SCHEDULE = {
+    ...SCHEDULE,
+    semesters: [
+        {
+            term: "2026-fall",
+            locked: false,
+            plannedCredits: 4,
+            notes: [],
+            loadRationale: LOAD_RATIONALE,
+            slots: [PLACEHOLDER_SLOT],
+        },
+    ],
+} as unknown as ForwardSchedule;
+
+describe("ScheduleView — F3 polish: completed/placeholder slots are NOT clickable", () => {
+    it("completed slot: clicking does NOT open the popover (no menu rendered)", () => {
+        const slotMatrix = vi.fn(() => makeMatrix(true));
+        const onSlotAction = vi.fn();
+        render(
+            <ScheduleView
+                schedule={COMPLETED_SCHEDULE}
+                readOnly={false}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
+            />,
+        );
+        // The completed course should render in the DOM.
+        expect(screen.getByText(/CSCI-UA 101/)).toBeTruthy();
+        // Clicking it should NOT open the popover.
+        fireEvent.click(screen.getByText(/CSCI-UA 101/));
+        expect(screen.queryByRole("menu")).toBeNull();
+        expect(onSlotAction).not.toHaveBeenCalled();
+    });
+
+    it("completed slot: title is NOT 'Edit this course' (no misleading edit affordance)", () => {
+        const { container } = render(
+            <ScheduleView
+                schedule={COMPLETED_SCHEDULE}
+                readOnly={false}
+                slotMatrix={vi.fn(() => makeMatrix(true))}
+                onSlotAction={vi.fn()}
+            />,
+        );
+        // The slot must NOT have the "Edit this course" title — that would
+        // imply it is editable (it is locked/graded).
+        const editableTitles = container.querySelectorAll("[title='Edit this course']");
+        expect(editableTitles.length).toBe(0);
+        // It SHOULD carry the "Completed — locked" title (informative).
+        const lockedTitles = container.querySelectorAll("[title='Completed — locked']");
+        expect(lockedTitles.length).toBeGreaterThan(0);
+    });
+
+    it("placeholder slot: clicking does NOT open the popover (no dead Drop)", () => {
+        const slotMatrix = vi.fn(() => makeMatrix(true));
+        const onSlotAction = vi.fn();
+        render(
+            <ScheduleView
+                schedule={PLACEHOLDER_SCHEDULE}
+                readOnly={false}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
+            />,
+        );
+        // The placeholder renders its category as text.
+        expect(screen.getByText(/Free Elective/)).toBeTruthy();
+        // Clicking it should NOT open the popover.
+        fireEvent.click(screen.getByText(/Free Elective/));
+        expect(screen.queryByRole("menu")).toBeNull();
+        expect(onSlotAction).not.toHaveBeenCalled();
+    });
+
+    it("specific_planned slot STILL opens the popover (existing behaviour unchanged)", () => {
+        render(
+            <ScheduleView
+                schedule={SCHEDULE}
+                readOnly={false}
+                slotMatrix={vi.fn(() => makeMatrix(true))}
+                onSlotAction={vi.fn()}
+            />,
+        );
+        // SCHEDULE has CSCI-UA 101 as specific_planned.
+        fireEvent.click(screen.getByText(/CSCI-UA 101/));
+        expect(screen.queryByRole("menu")).toBeTruthy();
+    });
+
+    it("in_progress slot STILL opens the popover (existing behaviour unchanged)", () => {
+        render(
+            <ScheduleView
+                schedule={IP_SCHEDULE}
+                readOnly={false}
+                slotMatrix={vi.fn(() => makeMatrix(true))}
+                onSlotAction={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByText(/CSCI-UA 301/));
+        expect(screen.queryByRole("menu")).toBeTruthy();
     });
 });

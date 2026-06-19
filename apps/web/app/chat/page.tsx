@@ -1862,23 +1862,24 @@ export default function ChatPage() {
     //     workspace "Confirm — make this My Plan" button (R1 preserved).
     const slotMatrix = useCallback(
         (slot: ScheduleSlot, term: string): SlotActionMatrix => {
-            // sidebarDpr is null only before a DPR loads; in that state the
-            // committed plan (and thus this editor) isn't mounted. Guard anyway
-            // so the closure is total — fall back to an empty DPR shape would
-            // be wrong, so we require it.
+            // sidebarDpr is null only before a DPR loads. The editor mounts
+            // only on the committed plan, which always requires a DPR — so
+            // this branch is unreachable in practice. Return a safe
+            // all-forbidden matrix rather than passing an empty `{}` cast as a
+            // DegreeProgressReport into slotActionMatrix (which would produce
+            // undefined behaviour and potentially offer actions with no DPR
+            // context to validate against).
             if (!sidebarDpr) {
-                // Should be unreachable (editor mounts only with a committed
-                // plan, which needs a DPR), but keep the closure total: a
-                // planned-state matrix with only drop available is the safest
-                // no-DPR default.
-                return slotActionMatrix({
-                    slot,
-                    term,
-                    dpr: { } as unknown as DegreeProgressReport,
-                    campus: campusForHomeSchool(homeSchool ?? undefined),
-                    calendar: NYU_ACADEMIC_CALENDAR,
-                    now: new Date(),
-                });
+                return {
+                    state: "final",
+                    allowed: { add: false, drop: false, withdraw: false, passFail: false },
+                    perAction: {
+                        add:      { reason: "DPR not loaded" },
+                        drop:     { reason: "DPR not loaded" },
+                        withdraw: { reason: "DPR not loaded" },
+                        passFail: { reason: "DPR not loaded" },
+                    },
+                } satisfies SlotActionMatrix;
             }
             return slotActionMatrix({
                 slot,

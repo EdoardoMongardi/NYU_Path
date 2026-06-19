@@ -209,8 +209,19 @@ export default function ScheduleView({
                                 // calls onSlotAction which routes through the existing
                                 // propose pipeline; nothing commits until the workspace
                                 // Confirm button.
+                                //
+                                // Per-slot kind gate (F3 polish):
+                                //   completed   → immutable (graded); NOT clickable.
+                                //   placeholder → no courseId to act on; NOT clickable.
+                                //   specific_planned / in_progress → clickable. An
+                                //     in_progress slot whose window is `closed` still
+                                //     opens the popover (the disabled buttons carry their
+                                //     "deadline passed — verify" reason: informative).
+                                const slotEditable =
+                                    interactive &&
+                                    (slot.kind === "specific_planned" || slot.kind === "in_progress");
                                 const popoverKey = `${sem.term}::${slotIdx}`;
-                                const isOpen = interactive && openPopoverKey === popoverKey;
+                                const isOpen = slotEditable && openPopoverKey === popoverKey;
 
                                 return (
                                     <li
@@ -227,12 +238,15 @@ export default function ScheduleView({
                                             diffModule,
                                             // .slotClickable supplies cursor:pointer +
                                             // position:relative (the popover anchor).
-                                            interactive ? styles.slotClickable : "",
+                                            // Only editable slot kinds (specific_planned /
+                                            // in_progress) get the clickable affordance;
+                                            // completed and placeholder are NOT clickable.
+                                            slotEditable ? styles.slotClickable : "",
                                         ]
                                             .filter(Boolean)
                                             .join(" ")}
                                         title={
-                                            interactive
+                                            slotEditable
                                                 ? "Edit this course"
                                                 : isLocked
                                                     ? "Completed — locked"
@@ -241,7 +255,7 @@ export default function ScheduleView({
                                                         : undefined
                                         }
                                         onClick={
-                                            interactive
+                                            slotEditable
                                                 ? () =>
                                                       setOpenPopoverKey((cur) =>
                                                           cur === popoverKey ? null : popoverKey,
