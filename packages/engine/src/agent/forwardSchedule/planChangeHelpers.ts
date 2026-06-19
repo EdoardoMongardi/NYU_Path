@@ -137,6 +137,85 @@ export const PlanChangeInputSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// resolveBindMutations — slot-level bind → pin translation (Plan 37 Task J2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Translate slot-level `bindPoolSlot` / `bindFreeElective` mutations into a
+ * `pin(courseId, slotTerm)` so the binding SURVIVES confirm.
+ *
+ * WHY THIS LIVES HERE (and not in applyMutationsToPreferences): the bind
+ * mutations carry only a `slotId`, while the persisted `SchedulePreferences`
+ * carry pins keyed on `(courseId, term)`. Resolving `slotId → term` requires
+ * the ACTIVE PLAN, which `applyMutationsToPreferences(base, mutations)` does
+ * NOT receive — that is exactly why those two mutation kinds were dead no-ops.
+ * This pre-pass runs at the propose/confirm tool boundary, where the plan
+ * (`session.forwardSchedule ?? session.studentDraftPlan`) IS in hand, and
+ * rewrites each resolvable bind into a `pin` BEFORE the prefs walk.
+ *
+ * The solver's pin-coverage pass (solver.ts) then sets the pin's `satisfiesRId`
+ * to the first unmet requirement whose `candidateCourses` include the bound
+ * course, so `materializePlan` writes `satisfiesRules: [rId]` on the placed
+ * slot and the authoritative validator credits the requirement leaf — i.e. the
+ * binding is PLACED in the slot's term AND satisfies the leaf after the
+ * re-solve.
+ *
+ * `freeze: true` (the pin default) is deliberate: a binding is the student's
+ * explicit choice of a specific course for a specific requirement slot, so the
+ * solver must not silently re-place it on a future re-plan. (The student can
+ * later `unbind` / `unpin` to release it.)
+ *
+ * Purity: returns a NEW mutations array; the input is never mutated. A bind
+ * whose `slotId` cannot be resolved to a placeholder in the plan is passed
+ * THROUGH unchanged — `applyMutationsToPreferences` will then surface its
+ * existing no-op consequence (preserving today's behavior for bad input).
+ * `unbindFreeElective` is also passed through (handled as a no-op downstream;
+ * a future J-task can map it to `unpin` once the bound courseId is tracked).
+ *
+ * @param plan the active plan used to resolve a bind's `slotId → term`
+ * @param mutations the raw mutation array from the tool input
+ * @returns a new mutation array with binds rewritten to pins where resolvable
+ */
+export function resolveBindMutations(
+    plan: ForwardSchedule | undefined,
+    mutations: PlanMutation[],
+): PlanMutation[] {
+    return mutations.map((m): PlanMutation => {
+        if (m.kind !== "bindPoolSlot" && m.kind !== "bindFreeElective") {
+            return m;
+        }
+        const term = findPlaceholderTerm(plan, m.slotId);
+        if (term == null) {
+            // Unresolvable slot — leave the bind in place so the prefs walk
+            // emits its no-op consequence (unchanged behavior for bad input).
+            return m;
+        }
+        // A binding is the student's explicit, durable choice → freeze: true.
+        return { kind: "pin", courseId: m.courseId, term, freeze: true };
+    });
+}
+
+/**
+ * Find the containing semester `term` of the placeholder slot with
+ * `placeholderId === slotId`, or null when absent. Mirrors the
+ * `findSlotWithTerm` lookup used by the bind tools.
+ */
+function findPlaceholderTerm(
+    plan: ForwardSchedule | undefined,
+    slotId: string,
+): string | null {
+    if (!plan) return null;
+    for (const sem of plan.semesters) {
+        for (const slot of sem.slots) {
+            if (slot.kind === "placeholder" && slot.placeholderId === slotId) {
+                return sem.term;
+            }
+        }
+    }
+    return null;
+}
+
+// ---------------------------------------------------------------------------
 // applyMutationsToPreferences — pure left-to-right walk
 // ---------------------------------------------------------------------------
 
@@ -348,9 +427,14 @@ export function applyMutationsToPreferences(
         }
     }
 
-    // Bind/unbind for the same slotId in one call cancel out.
-    // (Already handled implicitly since unbind produces a no-op consequence
-    //  and bind is also a no-op at this level — both are deferred to Task 6.)
+    // NOTE: a resolvable bindFreeElective/bindPoolSlot is rewritten to a real
+    // `pin` by resolveBindMutations() BEFORE this walk (it needs the active
+    // plan to resolve slotId→term), so it persists and is NOT a no-op here.
+    // Only the unbind path (unbindFreeElective) remains a no-op at this level
+    // — a bind/unbind pair for the same slotId therefore does NOT cancel out;
+    // wiring unbind→unpin is a tracked follow-up (Phase F's "drop a bound
+    // course" needs the inverse). An unresolvable bind (missing plan / unknown
+    // slotId) falls through to its no-op branch above unchanged.
 
     return { prefs, noOpConsequences };
 }

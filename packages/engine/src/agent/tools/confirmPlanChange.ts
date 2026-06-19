@@ -17,6 +17,7 @@ import { finalizeForwardSchedule } from "../forwardSchedule/build.js";
 import { runGraduationPathValidator } from "../forwardSchedule/graduationPathValidator.js";
 import {
     applyMutationsToPreferences,
+    resolveBindMutations,
     buildSolverInputWithRulesFromSession,
     computeSlotDiff,
     deriveConsequences,
@@ -157,11 +158,19 @@ export const confirmPlanChangeTool = buildTool({
             };
         }
 
+        // Plan 37 Task J2 — translate slot-level binds into pins BEFORE the
+        // prefs walk so the binding SURVIVES this confirm (and future re-plans):
+        // `currentPlan` resolves a bind's slotId → term, and the pin path both
+        // persists into prefs.pins[] and (via the solver's pin-coverage pass)
+        // covers the requirement leaf. The dead bindPoolSlot/bindFreeElective
+        // no-ops never persisted, so the binding used to be discarded here.
+        const resolvedMutations = resolveBindMutations(currentPlan, input.mutations as PlanMutation[]);
+
         // Step 1: Apply mutations to session.schedulePreferences (mutate).
         const basePrefs: SchedulePreferences = session.schedulePreferences ?? {};
         const { prefs: newPrefs, noOpConsequences } = applyMutationsToPreferences(
             basePrefs,
-            input.mutations as PlanMutation[],
+            resolvedMutations,
         );
         session.schedulePreferences = newPrefs;
 
