@@ -262,15 +262,19 @@ describe.skipIf(!process.env.DATABASE_URL)("e2e confirm→persist (live Neon) �
         const confirmRes = await confirmPOST(
             fakeRequest(token, { pendingMutationId }) as never,
         );
+        // Plan 37 (M1) — the confirm path NEVER commits an invalid plan. The
+        // minimal seed DPR re-solves FEASIBLE, so this confirm returns 200 and
+        // persists. (Were it infeasible, M1 would return 422 and persist
+        // NOTHING — see planConfirmRoute.test.ts for that path.) A 200 here
+        // therefore implies storedIn === "forwardSchedule".
         expect(confirmRes.status).toBe(200);
         const confirmJson = await confirmRes.json();
         expect(confirmJson.consumedMutationId).toBe(pendingMutationId);
-        // Decision #32 — a valid plan lands in forwardSchedule, an
-        // infeasible/draft one in studentDraftPlan. The seed DPR is minimal,
-        // so accept EITHER slot — the load-bearing assertion is that restore
-        // routes the persisted plan to the SAME slot the confirm reported.
         const storedIn: "forwardSchedule" | "studentDraftPlan" = confirmJson.storedIn;
-        expect(storedIn).toMatch(/^(forwardSchedule|studentDraftPlan)$/);
+        // Post-M1 a committed (200) confirm is ALWAYS the valid slot — an
+        // infeasible draft is never persisted as the committed forward_schedule.
+        expect(storedIn).toBe("forwardSchedule");
+        expect(confirmJson.feasible).toBe(true);
 
         // (single-use) the staged pending_mutations row was CONSUMED on confirm.
         const afterTake = await db
@@ -301,22 +305,17 @@ describe.skipIf(!process.env.DATABASE_URL)("e2e confirm→persist (live Neon) �
         expect(priorRowAfter.length).toBe(1);
         expect(priorRowAfter[0]!.supersededAt).not.toBeNull();
 
-        // ---- (4) restore routes the confirmed plan to the correct Decision-#32
-        //      slot (valid → forwardSchedule, draft → studentDraftPlan). ----
+        // ---- (4) restore routes the confirmed (VALID) plan to forwardSchedule.
+        //      Post-M1, a committed confirm is always the valid slot; an
+        //      infeasible confirm never reaches here (it 422s + persists
+        //      nothing). ----
         const { GET: restoreGET } = await import("../app/api/session/restore/route");
         const restoreRes = await restoreGET(fakeRequest(token, undefined) as never);
         expect(restoreRes.status).toBe(200);
         const restoreJson = await restoreRes.json();
         expect(restoreJson.profile).not.toBeNull();
-        if (storedIn === "forwardSchedule") {
-            expect(restoreJson.forwardSchedule).not.toBeNull();
-            expect(restoreJson.studentDraftPlan).toBeNull();
-        } else {
-            expect(restoreJson.studentDraftPlan).not.toBeNull();
-            // The seed's valid forwardSchedule was superseded by the draft
-            // apply, so the live slot resolves to the draft only.
-            expect(restoreJson.forwardSchedule).toBeNull();
-        }
+        expect(restoreJson.forwardSchedule).not.toBeNull();
+        expect(restoreJson.studentDraftPlan).toBeNull();
 
         // ---- (5) schedule_preferences round-trips. confirm_plan_change wrote
         //      a prefs row (the `add` becomes a pin in schedulePreferences);

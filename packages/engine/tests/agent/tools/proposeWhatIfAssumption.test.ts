@@ -367,3 +367,267 @@ describe("propose_whatif_assumption — READ-ONLY", () => {
         expect(JSON.parse(JSON.stringify(session.degreeProgressReport))).toEqual(beforeDpr);
     });
 });
+
+// ---------------------------------------------------------------------------
+// (f) D-7 IP-membership guard (E1) — validateInput rejects non-IP targets
+// ---------------------------------------------------------------------------
+
+/**
+ * A DPR where CSCI-UA 101 is COMPLETED (type:"EN", graded) — not in-progress.
+ * The student would try to withdraw/pass-fail it, which the guard must reject.
+ */
+function makeCompletedDpr(): DegreeProgressReport {
+    const dpr: DegreeProgressReport = {
+        _meta: makeMeta(),
+        reportKind: "dpr",
+        header: { studentName: "Synthetic Student (fabricated)", preparedDate: "10/01/2026" },
+        programs: [
+            {
+                programType: "Undergraduate Career",
+                label: "UA-Coll of Arts & Sci",
+                requirementTerm: "Fall 2024",
+                requirementStatus: "not_satisfied",
+            },
+        ],
+        advisorNotations: [],
+        cumulative: {
+            creditsRequired: 128,
+            creditsUsed: 120,
+            cumulativeGpa: 3.5,
+            cumulativeGpaRequired: 2.0,
+            residencyRequired: 64,
+            residencyUsed: 64,
+            passFailUsedUnits: 0,
+            passFailCapUnits: 32,
+            outsideHomeUsedUnits: 0,
+            outsideHomeCapUnits: 16,
+            timeLimitYears: 8,
+        },
+        requirementGroups: [],
+        // CSCI-UA 101 is COMPLETED (type "EN", graded "A") — not in-progress.
+        courseHistory: [
+            {
+                term: "2025 Fall",
+                subject: "CSCI-UA",
+                catalogNbr: "101",
+                courseTitle: "Intro to CS",
+                grade: "A",
+                units: 4,
+                type: "EN",
+            },
+        ],
+    };
+    return degreeProgressReportSchema.parse(dpr);
+}
+
+/**
+ * A DPR with no mention of CSCI-UA 999 at all — the course is planned (or
+ * just unknown) but NOT on the DPR.  The guard must distinguish "not on DPR
+ * at all" from "on DPR but completed".
+ */
+function makeNoCourseOnDprDpr(): DegreeProgressReport {
+    const dpr: DegreeProgressReport = {
+        _meta: makeMeta(),
+        reportKind: "dpr",
+        header: { studentName: "Synthetic Student (fabricated)", preparedDate: "10/01/2026" },
+        programs: [
+            {
+                programType: "Undergraduate Career",
+                label: "UA-Coll of Arts & Sci",
+                requirementTerm: "Fall 2024",
+                requirementStatus: "not_satisfied",
+            },
+        ],
+        advisorNotations: [],
+        cumulative: {
+            creditsRequired: 128,
+            creditsUsed: 120,
+            cumulativeGpa: 3.5,
+            cumulativeGpaRequired: 2.0,
+            residencyRequired: 64,
+            residencyUsed: 64,
+            passFailUsedUnits: 0,
+            passFailCapUnits: 32,
+            outsideHomeUsedUnits: 0,
+            outsideHomeCapUnits: 16,
+            timeLimitYears: 8,
+        },
+        requirementGroups: [],
+        courseHistory: [], // empty — CSCI-UA 999 is simply not on the DPR
+    };
+    return degreeProgressReportSchema.parse(dpr);
+}
+
+/** Session whose DPR has CSCI-UA 101 as COMPLETED (graded "A", type "EN"). */
+function makeCompletedSession(): ToolSession {
+    const base = casStudentSession({
+        degreeProgressReport: makeCompletedDpr(),
+    });
+    const forwardSchedule = buildForwardSchedule({
+        session: base,
+        dpr: base.degreeProgressReport!,
+        graduationTermOverride: "2027-spring",
+    });
+    return { ...base, forwardSchedule };
+}
+
+/** Session whose DPR does NOT contain CSCI-UA 999 at all (planned course). */
+function makePlannedSession(): ToolSession {
+    const base = casStudentSession({
+        degreeProgressReport: makeNoCourseOnDprDpr(),
+    });
+    const forwardSchedule = buildForwardSchedule({
+        session: base,
+        dpr: base.degreeProgressReport!,
+        graduationTermOverride: "2027-spring",
+    });
+    return { ...base, forwardSchedule };
+}
+
+// ---------------------------------------------------------------------------
+// (g) D-4 P/F-eligibility guard — canElect:false school must reject pass/fail
+//     but allow withdraw (W is universal)
+// ---------------------------------------------------------------------------
+
+/** A schoolConfig where passFail.canElect is explicitly false (Tandon-style). */
+function tandonSchoolConfig() {
+    return {
+        schoolId: "tandon",
+        name: "NYU Tandon School of Engineering",
+        degreeType: "BS" as const,
+        courseSuffix: ["-UE"],
+        totalCreditsRequired: 128,
+        overallGpaMin: 2.0,
+        acceptsTransferCredit: true,
+        maxCreditsPerSemester: 18,
+        f1FullTimeMinCredits: 12,
+        residency: { minCredits: 64, note: null },
+        passFail: {
+            careerLimitType: "credits" as const,
+            canElect: false,
+        },
+    };
+}
+
+/** Session for a Tandon student with an IP course (CSCI-UA 102). */
+function makeTandonIpSession(): ToolSession {
+    const base: ToolSession = {
+        student: {
+            id: "test-student",
+            catalogYear: "2024",
+            homeSchool: "tandon",
+            declaredPrograms: [{ programId: "computer_science", programType: "major" }],
+            coursesTaken: [],
+            visaStatus: "f1",
+        },
+        schoolConfig: tandonSchoolConfig(),
+        degreeProgressReport: makeIpMajorDpr(),
+        courses: makeIpCourses(),
+    };
+    const forwardSchedule = buildForwardSchedule({
+        session: base,
+        dpr: base.degreeProgressReport!,
+        graduationTermOverride: "2027-spring",
+    });
+    return { ...base, forwardSchedule };
+}
+
+describe("propose_whatif_assumption — D-4 P/F-eligibility guard (canElect:false)", () => {
+    it("(a) outcome:'pass' at canElect:false school → validateInput returns { ok:false } with message matching /pass\\/fail|elect/i", async () => {
+        const session = makeTandonIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "pass" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.userMessage).toMatch(/pass\/?fail|elect/i);
+    });
+
+    it("(b) outcome:'fail' at canElect:false school → validateInput returns { ok:false } with message matching /pass\\/fail|elect/i", async () => {
+        const session = makeTandonIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "fail" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.userMessage).toMatch(/pass\/?fail|elect/i);
+    });
+
+    it("(c) outcome:'pass' at canElect:true (CAS) school → validateInput returns { ok:true }", async () => {
+        // CAS schoolConfig has no passFail block → canElect treated as true (can elect)
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "pass" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(true);
+    });
+
+    it("(d) outcome:'withdraw' at canElect:false school → validateInput returns { ok:true } (W is universal, not gated)", async () => {
+        const session = makeTandonIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "withdraw" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(true);
+    });
+});
+
+describe("propose_whatif_assumption — D-7 IP-membership guard (E1)", () => {
+    it("(a) COMPLETED course → validateInput returns { ok:false } with message about in-progress / completed", async () => {
+        // CSCI-UA 101 is completed (type:"EN", grade:"A") — withdraw/PF do not apply
+        const session = makeCompletedSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 101", outcome: "withdraw" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.userMessage).toMatch(/in progress|currently taking|completed/i);
+    });
+
+    it("(b) IN-PROGRESS course → validateInput returns { ok:true }", async () => {
+        // CSCI-UA 102 is in the DPR with type:"IP" — the guard should pass
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "withdraw" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(true);
+    });
+
+    it("(c) NOT-ON-DPR course (planned/unknown) → validateInput returns { ok:false } with message about planned / drop it instead", async () => {
+        // CSCI-UA 999 is not on the DPR at all — student likely means a planned course
+        const session = makePlannedSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 999", outcome: "withdraw" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.userMessage).toMatch(/planned|drop it instead/i);
+    });
+});

@@ -1670,3 +1670,137 @@ describe("derivePlanStateFromValidator — state routing assertions", () => {
         expect(state).not.toBe("student-preferred-invalid-draft");
     });
 });
+
+// ---------------------------------------------------------------------------
+// Axis 8 — passFailLimitsRespected (Plan 37, Task C2)
+// ---------------------------------------------------------------------------
+
+describe("Axis 8 — passFailLimitsRespected", () => {
+    it("fails (and flips feasible=false) when P/F credits used exceed the career cap", () => {
+        // Synthetic DPR: 36 P/F credits used against a 32-credit career limit.
+        const dpr = makeDpr({
+            cumulative: {
+                creditsRequired: 128,
+                creditsUsed: 96,
+                cumulativeGpa: 3.4,
+                cumulativeGpaRequired: 2.0,
+                residencyRequired: 64,
+                residencyUsed: 64,
+                passFailUsedUnits: 36,
+                passFailCapUnits: 32,
+                outsideHomeUsedUnits: 0,
+                outsideHomeCapUnits: 16,
+                timeLimitYears: 8,
+            },
+        });
+        const plan = makeEmptyPlan();
+        const result = runGraduationPathValidator({
+            plan,
+            dpr,
+            programRules: makeProgramRules(),
+            passFailConfig: { careerLimitType: "credits", careerLimitValue: 32 },
+        });
+        expect(result.axisResults.passFailLimitsRespected.status).toBe("fail");
+        // The new axis is the ONLY failing one here → feasible must be false.
+        expect(result.feasible).toBe(false);
+    });
+
+    it("passes (pass-by-default) and does NOT change feasible when passFailConfig is omitted (otherwise-valid plan)", () => {
+        // A genuinely-feasible plan (mirrors the Test-8 fixture): DPR
+        // requirementGroups satisfied, 96 earned + 2×16 planned = 128 ≥ 128 by
+        // the 2027-spring target, null major floor (→ requires-approval, which
+        // does NOT flip feasible). Even with 36 P/F credits used (over a 32
+        // cap), OMITTING passFailConfig makes the 8th axis opt-out → `pass`, so
+        // `feasible` stays true. Confirms an absent config can never flip it.
+        const dpr = makeDpr({
+            requirementGroups: [
+                {
+                    rgId: "RG1",
+                    title: "CS Core",
+                    status: "satisfied",
+                    statusText: "Satisfied",
+                    children: [
+                        {
+                            rId: "R100/10",
+                            title: "CS Required",
+                            status: "satisfied",
+                            statusText: "Satisfied",
+                            coursesUsed: [
+                                {
+                                    term: "2024 Fall",
+                                    subject: "CSCI-UA",
+                                    catalogNbr: "102",
+                                    courseTitle: "Data Structures",
+                                    grade: "A",
+                                    units: 4,
+                                    type: "EN",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+            cumulative: {
+                creditsRequired: 128,
+                creditsUsed: 96,
+                cumulativeGpa: 3.4,
+                cumulativeGpaRequired: 2.0,
+                residencyRequired: 64,
+                residencyUsed: 64,
+                // Deliberately over a 32-credit cap — but no config is passed,
+                // so the axis must still pass-by-default.
+                passFailUsedUnits: 36,
+                passFailCapUnits: 32,
+                outsideHomeUsedUnits: 0,
+                outsideHomeCapUnits: 16,
+                timeLimitYears: 8,
+            },
+        });
+        const plan = makeEmptyPlan({
+            graduationTerm: "2027-spring",
+            semesters: [
+                {
+                    term: "2026-fall",
+                    locked: false,
+                    plannedCredits: 16,
+                    notes: [],
+                    loadRationale: {
+                        strategy: "balanced",
+                        creditsTarget: 16,
+                        slack: 0,
+                        weightedCredits: 16,
+                        hardCount: 4,
+                        easyCount: 0,
+                        alternativeDistributionsConsidered: [],
+                    },
+                    slots: [],
+                },
+                {
+                    term: "2027-spring",
+                    locked: false,
+                    plannedCredits: 16,
+                    notes: [],
+                    loadRationale: {
+                        strategy: "balanced",
+                        creditsTarget: 16,
+                        slack: 0,
+                        weightedCredits: 16,
+                        hardCount: 4,
+                        easyCount: 0,
+                        alternativeDistributionsConsidered: [],
+                    },
+                    slots: [],
+                },
+            ],
+        });
+        const result = runGraduationPathValidator({
+            plan,
+            dpr,
+            programRules: makeProgramRules({ majorCreditMinimum: null }),
+            // passFailConfig deliberately omitted
+        });
+        expect(result.axisResults.passFailLimitsRespected.status).toBe("pass");
+        // No axis fails for this otherwise-valid plan → feasible stays true.
+        expect(result.feasible).toBe(true);
+    });
+});

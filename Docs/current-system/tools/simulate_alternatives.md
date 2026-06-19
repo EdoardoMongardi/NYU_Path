@@ -195,7 +195,7 @@ buildCandidate(relaxation, summary, out, input, fallbackReason):
 
 Two key consequences:
 
-1. **Every feasible candidate is validator-checked.** `finalizeForwardSchedule` (`build.ts:64-110`) assembles the `ForwardSchedule` AND runs the authoritative 7-axis `runGraduationPathValidator`, deriving the `state` from the validator (not the solver's coarse state). A coarse-feasible-but-validator-infeasible alternative becomes a `stillInfeasibleReason` entry, NOT a falsely-valid schedule. The `validatorRulesFromInput` helper (`alternatives.ts:126-136`) reconstructs the `ValidatorRules` from the `SolverInput`, mirroring `buildProgramRules` (minor/school-core/upper-level minimums are always `null`).
+1. **Every feasible candidate is validator-checked.** `finalizeForwardSchedule` (`build.ts:64-110`) assembles the `ForwardSchedule` AND runs the authoritative 8-axis `runGraduationPathValidator`, deriving the `state` from the validator (not the solver's coarse state). A coarse-feasible-but-validator-infeasible alternative becomes a `stillInfeasibleReason` entry, NOT a falsely-valid schedule. The `validatorRulesFromInput` helper (`alternatives.ts:126-136`) reconstructs the `ValidatorRules` from the `SolverInput`, mirroring `buildProgramRules` (minor/school-core/upper-level minimums are always `null`).
 2. **Infeasible candidates carry specific, concrete reasons.** When the solver already reports infeasible, the reason joins the per-requirement `constraintViolations[].detail` strings (offering / ceiling / coreq / NOT / prereq-depth / capacity), not a bare "N constraint violation(s)" count. The `fallbackReason` is used only when the solver reported no detail at all.
 
 So each candidate has one of two shapes:

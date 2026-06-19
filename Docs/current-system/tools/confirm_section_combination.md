@@ -28,7 +28,7 @@ A successful confirm consumes (deletes) the pending entry, so the same `proposal
 
 Registered as a live tool in `packages/engine/src/agent/registry.ts`. Defined at `packages/engine/src/agent/tools/materializeSections.ts:358-460`.
 
-> **Known limitations.** Binding never re-runs the 7-axis graduation validator. It only enriches slots that are already structurally bound (`bindingState === "bound"`), writing five optional fields in-place; it does not flip any state flag or re-validate the plan. If the structural plan changed between stage and confirm (a semester or matching `specific_planned` slot disappeared), the affected sections are silently skipped with a per-section note and `sectionsBound` reflects only the successful binds — see §11.
+> **Known limitations.** Binding never re-runs the 8-axis graduation validator. It only enriches slots that are already structurally bound (`bindingState === "bound"`), writing five optional fields in-place; it does not flip any state flag or re-validate the plan. If the structural plan changed between stage and confirm (a semester or matching `specific_planned` slot disappeared), the affected sections are silently skipped with a per-section note and `sectionsBound` reflects only the successful binds — see §11.
 
 ---
 

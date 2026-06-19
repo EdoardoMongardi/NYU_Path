@@ -11,6 +11,7 @@ import type {
     SchedulePreferences,
     ForwardSchedule,
     ScheduleSlot,
+    ScheduleSlotPlaceholder,
     PlanChangeOutcome,
     PlanDiff,
     PlanState,
@@ -137,6 +138,99 @@ export const PlanChangeInputSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// resolveBindMutations — slot-level bind → pin translation (Plan 37 Task J2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Translate slot-level `bindPoolSlot` / `bindFreeElective` mutations into a
+ * `pin(courseId, slotTerm)` so the binding SURVIVES confirm.
+ *
+ * WHY THIS LIVES HERE (and not in applyMutationsToPreferences): the bind
+ * mutations carry only a `slotId`, while the persisted `SchedulePreferences`
+ * carry pins keyed on `(courseId, term)`. Resolving `slotId → term` requires
+ * the ACTIVE PLAN, which `applyMutationsToPreferences(base, mutations)` does
+ * NOT receive — that is exactly why those two mutation kinds were dead no-ops.
+ * This pre-pass runs at the propose/confirm tool boundary, where the plan
+ * (`session.forwardSchedule ?? session.studentDraftPlan`) IS in hand, and
+ * rewrites each resolvable bind into a `pin` BEFORE the prefs walk.
+ *
+ * The solver's pin-coverage pass (solver.ts) then sets the pin's `satisfiesRId`
+ * to the first unmet requirement whose `candidateCourses` include the bound
+ * course, so `materializePlan` writes `satisfiesRules: [rId]` on the placed
+ * slot and the authoritative validator credits the requirement leaf — i.e. the
+ * binding is PLACED in the slot's term AND satisfies the leaf after the
+ * re-solve.
+ *
+ * `freeze: true` (the pin default) is deliberate: a binding is the student's
+ * explicit choice of a specific course for a specific requirement slot, so the
+ * solver must not silently re-place it on a future re-plan. (The student can
+ * later `unbind` / `unpin` to release it.)
+ *
+ * Purity: returns a NEW mutations array; the input is never mutated. A bind
+ * whose `slotId` cannot be resolved to a placeholder in the plan is passed
+ * THROUGH unchanged — `applyMutationsToPreferences` will then surface its
+ * existing no-op consequence (preserving today's behavior for bad input).
+ * `unbindFreeElective` is also passed through (a graceful no-op downstream — it
+ * carries only a slotId that no longer resolves once the slot is bound; the
+ * "release a bound course" gesture is a DROP, whose `exclude` releases the
+ * bind's pin in applyMutationsToPreferences — see that case).
+ *
+ * @param plan the active plan used to resolve a bind's `slotId → term`
+ * @param mutations the raw mutation array from the tool input
+ * @returns a new mutation array with binds rewritten to pins where resolvable
+ */
+export function resolveBindMutations(
+    plan: ForwardSchedule | undefined,
+    mutations: PlanMutation[],
+): PlanMutation[] {
+    return mutations.map((m): PlanMutation => {
+        if (m.kind !== "bindPoolSlot" && m.kind !== "bindFreeElective") {
+            return m;
+        }
+        const found = findPlaceholderSlot(plan, m.slotId);
+        if (found == null) {
+            // Unresolvable slot — leave the bind in place so the prefs walk
+            // emits its no-op consequence (unchanged behavior for bad input).
+            return m;
+        }
+        // A binding is the student's explicit, durable choice → freeze: true.
+        return { kind: "pin", courseId: m.courseId, term: found.term, freeze: true };
+    });
+}
+
+/**
+ * Find the placeholder slot with `placeholderId === slotId` and its containing
+ * semester `term`, or `null` when absent. Scans
+ * `plan.semesters[].slots[]` for a `kind === "placeholder"` slot whose
+ * `placeholderId` matches.
+ *
+ * J2 follow-up — the single shared slot-by-id lookup. Previously three
+ * near-identical copies existed: `findPlaceholderTerm` here (term-only) plus a
+ * `findSlotWithTerm` in each of `bindPoolSlot.ts` / `bindFreeElective.ts`
+ * (`{ slot, term }`). The bind tools need both the slot AND the term; this
+ * caller derives `.term` from the same return. Behavior is identical to the
+ * removed duplicates (same predicate, same first-match order).
+ *
+ * Accepts `ForwardSchedule | undefined` so `resolveBindMutations` (which may
+ * hold no active plan) can pass through; the bind tools pass a concrete
+ * `ForwardSchedule` (assignable).
+ */
+export function findPlaceholderSlot(
+    plan: ForwardSchedule | undefined,
+    slotId: string,
+): { slot: ScheduleSlotPlaceholder; term: string } | null {
+    if (!plan) return null;
+    for (const sem of plan.semesters) {
+        for (const slot of sem.slots) {
+            if (slot.kind === "placeholder" && slot.placeholderId === slotId) {
+                return { slot, term: sem.term };
+            }
+        }
+    }
+    return null;
+}
+
+// ---------------------------------------------------------------------------
 // applyMutationsToPreferences — pure left-to-right walk
 // ---------------------------------------------------------------------------
 
@@ -198,6 +292,29 @@ export function applyMutationsToPreferences(
                     e => !(e.courseId === m.courseId && e.term === m.term),
                 );
                 prefs.exclusions.push({ courseId: m.courseId, term: m.term });
+
+                // J2 follow-up — RELEASE any matching pin so an excluded
+                // (dropped) course is genuinely removed. WHY this is required:
+                // the solver's pin pass (solver.ts) places every pin into the
+                // FIXED set UNCONDITIONALLY — it never consults the exclusion
+                // set (which only filters the SEARCH candidate variables in
+                // constraintModel.ts / materializePlan.ts). So a course that
+                // was bound (→ pin, via resolveBindMutations) and then dropped
+                // (→ exclude) would be re-placed by its lingering pin: the pin
+                // wins over the exclude, and the drop is silently a no-op. The
+                // fix is local and minimal — an exclude is the user saying
+                // "remove this course," which must beat any prior pin.
+                //
+                // A term-scoped exclude releases only the pin for that
+                // (courseId, term); a global exclude (term undefined) releases
+                // ALL pins for that courseId. This matches the drop route's two
+                // shapes (`/api/plan/drop` sends term-scoped or global). It is
+                // a no-op when no matching pin exists.
+                if (prefs.pins && prefs.pins.length > 0) {
+                    prefs.pins = prefs.pins.filter(
+                        p => !(p.courseId === m.courseId && (m.term === undefined || p.term === m.term)),
+                    );
+                }
                 break;
             }
             case "swap": {
@@ -302,9 +419,22 @@ export function applyMutationsToPreferences(
                 break;
             }
             case "unbindFreeElective": {
+                // J2 follow-up — stays a GRACEFUL no-op by design. The realistic
+                // "release a bound course" gesture is a DROP, which the
+                // slot-editor emits as `exclude(courseId, term)` (it reads the
+                // courseId straight off the bound `specific_planned` slot) — and
+                // the `exclude` case above now releases the lingering pin, so
+                // the drop genuinely removes the course. `unbindFreeElective`
+                // carries ONLY a slotId, and after a bind the slot is
+                // `specific_planned` with NO `placeholderId` / origin marker, so
+                // the slotId can no longer resolve to the bound courseId — there
+                // is nothing to translate to an `unpin`. (No UI path emits this
+                // kind; wiring it to `unpin` would need a schema change to carry
+                // the courseId, which is not worth the ripple given the drop
+                // path already covers the use case.)
                 noOpConsequences.push(
-                    `unbindFreeElective(slotId=${m.slotId}) is a no-op in the solver — ` +
-                    "Phase 14 Task 6 wires the real slot-level binding logic.",
+                    `unbindFreeElective(slotId=${m.slotId}) is a no-op — release a bound course by ` +
+                    "dropping it (the drop's exclusion now also clears the bind's pin).",
                 );
                 break;
             }
@@ -348,9 +478,16 @@ export function applyMutationsToPreferences(
         }
     }
 
-    // Bind/unbind for the same slotId in one call cancel out.
-    // (Already handled implicitly since unbind produces a no-op consequence
-    //  and bind is also a no-op at this level — both are deferred to Task 6.)
+    // NOTE: a resolvable bindFreeElective/bindPoolSlot is rewritten to a real
+    // `pin` by resolveBindMutations() BEFORE this walk (it needs the active
+    // plan to resolve slotId→term), so it persists and is NOT a no-op here.
+    // The INVERSE — "release a bound course" — is now correct: the slot-editor
+    // drop emits `exclude(courseId, term)`, and the `exclude` case above
+    // releases any matching pin (so the bind's pin no longer re-places the
+    // dropped course; J2 follow-up). `unbindFreeElective` itself stays a
+    // graceful no-op (its slotId can't resolve post-bind; no UI emits it). An
+    // unresolvable bind (missing plan / unknown slotId) falls through to its
+    // no-op branch above unchanged.
 
     return { prefs, noOpConsequences };
 }
@@ -631,7 +768,7 @@ export function buildPlanDiff(
             const b = beforeAxes[axis];
             // Record an axis only when a `before` exists AND the result changed
             // (by status or reason/payload). The validator always emits the same
-            // 7 axes for both plans, so a missing `before` is not an expected
+            // 8 axes for both plans, so a missing `before` is not an expected
             // transition and is skipped rather than recorded as before===after.
             if (b && !validationResultsEqual(b, a)) {
                 validationResultsChanges[axis] = { before: b, after: a };

@@ -16,6 +16,7 @@ import { finalizeForwardSchedule } from "../forwardSchedule/build.js";
 import { runGraduationPathValidator } from "../forwardSchedule/graduationPathValidator.js";
 import {
     applyMutationsToPreferences,
+    resolveBindMutations,
     buildSolverInputWithRulesFromSession,
     computeSlotDiff,
     deriveConsequences,
@@ -134,11 +135,17 @@ export const proposePlanChangeTool = buildTool({
             };
         }
 
+        // Plan 37 Task J2 — translate slot-level binds into pins BEFORE the
+        // prefs walk. `currentPlan` is in hand here, so a bind's slotId resolves
+        // to its term and the binding flows through the pin path (which survives
+        // confirm + covers the requirement leaf). Pure: returns a new array.
+        const resolvedMutations = resolveBindMutations(currentPlan, input.mutations as PlanMutation[]);
+
         // Build hypothetical preferences (no mutation of session)
         const basePrefs: SchedulePreferences = session.schedulePreferences ?? {};
         const { prefs: hypotheticalPrefs, noOpConsequences } = applyMutationsToPreferences(
             basePrefs,
-            input.mutations as PlanMutation[],
+            resolvedMutations,
         );
 
         // Build a hypothetical SolverInput with the mutated preferences.
@@ -154,18 +161,21 @@ export const proposePlanChangeTool = buildTool({
         // Run the solver (read-only — we never write the result to session)
         const solverOutput = solveForwardSchedule(solverInput);
 
-        // ---- Route through the AUTHORITATIVE 7-axis validator (P2.7/PLAN-3) ----
+        // ---- Route through the AUTHORITATIVE 8-axis validator (P2.7/PLAN-3) ----
         //
         // The solver's coarse `feasibility`/`state` is NOT trusted here. We run
         // the SAME finalize step the build path uses, so the proposed schedule
         // carries the validator-derived state and `feasible` reflects the full
-        // 7-axis verdict — closing the PLAN-3 hole where an edit could preview
-        // as feasible while a 7-axis check would have failed.
+        // 8-axis verdict — closing the PLAN-3 hole where an edit could preview
+        // as feasible while an 8-axis check would have failed.
         const { schedule: proposedSchedule, validatorResult } = finalizeForwardSchedule(
             solverOutput,
             solverInput,
             dpr,
             validatorRules,
+            // Plan 37 (Task C2) — thread the session-resolved per-school P/F
+            // config so the 8th validator axis enforces the career cap.
+            session.schoolConfig?.passFail,
         );
 
         // Validate the BEFORE plan too (cheap, pure) so the planDiff can report
@@ -174,6 +184,10 @@ export const proposePlanChangeTool = buildTool({
             plan: currentPlan,
             dpr,
             programRules: validatorRules,
+            // Plan 37 (Task C2) — evaluate the BEFORE plan under the SAME P/F
+            // config so the per-axis before/after diff reflects only genuine
+            // plan-driven changes (the career cap is plan-independent).
+            passFailConfig: session.schoolConfig?.passFail,
         }).axisResults;
 
         // Compute diff and consequences

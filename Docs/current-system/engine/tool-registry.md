@@ -1,12 +1,12 @@
 # Tool Registry & Tool Contract
 
-> Last verified against code: 2026-06-13 (doc-sync pass: refreshed drifted registry.ts/route.ts/agentLoop.ts line citations in §5–§6).
+> Last verified against code: 2026-06-19 (Plan 37 — `proposeWhatIfAssumption` `validateInput` gains the D-7 IP-membership guard + D-4 P/F-eligibility gate; `/api/plan/add` gains the E3 course-existence 422; `/api/plan/whatif` route now runs `validateInput` before `.call`; **tool count corrected to 22** — `propose_whatif_assumption` was added in plan 35 but the count was not updated; the ordered list below now shows all 22).
 
 > **Source files:** `packages/engine/src/agent/tool.ts`, `packages/engine/src/agent/registry.ts`
 
 ## Purpose
 
-The AI doesn't look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 21 such tools, each good at one thing (auditing a degree, finding a course, planning the remaining degree, etc.). To keep them consistent, every tool follows the same recipe: a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some surface a verbatim string the reply MUST contain, the rest are synthesized freely.
+The AI doesn't look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 22 such tools, each good at one thing (auditing a degree, finding a course, planning the remaining degree, etc.). To keep them consistent, every tool follows the same recipe: a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some surface a verbatim string the reply MUST contain, the rest are synthesized freely.
 
 ```mermaid
 flowchart LR
@@ -23,7 +23,7 @@ flowchart LR
 
 ---
 
-This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 21 live tools.
+This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 22 live tools.
 
 ---
 
@@ -104,7 +104,7 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 
 ## 5. `ALL_NYUPATH_TOOLS` — the wired set
 
-`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:72-94`), containing exactly **21** tools in this fixed order:
+`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:73-96`), containing exactly **22** tools in this fixed order:
 
 ```
 1.  run_full_audit
@@ -121,16 +121,30 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 12. view_forward_plan
 13. propose_plan_change
 14. probe_counterfactual
-15. confirm_plan_change
-16. simulate_alternatives
-17. bind_free_elective
-18. bind_pool_slot
-19. compare_plan_alternatives
-20. materialize_sections
-21. confirm_section_combination
+15. propose_whatif_assumption      ← added plan 35 (Branch-B what-if confirm)
+16. confirm_plan_change
+17. simulate_alternatives
+18. bind_free_elective
+19. bind_pool_slot
+20. compare_plan_alternatives
+21. materialize_sections
+22. confirm_section_combination
 ```
 
-`buildDefaultRegistry()` (`registry.ts:100-102`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts:612`).
+`buildDefaultRegistry()` (`registry.ts:102-104`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts`).
+
+### Plan 37 tool enhancements (guards on existing tools)
+
+No new tools were added **in plan 37**; the registry contains 22 tools (plan 35 added `propose_whatif_assumption`, correcting the previously-stated count of 21). Three live tool behaviors changed in plan 37:
+
+- **`propose_whatif_assumption` — D-7 IP-membership guard + D-4 P/F-eligibility gate.** `proposeWhatIfAssumptionTool.validateInput` now checks two conditions before calling the tool:
+  1. **IP-membership (D-7):** the `courseId` arg must be an `in_progress` row in the authoritative DPR. A withdraw/pass-fail targeting a `completed` or `specific_planned` course is rejected with a clear message ("Withdraw / pass-fail applies only to a course you're currently taking (in progress). <course> is <completed / planned> — to remove a planned course, drop it instead."). This makes the D-2 PLANNED-slot restriction a real engine guard, not just a dormant UI gate.
+  2. **P/F eligibility (D-4, follow-up fix):** if the action is `pass` or `fail` AND the student's home school has `canElect: false` (Tandon) OR the slot category makes the course ineligible (e.g. a course counting toward a major at a school that bans major-course P/F elections), `validateInput` rejects the call before the tool runs. This closes the D-4 eligibility gap that existed when the what-if path bypassed `validateInput`.
+  The `/api/plan/whatif` route also now **explicitly runs `validateInput` before `.call`** (this was the follow-up fix — the editor path previously bypassed validation).
+
+- **`/api/plan/add` — E3 course-existence 422.** The add-course route validates the submitted `courseId` against `courseExists(courseId, session.courses)` — a pure catalog lookup (`apps/web/lib/courseExists.ts`). An unknown course id returns HTTP 422 with a clear message. The same check also runs client-side in the `+ Add course` affordance before the route is called.
+
+- **`proposeWhatIfAssumption` threading (C2 follow-up).** The `solveWhatIfAssumption` and `solveAndDiff` helpers that this tool calls now receive `passFailConfig` from the school config and thread it into `finalizeForwardSchedule`, so the 8th `passFailLimitsRespected` axis fires for P/F elections via the what-if path.
 
 ### Removed tools (do not document as live)
 
@@ -155,7 +169,7 @@ sequenceDiagram
     participant Tool as Tool.call
 
     Route->>Reg: buildDefaultRegistry()
-    Reg-->>Route: registry (21 tools)
+    Reg-->>Route: registry (22 tools)
     Route->>Loop: runAgentTurnStreaming(client, registry, session, msg, opts)
     Loop->>Reg: registry.list() (via toLLMToolDefs)
     Reg-->>Loop: [Tool, …]

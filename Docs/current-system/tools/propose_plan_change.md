@@ -1,10 +1,10 @@
 # propose_plan_change — Technical Audit
 
-> Last verified against code: 2026-06-13 (doc-sync pass: PlanMutation now 14 kinds — added D6.2 addSoftObjective/clearSoftObjectives — and refreshed planChangeHelpers.ts / proposePlanChange.ts line citations).
+> Last verified against code: 2026-06-19 (plan 37 — I1: after this tool returns in a chat turn, the v2 route emits a `plan_proposal` SSE event carrying the proposed mutation list and pendingMutationId so the workspace Confirm rail appears; the agent narrates the Confirm button to the student and does NOT auto-call `confirm_plan_change` itself (I3, confirmed in the system-prompt preference-extraction rules)).
 
 ## Purpose
 
-When a student asks "what if I drop Calc II?", "can I move CSCI 101 to Spring?", "what if I add a summer term?", or "swap this elective for that one," this tool gives a preview without committing anything. It clones the scheduling preferences, applies the requested mutation(s) to the clone, re-runs the planner against the clone, routes the result through the **same authoritative 7-axis validator** the build path uses, and returns what would happen — the slot diff, the new feasibility verdict, credit/workload deltas, a plain-English consequence list, and the simulated post-mutation schedule. It writes nothing. It is the "try before you buy" half of a two-step contract: the student then calls its sibling [`confirm_plan_change`](confirm_plan_change.md) with the same mutation list to actually apply it.
+When a student asks "what if I drop Calc II?", "can I move CSCI 101 to Spring?", "what if I add a summer term?", or "swap this elective for that one," this tool gives a preview without committing anything. It clones the scheduling preferences, applies the requested mutation(s) to the clone, re-runs the planner against the clone, routes the result through the **same authoritative 8-axis validator** the build path uses, and returns what would happen — the slot diff, the new feasibility verdict, credit/workload deltas, a plain-English consequence list, and the simulated post-mutation schedule. It writes nothing. It is the "try before you buy" half of a two-step contract: the student then calls its sibling [`confirm_plan_change`](confirm_plan_change.md) with the same mutation list to actually apply it.
 
 ```mermaid
 flowchart LR
@@ -12,7 +12,7 @@ flowchart LR
     T --> C[Clone preferences]
     C --> A[Apply mutations to clone]
     A --> S[Re-solve: search + finalize]
-    S --> V[7-axis validator verdict]
+    S --> V[8-axis validator verdict]
     V --> R[Build slot diff + planDiff + consequences]
     R --> P[Preview + proposedSchedule]
     P --> D{Student accepts?}
@@ -35,7 +35,7 @@ Source files:
 
 `propose_plan_change` is the **read-only preview** half of the two-step plan-mutation contract. It accepts one or more `PlanMutation` operations, applies them to a **hypothetical clone** of `session.schedulePreferences`, re-runs the forward solver against that clone, routes the output through the authoritative validator, and returns:
 
-- a feasibility verdict from the **7-axis `runGraduationPathValidator`** (not the solver's coarse flag),
+- a feasibility verdict from the **8-axis `runGraduationPathValidator`** (not the solver's coarse flag),
 - a slot-level before/after diff,
 - a list of plain-English consequence strings,
 - a rich `PlanDiff` (credit/weighted-credit deltas, workload-tier shifts, balance impact, plan-state change, per-axis validation transitions, and real trade-off fields),
@@ -131,7 +131,7 @@ flowchart TD
 
 **Step 3 — Re-solve.** `solveForwardSchedule(solverInput)` runs the rebuilt feasibility-first search + materialize. (The old greedy solver is gone; see [forward-schedule audit](../engine/forward-schedule.md).)
 
-**Step 4 — Route through the AUTHORITATIVE 7-axis validator.** `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`proposePlanChange.ts:164`) assembles the `ForwardSchedule` AND runs `runGraduationPathValidator`, returning `{ schedule: proposedSchedule, validatorResult }`. **This is the key post-rebuild change:** the tool no longer trusts the solver's coarse `feasibility`/`state`. `feasible` in the output reflects the full 7-axis verdict (`validatorResult.feasible`), closing the PLAN-3 hole where an edit could preview as feasible while a 7-axis check would have failed.
+**Step 4 — Route through the AUTHORITATIVE 8-axis validator.** `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`proposePlanChange.ts:164`) assembles the `ForwardSchedule` AND runs `runGraduationPathValidator`, returning `{ schedule: proposedSchedule, validatorResult }`. **This is the key post-rebuild change:** the tool no longer trusts the solver's coarse `feasibility`/`state`. `feasible` in the output reflects the full 8-axis verdict (`validatorResult.feasible`), closing the PLAN-3 hole where an edit could preview as feasible while a 8-axis check would have failed.
 
 **Step 5 — Validate the BEFORE plan.** `runGraduationPathValidator({ plan: currentPlan, dpr, programRules: validatorRules })` produces `beforeAxes`, so the `planDiff` can report per-axis transitions.
 
@@ -160,7 +160,7 @@ flowchart TD
 
 ```
 {
-  feasible: boolean,                         // validatorResult.feasible (7-axis)
+  feasible: boolean,                         // validatorResult.feasible (8-axis)
   diff: { added: [...], removed: [...] },
   consequences: string[],                    // NO double-count text here (rides disclaimers[])
   conflicts?: Array<{ kind, detail }>,       // from the validator's infeasibilityReport
@@ -200,7 +200,7 @@ sequenceDiagram
 
     Agent->>Propose: mutations[]
     Propose->>Session: read forwardSchedule, schedulePreferences, DPR
-    Propose->>Propose: clone prefs, apply, re-solve, 7-axis validate
+    Propose->>Propose: clone prefs, apply, re-solve, 8-axis validate
     Propose-->>Agent: outcome + planDiff + explanation + proposedSchedule
     Note right of Session: session UNCHANGED
     Agent->>Agent: show preview to student
@@ -238,6 +238,7 @@ The rich `planDiff.creditsByTermDelta`, `weightedCreditsByTermDelta`, `workloadT
 
 ## 10. Interactions
 
+- **v2 route `plan_proposal` SSE event (I1, plan 37):** when `propose_plan_change` returns in a chat turn, `apps/web/app/api/chat/v2/route.ts` emits a `plan_proposal` SSE event (`kind: "plan_proposal"`) carrying the proposed mutation list and a staged `pendingMutationId`. The workspace Confirm rail then appears for the student. The agent narrates this to the student ("the proposal is now visible on the canvas — click Confirm or type 'confirm' in chat") but does **NOT** call `confirm_plan_change` itself. A bare confirm phrase ("confirm", "yes", "apply it") typed in chat while a proposal is pending is intercepted by the UI and routed to the staged `pendingMutationId`; the agent sees that as a new turn only if the message is longer.
 - **`confirm_plan_change`** — direct partner. Same `inputSchema`, same `PlanMutationSchema`, same five helpers. See [confirm_plan_change](confirm_plan_change.md).
 - **`plan_forward_degree`** — strict ordering: `validateInput` rejects when both schedule slots are absent, and only `plan_forward_degree` creates them. See [plan_forward_degree](plan_forward_degree.md).
 - **`simulate_alternatives`** — independent. It probes three predefined relaxations (summer, J-term, extend graduation) and returns summaries; `propose_plan_change` takes an explicit mutation list and returns the full `planDiff`.

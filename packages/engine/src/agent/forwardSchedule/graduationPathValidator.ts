@@ -2,7 +2,8 @@
  * Phase 13 Task 3.2 — Final plan-validation gate (Decision #41).
  *
  * Runs at Stage 8 after Stage 7 has converged. Produces per-axis
- * ValidationResult for 7 axes and derives PlanState per Decision #32.
+ * ValidationResult for 8 axes (Plan 37 added the 8th, passFailLimitsRespected)
+ * and derives PlanState per Decision #32.
  *
  * Same logic is invoked from Stage 7's full-revalidation (Decision #36)
  * with a cheaper subset — that wiring is Phase 14's responsibility.
@@ -14,9 +15,11 @@ import type {
     InfeasibilityReport,
     ScheduleSlot,
     PlanState,
+    PassFailConfig,
 } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import { walkRequirements, notSatisfiedRequirements } from "../../dpr/schema.js";
+import { checkPassFailLimits } from "./passFailLimitAxis.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -34,6 +37,15 @@ export interface GraduationPathValidatorArgs {
         schoolCoreMinCredits: number | null;
         graduationTargetTerm: string;
     };
+    /**
+     * Plan 37 (Task C2) — the per-school Pass/Fail config backing the 8th axis
+     * (`passFailLimitsRespected`). Sibling field (NOT nested under
+     * `programRules`) because it is loaded from `SchoolConfig.passFail`, not
+     * derived from the DPR-built program rules. OPTIONAL: when absent the axis
+     * is pass-by-default (`checkPassFailLimits` returns `pass` for an undefined
+     * config), so it can never flip `feasible`.
+     */
+    passFailConfig?: PassFailConfig;
 }
 
 export type ValidatorAxis =
@@ -43,7 +55,8 @@ export type ValidatorAxis =
     | "thresholdsMet"
     | "visaAxesPass"
     | "assumptionsExplicit"
-    | "graduationTargetMet";
+    | "graduationTargetMet"
+    | "passFailLimitsRespected";
 
 export interface GraduationPathValidatorResult {
     feasible: boolean;
@@ -605,6 +618,11 @@ export function runGraduationPathValidator(
         visaAxesPass: checkVisaAxesPass(plan),
         assumptionsExplicit: checkAssumptionsExplicit(plan, dpr),
         graduationTargetMet: checkGraduationTargetMet(plan, dpr, programRules),
+        // Plan 37 (Task C2) — 8th axis: per-school P/F career limit. Uses the
+        // SAME (possibly-synthetic) `dpr` the other axes use. Pass-by-default:
+        // an undefined `args.passFailConfig` yields `pass` and can never flip
+        // `feasible` (which keys on `status === "fail"` only, below).
+        passFailLimitsRespected: checkPassFailLimits(dpr, args.passFailConfig),
     };
 
     const allAxes = Object.values(axisResults);

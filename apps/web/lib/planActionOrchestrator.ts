@@ -136,6 +136,12 @@ export type RunProposeError =
 export type RunConfirmError =
     | { kind: "unknown_mutation_id"; message: string }
     | { kind: "studentId_mismatch";  message: string }
+    // M1 (plan 37) — the re-solved plan is INFEASIBLE. The confirm path NEVER
+    // commits an invalid plan: nothing is persisted, the prior valid plan is
+    // untouched, and `message` carries the failing-axis explanation so the
+    // caller can surface WHY. The retired `force` override no longer mints a
+    // `student-preferred-invalid-draft` — an infeasible confirm is refused.
+    | { kind: "infeasible";          message: string }
     | RunProposeError;
 
 // ---------------------------------------------------------------------------
@@ -575,6 +581,39 @@ export async function runProposeWhatIfStage(
     const session = buildSession(loaded.state, env);
     const ctx = { signal: new AbortController().signal, session };
 
+    // ── Guard-bypass fix ────────────────────────────────────────────────────
+    // The AGENT path runs validateInput via the tool framework automatically.
+    // The ROUTE path (editor + direct /api/plan/whatif callers) calls .call()
+    // directly and previously BYPASSED validateInput entirely, skipping:
+    //   • D-7 IP-membership guard (E1) — reject non-IP / absent courses
+    //   • D-4 P/F-eligibility guard  — reject canElect:false schools (Tandon …)
+    //   • DPR-presence guard          — reject when session has no DPR
+    // We run validateInput here (once) before .call so the route enforces ALL
+    // guards. The agent path runs it again via the framework — harmless double-
+    // call; both are read-only guard checks.
+    if (proposeWhatIfAssumptionTool.validateInput) {
+        const toolInput = {
+            courseId: assumption.courseId,
+            outcome: assumption.outcome,
+            ...(opts.now ? { now: opts.now.toISOString() } : {}),
+        } as Parameters<typeof proposeWhatIfAssumptionTool.call>[0];
+        const validation = await proposeWhatIfAssumptionTool.validateInput(toolInput, ctx);
+        if (!validation.ok) {
+            return {
+                ok: false,
+                error: {
+                    // bad_input → HTTP 400: the student-facing message (D-7 /
+                    // D-4 text) is surfaced verbatim so the editor + review card
+                    // can show WHY the what-if was rejected (e.g. "CSCI-UA 102
+                    // isn't in progress" / "Your school doesn't allow P/F").
+                    kind: "bad_input",
+                    message: validation.userMessage,
+                },
+            };
+        }
+    }
+    // ── end guard-bypass fix ────────────────────────────────────────────────
+
     let outcome: Awaited<ReturnType<typeof proposeWhatIfAssumptionTool.call>>;
     try {
         outcome = await proposeWhatIfAssumptionTool.call(
@@ -641,13 +680,16 @@ export async function runProposeWhatIfStage(
  * success the staging entry is dropped so the same id cannot be
  * confirmed twice.
  *
- * Phase 17 Task D — `opts.force` toggles the Decision #32
- * "student-preferred-invalid-draft" route. When `force === true`
- * AND the engine returns `feasible: false`, the persisted schedule
- * is reclassified from `infeasible-draft` to
- * `student-preferred-invalid-draft` (the engine itself only emits
- * 3 of the 4 PlanState members; the route-layer reclassification
- * keeps the engine scope unchanged).
+ * M1 (plan 37) — the confirm path is the commit chokepoint and NEVER
+ * commits an invalid plan. When the re-solved result is `feasible: false`
+ * the persist is refused and the route returns `{ ok:false,
+ * kind:"infeasible" }` (→ HTTP 422); the previously-committed valid plan
+ * is left untouched. This holds on BOTH confirm sub-paths — the
+ * plan-change path (`confirmPlanChangeTool`, guard below) AND the what-if
+ * assumption path (`runConfirmWhatIfAssumption`, parallel guard). The
+ * retired Phase-17 `opts.force` → "student-preferred-invalid-draft"
+ * override no longer exists: `force` is inert (an infeasible confirm is
+ * refused regardless of its value).
  */
 export async function runConfirmStage(
     studentId: string,
@@ -760,47 +802,40 @@ export async function runConfirmStage(
     // second confirm of the same id returns 404 (no accidental
     // double-apply).
 
-    let persistedSchedule = session.forwardSchedule ?? session.studentDraftPlan;
-
-    // Phase 17 Task D — Override-anyway reclassification. The engine's
-    // derivePlanState emits at most `infeasible-draft` for an
-    // infeasible apply; the 4th PlanState member
-    // `student-preferred-invalid-draft` is the route layer's signal
-    // that the student explicitly chose to keep the plan despite
-    // hard violations. We mutate ONLY the persisted schedule's
-    // `state` field (and the studentDraftPlan slot in the session)
-    // so the sidebar's 4-state banner picks it up on the next
-    // restore.
-    if (force && !outcome.feasible && persistedSchedule) {
-        const reclassified: ForwardSchedule = {
-            ...persistedSchedule,
-            state: "student-preferred-invalid-draft",
+    // ---- M1 (plan 37) — NEVER commit an invalid plan -------------------
+    //
+    // The confirm path is the commit chokepoint. When the re-solved plan is
+    // INFEASIBLE the engine (`confirmPlanChangeTool`) already kept the change
+    // OUT of `session.forwardSchedule` (Decision #32 — it landed only in the
+    // in-memory `studentDraftPlan` scratchpad) AND, post-M1, did NOT persist
+    // it. So the previously-committed valid plan is untouched in the DB.
+    //
+    // The route layer's job is to REFUSE the commit and surface WHY: we return
+    // `{ ok:false, kind:"infeasible", message }` carrying the failing-axis
+    // explanation. The caller (workspace `confirmProposed` via
+    // `applyReviewConfirm`, or the chat-bubble Confirm) only commits on
+    // `ok:true`, so an invalid result is never written to the canvas committed
+    // slot or the DB `forward_schedule`.
+    //
+    // The Phase-17 `force` → `student-preferred-invalid-draft` override is
+    // RETIRED: `force` no longer reclassifies/commits an infeasible result.
+    // A `force:true` confirm now behaves IDENTICALLY to a normal confirm — the
+    // infeasible result is refused either way. (The `force` param remains in
+    // the route signature for back-compat but is inert in the confirm path;
+    // referencing it here keeps the no-unused-param lint quiet without
+    // reintroducing any override behavior.)
+    void force;
+    if (!outcome.feasible) {
+        return {
+            ok: false,
+            error: {
+                kind: "infeasible",
+                message: buildInfeasibleReason(outcome),
+            },
         };
-        // Keep the session + persistence layer in lockstep.
-        if (session.studentDraftPlan === persistedSchedule) {
-            session.studentDraftPlan = reclassified;
-        }
-        if (session.forwardSchedule === persistedSchedule) {
-            session.forwardSchedule = reclassified;
-        }
-        persistedSchedule = reclassified;
-        // Persist the reclassified state so login restore agrees with
-        // the live UI. Failures are logged but never throw — the
-        // in-memory mutation already landed.
-        if (session.scheduleStore && session.student) {
-            try {
-                const fingerprint = persistedSchedule.dprCourseHistoryHash;
-                await session.scheduleStore.persistSchedule(
-                    session.student.id,
-                    persistedSchedule,
-                    fingerprint,
-                );
-            } catch (err) {
-                // eslint-disable-next-line no-console
-                console.warn(`[confirm/force] persistSchedule failed: ${err instanceof Error ? err.message : String(err)}`);
-            }
-        }
     }
+
+    const persistedSchedule = session.forwardSchedule ?? session.studentDraftPlan;
 
     const response: PlanConfirmResponse = {
         feasible: outcome.feasible,
@@ -813,6 +848,26 @@ export async function runConfirmStage(
         consumedMutationId: pendingMutationId,
     };
     return { ok: true, response };
+}
+
+/**
+ * M1 — build a human-readable refusal reason from an infeasible
+ * confirm_plan_change outcome. Prefers the failing-axis detail surfaced by the
+ * engine (`conflicts[]` carries the validator's `conflictSource`/`conflictDetail`;
+ * `consequences[]` names the failing axes), falling back to a generic message.
+ */
+function buildInfeasibleReason(outcome: PlanChangeOutcome): string {
+    const conflictDetail = outcome.conflicts?.find((c) => c.detail)?.detail;
+    if (conflictDetail && conflictDetail.trim().length > 0) {
+        return `Can't apply this change — it would make your plan invalid: ${conflictDetail}`;
+    }
+    const axisConsequence = outcome.consequences?.find((c) =>
+        /graduation-path validation|fails/i.test(c),
+    );
+    if (axisConsequence) {
+        return `Can't apply this change — ${axisConsequence}`;
+    }
+    return "Can't apply this change — the resulting plan fails graduation-path validation, so it was not committed. Your current plan is unchanged.";
 }
 
 // ---------------------------------------------------------------------------
@@ -872,10 +927,41 @@ async function runConfirmWhatIfAssumption(
         };
     }
 
+    // ---- M1 C1 (plan 37) — NEVER commit an invalid what-if plan ----------
+    //
+    // PARALLEL to the plan-change confirm guard above: the confirm path is the
+    // commit chokepoint for what-if assumptions too. A re-solve CAN return
+    // `feasible: false` (`solveWhatIfAssumption` → `solveAndDiff`, e.g. a
+    // P/F-FAIL re-opens a requirement so an axis fails). Persisting it would
+    // call `scheduleStore.persistSchedule`, which SUPERSEDES every prior live
+    // row — destroying the previously-committed VALID plan and replacing it
+    // with the infeasible one.
+    //
+    // So we REFUSE the commit BEFORE any persist: return
+    // `{ ok:false, kind:"infeasible", message }` carrying the same failing-axis
+    // explanation (`buildInfeasibleReason`, shared with the plan-change path —
+    // the what-if `result` is structurally a `PlanChangeOutcome`). The route's
+    // `mapConfirmError` maps `kind:"infeasible"` → HTTP 422, so the client
+    // refuses to commit and the prior valid `forward_schedule` row SURVIVES.
+    //
+    // R1 + Decision #32: `solveWhatIfAssumption` is READ-ONLY (it builds a
+    // synthetic in-memory DPR and never mutates `session` state), so there is
+    // no scratchpad write to undo here — refusing the persist is sufficient.
+    // The synthetic DPR is never written to `parsed_dpr` on ANY path.
+    if (!result.feasible) {
+        return {
+            ok: false,
+            error: {
+                kind: "infeasible",
+                message: buildInfeasibleReason(result),
+            },
+        };
+    }
+
     const newSchedule = result.schedule;
-    const storedIn: PlanConfirmResponse["storedIn"] = result.feasible
-        ? "forwardSchedule"
-        : "studentDraftPlan";
+    // Reaching here implies `result.feasible === true` (the infeasible case
+    // returned above), so a confirmed what-if always commits to forwardSchedule.
+    const storedIn: PlanConfirmResponse["storedIn"] = "forwardSchedule";
 
     // Persist ONLY the resulting forward_schedule. The fingerprint is of the
     // student's REAL DPR (state.dpr) — so a later REAL DPR upload with a

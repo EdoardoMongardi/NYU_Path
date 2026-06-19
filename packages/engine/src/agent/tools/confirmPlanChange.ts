@@ -17,6 +17,7 @@ import { finalizeForwardSchedule } from "../forwardSchedule/build.js";
 import { runGraduationPathValidator } from "../forwardSchedule/graduationPathValidator.js";
 import {
     applyMutationsToPreferences,
+    resolveBindMutations,
     buildSolverInputWithRulesFromSession,
     computeSlotDiff,
     deriveConsequences,
@@ -157,11 +158,19 @@ export const confirmPlanChangeTool = buildTool({
             };
         }
 
+        // Plan 37 Task J2 — translate slot-level binds into pins BEFORE the
+        // prefs walk so the binding SURVIVES this confirm (and future re-plans):
+        // `currentPlan` resolves a bind's slotId → term, and the pin path both
+        // persists into prefs.pins[] and (via the solver's pin-coverage pass)
+        // covers the requirement leaf. The dead bindPoolSlot/bindFreeElective
+        // no-ops never persisted, so the binding used to be discarded here.
+        const resolvedMutations = resolveBindMutations(currentPlan, input.mutations as PlanMutation[]);
+
         // Step 1: Apply mutations to session.schedulePreferences (mutate).
         const basePrefs: SchedulePreferences = session.schedulePreferences ?? {};
         const { prefs: newPrefs, noOpConsequences } = applyMutationsToPreferences(
             basePrefs,
-            input.mutations as PlanMutation[],
+            resolvedMutations,
         );
         session.schedulePreferences = newPrefs;
 
@@ -178,7 +187,7 @@ export const confirmPlanChangeTool = buildTool({
         );
         const solverOutput = solveForwardSchedule(solverInput);
 
-        // ---- Route through the AUTHORITATIVE 7-axis validator (P2.7/PLAN-3) ----
+        // ---- Route through the AUTHORITATIVE 8-axis validator (P2.7/PLAN-3) ----
         //
         // PLAN-3 hole: previously the Decision #32 routing keyed on the SOLVER's
         // coarse `state`, so a confirmed edit could be stored to
@@ -193,6 +202,10 @@ export const confirmPlanChangeTool = buildTool({
             plan: currentPlan,
             dpr,
             programRules: validatorRules,
+            // Plan 37 (Task C2) — evaluate the BEFORE plan under the SAME P/F
+            // config so the per-axis before/after diff reflects only genuine
+            // plan-driven changes (the career cap is plan-independent).
+            passFailConfig: session.schoolConfig?.passFail,
         }).axisResults;
 
         const { schedule: newSchedule, validatorResult } = finalizeForwardSchedule(
@@ -200,6 +213,9 @@ export const confirmPlanChangeTool = buildTool({
             solverInput,
             dpr,
             validatorRules,
+            // Plan 37 (Task C2) — thread the session-resolved per-school P/F
+            // config so the 8th validator axis enforces the career cap.
+            session.schoolConfig?.passFail,
         );
 
         // D6.3 — rung-3 re-rank provenance. When the agent applied an
@@ -230,6 +246,12 @@ export const confirmPlanChangeTool = buildTool({
         // authoritative validator deems it feasible (state valid-clean /
         // valid-with-trade-offs). Otherwise it lands in studentDraftPlan and
         // the last valid forwardSchedule is preserved.
+        //
+        // Plan 37 (M1): the studentDraftPlan slot is now a STRICTLY in-memory
+        // scratchpad for the agent's NEXT edit — an infeasible result is NOT
+        // persisted (see the feasibility-gated persistence block below), so it
+        // never becomes the committed `forward_schedule`. "Confirming a plan ≠
+        // committing an invalid one."
         let storedIn: ConfirmPlanChangeOutput["storedIn"];
         if (validatorResult.feasible) {
             session.forwardSchedule = newSchedule;
@@ -246,7 +268,23 @@ export const confirmPlanChangeTool = buildTool({
         // preferences (so pins / load-style / exclusions survive across
         // sessions). Failures do NOT throw — the in-memory mutation
         // already landed and the live turn is the source of truth.
-        if (session.scheduleStore && session.student) {
+        //
+        // Plan 37 (M1) — NEVER commit an invalid plan. We persist the schedule
+        // ONLY when the authoritative validator deems it feasible. An
+        // infeasible result lives ONLY in the in-memory `studentDraftPlan`
+        // scratchpad (set above) for the agent's NEXT edit — it is NOT written
+        // to the DB as the committed `forward_schedule`, so the previously
+        // committed VALID plan stays live and is never superseded by a draft.
+        // (R1 still holds: `parsed_dpr` is never written; and now an INVALID
+        // `forward_schedule` is never written either.) The PREFERENCES write is
+        // also gated on feasibility — an infeasible edit must not durably pin
+        // the mutation that broke the plan (a future re-solve would re-apply it
+        // and re-break). The invariant is COMPLETE across every confirm path:
+        // `confirm_plan_change` (this tool, the agent path), the workspace
+        // `confirmProposed` confirm (via the route orchestrator), AND the
+        // parallel what-if-assumption confirm (`runConfirmWhatIfAssumption`, M1
+        // C1) all reject an infeasible result the same way — none persists it.
+        if (validatorResult.feasible && session.scheduleStore && session.student) {
             try {
                 const fingerprint = computeDprFingerprint(dpr);
                 await session.scheduleStore.persistSchedule(

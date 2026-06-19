@@ -111,6 +111,8 @@
   ],
   "passFail": {
     "careerLimitType": "credits",
+    "careerLimitValue": 16,
+    "careerLimitSourceRef": "bulletin-raw/undergraduate/liberal-studies/academic-policies/_index.md:205",
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,

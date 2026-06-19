@@ -120,6 +120,19 @@ export interface WizardValues {
      */
     visa: "f1" | "domestic";
     /**
+     * H1 — whether the student made an EXPLICIT visa-status choice in
+     * the wizard (on the confirm_profile or goals step). Default `false`.
+     *
+     * WHY: the F-1 full-time-floor advisory fires only when `visa === "f1"`.
+     * If visa silently defaults to "domestic" and the student is actually
+     * on an F-1 visa, the advisory never fires and the generated plan may
+     * be invalid (below the 12-credit floor). We therefore gate "Build my
+     * plan" on an explicit choice: `canBuildPlan` returns false until this
+     * is true, even when a DPR is present. A student who skips every step
+     * cannot reach a valid plan without choosing their visa status.
+     */
+    visaChosen: boolean;
+    /**
      * Course-load DISTRIBUTION preference. Default "balanced" — the
      * neutral plan-level load style. The non-default values
      * (`frontload`/`backload`) are the EXACT plan-level-valid domain of
@@ -153,6 +166,11 @@ export const DEFAULT_WIZARD_VALUES: WizardValues = Object.freeze({
     homeSchool: "",
     gradTerm: "",
     visa: "domestic",
+    // H1 — must be explicitly set to true by the student choosing a visa
+    // value in the wizard. The gate `canBuildPlan` returns false until
+    // this is true, preventing a plan from being built with a silently
+    // defaulted visa (which could miss the F-1 12-credit floor advisory).
+    visaChosen: false,
     workload: "balanced",
     summer: false,
     jTerm: false,
@@ -256,4 +274,23 @@ export function skipAll(state: WizardState): WizardState {
         // fields survive.
         values: { ...DEFAULT_WIZARD_VALUES, ...state.values },
     };
+}
+
+/**
+ * H1 — F-1 floor correctness gate.
+ *
+ * Returns `true` only when BOTH of the following are true:
+ *   1. A parsed DPR is present (personalised plan is possible).
+ *   2. The student made an EXPLICIT visa-status choice (`visaChosen`).
+ *
+ * WHY: if visa silently defaults to "domestic" and the student is on an
+ * F-1 visa, the F-1 12-credit floor advisory never fires and the plan
+ * may be invalid. Gating "Build my plan" here forces an active choice.
+ *
+ * `parsedDpr` is typed `unknown` so this helper stays a PURE module with
+ * zero engine imports — the caller (OnboardingWizard) holds the real
+ * `DegreeProgressReport | null` and we only need its truthiness.
+ */
+export function canBuildPlan(state: WizardState, parsedDpr: unknown): boolean {
+    return !!parsedDpr && state.values.visaChosen;
 }

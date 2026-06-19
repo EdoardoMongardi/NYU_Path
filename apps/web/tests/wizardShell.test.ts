@@ -49,9 +49,11 @@ import {
     skipStep,
     prevStep,
     skipAll,
+    canBuildPlan,
     type WizardStepId,
     type WizardState,
 } from "../lib/wizard/wizardMachine";
+import type { DegreeProgressReport } from "@nyupath/engine";
 
 // ---------------------------------------------------------------------------
 // Step list.
@@ -258,5 +260,61 @@ describe("skipAll — the no-dead-end guarantee", () => {
         const reached = skipAll(initialWizardState());
         expect(skipAll(reached).step).toBe("plan");
         expect(skipAll(reached).values).toEqual(reached.values);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// H1 — canBuildPlan: requires both a parsed DPR AND visaChosen = true.
+// ---------------------------------------------------------------------------
+
+describe("canBuildPlan — H1 F-1 floor correctness gate", () => {
+    const minimalDpr = {
+        header: { studentName: "Test Student" },
+        programs: [],
+        courseHistory: [],
+        advisorNotations: [],
+    } as unknown as DegreeProgressReport;
+
+    it("returns false when there is no DPR, regardless of visaChosen", () => {
+        const s = initialWizardState(); // visaChosen: false
+        expect(canBuildPlan(s, null)).toBe(false);
+    });
+
+    it("returns false when there is no DPR, even if visaChosen is true", () => {
+        const s: WizardState = {
+            step: "plan",
+            values: { ...DEFAULT_WIZARD_VALUES, visaChosen: true },
+        };
+        expect(canBuildPlan(s, null)).toBe(false);
+    });
+
+    it("returns false when DPR is present but visaChosen is false (the default)", () => {
+        const s = initialWizardState(); // visaChosen defaults to false
+        expect(canBuildPlan(s, minimalDpr)).toBe(false);
+    });
+
+    it("returns true when DPR is present AND visaChosen is true", () => {
+        const s: WizardState = {
+            step: "plan",
+            values: { ...DEFAULT_WIZARD_VALUES, visaChosen: true },
+        };
+        expect(canBuildPlan(s, minimalDpr)).toBe(true);
+    });
+
+    it("skipAll from visaChosen=false lands on plan, but canBuildPlan returns false there", () => {
+        const reached = skipAll(initialWizardState()); // visaChosen stays false
+        expect(reached.step).toBe("plan");
+        expect(reached.values.visaChosen).toBe(false);
+        expect(canBuildPlan(reached, minimalDpr)).toBe(false);
+    });
+
+    it("canBuildPlan returns true once visa is chosen (visaChosen=true) + DPR present", () => {
+        // Simulate the user choosing a visa value on the Goals/confirm_profile step.
+        const s = initialWizardState();
+        const withVisa = nextStep(s, { visa: "f1", visaChosen: true });
+        const reached = skipAll(withVisa);
+        expect(reached.step).toBe("plan");
+        expect(reached.values.visaChosen).toBe(true);
+        expect(canBuildPlan(reached, minimalDpr)).toBe(true);
     });
 });

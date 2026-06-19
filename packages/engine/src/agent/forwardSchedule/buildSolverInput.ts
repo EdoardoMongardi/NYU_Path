@@ -27,6 +27,7 @@ import { deriveTemporalContext } from "../../dpr/temporalContext.js";
 import { hashDprCourseHistory } from "./reconcile.js";
 import { classifyRequirementKind } from "./requirementKind.js";
 import { psTermToSolverTerm } from "./termLabel.js";
+import { compareSolverTerms } from "./solverHelpers.js";
 import type { SolverInput } from "./types.js";
 import { loadOffCatalogCredits, loadOfferings } from "../../dataLoader.js";
 import type { ConfidenceTier } from "@nyupath/shared";
@@ -191,14 +192,41 @@ export function buildSolverInputWithRules(
     const currentTerm = inferCurrentTerm(dpr);
 
     // ---- 4. Build coursesTaken + coursesInProgress from DPR ----
-
+    //
+    // K1 — PAST/STALE IP reconciliation. An IP row whose term is STRICTLY BEFORE
+    // the (wall-clock-derived) currentTerm is a finished-but-ungraded course from a
+    // term that is already over — the same "past / stale IP row → closed" notion
+    // ipCourseChangeability.ts already encodes. It must NOT enter coursesInProgress:
+    // the solver maps an out-of-window IP term to `currentTerm` (solver.ts), and a
+    // past SPRING IP (e.g. MATH-UA 334, spring-only) then lands in a SUMMER current
+    // term and fails the forward offering-season check on that FIXED placement —
+    // poisoning EVERY search trial (the fixed set is offering-invalid and can never
+    // be cleared) so the search returns no plan and ALL unmet leaves degrade to
+    // empty placeholders. A past/stale IP is treated as TAKEN instead: it still
+    // satisfies prereqs and counts toward earned credits, but occupies no forward
+    // term and faces no forward offering check. Only CURRENT/FUTURE IP rows remain
+    // in coursesInProgress (the genuine in-flight courses the planner schedules
+    // around). currentTerm itself is wall-clock-correct (deriveTemporalContext).
     const coursesTaken = new Set<string>();
     const coursesInProgress = new Map<string, { term: string }>();
+    // K1 (fix-loop) — ids reconciled from a PAST/STALE IP row into coursesTaken.
+    // Like a current IP enrollment, a past/stale IP is an established (here,
+    // finished-but-ungraded) enrollment, NOT a forward prediction — so it must
+    // never carry a forward offering entry either (the gap-fill below would
+    // otherwise add one from session.courses). Tracked so the offering-deletion
+    // loop drops these alongside the current-IP ids.
+    const reconciledPastIpAsTaken = new Set<string>();
     for (const row of dpr.courseHistory) {
         const key = `${row.subject} ${row.catalogNbr}`;
         if (row.type === "IP") {
-            const rowTerm = psTermToSolverTerm(row.term) ?? currentTerm;
-            coursesInProgress.set(key, { term: rowTerm });
+            const rowTerm = psTermToSolverTerm(row.term);
+            // Past/stale IP (term strictly before currentTerm) → reconcile as taken.
+            if (rowTerm !== null && compareSolverTerms(rowTerm, currentTerm) < 0) {
+                coursesTaken.add(key);
+                reconciledPastIpAsTaken.add(key);
+                continue;
+            }
+            coursesInProgress.set(key, { term: rowTerm ?? currentTerm });
             continue;
         }
         if (row.grade && meetsGradeThreshold(row.grade, "D")) {
@@ -232,6 +260,25 @@ export function buildSolverInputWithRules(
         declaredPrograms: student?.declaredPrograms ?? [],
     });
 
+    // K1 (fix-loop) — a course the student has ALREADY COMPLETED (coursesTaken)
+    // or is CURRENTLY TAKING (coursesInProgress) cannot be a FORWARD satisfier of a
+    // still-UNMET requirement leaf: it is already accounted for and occupies no
+    // forward term. The frozen search has no already-taken guard on a leaf's
+    // candidate domain (checkRequirementCoverage covers a leaf via a freshly-placed
+    // source ∈ {requirement, pin}, never source "ip"), so a still-listed taken
+    // candidate would PHANTOM-RESOLVE the leaf — e.g. R1142/20 "CS-Required" bound
+    // the already-completed CSCI-UA 102 and left the genuinely-missing CSCI-UA 421
+    // unscheduled, falsely reporting the plan valid. We therefore filter every
+    // candidate domain against this "already-accounted-for" set HERE, in the
+    // derivation, BEFORE the candidates reach the frozen constraint model. A leaf
+    // left with ZERO not-yet-taken candidates correctly degrades to an empty
+    // placeholder (surfaced as the genuine, honest infeasibility) rather than
+    // phantom-resolving to a course the student already finished.
+    const alreadyAccountedFor = new Set<string>([
+        ...coursesTaken,
+        ...coursesInProgress.keys(),
+    ]);
+
     const unmetReqs = notSatisfiedRequirements(dpr.requirementGroups);
     const unmetRequirements: SolverInput["unmetRequirements"] = unmetReqs.map(req => {
         const { candidateCourses, pool } = extractCandidatesAndPool(req);
@@ -240,7 +287,7 @@ export function buildSolverInputWithRules(
             title: req.title,
             category: kindByRId.get(req.rId) ?? "unknown",
             credits: inferRequirementCredits(req),
-            candidateCourses,
+            candidateCourses: candidateCourses.filter(c => !alreadyAccountedFor.has(c)),
             ...(pool !== undefined ? { pool } : {}),
         };
     });
@@ -339,6 +386,44 @@ export function buildSolverInputWithRules(
                     }
                 }
             }
+            // K1 — an IN-PROGRESS course is an ESTABLISHED enrollment, not a
+            // forward prediction: the student is already registered for it in its
+            // term (the DPR is authoritative). A forward offering-season constraint
+            // is therefore meaningless for it — and HARMFUL when the static
+            // termsOffered data is stale/partial for that section (e.g. MATH-UA 251
+            // pre-registered in Fall though the historical pattern is spring-only):
+            // the fixed IP placement would fail checkOfferingSeasonMatch and poison
+            // EVERY search trial, degrading all unmet leaves to empty placeholders.
+            // We drop the forward offering entry for IP course-ids (AFTER the
+            // gap-fill, so neither the global cache nor session.courses can re-add
+            // it) so the IP placement faces no offering check — mirroring how
+            // checkPrereqsSatisfied already exempts source:"ip".
+            //
+            // Deleting GLOBALLY by id (not scoped to the IP's placed term) is safe:
+            // the K1 already-accounted-for candidate filter above EXCLUDES every
+            // in-progress course id from all FORWARD candidate domains (the
+            // `specific` candidateCourses list AND the catalog-enumerated pool
+            // members in poolMembersFor), so no forward candidate of the same id
+            // can arise to be wrongly exempted. The disjointness the global delete
+            // relies on is therefore ENFORCED by derivation, not merely assumed.
+            // (The offerings map is keyed by id, not by (id, term), so a
+            // term-scoped delete is not expressible against it anyway — and is
+            // unnecessary given the enforced disjointness.)
+            //
+            // We also drop the offering entry for any PAST/STALE IP row reconciled
+            // into coursesTaken: it too is an established (finished-but-ungraded)
+            // enrollment, never a forward candidate, so a forward offering entry for
+            // it is meaningless. (Harmless if left — the K1 candidate filter already
+            // bars taken ids from forward domains — but dropped to keep the
+            // invariant "no IP-origin id carries a forward offering entry" clean.)
+            for (const ipId of coursesInProgress.keys()) {
+                offerings.delete(ipId);
+                offeringConfidence.delete(ipId);
+            }
+            for (const pastIpId of reconciledPastIpAsTaken) {
+                offerings.delete(pastIpId);
+                offeringConfidence.delete(pastIpId);
+            }
             return { offerings, offeringConfidence };
         })(),
         courseCatalog,
@@ -426,14 +511,27 @@ export function buildProgramRules(
     // (mirrors the non-CAS deferral). Revisit when a real DPR fixture exercises
     // a course-count major floor; until then a `kind:"courses"` major leaf
     // contributes nothing to majorCreditMin (it is simply skipped below).
+    //
+    // K1 — FORWARD-REMAINING, not full-requirement. `checkMajorCreditFloor`
+    // (and validator axis-4 / checkThresholdsMet) compare this floor against the
+    // major credits placed in the FORWARD schedule ONLY — they do NOT add the
+    // major credits already earned (read from the DPR). So the floor must itself
+    // be net of completed major credits: the credits STILL NEEDED forward, i.e.
+    // `max(0, required - used)` per units-counter major leaf. A leaf that is
+    // already satisfied (used >= required, e.g. the joint-major residency
+    // "36 required, 56 used") then contributes 0 — otherwise its full 36 would be
+    // demanded from the forward plan alone, falsely making an otherwise-valid plan
+    // infeasible (the sample-DPR "major credits 0 < 36" shortfall). This is a
+    // derivation fix only; the frozen search predicate + validator axis are
+    // untouched and now agree because they share this single derived floor.
     let majorCreditMin: number | null = null;
     for (const leaf of leaves) {
         const kind = kindByRId.get(leaf.rId);
         if (kind === "major-required" || kind === "major-elective") {
             if (leaf.counter?.kind === "units") {
-                const requiredCredits = leaf.counter.required;
-                if (requiredCredits > 0) {
-                    majorCreditMin = (majorCreditMin ?? 0) + requiredCredits;
+                const remainingCredits = Math.max(0, leaf.counter.required - leaf.counter.used);
+                if (remainingCredits > 0) {
+                    majorCreditMin = (majorCreditMin ?? 0) + remainingCredits;
                 }
             }
         }

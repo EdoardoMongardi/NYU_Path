@@ -1,12 +1,12 @@
 # plan_forward_degree — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-19 (plan 37 — 8-axis validator: `finalizeForwardSchedule` now receives `passFailConfig` from `session.schoolConfig?.passFail` so the 8th `passFailLimitsRespected` axis fires on the build path; plan states and descriptions below still accurate).
 
 ## Purpose
 
 When a student says "plan my degree," "build me a roadmap to graduation," or "when can I finish if I take 16 credits a term?", this is the tool that runs. The student must have a Degree Progress Report (DPR) uploaded first — without it the tool hard-refuses in `validateInput`. The tool reads the DPR, figures out every unmet requirement, and lays out a semester-by-semester schedule from the current term through the target graduation term: real courses where it can place them, placeholder slots ("free elective here," "pick one from this pool there") where the choice is still open. The student can hint a graduation target ("Spring 2027") or let the tool fall back to the one captured at onboarding, then to a credit-derived default.
 
-The output is more than a course list: it carries a feasibility verdict from a 7-axis graduation-path validator, a plan-state label (clean, has trade-offs, or infeasible draft), a balance score, and per-course assumptions. Clean / trade-off plans are saved to the main `forwardSchedule` slot; infeasible drafts are saved separately to `studentDraftPlan` so the agent never quietly endorses a broken plan. For multi-program students the tool also attaches a **double-count advisory** as a CITED envelope disclaimer.
+The output is more than a course list: it carries a feasibility verdict from a 8-axis graduation-path validator, a plan-state label (clean, has trade-offs, or infeasible draft), a balance score, and per-course assumptions. Clean / trade-off plans are saved to the main `forwardSchedule` slot; infeasible drafts are saved separately to `studentDraftPlan` so the agent never quietly endorses a broken plan. For multi-program students the tool also attaches a **double-count advisory** as a CITED envelope disclaimer.
 
 ```mermaid
 flowchart LR
@@ -14,7 +14,7 @@ flowchart LR
     T --> D[Read DPR: what's left]
     D --> B[buildForwardSchedule]
     B --> S[Constraint search + materialize]
-    S --> V[7-axis runGraduationPathValidator]
+    S --> V[8-axis runGraduationPathValidator]
     V --> ST{Plan state}
     ST -->|valid| MAIN[Save to forwardSchedule slot]
     ST -->|infeasible| DRAFT[Save to studentDraftPlan slot]
@@ -35,7 +35,7 @@ Source: `packages/engine/src/agent/tools/planForwardDegree.ts`.
 `plan_forward_degree` is a thin wrapper around `buildForwardSchedule`. Its job is:
 
 1. Resolve the graduation target string.
-2. Call `buildForwardSchedule` (which runs the constraint search and the authoritative 7-axis validator).
+2. Call `buildForwardSchedule` (which runs the constraint search and the authoritative 8-axis validator).
 3. Route the returned `ForwardSchedule` to one of two session slots based on its `state`.
 4. Persist the schedule (best-effort) when a `scheduleStore` is present.
 5. Build a human-readable summary and attach a double-count advisory disclaimer.
@@ -95,7 +95,7 @@ Everything the search/validator reads downstream — `schoolConfig` caps, `cours
 The tool calls `buildForwardSchedule({ session, dpr, graduationTermOverride })` (`build.ts:145`). That function is where the actual rebuild lives, and it differs fundamentally from the pre-rebuild greedy solver this doc used to describe:
 
 - **The greedy solver is gone.** `solveForwardSchedule` is now a thin orchestration over `buildConstraintContext` → `findFirstValidPlan` (a **feasibility-first backtracking search** that returns the first valid leaf, not a single greedy pass) → `localImprove` → `materializePlan` (`solver.ts:1-60`). Diverse alternatives come from `findDiverseValidPlans`.
-- **One search → one validator for every path.** `buildForwardSchedule` calls the search once, then `finalizeForwardSchedule` (`build.ts:64`) assembles the `ForwardSchedule` and runs the authoritative `runGraduationPathValidator`. The validator-derived `state` (via `derivePlanStateFromValidator`) **overrides** the solver's coarse state. This same finalize step is shared by `propose_plan_change` and `confirm_plan_change` (PLAN-3), so all build/edit paths gate on the identical 7-axis validator.
+- **One search → one validator for every path.** `buildForwardSchedule` calls the search once, then `finalizeForwardSchedule` (`build.ts:64`) assembles the `ForwardSchedule` and runs the authoritative `runGraduationPathValidator` (now **8 axes** — 7 graduation-path axes + the plan-37 `passFailLimitsRespected` axis, fed by `passFailConfig` from `session.schoolConfig?.passFail`). The validator-derived `state` (via `derivePlanStateFromValidator`) **overrides** the solver's coarse state. This same finalize step is shared by `propose_plan_change` and `confirm_plan_change` (PLAN-3), so all build/edit paths gate on the identical 8-axis validator.
 - **Add-a-term relax loop.** When the graduation term was *derived* (no student-stated target, no override) and the validator reports infeasible, `buildForwardSchedule` extends the horizon up to `MAX_HORIZON_RELAX_TERMS = 2` extra main terms, rebuilding both `solverInput` and `validatorRules` each time (`build.ts:211`). The extension is adopted only if it *achieves* validator-feasibility; otherwise the original derived-horizon result is returned with its honest binding constraints. A hard target is never silently extended.
 
 ```mermaid
@@ -106,7 +106,7 @@ flowchart TD
     C --> D[buildForwardSchedule]
     D --> E[buildSolverInputWithRules: SolverInput + validatorRules]
     E --> F[solveForwardSchedule: search + materialize]
-    F --> G[finalizeForwardSchedule: assemble + 7-axis validator]
+    F --> G[finalizeForwardSchedule: assemble + 8-axis validator]
     G --> H{validator feasible?}
     H -- no, derived horizon --> I[relax loop: +1..2 main terms]
     I --> F
@@ -129,8 +129,8 @@ For the 7 validator axes, plan-state derivation, balance score, workload tiers, 
 
 | State | Meaning |
 | --- | --- |
-| `valid-clean` | All 7 axes pass; no IP assumptions, petitions, low-confidence slots, or placeholders. Safe to endorse. |
-| `valid-with-trade-offs` | All 7 axes pass but there is at least one caveat (assumed-pass / requires-approval axis, IP assumption, petition, low-confidence slot, or placeholder). Endorsable with disclaimers. |
+| `valid-clean` | All 8 axes pass (plan 37: incl. `passFailLimitsRespected`); no IP assumptions, petitions, low-confidence slots, or placeholders. Safe to endorse. |
+| `valid-with-trade-offs` | All 8 axes pass but there is at least one caveat (assumed-pass / requires-approval axis, IP assumption, petition, low-confidence slot, or placeholder). Endorsable with disclaimers. |
 | `infeasible-draft` | At least one axis failed. Plan does not reach graduation. Stored separately so the agent never endorses it. |
 
 The fourth state, `student-preferred-invalid-draft`, is **never** emitted by `derivePlanStateFromValidator`. It is reserved for an explicit student-override path elsewhere. `plan_forward_degree` routes it identically to `infeasible-draft` (both go to `studentDraftPlan`).
@@ -255,7 +255,7 @@ The fingerprint lets the Update-DPR route detect a meaningful re-upload by compa
 ## 12. Interactions
 
 - **`view_forward_plan`** — the reader counterpart. The tool description directs the LLM to call it after `plan_forward_degree` to retrieve the stored plan. See [view_forward_plan](view_forward_plan.md).
-- **`propose_plan_change` / `confirm_plan_change`** — edit the stored plan. They re-solve through the same `finalizeForwardSchedule` + 7-axis validator and re-route per Decision #32. See [propose_plan_change](propose_plan_change.md) and [confirm_plan_change](confirm_plan_change.md).
+- **`propose_plan_change` / `confirm_plan_change`** — edit the stored plan. They re-solve through the same `finalizeForwardSchedule` + 8-axis validator and re-route per Decision #32. See [propose_plan_change](propose_plan_change.md) and [confirm_plan_change](confirm_plan_change.md).
 - **`simulate_alternatives`** — explores relaxations (summer, J-term, extend graduation) for an infeasible plan; `plan_forward_degree` does not invoke it.
 - **`materialize_sections`** — the chat-route orchestrator may chain it after a fresh `forwardSchedule` write to attach real CRN candidates for the next term. The tool's only contribution is the fresh `computedAt`.
 
@@ -278,7 +278,7 @@ The fingerprint lets the Update-DPR route detect a meaningful re-upload by compa
 | Build orchestrator + shared finalize + relax loop | `packages/engine/src/agent/forwardSchedule/build.ts` |
 | Solver entry (search + materialize) | `packages/engine/src/agent/forwardSchedule/solver.ts` |
 | Feasibility-first search | `packages/engine/src/agent/forwardSchedule/search.ts` |
-| 7-axis validator + state derivation | `packages/engine/src/agent/forwardSchedule/graduationPathValidator.ts` |
+| 8-axis validator + state derivation | `packages/engine/src/agent/forwardSchedule/graduationPathValidator.ts` |
 | Double-count advisory | `packages/engine/src/agent/forwardSchedule/doubleCountAdvisory.ts` |
 | Envelope / disclaimer rendering | `packages/engine/src/agent/toolEnvelope.ts` |
 | Subsystem deep-dive | [`Docs/current-system/engine/forward-schedule.md`](../engine/forward-schedule.md) |

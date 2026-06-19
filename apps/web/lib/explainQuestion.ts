@@ -22,7 +22,7 @@
 // ============================================================
 
 import type { ScheduleSlot } from "@nyupath/shared";
-import { formatTermLabel } from "../app/chat/sidebar/sidebarFormatters";
+import { formatTermLabel } from "../app/chat/shared/sidebarFormatters";
 
 /**
  * Build the scoped "why is this slot here?" question for a single

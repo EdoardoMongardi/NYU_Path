@@ -45,6 +45,8 @@
   ],
   "passFail": {
     "careerLimitType": "credits",
+    "careerLimitValue": null,
+    "careerLimitSourceRef": "no published career cap on file → hedge",
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,

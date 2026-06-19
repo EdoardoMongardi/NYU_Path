@@ -13,8 +13,27 @@ import {
 import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
 import { formatDuration } from "../../lib/formatDuration";
 import { renderMarkdown } from "../../lib/renderMarkdown";
-import type { ForwardSchedule, SchedulePreferences, StudentProfile } from "@nyupath/shared";
+import type { ForwardSchedule, SchedulePreferences, StudentProfile, ScheduleSlot } from "@nyupath/shared";
 import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@nyupath/engine";
+// TYPE-ONLY engine imports (pure types — no node:* pulled into the client
+// bundle). The RUNTIME slot-action builder + the calendar const are sourced
+// from the CLIENT-SAFE entry `@nyupath/engine/client` (below), NEVER the barrel.
+import type { SlotAction, SlotActionMatrix } from "@nyupath/engine";
+import {
+    slotActionMatrix,
+    NYU_ACADEMIC_CALENDAR,
+    campusForHomeSchool,
+    // Plan 37 F4 — the IP-changeability TERM classifier, used to window-gate
+    // the per-term "+ Add course" affordance. Both are node-free (re-exported
+    // from the client-safe entry — see packages/engine/src/client.ts).
+    classifyIpChangeability,
+    deriveTemporalContext,
+    // Plan 37 follow-up — per-school PassFailConfig (client-safe static map).
+    // Lets slotActionMatrix pre-disable the Pass/Fail button at canElect:false
+    // schools (e.g. Tandon) on the CLIENT, instead of showing enabled then
+    // receiving a server-side 422. Zero node: imports — pure data in passFailDefaults.ts.
+    passFailForSchool,
+} from "@nyupath/engine/client";
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
 // H5.1 (plan 36) — the RIGHT zone is now the profile-only ProfileRail.
 // `scheduleSidebar.tsx` lingers UNMOUNTED (its grid + slot popovers +
@@ -25,14 +44,16 @@ import ProfileRail from "./ProfileRail";
 import {
     bubbleSlotKey,
     bubbleHasButtons,
-    bubbleHasOverrideButton,
     initBubbleState,
     applyPolishEvent,
     applyStage2Event,
     type PlanActionBubbleState,
 } from "../../lib/planActionBubbleHelpers";
 import {
+    planAdd,
     planConfirm,
+    planDrop,
+    planWhatIf,
     type PlanActionResult,
     type PlanActionRouteResponse,
     type WhatIfAssumptionRouteResponse,
@@ -53,11 +74,14 @@ import OnboardingWizard from "./wizard/OnboardingWizard";
 import ScheduleCard from "./ScheduleCard";
 import WhatIfUploadCard from "./WhatIfUploadCard";
 import { buildScheduleCardMessage } from "./buildScheduleCardMessage";
+import { applyPlanProposalEvent } from "./planProposalEvent";
+import { applyWhatIfResult } from "./whatIfResultHandler";
 import {
     buildWhatIfScenarioFromAudit,
     type WhatIfAuditResponse,
 } from "./buildWhatIfScenarioFromAudit";
 import type { ScenarioKind } from "./workspace/scenarioBadges";
+import { shouldInterceptAsConfirm } from "./typedConfirmIntercept";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -126,7 +150,7 @@ interface Message {
     /** Phase 17 Task D follow-up — populated only when
      *  `kind === "plan_action_bubble"`. Holds the bubble's
      *  template/polished text, the verb, the pendingMutationId
-     *  (Confirm / Override-anyway target), the bubble category
+     *  (Confirm target), the bubble category
      *  (clean | trade_offs | soft_refusal | hard_refusal), and the
      *  Stage 2 enrichment Map. Mutated by the polish + Stage 2 SSE
      *  reducers. */
@@ -134,9 +158,9 @@ interface Message {
     /** Phase 17 Task D follow-up — verb that triggered the bubble
      *  (used for analytics + the bubble's lead-in). */
     bubbleVerb?: "add" | "swap" | "drop" | "lock" | "move";
-    /** Phase 17 Task D follow-up — true once Confirm / Keep-as-is /
-     *  Override-anyway has fired so we can disable the buttons +
-     *  hide them while the confirm round-trip is in flight. */
+    /** Phase 17 Task D follow-up — true once Confirm / Keep-as-is
+     *  has fired so we can disable the buttons + hide them while the
+     *  confirm round-trip is in flight. */
     bubbleResolved?: boolean;
     /** Per-message tool-invocation log (rendered inline above the bubble) */
     toolStatuses?: ToolStatus[];
@@ -616,6 +640,27 @@ export default function ChatPage() {
             case "forward_schedule_update":
                 planStore.setForwardSchedule(ev.schedule);
                 break;
+            case "plan_proposal": {
+                // Task I2 (refactored) — thin adapter; logic lives in
+                // planProposalEvent.ts so it can be unit-tested without a
+                // React-DOM render harness.
+                //
+                // NOT routed through `forward_schedule_update`: that path
+                // would COMMIT the plan + drop all scenarios (planState.ts
+                // lines 283-305). A proposal must stage as kind:"proposed"
+                // so only the workspace Confirm button commits.
+                //
+                // R1 holds: staging a proposed scenario never writes to
+                // `students.parsed_dpr`; only /api/plan/confirm commits.
+                applyPlanProposalEvent(ev, {
+                    planStore,
+                    emitScheduleCard: (msg) => {
+                        setMessages(prev => [...prev, msg as Message]);
+                        setTimeout(scrollToBottom, 50);
+                    },
+                });
+                break;
+            }
             case "whatif_audit_request": {
                 // H4.2b-3 — the agent offered a Branch-A "explore precisely"
                 // path this turn (hypothetical PROGRAM change). Inject a
@@ -711,12 +756,32 @@ export default function ChatPage() {
         if (!text || isLoading) return;
 
         setInput("");
-        addMessage("user", text);
         setIsLoading(true);
 
         try {
+            // I3 — typed-confirm intercept.
+            // If the student types a bare confirm phrase ("confirm", "yes",
+            // "apply it", etc.) WHILE a proposed scenario is pending, route
+            // the message to the SAME canvas-Confirm chokepoint instead of
+            // the agent.  The consume-once pending-mutation store ensures this
+            // is idempotent: button-then-typed (or typed-then-button) commits
+            // exactly once.  The student's message is still shown in the
+            // thread so the conversation stays readable.
+            const activeSc = planStore.getActiveScenario();
+            const hasPendingProposal =
+                activeSc?.kind === "proposed" && !!activeSc.pendingMutationId;
+            if (shouldInterceptAsConfirm(text, hasPendingProposal)) {
+                // Show the user message in the thread.
+                addMessage("user", text);
+                // Route to the existing chokepoint (same as the canvas Confirm button).
+                // `activeSc` is definitely defined + proposed + has pendingMutationId here.
+                await handleWorkspaceConfirm(activeSc!);
+                return;
+            }
+
             // Onboarding turns and pre-transcript chitchat → legacy v1.
             // Post-onboarding (parsedData present + step=complete) → v2 SSE.
+            addMessage("user", text);
             const useV2 = onboardingStep === "complete" && parsedData;
             if (useV2) {
                 await handleSendV2(text);
@@ -1049,7 +1114,8 @@ export default function ChatPage() {
     // `plan_action_bubble` Message into the chat thread for non-clean
     // outcomes (clean applies stay silent — the sidebar's own state
     // re-render is the only feedback). The bubble carries Confirm +
-    // Keep-as-is buttons (and Override-anyway for soft refusals); a
+    // Keep-as-is buttons (soft refusals: Cancel + Ask-why only — no
+    // Override-anyway after M2); a
     // background polish stream (gated on
     // NEXT_PUBLIC_PLAN_CHANGE_LLM_POLISH=1) replaces the deterministic
     // template text once Anthropic Haiku returns; Stage 2 streams
@@ -1077,9 +1143,9 @@ export default function ChatPage() {
 
     /**
      * Per-bubble AbortController registry. When the user clicks
-     * Confirm / Keep-as-is / Override-anyway we want to abort any
-     * in-flight polish + Stage 2 streams so we don't burn Anthropic +
-     * FOSE tokens after the bubble is resolved. Keyed by messageId.
+     * Confirm / Keep-as-is we want to abort any in-flight polish +
+     * Stage 2 streams so we don't burn Anthropic + FOSE tokens after
+     * the bubble is resolved. Keyed by messageId.
      *
      * Stored as a ref (not state) because abort signaling is an
      * imperative side-effect, not a render-driving value.
@@ -1170,9 +1236,9 @@ export default function ChatPage() {
 
     /**
      * Abort any in-flight polish + Stage 2 streams for a bubble. Called
-     * by all three resolution handlers (Confirm / Keep-as-is /
-     * Override-anyway) so the network round-trips stop the moment the
-     * user picks an action — no orphan token spend.
+     * by resolution handlers (Confirm / Keep-as-is) so the network
+     * round-trips stop the moment the user picks an action — no orphan
+     * token spend.
      */
     const abortBubbleEnrichers = useCallback((messageId: string): void => {
         const aborter = bubbleAbortersRef.current.get(messageId);
@@ -1225,7 +1291,7 @@ export default function ChatPage() {
         //     naming the binding constraint(s) from the response's OWN
         //     fields, the committed plan byte-identical, any stale preview
         //     cleared. The chat bubble is ALSO minted (it carries
-        //     Override-anyway / hard-refusal copy the red card doesn't).
+        //     soft/hard-refusal copy the red card doesn't).
         //
         // Either way the committed plan (planStore.forwardSchedule) is
         // NEVER mutated here — only Confirm commits.
@@ -1297,25 +1363,20 @@ export default function ChatPage() {
             setTimeout(scrollToBottom, 50);
             return;
         }
-        // A what-if assumption is a feasible preview carrying the
-        // whatIfAssumption marker → stage the preview + labeled review card.
-        const surfaces = planActionSurfaces(result.data);
-        if (surfaces.invalidCard) {
-            planStore.setInvalidProposal(surfaces.invalidCard);
-            planStore.clearPendingPreview();
-        } else if (surfaces.preview) {
-            planStore.setPendingPreview(surfaces.preview);
-            planStore.clearInvalidProposal();
-            // H4.2a — emit a ScheduleCard into the chat thread so the
-            // student can open/compare the new what-if scenario from the
-            // conversation (feasible path ONLY; invalid stays card-only).
-            const activeSc = planStore.getActiveScenario();
-            if (activeSc && activeSc.kind === "proposed") {
-                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
-                setMessages(prev => [...prev, buildScheduleCardMessage(activeSc, cardMsgId, new Date()) as Message]);
+        // CONFIRMABLE gate (owner decision — Branch-B withdraw/pass-fail):
+        //   • VALID  → setPendingPreview (kind:"proposed" + Confirm button;
+        //              R1 intact — only forward_schedule persists).
+        //   • INVALID → setInvalidProposal (red explanation card; no Confirm).
+        // The audit (Branch-A program-change) path is read-only and is handled
+        // separately by buildWhatIfScenarioFromAudit (not this path).
+        applyWhatIfResult(result.data, {
+            planStore,
+            emitScheduleCard: (msg) => {
+                setMessages(prev => [...prev, msg as Message]);
                 setTimeout(scrollToBottom, 50);
-            }
-        }
+            },
+            now: Date.now(),
+        });
     }, []);
 
     /** Confirm — apply the staged mutation. */
@@ -1411,14 +1472,26 @@ export default function ChatPage() {
                 // Build the read-only what-if scenario + register it.
                 const scenarioId = "whatif-audit-" + Date.now().toString() + Math.random().toString(36).slice(2, 6);
                 const scenario = buildWhatIfScenarioFromAudit(data, scenarioId, Date.now());
-                planStore.addScenario(scenario);
 
-                // 🔍 schedule card so the student can Open/Compare it.
-                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                // I4 verdict gate: an invalid audit what-if is chat-only —
+                // no workspace tab, no ScheduleCard.  The summary + narration
+                // below explain the consequence; a tab adds no value since
+                // the student cannot adopt or meaningfully compare an invalid
+                // hypothetical plan.
+                if (scenario.verdict !== "invalid") {
+                    planStore.addScenario(scenario);
+
+                    // 🔍 schedule card so the student can Open/Compare it.
+                    const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                    setMessages(prev => [
+                        ...prev,
+                        buildScheduleCardMessage(scenario, cardMsgId, new Date()) as Message,
+                    ]);
+                }
+
                 const narrationId = Date.now().toString() + Math.random().toString(36).slice(2, 6) + "-n";
                 setMessages(prev => [
                     ...prev,
-                    buildScheduleCardMessage(scenario, cardMsgId, new Date()) as Message,
                     {
                         id: narrationId,
                         role: "assistant",
@@ -1466,38 +1539,6 @@ export default function ChatPage() {
             bubbleResolved: true,
             content: "Kept the plan as-is.",
         });
-    }, [patchMessage, abortBubbleEnrichers]);
-
-    /** Override-anyway — apply with `force: true` (Decision #32). */
-    const handleBubbleOverrideAnyway = useCallback(async (messageId: string, pendingMutationId: string): Promise<void> => {
-        patchMessage(messageId, { bubbleResolved: true });
-        abortBubbleEnrichers(messageId);
-        try {
-            const result = await planConfirm({ pendingMutationId, force: true });
-            if (!result.ok) {
-                patchMessage(messageId, {
-                    bubbleResolved: false,
-                    content: `Override failed (${result.status}): ${result.error}`,
-                });
-                return;
-            }
-            if (result.data.forwardSchedule) {
-                planStore.setForwardSchedule(result.data.forwardSchedule);
-            }
-            // E3.1 — the bubble is resolved; drop any PENDING overlay so
-            // the sidebar shows the now-committed (student-preferred)
-            // plan rather than a stale preview.
-            planStore.clearPendingPreview();
-            patchMessage(messageId, {
-                bubbleResolved: true,
-                content: "⚠ Override applied — plan saved as student-preferred-invalid-draft.",
-            });
-        } catch (err) {
-            patchMessage(messageId, {
-                bubbleResolved: false,
-                content: `Override failed: ${err instanceof Error ? err.message : String(err)}`,
-            });
-        }
     }, [patchMessage, abortBubbleEnrichers]);
 
     // ----------------------------------------------------------------
@@ -1811,6 +1852,201 @@ export default function ChatPage() {
         }
     }, [sidebarDpr, visaStatus]);
 
+    // ============================================================
+    // Plan 37 F3 — committed-plan slot editor (matrix + propose dispatch)
+    // ============================================================
+    // The slot-action popover is offered ONLY on the COMMITTED plan in the
+    // CENTER-zone workspace. These two callbacks wire it:
+    //
+    //   slotMatrix(slot, term) → the per-slot action matrix (which of
+    //     drop/withdraw/passFail the slot allows), computed by the engine's
+    //     PURE `slotActionMatrix` (sourced via @nyupath/engine/client — no
+    //     node:* in the client bundle).
+    //
+    //     Inputs:
+    //       · dpr      = `sidebarDpr` — the COMMITTED, authoritative DPR
+    //                    (parsedData.kind === "dpr"). null until a DPR loads.
+    //       · campus   = `campusForHomeSchool(homeSchool)` — NY / Shanghai /
+    //                    Abu Dhabi from the confirmed home-school id; defaults
+    //                    to "ny" when homeSchool is null/unknown (the helper's
+    //                    own fallback). The registration windows are typical +
+    //                    hedged, so a wrong campus only shifts the hedge copy.
+    //       · calendar = NYU_ACADEMIC_CALENDAR (the bundled typical windows).
+    //       · passFail = passFailForSchool(homeSchool) — the school's
+    //                    PassFailConfig from the client-safe static inline map
+    //                    (packages/engine/src/data/passFailDefaults.ts). Sourced
+    //                    verbatim from data/schools/<id>.json; zero node: imports.
+    //                    At canElect:false schools (e.g. Tandon) slotActionMatrix
+    //                    returns passFail.allowed=false with the "school doesn't
+    //                    let you elect" reason → button pre-disabled on the client.
+    //                    Unknown schools → undefined → treated as "not explicitly
+    //                    blocked" (same behaviour as before this follow-up).
+    //       · now      = new Date() (real "today"; tests inject their own).
+    //
+    //   onSlotAction(slot, term, action) → PROPOSE-ONLY dispatch (D-8). It
+    //     calls EXACTLY the same client verbs a chat-driven change uses and
+    //     feeds the result into the SAME result handlers:
+    //       · drop     → planDrop({courseId,term})    → handlePlanActionResult
+    //       · withdraw → planWhatIf({courseId,outcome:"withdraw"}) → handleWhatIfResult
+    //       · passFail → planWhatIf({courseId,outcome:"pass"})     → handleWhatIfResult
+    //     It NEVER calls planConfirm / /api/plan/confirm and NEVER writes
+    //     parsed_dpr — the DB commit happens ONLY when the student clicks the
+    //     workspace "Confirm — make this My Plan" button (R1 preserved).
+    const slotMatrix = useCallback(
+        (slot: ScheduleSlot, term: string): SlotActionMatrix => {
+            // sidebarDpr is null only before a DPR loads. The editor mounts
+            // only on the committed plan, which always requires a DPR — so
+            // this branch is unreachable in practice. Return a safe
+            // all-forbidden matrix rather than passing an empty `{}` cast as a
+            // DegreeProgressReport into slotActionMatrix (which would produce
+            // undefined behaviour and potentially offer actions with no DPR
+            // context to validate against).
+            if (!sidebarDpr) {
+                return {
+                    state: "final",
+                    allowed: { add: false, drop: false, withdraw: false, passFail: false },
+                    perAction: {
+                        add:      { reason: "DPR not loaded" },
+                        drop:     { reason: "DPR not loaded" },
+                        withdraw: { reason: "DPR not loaded" },
+                        passFail: { reason: "DPR not loaded" },
+                    },
+                } satisfies SlotActionMatrix;
+            }
+            return slotActionMatrix({
+                slot,
+                term,
+                dpr: sidebarDpr,
+                campus: campusForHomeSchool(homeSchool ?? undefined),
+                calendar: NYU_ACADEMIC_CALENDAR,
+                // Plan 37 follow-up: thread the per-school PassFailConfig from
+                // the client-safe static map so the button is pre-disabled at
+                // canElect:false schools (e.g. Tandon) without touching node:fs.
+                passFail: passFailForSchool(homeSchool ?? undefined),
+                now: new Date(),
+            });
+        },
+        [sidebarDpr, homeSchool],
+    );
+
+    const onSlotAction = useCallback(
+        async (slot: ScheduleSlot, term: string, action: SlotAction): Promise<void> => {
+            // courseId exists only on concrete (non-placeholder) slots.
+            const courseId =
+                slot.kind === "specific_planned" ||
+                slot.kind === "completed" ||
+                slot.kind === "in_progress"
+                    ? slot.courseId
+                    : null;
+            if (!courseId) return;
+
+            switch (action) {
+                case "drop": {
+                    // PROPOSE path — same as a chat-driven drop.
+                    const result = await planDrop({ courseId, term });
+                    handlePlanActionResult("drop", result);
+                    return;
+                }
+                case "withdraw": {
+                    const result = await planWhatIf({ courseId, outcome: "withdraw" });
+                    handleWhatIfResult(result);
+                    return;
+                }
+                case "passFail": {
+                    // P/F election → the whatif "pass" outcome.
+                    const result = await planWhatIf({ courseId, outcome: "pass" });
+                    handleWhatIfResult(result);
+                    return;
+                }
+                case "add":
+                    // ADD is a TERM-level affordance, never reachable from the
+                    // per-slot popover (slotActionView omits it). No-op guard.
+                    return;
+            }
+        },
+        [handlePlanActionResult, handleWhatIfResult],
+    );
+
+    // ============================================================
+    // Plan 37 F4 — committed-plan per-term "+ Add course" affordance
+    // ============================================================
+    // The "+ Add course" control is offered ONLY on the COMMITTED plan, and
+    // ONLY for terms whose registration window still allows adding. A whole
+    // TERM is classified (not a single slot) via the SAME pure F3 classifier
+    // (classifyIpChangeability over deriveTemporalContext), sourced from
+    // @nyupath/engine/client (no node:* in the client bundle):
+    //
+    //   window → add-eligibility (D-2):
+    //     future       → add FREE   (a future / planned term — pure planning).
+    //     add_drop     → add HEDGED (current term inside add/drop; carry the
+    //                    classifier's add/drop hedge — registering this late is
+    //                    deadline-gated, verify).
+    //     unknown      → add allowed + the generic hedge (cautious — we don't
+    //                    suppress the control just because we lack exact dates).
+    //     withdraw_pf  → add HIDDEN (add/drop period is over).
+    //     closed       → add HIDDEN (registration for that term is over).
+    //
+    // sidebarDpr is null only before a DPR loads (the committed plan always has
+    // one), so the editor is effectively never null here; the null branch
+    // returns { allowed: false } (no control) defensively.
+    const addTermState = useCallback(
+        (term: string): { allowed: boolean; hedge?: string } => {
+            if (!sidebarDpr) return { allowed: false };
+            const result = classifyIpChangeability({
+                ipTerm: term,
+                temporalContext: deriveTemporalContext(sidebarDpr, { now: new Date() }),
+                campus: campusForHomeSchool(homeSchool ?? undefined),
+                calendar: NYU_ACADEMIC_CALENDAR,
+                now: new Date(),
+            });
+            switch (result.window) {
+                case "future":
+                    return { allowed: true };
+                case "add_drop":
+                case "unknown":
+                    return result.hedge
+                        ? { allowed: true, hedge: result.hedge }
+                        : { allowed: true };
+                case "withdraw_pf":
+                case "closed":
+                    // Add/drop period is over for this term — control absent.
+                    return { allowed: false };
+            }
+        },
+        [sidebarDpr, homeSchool],
+    );
+
+    // PROPOSE-ONLY (D-8): an add NEVER auto-confirms. It routes through the
+    // SAME /api/plan/add propose pipeline a chat-driven add uses, and feeds the
+    // result into the SAME `handlePlanActionResult("add", …)` handler the F3
+    // slot actions use → a violet PENDING preview + a review card; the DB
+    // commit happens ONLY when the student clicks the workspace Confirm button
+    // (R1 preserved — parsed_dpr is never written here).
+    //
+    // The /api/plan/add route (E3) returns 422 with `{ message }` for an
+    // unknown courseId; planAdd → postJson surfaces that message via
+    // `result.error` (postJson now falls back to the route's `message` field).
+    // On a 422 we do NOT treat the add as success — we surface the route's
+    // student-facing copy as an assistant chat line and leave the plan
+    // untouched.
+    const onAddCourse = useCallback(
+        async (term: string, courseId: string): Promise<void> => {
+            const trimmed = courseId.trim();
+            if (!trimmed) return; // empty / whitespace → no-op (ScheduleView also guards).
+            const result = await planAdd({ courseId: trimmed, term });
+            if (!result.ok && result.status === 422) {
+                // Unknown course — surface the route's "I couldn't find …"
+                // message as an assistant chat line; the plan stays untouched.
+                addMessage("assistant", result.error);
+                return;
+            }
+            // Success OR any other failure routes through the shared handler
+            // (which itself injects a brief failure bubble for non-2xx).
+            handlePlanActionResult("add", result);
+        },
+        [handlePlanActionResult],
+    );
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -1880,6 +2116,10 @@ export default function ChatPage() {
                 planStore={planStore}
                 onConfirmProposed={handleWorkspaceConfirm}
                 onAskWhy={handleWorkspaceAskWhy}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
+                addTermState={addTermState}
+                onAddCourse={onAddCourse}
                 left={
                     <>
             {/* Messages */}
@@ -1901,13 +2141,12 @@ export default function ChatPage() {
                     // text + reasoning columns.
                     if (msg.kind === "plan_action_bubble" && msg.bubble) {
                         const buttons = bubbleHasButtons(msg.bubble.kind);
-                        const showOverride = bubbleHasOverrideButton(msg.bubble.kind);
                         const stage2Entries = Array.from(msg.bubble.stage2.values());
                         // While the bubble is unresolved, the bubble text
                         // is the source of truth (the polish reducer writes
-                        // to it). Once the user clicks Confirm / Keep-as-is /
-                        // Override-anyway, `msg.content` carries the
-                        // resolved-state caption ("✓ Applied." etc).
+                        // to it). Once the user clicks Confirm / Keep-as-is,
+                        // `msg.content` carries the resolved-state caption
+                        // ("✓ Applied." etc).
                         const displayedText = msg.bubbleResolved ? msg.content : msg.bubble.text;
                         return (
                             <div
@@ -1979,22 +2218,6 @@ export default function ChatPage() {
                                             >
                                                 Keep as-is
                                             </button>
-                                            {showOverride && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void handleBubbleOverrideAnyway(msg.id, msg.bubble!.pendingMutationId)}
-                                                    style={{
-                                                        padding: "6px 12px",
-                                                        borderRadius: 6,
-                                                        background: "#fff",
-                                                        color: "#dc3545",
-                                                        border: "1px solid #dc3545",
-                                                        cursor: "pointer",
-                                                    }}
-                                                >
-                                                    Override anyway
-                                                </button>
-                                            )}
                                         </div>
                                     )}
                                 </div>

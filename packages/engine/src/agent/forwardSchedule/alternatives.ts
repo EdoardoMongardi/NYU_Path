@@ -163,6 +163,16 @@ function buildCandidate(
 ): AlternativeCandidate {
     if (out.feasibility.feasible) {
         // Route through the validator to get the AUTHORITATIVE state (T8/M3).
+        //
+        // Plan 37 (Task C2 fix-loop) — intentionally NO `passFailConfig` 5th arg
+        // here. `simulateAlternatives` is read-only STRUCTURAL relaxation
+        // (add-summer / add-jterm / extend-grad) over `input.dpr`, which the
+        // tool always builds from `session.degreeProgressReport` — the
+        // AUTHORITATIVE DPR, NEVER a P/F-election synthetic clone (that path is
+        // `solveWhatIfAssumption` only). So `passFailUsedUnits` cannot change
+        // here, the 8th axis would be a strict no-op, and pass-by-default is
+        // correct. (An already-over-cap authoritative DPR is caught upstream by
+        // the primary `buildForwardSchedule`, which DOES thread the config.)
         const { schedule, validatorResult } = finalizeForwardSchedule(
             out,
             input,

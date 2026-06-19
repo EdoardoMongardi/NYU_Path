@@ -256,10 +256,14 @@ export function applyPassFailToDpr(
     next.reportKind = "what_if";
 
     // 1. Flip matching courseHistory rows to "P" (P clears the ≥D gate →
-    //    stays in coursesTaken → credit kept).
+    //    stays in coursesTaken → credit kept). Mark the row passFailElected:
+    //    this is the ONE place we KNOW a P/F was ELECTED (the student's
+    //    what-if election) — so the P/F limit axis counts it, but native /
+    //    historical "P" rows (which never carry this flag) do NOT false-fire.
     for (const row of next.courseHistory) {
         if (rowKey(row) === targetId) {
             row.grade = PASS_GRADE;
+            row.passFailElected = true;
         }
     }
 
@@ -306,7 +310,19 @@ export function applyPassFailToDpr(
     };
     for (const g of next.requirementGroups) visit(g, null);
 
-    // 3. Validate the synthetic DPR is still schema-valid (also returns a
+    // 3. D-5: a P/F PASS election consumes career P/F budget. Increment the
+    //    synthetic DPR's used-units so the career-cap axis (passFailLimitAxis)
+    //    and the materializePlan cap check engage. FAIL earns no credit →
+    //    no increment here. `next.cumulative` is already a deep clone from
+    //    structuredClone(dpr) above — mutating it does NOT alias the input's
+    //    cumulative object (R1 purity preserved).
+    const electedRow = next.courseHistory.find((r) => rowKey(r) === targetId);
+    if (electedRow !== undefined) {
+        next.cumulative.passFailUsedUnits =
+            (next.cumulative.passFailUsedUnits ?? 0) + electedRow.units;
+    }
+
+    // 4. Validate the synthetic DPR is still schema-valid (also returns a
     //    fresh validated object, preserving purity).
     return { dpr: degreeProgressReportSchema.parse(next), hedges };
 }

@@ -1,5 +1,5 @@
 // ============================================================
-// /api/plan/confirm — Phase 17 Task B + Task D
+// /api/plan/confirm — Phase 17 Task B (+ Task D retired by M1/M2)
 // ============================================================
 // Applies a previously-staged plan mutation by `pendingMutationId`.
 //
@@ -13,15 +13,12 @@
 // Single-use: a confirmed id is dropped from the staging map.
 // Expired (10 min TTL) ids return 404; cross-tenant ids return 403.
 //
-// Phase 17 Task D — optional `force: true` flag for the
-// "Override anyway" affordance. The engine path is unchanged — an
-// apply that lands in `studentDraftPlan` keeps its `infeasible-draft`
-// state. The route-layer post-processor reclassifies the persisted
-// plan to `student-preferred-invalid-draft` when `force=true` was set
-// AND the engine returned `feasible: false`. That keeps the engine
-// scope unchanged (no new tool argument, no new semantic) while
-// surfacing the student's "I know it's invalid, do it anyway"
-// intent through the Decision #32 4-state PlanState union.
+// M1 (plan 37) — an infeasible re-solve is REFUSED with 422.
+// An invalid plan is NEVER committed. The `force` param (below) is
+// INERT / DEPRECATED — it was the Phase 17 Task D "Override anyway"
+// affordance. M2 removed the UI and agent affordances so no call
+// site passes force:true anymore; the server ignores it either way
+// (422 is returned regardless of force when the re-solve is infeasible).
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -32,11 +29,10 @@ export const runtime = "nodejs";
 
 const InputSchema = z.object({
     pendingMutationId: z.string().uuid(),
-    /** Phase 17 Task D — when `true`, an infeasible apply lands as
-     *  `student-preferred-invalid-draft` rather than `infeasible-draft`
-     *  (Decision #32). When `false` or omitted, behaves identically to
-     *  the Phase 17 Task B route. The engine path is unchanged; this
-     *  is a route-layer reclassification of `state`. */
+    /** DEPRECATED / INERT (M1 plan 37). The "Override anyway" affordance
+     *  has been retired. This field is accepted for back-compat but is
+     *  ignored: an infeasible re-solve returns 422 regardless of whether
+     *  force is true or omitted. No UI path passes force:true after M2. */
     force: z.boolean().optional(),
 });
 

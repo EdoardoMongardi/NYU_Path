@@ -12,7 +12,10 @@
  * predicate here also passes `runGraduationPathValidator`. The per-placement
  * predicates (offering / prereq / NOT / coreq) mirror the placement-time checks
  * the old greedy solver applied (now in solverHelpers.ts / materializePlan.ts);
- * the per-term and completion predicates mirror the validator's 7 axes.
+ * the per-term and completion predicates mirror the validator's search-facing
+ * axes (7 of the validator's 8 — the 8th, passFailLimitsRespected, is
+ * validate-only: the solver never searches over P/F elections, so no predicate
+ * mirrors it).
  *
  * Reuses the pure primitives from solverHelpers.ts (enumerateMainTerms,
  * parseTerm, compareSolverTerms, computePrereqDepths, buildDependentsIndex,
@@ -142,6 +145,20 @@ export function poolMembersFor(
     const excludedCourseIds = new Set<string>(
         (input.preferences?.exclusions ?? []).map(e => e.courseId),
     );
+    // K1 (fix-loop) — already-accounted-for derivation filter (mirrors the
+    // candidate filter in buildSolverInput.ts). A course the student has already
+    // COMPLETED (coursesTaken) or is CURRENTLY TAKING (coursesInProgress) cannot
+    // be a FORWARD satisfier of a still-unmet pool leaf — it is already accounted
+    // for and occupies no forward term. `req.candidateCourses` arrives already
+    // filtered (buildSolverInput.ts), but the catalog-RANGE scan below enumerates
+    // straight from input.courseCatalog and so must apply the same exclusion here,
+    // alongside the existing study-abroad / student-exclusion filters. This changes
+    // only WHICH candidates feed the predicates (a derivation filter), never any
+    // predicate's logic.
+    const alreadyAccountedFor = new Set<string>([
+        ...input.coursesTaken,
+        ...input.coursesInProgress.keys(),
+    ]);
 
     const members = new Set<string>();
     // Range members: catalog ids matching dept + [levelMin, levelMax].
@@ -158,7 +175,12 @@ export function poolMembersFor(
     }
 
     return [...members]
-        .filter(cid => !excludedCourseIds.has(cid) && !isStudyAbroadCourse(cid))
+        .filter(
+            cid =>
+                !excludedCourseIds.has(cid) &&
+                !isStudyAbroadCourse(cid) &&
+                !alreadyAccountedFor.has(cid),
+        )
         .sort();
 }
 
@@ -486,7 +508,8 @@ export function checkPerTermCeiling(plan: PartialPlan, ctx: ConstraintContext): 
 }
 
 // ===========================================================================
-// Completion predicates (mirror the validator's 7 axes)
+// Completion predicates (mirror the validator's 7 search-facing axes; the 8th,
+// passFailLimitsRespected, is validate-only and has no search predicate)
 // ===========================================================================
 
 /** perTermFloor — mirrors the materializePlan.ts visa-floor check (visaValidator per

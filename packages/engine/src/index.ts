@@ -280,3 +280,11 @@ export type {
     ChatMessageRecord,
 } from "./persistence/chatHistoryStore.js";
 export { computeDprFingerprint } from "./dpr/fingerprint.js";
+
+// Plan 37 — slot-editor: SlotActionMatrix + related types (used by web UI via import type)
+export type {
+    SlotAction,
+    SlotActionDecision,
+    SlotActionMatrix,
+    SlotActionMatrixArgs,
+} from "./agent/forwardSchedule/slotActionMatrix.js";

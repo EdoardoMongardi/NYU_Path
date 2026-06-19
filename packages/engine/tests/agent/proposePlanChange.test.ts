@@ -16,6 +16,7 @@ import { proposePlanChangeTool } from "../../src/agent/tools/proposePlanChange.j
 import { confirmPlanChangeTool } from "../../src/agent/tools/confirmPlanChange.js";
 import { simulateAlternativesTool } from "../../src/agent/tools/simulateAlternatives.js";
 import { buildDefaultRegistry } from "../../src/agent/registry.js";
+import { InMemoryScheduleStore } from "../../src/persistence/scheduleStore.js";
 import type { ToolSession, ToolUseContext } from "../../src/agent/tool.js";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
 import type { ForwardSchedule } from "@nyupath/shared";
@@ -395,6 +396,104 @@ describe("confirmPlanChangeTool — applies change and routes per Decision #32",
             ...output.consequences,
         ].join(" ");
         expect(allText).toMatch(/requirementGroupsSatisfied/);
+    });
+
+    // Plan 37 (M1) — confirm_plan_change NEVER persists an INVALID plan. An
+    // infeasible result lives ONLY in the in-memory studentDraftPlan scratchpad;
+    // it is NOT written to the scheduleStore as the committed forward_schedule,
+    // so a prior valid committed row is never superseded by a draft.
+    it("M1 — an infeasible confirm does NOT persist (scratchpad only; committed plan untouched)", async () => {
+        const scheduleStore = new InMemoryScheduleStore();
+        // A prior VALID committed plan is already on file.
+        await scheduleStore.persistSchedule("test-student", makeMinimalFeasibleSchedule(), "fp-valid");
+        const beforeLive = await scheduleStore.loadLatestSchedule("test-student");
+        expect(beforeLive?.dprFingerprint).toBe("fp-valid");
+        expect(beforeLive?.schedule.state).toBe("valid-clean");
+
+        // Same infeasibility recipe as the routing test: an unmet Capstone leaf
+        // whose only candidate has no offerings → unbound placeholder → Axis 1
+        // (requirementGroupsSatisfied) fails.
+        const dpr = makeDpr({
+            cumulative: {
+                creditsRequired: 128,
+                creditsUsed: 120,
+                cumulativeGpa: 3.4,
+                cumulativeGpaRequired: 2.0,
+                residencyRequired: 64,
+                residencyUsed: 64,
+                passFailUsedUnits: 0,
+                passFailCapUnits: 32,
+                outsideHomeUsedUnits: 0,
+                outsideHomeCapUnits: 16,
+                timeLimitYears: 8,
+            },
+            requirementGroups: [
+                {
+                    rgId: "RG1",
+                    title: "CS Core",
+                    status: "not_satisfied",
+                    statusText: "Not Satisfied",
+                    children: [
+                        {
+                            rId: "R100/1",
+                            title: "Capstone",
+                            status: "not_satisfied",
+                            statusText: "Not Satisfied. Choose CSCI-UA 480.",
+                            coursesUsed: [],
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            counter: { kind: "units", required: 4, used: 0 } as any,
+                        },
+                    ],
+                },
+            ],
+            courseHistory: [],
+        });
+        const priorValidSchedule = makeMinimalFeasibleSchedule();
+        const session = makeSession({
+            degreeProgressReport: dpr,
+            forwardSchedule: priorValidSchedule,
+            scheduleStore,
+        });
+        const ctx = makeCtx(session);
+
+        const output = await confirmPlanChangeTool.call(
+            { mutations: [{ kind: "loadStyleOverride", style: "balanced" }] },
+            ctx,
+        );
+
+        // Infeasible → scratchpad only.
+        expect(output.feasible).toBe(false);
+        expect(output.storedIn).toBe("studentDraftPlan");
+        expect(session.studentDraftPlan).toBeDefined();
+        expect(session.forwardSchedule).toBe(priorValidSchedule);
+
+        // The DB was NOT touched: the prior VALID row is still the latest live
+        // schedule (an infeasible draft never superseded it).
+        const afterLive = await scheduleStore.loadLatestSchedule("test-student");
+        expect(afterLive?.dprFingerprint).toBe("fp-valid");
+        expect(afterLive?.schedule.state).toBe("valid-clean");
+        expect(afterLive?.schedule.computedAt).toBe(beforeLive?.schedule.computedAt);
+    });
+
+    it("M1 — a FEASIBLE confirm DOES persist (regression guard for the gated write)", async () => {
+        const scheduleStore = new InMemoryScheduleStore();
+        await scheduleStore.persistSchedule("test-student", makeMinimalFeasibleSchedule(), "fp-old");
+        const before = await scheduleStore.loadLatestSchedule("test-student");
+
+        const session = makeSession({ scheduleStore });
+        const ctx = makeCtx(session);
+
+        const output = await confirmPlanChangeTool.call(
+            { mutations: [{ kind: "loadStyleOverride", style: "balanced" }] },
+            ctx,
+        );
+
+        expect(output.feasible).toBe(true);
+        expect(output.storedIn).toBe("forwardSchedule");
+        // A new schedule WAS persisted (the fingerprint changed off the seed).
+        const after = await scheduleStore.loadLatestSchedule("test-student");
+        expect(after).not.toBeNull();
+        expect(after!.schedule.computedAt).not.toBe(before?.schedule.computedAt);
     });
 
     it("valid result routes to session.forwardSchedule and clears studentDraftPlan", async () => {

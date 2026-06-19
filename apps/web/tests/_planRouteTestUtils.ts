@@ -153,6 +153,58 @@ export async function seedStudentState(studentId: string, schedule?: ForwardSche
     await scheduleStore.persistSchedule(studentId, schedule ?? makeFeasibleSchedule(studentId), "fp-test");
 }
 
+/**
+ * M1 (plan 37) — a DPR whose re-solve is INFEASIBLE: an unmet "Capstone"
+ * requirement leaf whose only candidate (`ZZZZ-UA 9999`) is NOT in the bundled
+ * catalog, so it can only be covered by an UNBOUND placeholder slot and the
+ * 8-axis validator fails Axis 1 (requirementGroupsSatisfied). Any confirmed
+ * mutation re-solves to an infeasible plan, which the confirm path REFUSES to
+ * commit. Mirrors the orchestrator test's recipe.
+ */
+export function makeInfeasibleDpr(): DegreeProgressReport {
+    const base = makeDpr();
+    return {
+        ...base,
+        cumulative: { ...base.cumulative, creditsUsed: 124, passFailUsedUnits: 0 },
+        requirementGroups: [
+            {
+                rgId: "RG1",
+                title: "CS Core",
+                status: "not_satisfied",
+                statusText: "Not Satisfied",
+                children: [
+                    {
+                        rId: "R100/1",
+                        title: "Capstone",
+                        status: "not_satisfied",
+                        statusText: "Not Satisfied. Choose ZZZZ-UA 9999.",
+                        coursesUsed: [],
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        counter: { kind: "units", required: 4, used: 0 } as any,
+                    },
+                ],
+            },
+        ],
+    };
+}
+
+/**
+ * M1 — seed a student whose re-solve is infeasible, alongside a VALID committed
+ * schedule. The M1 invariant: an infeasible confirm leaves THIS valid plan
+ * untouched (no persist, no supersede of the prior live row).
+ */
+export async function seedInfeasibleStudentState(studentId: string): Promise<void> {
+    const stores = getStores({});
+    const profileStore = stores.profileStore as InMemoryProfileStore;
+    const scheduleStore = stores.scheduleStore as InMemoryScheduleStore;
+    await profileStore.persistMutation(
+        makeProfile(studentId),
+        { pendingMutationId: "seed", field: "homeSchool", before: null, after: "cas", confirmedAt: new Date().toISOString() },
+        makeInfeasibleDpr(),
+    );
+    await scheduleStore.persistSchedule(studentId, makeFeasibleSchedule(studentId), "fp-valid");
+}
+
 export async function issueTestToken(sub: string): Promise<string> {
     return new SignJWT({ email: `${sub}@nyu.edu` })
         .setProtectedHeader({ alg: "HS256" })
@@ -166,14 +218,20 @@ export interface FakeRequest {
     cookies?: { get: (name: string) => { value: string } | undefined };
     headers: { get: (name: string) => string | null };
     json: () => Promise<unknown>;
+    clone: () => FakeRequest;
 }
 
 export function fakeRequest(cookieValue: string | undefined, body: unknown): FakeRequest {
-    return {
+    const self: FakeRequest = {
         cookies: cookieValue
             ? { get: (n: string) => (n === SESSION_COOKIE ? { value: cookieValue } : undefined) }
             : { get: () => undefined },
         headers: { get: () => null },
         json: async () => body,
+        // clone() returns a new FakeRequest over the same body — mirrors the
+        // real NextRequest.clone() behaviour that the add route uses for its
+        // E3 existence pre-check (peek body without consuming the original stream).
+        clone: () => fakeRequest(cookieValue, body),
     };
+    return self;
 }

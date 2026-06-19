@@ -1,6 +1,6 @@
 # Session Builders and Boot-time RAG
 
-> Last verified against code: 2026-06-16 (Phase 4 follow-ups F1-F3 — DPR-field authority, IP-window model, wizard mounted). **`deriveHomeSchool` is now EXPORTED** (`buildSession.ts:238`) and is the confident-vs-`"unknown"` **AUTHORITY signal** for the DPR-derived-field rule (F2): a confident return means the DPR deterministically shows the home school → READ-ONLY; only `"unknown"` lets a student pick one. The SAME signal gates both the v2 route home-school override (`route.ts:260-263`) and the wizard's `computeHomeSchoolProposal.derivedFromDpr` (§`homeSchool` derivation). Prior: 2026-06-16 (Phase 4 E5 — `homeSchoolOverride` now SENT by a client; `deriveDeclaredProgramsFromDpr` exported as the pre-fallback classification core the wizard reuses, §2); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-19 (Plan 37 C2 — `buildSession` in the orchestrator now loads and attaches `schoolConfig` to the ToolSession so `schoolConfig.passFail` reaches the engine for the 8th validator axis and the D-4 P/F-eligibility gate). Prior: 2026-06-16 (Phase 4 follow-ups F1-F3 — DPR-field authority, IP-window model, wizard mounted). **`deriveHomeSchool` is now EXPORTED** (`buildSession.ts:238`) and is the confident-vs-`"unknown"` **AUTHORITY signal** for the DPR-derived-field rule (F2): a confident return means the DPR deterministically shows the home school → READ-ONLY; only `"unknown"` lets a student pick one. The SAME signal gates both the v2 route home-school override (`route.ts:260-263`) and the wizard's `computeHomeSchoolProposal.derivedFromDpr` (§`homeSchool` derivation). Prior: 2026-06-16 (Phase 4 E5 — `homeSchoolOverride` now SENT by a client; `deriveDeclaredProgramsFromDpr` exported as the pre-fallback classification core the wizard reuses, §2); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## Purpose
 
@@ -194,7 +194,34 @@ Any throw during construction is caught at `policyRagSetup.ts:86-91`: the messag
 | `COHERE_API_KEY`          | Bundle still builds; reranker is the local lexical fallback.   |
 | Constructor throw         | Bundle never builds; reason captured in sticky module state.   |
 
-## 4. The session lifecycle per request
+## 4. `buildSession` in the plan-action orchestrator (Plan 37 C2)
+
+The plan-action orchestrator (`apps/web/lib/planActionOrchestrator.ts`) contains its own `buildSession` function (separate from the v2 chat route's inline session assembly) that rebuilds a `ToolSession` per propose/confirm call. **C2 (Plan 37)** added `schoolConfig` to this orchestrator-local session:
+
+```typescript
+function buildSession(state: LoadedSessionState, env): ToolSession {
+    const schoolConfig = (() => {
+        try { return loadSchoolConfig(state.profile.homeSchool); }
+        catch { return null; }
+    })();
+    // ...
+    return {
+        student: state.profile,
+        degreeProgressReport: state.dpr,
+        scheduleStore, profileStore,
+        ...(schoolConfig ? { schoolConfig } : {}),
+        // ...
+    };
+}
+```
+
+**Why this matters:** `schoolConfig.passFail` carries per-school P/F rules (credit limits, per-term limits, `canElect`). Without `schoolConfig` on the session:
+- The **8th validator axis** (per-school P/F credit-limit check, Plan 37) would not engage on the propose/confirm path — the engine tool calls would silently skip the P/F limit gate.
+- The **D-4 P/F-eligibility gate** (`proposeWhatIfAssumptionTool.validateInput`) would not know whether the student's school allows P/F elections, so a `pass`/`fail` what-if at a `canElect:false` school (e.g. Tandon) would not be blocked on the route path.
+
+A `loadSchoolConfig` throw (e.g. unknown school code) is silently swallowed; the session falls back to school-agnostic mode (uses `schoolDefaults` constants, no per-school P/F rules). The v2 chat route assembles its own session inline with its own `loadSchoolConfig` call — the orchestrator's `buildSession` is a parallel, independent session reconstruction.
+
+## 5. The session lifecycle per request
 
 `getPolicyRagBundle()` returns the `rag` slot of the `ToolSession` the v2 chat route assembles per request; `buildStudentProfileFromDpr` returns the `student` slot. Everything else on the session is composed inline in the chat route ([chat-route-sse.md §5](chat-route-sse.md#5-session-bootstrap)).
 

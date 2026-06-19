@@ -1,6 +1,6 @@
 # DPR Subsystem — Technical Audit
 
-> Last verified against code: 2026-06-18 (plan 35 — W / pass-fail → requirement modeling is now COMPUTED via pure `applyWithdrawalToDpr` / `applyPassFailToDpr` DPR transforms + per-school `pfEligibility`, surfaced read-only via `probe_counterfactual` arms + a confirmable `propose_whatif_assumption` flow that persists only the `forward_schedule`; `reportKind` flag + `assertAuthoritativeDpr` guard; Branch-A `/api/whatif-audit` exploration upload; the frozen contract is untouched). Prior: 2026-06-17 (Phase 4 follow-up F3-campus — `academicCalendar.ts` now gives NYU Shanghai + Abu Dhabi their OWN sourced per-season patterns, `SHANGHAI_SEASON_WINDOWS` / `ABU_DHABI_SEASON_WINDOWS`, instead of sharing the NY defaults; genuinely-unsourced windows left absent → hedge). Prior: 2026-06-16 (F3-revise — §13 IP-course changeability temporal model reworked to a **per-SEASON typical-date** model: `academicCalendar.ts` now holds one assumed date-set per season applied every year + `classifyIpChangeability.ts` stamps the term's year onto it and ALWAYS hedges "typical, shifts each year"). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-19 (plan 37 — `DPRCourseRow.passFailElected` field added (B1); `applyPassFailToDpr` PASS path sets it, enabling elected-only counting in the 8th validator axis without false-firing on native/historical P rows. Prior: 2026-06-18 — plan 35 — W / pass-fail → requirement modeling is now COMPUTED via pure `applyWithdrawalToDpr` / `applyPassFailToDpr` DPR transforms + per-school `pfEligibility`, surfaced read-only via `probe_counterfactual` arms + a confirmable `propose_whatif_assumption` flow that persists only the `forward_schedule`; `reportKind` flag + `assertAuthoritativeDpr` guard; Branch-A `/api/whatif-audit` exploration upload; the frozen contract is untouched). Prior: 2026-06-17 (Phase 4 follow-up F3-campus — `academicCalendar.ts` now gives NYU Shanghai + Abu Dhabi their OWN sourced per-season patterns, `SHANGHAI_SEASON_WINDOWS` / `ABU_DHABI_SEASON_WINDOWS`, instead of sharing the NY defaults; genuinely-unsourced windows left absent → hedge). Prior: 2026-06-16 (F3-revise — §13 IP-course changeability temporal model reworked to a **per-SEASON typical-date** model: `academicCalendar.ts` now holds one assumed date-set per season applied every year + `classifyIpChangeability.ts` stamps the term's year onto it and ALWAYS hedges "typical, shifts each year"). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
@@ -70,6 +70,15 @@ DPRCourseRow := {
     type:        string  // "EN" | "TE" | "IP" | other
     repeatCode?: string  // "RI" | "R" | other (from continuation lines)
     courseTopic?: string // attached topic suffix, when present
+    passFailElected?: boolean // Plan 37 B1 — SET ONLY by applyPassFailToDpr (PASS path).
+                              // Distinguishes a voluntary P/F election from a native-P/F-only
+                              // course (PE, 0-credit seminars, labs) or immutable historical P.
+                              // The 8th validator axis counts ONLY rows where grade==="P" &&
+                              // passFailElected===true (ELECTED-only counting); native/historical
+                              // P rows carry no flag → never counted → no false-fires on the cap.
+                              // The real DPR never sets this flag (all DPR rows have
+                              // passFailElected !== true); it only appears in the SYNTHETIC DPR
+                              // cloned by applyPassFailToDpr, which is never written to parsed_dpr (R1).
 }
 ```
 
@@ -155,7 +164,15 @@ DPRCumulative := {
     cumulativeGpaRequired:  number | null   // R1001/20 .required
     residencyRequired:      number | null   // R1001/35 .required
     residencyUsed:          number | null   // R1001/35 .used
-    passFailUsedUnits:      number | null   // R1680/10 .used
+    passFailUsedUnits:      number | null   // R1680/10 .used — the registrar's
+                                            // ELECTED-only P/F credit total (PeopleSoft
+                                            // records only voluntary elections here;
+                                            // native-P/F courses do NOT count against it).
+                                            // Plan 37 B1: applyPassFailToDpr (PASS path)
+                                            // increments this on the SYNTHETIC DPR clone
+                                            // so the 8th axis credits-cap tier engages
+                                            // on a what-if election; the real DPR value
+                                            // is never modified (R1 guardrail).
     passFailCapUnits:       number | null   // parsed from R1680/10 desc, default 32
     outsideHomeUsedUnits:   number | null   // R1680/30 .used
     outsideHomeCapUnits:    number | null   // parsed from R1680/30 desc, default 16

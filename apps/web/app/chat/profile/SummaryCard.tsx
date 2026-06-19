@@ -13,7 +13,7 @@
 import type { ForwardSchedule, StudentProfile } from "@nyupath/shared";
 import type { DegreeProgressReport } from "@nyupath/engine";
 import styles from "../chat.module.css";
-import { formatTermLabel, formatVisa } from "./sidebarFormatters";
+import { formatTermLabel, formatVisa } from "../shared/sidebarFormatters";
 
 interface SummaryCardProps {
     student: StudentProfile;

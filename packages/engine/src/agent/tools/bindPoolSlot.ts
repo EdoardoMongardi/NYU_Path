@@ -31,7 +31,6 @@ import type {
     PlanChangeOutcome,
     ForwardSchedule,
     ScheduleSlotSpecificPlanned,
-    ScheduleSlotPlaceholder,
 } from "@nyupath/shared";
 import { isPrereqSatisfied } from "../../dpr/prereqSatisfaction.js";
 import { classifyWorkloadTier } from "../forwardSchedule/workloadTier.js";
@@ -42,6 +41,7 @@ import {
 import {
     runGraduationPathValidator,
 } from "../forwardSchedule/graduationPathValidator.js";
+import { findPlaceholderSlot } from "../forwardSchedule/planChangeHelpers.js";
 import type { WarningLevel } from "./bindFreeElective.js";
 
 // ---------------------------------------------------------------------------
@@ -77,27 +77,6 @@ function termSeason(term: string): string | null {
     const idx = term.indexOf("-");
     if (idx === -1) return null;
     return term.substring(idx + 1).toLowerCase();
-}
-
-// ---------------------------------------------------------------------------
-// Helper: find slot in schedule + its containing semester term
-// ---------------------------------------------------------------------------
-
-function findSlotWithTerm(
-    schedule: ForwardSchedule,
-    placeholderId: string,
-): { slot: ScheduleSlotPlaceholder; term: string } | null {
-    for (const sem of schedule.semesters) {
-        for (const slot of sem.slots) {
-            if (
-                slot.kind === "placeholder" &&
-                slot.placeholderId === placeholderId
-            ) {
-                return { slot, term: sem.term };
-            }
-        }
-    }
-    return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,12 +221,11 @@ export const bindPoolSlotTool = buildTool({
     isReadOnly: true,
     maxResultChars: 3000,
     async validateInput(_input, { session }) {
-        if (!session.forwardSchedule) {
+        if (!session.forwardSchedule && !session.studentDraftPlan) {
             return {
                 ok: false,
                 userMessage:
-                    "No forward plan exists in this session. " +
-                    "Call plan_forward_degree first, then bind pool slots.",
+                    "I don't have a plan to bind into yet — let me build your forward plan first.",
             };
         }
         if (!session.degreeProgressReport) {
@@ -265,13 +243,13 @@ export const bindPoolSlotTool = buildTool({
         "choose_n constraint, duplicates, and computes a warning level. " +
         "Returns warningLevel: none | mild | strong based on workload + balance impact.",
     async call(input, { session }): Promise<BindPoolSlotOutput> {
-        const schedule = session.forwardSchedule!;
+        const schedule = session.forwardSchedule ?? session.studentDraftPlan!;
         const dpr = session.degreeProgressReport!;
         const courses = session.courses ?? [];
         const prereqsAll = session.prereqs ?? [];
 
         // --- 1. Check slot exists ---
-        const found = findSlotWithTerm(schedule, input.slotId);
+        const found = findPlaceholderSlot(schedule, input.slotId);
         if (!found) {
             return {
                 feasible: false,

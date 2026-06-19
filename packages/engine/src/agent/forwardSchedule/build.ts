@@ -15,7 +15,7 @@
  */
 
 import type { ToolSession } from "../tool.js";
-import type { ForwardSchedule } from "@nyupath/shared";
+import type { ForwardSchedule, PassFailConfig } from "@nyupath/shared";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import type { SolverInput, SolverOutput } from "./types.js";
 import { solveForwardSchedule } from "./solver.js";
@@ -66,6 +66,12 @@ export function finalizeForwardSchedule(
     solverInput: SolverInput,
     dpr: DegreeProgressReport,
     validatorRules: ValidatorRules,
+    // Plan 37 (Task C2) — optional per-school P/F config for the 8th validator
+    // axis. ADDITIVE / optional (last param) so the existing 4-arg callers
+    // (alternatives.ts, whatIfAssumption.ts) keep compiling and stay
+    // pass-by-default. When supplied (build.ts / propose / confirm thread
+    // `session.schoolConfig?.passFail`) the validator enforces the cap.
+    passFailConfig?: PassFailConfig,
 ): FinalizedSchedule {
     const plannedCredits = solverOutput.semesters.reduce((sum, sem) => sum + sem.plannedCredits, 0);
     const degreeCreditsMet =
@@ -103,6 +109,7 @@ export function finalizeForwardSchedule(
         plan: assembled,
         dpr,
         programRules: validatorRules,
+        passFailConfig,
     });
     const state = derivePlanStateFromValidator(validatorResult, assembled);
 
@@ -189,7 +196,11 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
     // extraction: the assembled literal, the validator call, and the
     // derivePlanStateFromValidator override are byte-identical to the prior
     // inline block.
-    let finalized = finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules);
+    // Plan 37 (Task C2) — thread the loaded per-school P/F config (from the
+    // session's already-resolved SchoolConfig) into the validator so the 8th
+    // axis (passFailLimitsRespected) can enforce the career cap.
+    const passFailConfig = session.schoolConfig?.passFail;
+    let finalized = finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules, passFailConfig);
 
     // ---- Relax loop (T2b) ----
     //
@@ -214,7 +225,7 @@ export function buildForwardSchedule(args: BuildForwardScheduleArgs): ForwardSch
         ext++;
         ({ solverInput, validatorRules } = buildSolverInputWithRules(session, dpr, { graduationTermOverride: extended }));
         solverOutput = solveForwardSchedule(solverInput);
-        finalized = finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules);
+        finalized = finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules, passFailConfig);
     }
 
     // Adopt the relaxed result only if it became feasible; else fall back to the original

@@ -29,6 +29,8 @@
   ],
   "passFail": {
     "careerLimitType": "percent_of_program",
+    "careerLimitValue": 25,
+    "careerLimitSourceRef": "bulletin-raw/undergraduate/nursing/academic-policies/_index.md (25% of program)",
     "countsForMajor": false,
     "countsForGenEd": false,
     "creditType": "elective_only",

@@ -43,6 +43,8 @@
   ],
   "passFail": {
     "careerLimitType": "courses",
+    "careerLimitValue": 3,
+    "careerLimitSourceRef": "bulletin-raw/undergraduate/abu-dhabi/academic-policies/_index.md (3-course career)",
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,

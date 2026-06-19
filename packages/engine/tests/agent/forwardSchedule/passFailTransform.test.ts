@@ -306,15 +306,75 @@ describe("applyPassFailToDpr", () => {
         expect(dpr).toEqual(before);
     });
 
-    // (8) cumulative block byte-identical (no GPA recomputation)
-    it("leaves the cumulative block unchanged for both outcomes", () => {
+    // (8) cumulative — FAIL leaves it byte-identical; PASS increments passFailUsedUnits
+    it("FAIL leaves the cumulative block unchanged (no GPA recomputation)", () => {
         const dpr = makeDpr();
-        expect(applyPassFailToDpr(dpr, "CSCI-UA 101", "pass", "cas").dpr.cumulative).toEqual(
-            dpr.cumulative,
-        );
         expect(applyPassFailToDpr(dpr, "CSCI-UA 101", "fail", "cas").dpr.cumulative).toEqual(
             dpr.cumulative,
         );
+    });
+
+    // (B1) PASS election increments cumulative.passFailUsedUnits by the course's units
+    it("PASS election increments cumulative.passFailUsedUnits by the elected course's units", () => {
+        // makeDpr() has cumulative.passFailUsedUnits = 0 (DEFAULT_CUMULATIVE default).
+        // CSCI-UA 101 is 4 units (mkCourse default). After a PASS, 0 + 4 = 4.
+        const dpr = makeDpr();
+        const { dpr: next } = applyPassFailToDpr(dpr, "CSCI-UA 101", "pass", "cas");
+        expect(next.cumulative.passFailUsedUnits).toBe(4);
+        // purity: input cumulative is unchanged
+        expect(dpr.cumulative.passFailUsedUnits).toBe(0);
+    });
+
+    // (B1-null) PASS election with a null passFailUsedUnits treats it as 0
+    it("PASS election treats a null passFailUsedUnits as 0 before incrementing", () => {
+        const dpr = mkDpr({
+            cumulative: { passFailUsedUnits: null },
+            courseHistory: [mkCourse({ term: "2026 Spr", courseId: "CSCI-UA 101", grade: null, type: "IP", units: 4 })],
+            requirementGroups: [],
+        });
+        const { dpr: next } = applyPassFailToDpr(dpr, "CSCI-UA 101", "pass", "cas");
+        expect(next.cumulative.passFailUsedUnits).toBe(4);
+        expect(dpr.cumulative.passFailUsedUnits).toBeNull();
+    });
+
+    // (B1-fail) FAIL election does NOT increment passFailUsedUnits (no credit earned)
+    it("FAIL election does NOT increment passFailUsedUnits (no credit earned)", () => {
+        const dpr = makeDpr();
+        const { dpr: next } = applyPassFailToDpr(dpr, "CSCI-UA 101", "fail", "cas");
+        expect(next.cumulative.passFailUsedUnits).toBe(0);
+        expect(dpr.cumulative.passFailUsedUnits).toBe(0);
+    });
+
+    // (PF-flag) A PASS election flags the elected row passFailElected:true so the
+    // P/F limit axis COUNTS it (D-4: HARD on the elections we can see). The input
+    // is untouched (purity), and native/historical "P" rows never carry the flag.
+    it("PASS election sets passFailElected:true on the elected row (so the limit axis counts it)", () => {
+        const dpr = makeDpr();
+        const { dpr: out } = applyPassFailToDpr(dpr, "CSCI-UA 101", "pass", "cas");
+        const row = out.courseHistory.find(
+            (r) => r.subject === "CSCI-UA" && r.catalogNbr === "101",
+        );
+        expect(row?.grade).toBe("P");
+        expect(row?.passFailElected).toBe(true);
+        // a non-elected sibling row is NOT flagged
+        const other = out.courseHistory.find((r) => r.subject === "ELEC-UA");
+        expect(other?.passFailElected).not.toBe(true);
+        // input untouched
+        const inRow = dpr.courseHistory.find(
+            (r) => r.subject === "CSCI-UA" && r.catalogNbr === "101",
+        );
+        expect(inRow?.passFailElected).toBeUndefined();
+    });
+
+    // (PF-flag-fail) A FAIL election does NOT flag passFailElected — the row
+    // becomes grade "F" and drops from coursesTaken, so there is nothing to count.
+    it("FAIL election does NOT set passFailElected:true (no P row to count)", () => {
+        const dpr = makeDpr();
+        const { dpr: out } = applyPassFailToDpr(dpr, "CSCI-UA 101", "fail", "cas");
+        const row = out.courseHistory.find(
+            (r) => r.subject === "CSCI-UA" && r.catalogNbr === "101",
+        );
+        expect(row?.passFailElected).not.toBe(true);
     });
 
     // (9) unknown courseId → no-op (clone w/ reportKind what_if, no hedges)

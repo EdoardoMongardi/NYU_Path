@@ -1,6 +1,6 @@
 # Plan Action Orchestrator — Server Coordinator and Browser Client
 
-> Last verified against code: 2026-06-16 (Phase 4 E6 — DB-backed pending-mutation staging; live exit gates). Prior: 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-19 (Plans 35/36/37 — never-commit-invalid M1, consume-once I3, whatif validateInput guard, schoolConfig in session, what-if confirm R1 guardrail). Prior: 2026-06-16 (Phase 4 E6 — DB-backed pending-mutation staging; live exit gates); 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## Purpose
 
@@ -71,20 +71,21 @@ stateDiagram-v2
     Classified --> HardRefusal : infeasible AND any hard conflict
     Clean --> [*] : no bubble; canvas review card (E3) applies on Confirm
     TradeOffs --> Confirming : user clicks Confirm
-    SoftRefusal --> Confirming : user clicks Confirm (force=false)
-    SoftRefusal --> ConfirmingForce : user clicks Override-anyway (force=true)
+    SoftRefusal --> Confirming : user clicks Confirm
     TradeOffs --> Dismissed : user clicks Keep-as-is
     SoftRefusal --> Dismissed : user clicks Keep-as-is
     HardRefusal --> Dismissed : no buttons; UI auto-dismisses
-    Confirming --> Confirmed : runConfirmStage success
+    Confirming --> Confirmed : runConfirmStage success (feasible)
+    Confirming --> ConfirmInfeasible : runConfirmStage returns infeasible → HTTP 422
     Confirming --> ConfirmError : runConfirmStage failure
-    ConfirmingForce --> Reclassified : runConfirmStage success with force
-    Reclassified --> [*] : state = student-preferred-invalid-draft
+    ConfirmInfeasible --> [*] : prior committed plan survives untouched; no persist
     Confirmed --> [*]
     ProposeError --> [*]
     ConfirmError --> [*]
     Dismissed --> [*]
 ```
+
+> **M1 (Plan 37) — "Override anyway" / force=true is RETIRED.** The `SoftRefusal → ConfirmingForce → student-preferred-invalid-draft` path from Phase 17 is removed. `force` is accepted in the request schema for back-compat but is **inert** — an infeasible re-solve is refused (HTTP 422) regardless of its value. No UI path passes `force: true` after M2.
 
 ### 2.1 The four bubble kinds
 
@@ -94,21 +95,30 @@ stateDiagram-v2
 |---|---|---|---|---|
 | `clean` | `feasible === true` AND `consequences.length === 0` | **Canvas review card (✓ Valid)** — no bubble | Confirm + Cancel + Ask-why (on the card) | A clean apply is no longer a silent commit; it previews like every feasible verb |
 | `trade_offs` | `feasible === true` AND `consequences.length > 0` | **Canvas review card (⚠ trade-offs)** — no bubble | Confirm + Cancel + Ask-why (on the card) | Engine considers it valid but flags side-effects |
-| `soft_refusal` | `feasible === false` AND no conflict in `HARD_CONFLICT_KINDS` | RED invalid-proposal card **+ chat bubble** | bubble: Confirm + Keep-as-is + Override-anyway | Override-anyway sends `force: true` |
+| `soft_refusal` | `feasible === false` AND no conflict in `HARD_CONFLICT_KINDS` | RED invalid-proposal card **+ chat bubble** | bubble: Confirm + Keep-as-is | Override-anyway removed (M2 — force is inert); a Confirm click is REFUSED at the server with 422 if re-solve returns infeasible |
 | `hard_refusal` | `feasible === false` AND any conflict in `HARD_CONFLICT_KINDS` | RED invalid-proposal card **+ chat bubble** | bubble: No buttons | Pure refusal; cannot override prereq/graduation/offering violations |
 
 The hard-conflict list (`apps/web/lib/planActionBubbleHelpers.ts:82-90`) contains: `prereq_unsatisfiable`, `prereqChain`, `not_clause`, `graduation_total`, `offering`, `offering_pattern`, `no_plan`.
 
-### 2.2 The Decision #32 force path
+### 2.2 The M1 never-commit-invalid guardrail (Plan 37)
 
-When the user clicks Override-anyway on a soft refusal, the client calls `planConfirm` with `force: true`. The orchestrator's confirm stage applies the mutation through the engine (which still emits `feasible: false` with `infeasible-draft` state) and then performs a route-layer reclassification:
+**Both confirm sub-paths refuse an infeasible result.** The confirm stage is the single commit chokepoint — no invalid plan ever reaches `scheduleStore.persistSchedule`.
 
-- The persisted `ForwardSchedule.state` is mutated from `infeasible-draft` to `student-preferred-invalid-draft`.
-- Both `session.studentDraftPlan` and `session.forwardSchedule` are kept in lockstep with the reclassified object.
-- The schedule is re-persisted via `scheduleStore.persistSchedule` with the original `dprCourseHistoryHash` so the login-restore agrees with the live UI.
-- Persistence failures are logged but never throw — the in-memory mutation has already landed.
+**Plan-change confirm path (`runConfirmStage` → `confirmPlanChangeTool`):**
 
-Source: `apps/web/lib/planActionOrchestrator.ts:583-612`.
+After the engine applies the mutations, if `outcome.feasible === false` the orchestrator returns `{ ok: false, error: { kind: "infeasible", message: buildInfeasibleReason(outcome) } }` without persisting anything. The prior committed `forward_schedule` row in the DB is untouched. The `force` parameter (still accepted for back-compat) is **inert**: `void force` is called to satisfy lint; the infeasible block executes regardless of its value. Source: `apps/web/lib/planActionOrchestrator.ts` — the `if (!outcome.feasible)` block at the plan-change path.
+
+**What-if assumption confirm path (`runConfirmWhatIfAssumption`):**
+
+A parallel guard sits in `runConfirmWhatIfAssumption`: after `solveWhatIfAssumption` runs (C1 fix), if `!result.feasible` the function returns the same `{ ok: false, error: { kind: "infeasible", message } }` before any `scheduleStore.persistSchedule` call. The prior committed valid plan survives (the supersede-then-insert persist is never called). Because `solveWhatIfAssumption` is read-only (builds a synthetic in-memory DPR, never mutates `session`), there is no scratchpad state to undo — refusing the persist is sufficient.
+
+**Route mapping:** `mapConfirmError` maps `kind: "infeasible"` → **HTTP 422** (Unprocessable Entity) with the failing-axis explanation in the body. The client (`applyReviewConfirm` / bubble Confirm) only commits on `ok: true`; a 422 leaves the canvas committed slot and the DB unchanged.
+
+**`buildInfeasibleReason`:** shared by both paths. Prefers the first `conflict.detail` with content; falls back to the first consequence that matches `/graduation-path validation|fails/i`; final fallback is a generic "Your current plan is unchanged" message.
+
+**The retired Phase-17 "force → student-preferred-invalid-draft" reclassification no longer exists.** The `opts.force` parameter is read only to satisfy the TypeScript `no-unused-vars` check (`void force;`); it does not branch the logic.
+
+Source: `apps/web/lib/planActionOrchestrator.ts` — `runConfirmStage` (plan-change guard) + `runConfirmWhatIfAssumption` (what-if guard); `apps/web/lib/planActionRouteHelpers.ts:132-134` (`mapConfirmError` 422 branch).
 
 ### 2.3 Server-side pending-mutation states
 
@@ -120,7 +130,9 @@ As of Phase 4 E6.3 these states are resolved **inside the store's `take`** (`pen
 | Present + matching studentId, unexpired | Within 10-minute TTL | `ok` (entry returned + **deleted single-use**) → Confirmable |
 | Present + mismatched studentId | Cross-tenant id guess | `tenant_mismatch` (entry left **intact** for its owner) → `studentId_mismatch` → 403 |
 | Present but stale | Older than `PENDING_MUTATION_TTL_MS` (10 minutes) | Swept by `sweepExpired` (runs on every `stage`; the Postgres `take` also treats a matched-but-expired row as `not_found`) → 404 |
-| Just consumed | `take` deleted the entry on the matched read | `not_found` on a second `take` → 404 |
+| Just consumed | `take` deleted the entry on the matched read | `not_found` on a second `take` → 404 (benign "already applied" — I3) |
+
+**I3 (Plan 37) — consume-once.** The Postgres `DELETE … RETURNING` inside `take` is atomic: a second confirm of the same `pendingMutationId` returns `not_found` → HTTP 404 "expired or already confirmed." This prevents double-commit. The in-memory fallback also deletes the entry on the first `take`, giving the same guarantee in dev.
 
 Source: `apps/web/lib/db/pendingMutationStore.ts:101`/`:182` (the `take` seam); `apps/web/lib/planActionOrchestrator.ts:526-551` (the orchestrator mapping).
 
@@ -134,7 +146,7 @@ The optimistic-update affordance lives in three concrete pieces:
 
 The propose stage extracts `proposedSchedule` from the engine's tool output (`apps/web/lib/planActionOrchestrator.ts:469-470`) and ships it back as `forwardSchedule` on the `PlanActionResponse`. This is a non-persisted preview — the actual write does not happen until confirm. **As of Phase 4 E3 the client renders exactly this `forwardSchedule` as the canvas "◷ Preview" overlay** — the page stages it into the shared store's `pendingPreview` slot and `planPreview.ts` computes the credit delta vs the committed plan; the committed plan stays untouched until Confirm. (A `feasible:false` response is never staged as a preview — see the RED invalid-proposal card in the client docs.)
 
-`proposePlanChangeTool` produces `proposedSchedule` by running the same `finalizeForwardSchedule` path the build/confirm/simulate flows use — the feasibility-first backtracking search plus the 7-axis `runGraduationPathValidator` (`packages/engine/src/agent/tools/proposePlanChange.ts:153`). So the propose preview is already validated, not a greedy guess.
+`proposePlanChangeTool` produces `proposedSchedule` by running the same `finalizeForwardSchedule` path the build/confirm/simulate flows use — the feasibility-first backtracking search plus the 8-axis `runGraduationPathValidator` (`packages/engine/src/agent/tools/proposePlanChange.ts:153`). So the propose preview is already validated, not a greedy guess.
 
 The Phase 17 follow-up that introduced this single-solver-pass pattern eliminated a second `confirm_plan_change` invocation that was previously needed just to extract the post-mutation schedule, halving Stage 1 latency (`apps/web/lib/planActionOrchestrator.ts:461-468`).
 
@@ -170,10 +182,11 @@ Mapped by `mapProposeError` (invoked from `handleProposeRoute`) to 409 / 409 / 4
 
 ### 4.2 `RunConfirmError`
 
-Source: `apps/web/lib/planActionOrchestrator.ts:106-109`. Variants — the propose error union, plus two confirm-specific kinds:
+Source: `apps/web/lib/planActionOrchestrator.ts` (the `RunConfirmError` type). Variants — the propose error union, plus three confirm-specific kinds:
 
-- `unknown_mutation_id` — the staging map has no entry for the supplied UUID (expired or already confirmed). HTTP 404.
+- `unknown_mutation_id` — the staging map has no entry for the supplied UUID (expired, already confirmed, or the first confirm after a double-click). HTTP 404.
 - `studentId_mismatch` — the staging entry's studentId differs from the requesting student. HTTP 403.
+- `infeasible` — **M1 (Plan 37).** The re-solved plan is infeasible; the confirm is refused, nothing persisted, the prior valid plan survives. HTTP **422**. `message` carries the failing-axis explanation from `buildInfeasibleReason`. This fires on BOTH the plan-change path AND the what-if assumption path.
 
 ### 4.3 Server-side rollback semantics
 
@@ -335,9 +348,11 @@ sequenceDiagram
 ### 6.6 Where the orchestrator does and does not show up
 
 - **Server-only.** `planActionOrchestrator.ts` is Node-only — it imports `node:crypto`, the engine package, and the persistence stores. It must never be imported from the browser bundle. The shape duplication in `planActionClient.ts` is exactly to enforce this separation.
-- **Staging is store-backed (E6.3).** The orchestrator no longer owns a module-scope `Map` — it calls `getStores().pendingMutationStore.stage` on propose and `.take` on confirm. With a DB handle this is the durable `PostgresPendingMutationStore` (`pending_mutations` table), so a propose served by instance A and a confirm served by instance B agree across a multi-instance deploy and survive a restart. Without a DB handle it is the `InMemoryPendingMutationStore` singleton (dev/offline), whose volatility matches the old Map. The test-only `_resetPendingMutationsForTests` / `_pendingMutationsSizeForTests` helpers (`apps/web/lib/planActionOrchestrator.ts:135-150`) delegate to the in-memory store.
-- **Cached bundled data.** `loadCourses` and `loadPrereqs` are cached at module scope (`apps/web/lib/planActionOrchestrator.ts:361-382`) so a flurry of plan-action calls doesn't re-read the JSON catalog repeatedly.
-- **Session reconstruction is per-call.** Every propose and every confirm rebuilds a fresh `ToolSession` from the persistence stores (`apps/web/lib/planActionOrchestrator.ts:388-413`). There is no session caching across requests — the staged entry carries only the `studentId` and `PlanMutation[]`, not the heavyweight session state.
+- **Staging is store-backed (E6.3).** The orchestrator no longer owns a module-scope `Map` — it calls `getStores().pendingMutationStore.stage` on propose and `.take` on confirm. With a DB handle this is the durable `PostgresPendingMutationStore` (`pending_mutations` table), so a propose served by instance A and a confirm served by instance B agree across a multi-instance deploy and survive a restart. Without a DB handle it is the `InMemoryPendingMutationStore` singleton (dev/offline), whose volatility matches the old Map. The test-only `_resetPendingMutationsForTests` / `_pendingMutationsSizeForTests` helpers delegate to the in-memory store.
+- **Cached bundled data.** `loadCourses` and `loadPrereqs` are cached at module scope so a flurry of plan-action calls doesn't re-read the JSON catalog repeatedly.
+- **Session reconstruction is per-call (includes `schoolConfig`).** Every propose and every confirm rebuilds a fresh `ToolSession` from the persistence stores via `buildSession`. **C2 (Plan 37):** `buildSession` calls `loadSchoolConfig(state.profile.homeSchool)` and attaches the result to the session as `schoolConfig` — this is how `schoolConfig.passFail` reaches the engine for the 8th validator axis (per-school P/F limit) and for the D-4 P/F-eligibility gate in `proposeWhatIfAssumptionTool.validateInput`. A failing `loadSchoolConfig` call is swallowed (returns `null`); the session runs in school-agnostic mode. The staged entry carries only `studentId` + `PlanMutation[]` (or a `WhatIfAssumptionStaged`), not the heavyweight session state.
+- **What-if assumptions use the SAME pending-mutation store (Plan 35 G3.1).** `runProposeWhatIfStage` stages an `assumption: { courseId, outcome }` inside the shared `pending_mutations` JSONB (no schema change). At confirm time, `runConfirmStage` detects `entry.assumption` and branches into `runConfirmWhatIfAssumption`, which re-applies the DPR transform + re-solves, then persists ONLY the resulting `forward_schedule` — **never** `students.parsed_dpr` (R1 guardrail: "confirming a plan ≠ recording a fact"). The `assertAuthoritativeDpr` guard in the engine is never reached on this path because `profileStore.persistMutation` is never called with the synthetic DPR.
+- **What-if propose runs `validateInput` (Plan 37 guard-bypass fix).** The agent path runs `proposeWhatIfAssumptionTool.validateInput` automatically via the tool framework. The route path (direct `/api/plan/whatif` callers including the slot editor) previously called `.call()` directly and bypassed it. `runProposeWhatIfStage` now explicitly calls `proposeWhatIfAssumptionTool.validateInput` before `.call`, enforcing all guards (D-7 IP-membership, D-4 P/F-eligibility for `canElect:false` schools, DPR-presence) on the route path. A validation failure returns `{ kind: "bad_input", message: validation.userMessage }` → HTTP 400 `bad_input` with the student-facing explanation.
 
 ### 6.7 Known limitations
 

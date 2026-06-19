@@ -81,7 +81,11 @@ function makeIpMajorDpr(): DegreeProgressReport {
         advisorNotations: [],
         cumulative: {
             creditsRequired: 128,
-            creditsUsed: 120,
+            // 124 used + the single 4-credit Intro leaf = 128 → re-placing the
+            // re-opened CSCI-UA 102 alone completes the degree, so a withdraw/
+            // pass re-solve is FEASIBLE (the R1 persist tests + the C1 feasible
+            // regression guard exercise the real persist path).
+            creditsUsed: 124,
             cumulativeGpa: 3.5,
             cumulativeGpaRequired: 2.0,
             residencyRequired: 64,
@@ -182,6 +186,122 @@ async function seedStudent(): Promise<void> {
     await scheduleStore.persistSchedule(STUDENT_ID, makeSeedSchedule(STUDENT_ID), "fp-seed");
 }
 
+// ---------------------------------------------------------------------------
+// M1 C1 (plan 37) — an INFEASIBLE what-if assumption fixture.
+//
+// Built on `makeIpMajorDpr`: the current-term IP course CSCI-UA 102 is the sole
+// satisfier of a NAMED major requirement leaf (SR/10). A W / P/F-FAIL — and a
+// P/F-PASS too — RE-OPENS that leaf (the transform strips the course from
+// coursesUsed + flips the leaf to not_satisfied). The solver re-places the
+// course, but the re-placed slot is not re-credited to SR/10, so the authoritative
+// Axis 1 (`requirementGroupsSatisfied`) reports SR/10 unsatisfied →
+// `solveWhatIfAssumption` returns feasible:false. (We ALSO seed the student at
+// the 32-unit CAS pass-fail cap so a P/F-PASS election is doubly infeasible — a
+// 4-credit election pushes used→36 > 32, tripping Axis 8 — but the binding
+// constraint for this fixture is the re-opened requirement.)
+//
+// This is exactly the C1 attack: a realistic infeasible re-solve whose confirm
+// must be REFUSED, not committed over the prior valid plan.
+// ---------------------------------------------------------------------------
+
+const INFEAS_STUDENT_ID = "whatif-infeasible-fixture";
+
+function makeAtCapPassFailDpr(): DegreeProgressReport {
+    const base = makeIpMajorDpr();
+    return {
+        ...base,
+        cumulative: {
+            ...base.cumulative,
+            // Already at the 32-unit CAS pass-fail cap (a secondary infeasibility
+            // for a P/F-PASS election; the binding one is the re-opened SR/10).
+            passFailUsedUnits: 32,
+            passFailCapUnits: 32,
+        },
+    };
+}
+
+async function seedInfeasibleWhatIfStudent(): Promise<void> {
+    const stores = getStores({});
+    const profileStore = stores.profileStore as InMemoryProfileStore;
+    const scheduleStore = stores.scheduleStore as InMemoryScheduleStore;
+    await profileStore.persistMutation(
+        makeProfile(INFEAS_STUDENT_ID),
+        { pendingMutationId: "seed", field: "homeSchool", before: null, after: "cas", confirmedAt: new Date().toISOString() },
+        makeAtCapPassFailDpr(),
+    );
+    // A VALID committed schedule that the infeasible confirm must NOT supersede.
+    await scheduleStore.persistSchedule(INFEAS_STUDENT_ID, makeSeedSchedule(INFEAS_STUDENT_ID), "fp-valid");
+}
+
+// ---------------------------------------------------------------------------
+// A FEASIBLE what-if fixture — the IP course is a FREE ELECTIVE (in
+// courseHistory only, NOT tied to any named requirement leaf) and the degree is
+// already credit-complete. Withdrawing / P/F-ing it re-opens NO named leaf, so
+// the re-solve stays VALID (feasible:true). Used by the R1 persist tests + the
+// C1 feasible-confirm regression guard (which need a real persist to occur).
+// ---------------------------------------------------------------------------
+
+const FEAS_COURSE = "ELEC-UA 200";
+const FEAS_STUDENT_ID = "whatif-feasible-fixture";
+
+function makeFeasibleWhatIfDpr(): DegreeProgressReport {
+    return {
+        _meta: makeMeta(),
+        reportKind: "dpr",
+        header: { studentName: "WhatIf Feasible", preparedDate: "10/01/2026" },
+        programs: [
+            {
+                programType: "Undergraduate Career",
+                label: "UA-Coll of Arts & Sci",
+                requirementTerm: "Fall 2024",
+                requirementStatus: "satisfied",
+            },
+        ],
+        advisorNotations: [],
+        cumulative: {
+            // Degree credit floor already met; the free elective is surplus, so
+            // dropping it via W / P/F re-opens no requirement and the re-solve
+            // stays valid (feasible:true).
+            creditsRequired: 128,
+            creditsUsed: 128,
+            cumulativeGpa: 3.5,
+            cumulativeGpaRequired: 2.0,
+            residencyRequired: 64,
+            residencyUsed: 64,
+            passFailUsedUnits: 0,
+            passFailCapUnits: 32,
+            outsideHomeUsedUnits: 0,
+            outsideHomeCapUnits: 16,
+            timeLimitYears: 8,
+        },
+        // No unsatisfied requirement leaves — nothing to re-open.
+        requirementGroups: [],
+        courseHistory: [
+            {
+                term: IP_COURSE_TERM,
+                subject: "ELEC-UA",
+                catalogNbr: "200",
+                courseTitle: "Free Elective",
+                grade: "IP",
+                units: 4,
+                type: "IP",
+            },
+        ],
+    };
+}
+
+async function seedFeasibleWhatIfStudent(): Promise<void> {
+    const stores = getStores({});
+    const profileStore = stores.profileStore as InMemoryProfileStore;
+    const scheduleStore = stores.scheduleStore as InMemoryScheduleStore;
+    await profileStore.persistMutation(
+        makeProfile(FEAS_STUDENT_ID),
+        { pendingMutationId: "seed", field: "homeSchool", before: null, after: "cas", confirmedAt: new Date().toISOString() },
+        makeFeasibleWhatIfDpr(),
+    );
+    await scheduleStore.persistSchedule(FEAS_STUDENT_ID, makeSeedSchedule(FEAS_STUDENT_ID), "fp-seed");
+}
+
 beforeEach(async () => {
     resetStoresForTests();
     _resetPendingMutationsForTests();
@@ -227,23 +347,36 @@ describe("runProposeWhatIfStage — stages an assumption + returns a marker", ()
 // ---------------------------------------------------------------------------
 
 describe("confirm of a staged whatif_assumption — R1 snapshot-integrity guard", () => {
+    // These tests verify the PERSIST path (a feasible what-if confirm persists
+    // the schedule, never parsed_dpr). They use the FEASIBLE fixture (a free
+    // elective whose W / P/F re-opens no requirement) so the re-solve is valid
+    // and a persist actually occurs — the M1 C1 fix refuses an INFEASIBLE
+    // what-if confirm (covered by its own block below), so the persist path now
+    // requires a feasible re-solve.
+    beforeEach(async () => {
+        resetStoresForTests();
+        _resetPendingMutationsForTests();
+        await seedFeasibleWhatIfStudent();
+    });
+
     it("persists the resulting forward_schedule AND leaves parsed_dpr BYTE-IDENTICAL", async () => {
         const profileStore = getStores({}).profileStore as InMemoryProfileStore;
-        const dprBefore = JSON.stringify(await profileStore.getParsedDpr(STUDENT_ID));
+        const dprBefore = JSON.stringify(await profileStore.getParsedDpr(FEAS_STUDENT_ID));
         expect(dprBefore).not.toBe("null");
 
         // Propose → stage.
         const proposed = await runProposeWhatIfStage(
-            STUDENT_ID,
-            { courseId: "CSCI-UA 102", outcome: "withdraw" },
+            FEAS_STUDENT_ID,
+            { courseId: FEAS_COURSE, outcome: "withdraw" },
             { now: NOW_IN_WITHDRAW_WINDOW },
         );
         expect(proposed.ok).toBe(true);
         if (!proposed.ok) return;
+        expect(proposed.response.feasible).toBe(true);
         const pendingMutationId = proposed.response.pendingMutationId;
 
         // Confirm → re-apply transform + persist the schedule (NOT the DPR).
-        const confirmed = await runConfirmStage(STUDENT_ID, pendingMutationId);
+        const confirmed = await runConfirmStage(FEAS_STUDENT_ID, pendingMutationId);
         expect(confirmed.ok).toBe(true);
         if (!confirmed.ok) return;
         expect(confirmed.response.consumedMutationId).toBe(pendingMutationId);
@@ -251,32 +384,33 @@ describe("confirm of a staged whatif_assumption — R1 snapshot-integrity guard"
         expect(confirmed.response.forwardSchedule).toBeDefined();
 
         // ---- R1 GUARD: parsed_dpr is BYTE-IDENTICAL after the confirm. ----
-        const dprAfter = JSON.stringify(await profileStore.getParsedDpr(STUDENT_ID));
+        const dprAfter = JSON.stringify(await profileStore.getParsedDpr(FEAS_STUDENT_ID));
         expect(dprAfter).toBe(dprBefore);
         // And the persisted DPR is STILL the authoritative real DPR (reportKind dpr).
-        const dprObj = await profileStore.getParsedDpr(STUDENT_ID);
+        const dprObj = await profileStore.getParsedDpr(FEAS_STUDENT_ID);
         expect(dprObj?.reportKind).toBe("dpr");
 
         // The confirmed plan WAS persisted to the schedule store (live row changed
         // from the seed — i.e. the supersede-then-insert landed a new row).
         const scheduleStore = getStores({}).scheduleStore as InMemoryScheduleStore;
-        const live = await scheduleStore.loadLatestSchedule(STUDENT_ID);
+        const live = await scheduleStore.loadLatestSchedule(FEAS_STUDENT_ID);
         expect(live).not.toBeNull();
         expect(live!.schedule.dprCourseHistoryHash).not.toBe("seed-hash");
     });
 
     it("a what-if confirm never throws the assertAuthoritativeDpr guard", async () => {
         const proposed = await runProposeWhatIfStage(
-            STUDENT_ID,
-            { courseId: "CSCI-UA 102", outcome: "fail" },
+            FEAS_STUDENT_ID,
+            { courseId: FEAS_COURSE, outcome: "fail" },
             { now: NOW_IN_WITHDRAW_WINDOW },
         );
         expect(proposed.ok).toBe(true);
         if (!proposed.ok) return;
+        expect(proposed.response.feasible).toBe(true);
 
         // Must not throw — the guard only fires on a parsed_dpr write with a
         // non-"dpr" reportKind; confirm persists the schedule, not the DPR.
-        const confirmed = await runConfirmStage(STUDENT_ID, proposed.response.pendingMutationId);
+        const confirmed = await runConfirmStage(FEAS_STUDENT_ID, proposed.response.pendingMutationId);
         expect(confirmed.ok).toBe(true);
     });
 });
@@ -330,5 +464,109 @@ describe("runProposeWhatIfStage — withdraw / pass / fail re-plan via the trans
         if (!result.ok) return;
         const hedges = result.response.whatIfAssumption?.hedges ?? [];
         expect(hedges.some((h) => /GPA/i.test(h))).toBe(true);
+    });
+
+});
+
+// ---------------------------------------------------------------------------
+// M1 C1 (plan 37) — the what-if-assumption confirm REFUSES an infeasible result.
+//
+// THE GAP this closes: `runConfirmStage` early-returned into
+// `runConfirmWhatIfAssumption`, BYPASSING the M1 plan-change infeasible guard,
+// and the what-if persist was UNCONDITIONAL — an infeasible re-solve would call
+// `persistSchedule`, which supersedes every prior live row, DESTROYING the
+// previously-committed VALID plan and replacing it with the invalid one (then
+// returning ok:true → the client committed).
+//
+// THE INVARIANT (now complete): an infeasible what-if confirm behaves EXACTLY
+// like an infeasible plan-change confirm — 422 (kind:"infeasible"), persist
+// NOTHING, the prior valid committed row UNTOUCHED.
+// ---------------------------------------------------------------------------
+
+describe("M1 C1 — an infeasible what-if confirm is refused (never commit an invalid plan)", () => {
+    beforeEach(async () => {
+        // Override the default seed with the infeasible-on-re-solve student
+        // (the IP course's W re-opens a named leaf that can't be re-credited).
+        resetStoresForTests();
+        _resetPendingMutationsForTests();
+        await seedInfeasibleWhatIfStudent();
+    });
+
+    it("the propose half reports the re-solve is INFEASIBLE (fixture sanity)", async () => {
+        // The W re-opens the named SR/10 leaf the IP course satisfied; the
+        // re-placed course is not re-credited to it → Axis 1 fails. This is the
+        // precondition the confirm refusal guards.
+        const proposed = await runProposeWhatIfStage(
+            INFEAS_STUDENT_ID,
+            { courseId: "CSCI-UA 102", outcome: "withdraw" },
+            { now: NOW_IN_WITHDRAW_WINDOW },
+        );
+        expect(proposed.ok).toBe(true);
+        if (!proposed.ok) return;
+        expect(proposed.response.feasible).toBe(false);
+    });
+
+    it("confirm → { ok:false, kind:'infeasible' } + nothing persisted + the prior VALID row survives", async () => {
+        const scheduleStore = getStores({}).scheduleStore as InMemoryScheduleStore;
+        const before = await scheduleStore.loadLatestSchedule(INFEAS_STUDENT_ID);
+        expect(before?.dprFingerprint).toBe("fp-valid");
+        expect(before?.schedule.state).toBe("valid-clean");
+        expect(before?.schedule.dprCourseHistoryHash).toBe("seed-hash");
+
+        // Propose → stage the (infeasible) assumption.
+        const proposed = await runProposeWhatIfStage(
+            INFEAS_STUDENT_ID,
+            { courseId: "CSCI-UA 102", outcome: "withdraw" },
+            { now: NOW_IN_WITHDRAW_WINDOW },
+        );
+        expect(proposed.ok).toBe(true);
+        if (!proposed.ok) return;
+        expect(proposed.response.feasible).toBe(false);
+
+        // Confirm → REFUSED. No persist. The reason names the failing axis.
+        const confirmed = await runConfirmStage(INFEAS_STUDENT_ID, proposed.response.pendingMutationId);
+        expect(confirmed.ok).toBe(false);
+        if (confirmed.ok) return;
+        expect(confirmed.error.kind).toBe("infeasible");
+        expect(confirmed.error.message).toMatch(/invalid|requirement|axis|graduation-path|not satisfied/i);
+
+        // The previously-committed VALID plan is UNCHANGED — the infeasible
+        // what-if never superseded the prior live row (the C1 bug).
+        const after = await scheduleStore.loadLatestSchedule(INFEAS_STUDENT_ID);
+        expect(after?.dprFingerprint).toBe("fp-valid");
+        expect(after?.schedule.state).toBe("valid-clean");
+        expect(after?.schedule.dprCourseHistoryHash).toBe("seed-hash");
+        expect(after?.schedule.computedAt).toBe(before?.schedule.computedAt);
+    });
+
+    it("a FEASIBLE what-if confirm STILL commits (regression guard)", async () => {
+        // Re-seed the FEASIBLE fixture (a free elective whose W re-opens no
+        // requirement) so the re-solve is valid and the confirm DOES commit.
+        resetStoresForTests();
+        _resetPendingMutationsForTests();
+        await seedFeasibleWhatIfStudent();
+
+        const scheduleStore = getStores({}).scheduleStore as InMemoryScheduleStore;
+        const before = await scheduleStore.loadLatestSchedule(FEAS_STUDENT_ID);
+        expect(before?.schedule.dprCourseHistoryHash).toBe("seed-hash");
+
+        const proposed = await runProposeWhatIfStage(
+            FEAS_STUDENT_ID,
+            { courseId: FEAS_COURSE, outcome: "withdraw" },
+            { now: NOW_IN_WITHDRAW_WINDOW },
+        );
+        expect(proposed.ok).toBe(true);
+        if (!proposed.ok) return;
+        expect(proposed.response.feasible).toBe(true);
+
+        const confirmed = await runConfirmStage(FEAS_STUDENT_ID, proposed.response.pendingMutationId);
+        expect(confirmed.ok).toBe(true);
+        if (!confirmed.ok) return;
+        expect(confirmed.response.feasible).toBe(true);
+        expect(confirmed.response.storedIn).toBe("forwardSchedule");
+
+        // The committed plan WAS rewritten (the supersede-then-insert landed).
+        const after = await scheduleStore.loadLatestSchedule(FEAS_STUDENT_ID);
+        expect(after?.schedule.dprCourseHistoryHash).not.toBe("seed-hash");
     });
 });

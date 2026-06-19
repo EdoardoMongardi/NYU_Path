@@ -1609,6 +1609,31 @@ button.reasoningHeader:focus-visible {
     cursor: pointer;
 }
 
+/* Plan 37 F4 — the per-term "+ Add course" hedge caption (e.g. the
+   current-term add/drop deadline warning). A small, muted line above the
+   input wrap so the student sees the "verify; registering this late is
+   deadline-gated" note before they submit. */
+.addCourseHedge {
+    font-size: 0.74em;
+    line-height: 1.3;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Visually-hidden but screen-reader-available label (a11y for the add
+   input). Standard sr-only recipe. */
+.srOnly {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* Inline spinner that replaces the grade cell while a Stage-1 propose
    round-trip is in flight for that slot. Sized to the grade cell's
    width so the row layout stays stable. */

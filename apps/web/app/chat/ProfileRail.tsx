@@ -43,7 +43,7 @@ import type { StudentProfile } from "@nyupath/shared";
 import type { DegreeProgressReport } from "@nyupath/engine";
 import type { PlanStore } from "./planState";
 import styles from "./chat.module.css";
-import SummaryCard from "./sidebar/SummaryCard";
+import SummaryCard from "./profile/SummaryCard";
 import { kindBadgeClass, kindBadgeLabel, verdictDisplay } from "./workspace/scenarioBadges";
 
 // Phase 16 Task B — env-flag-gated test "clear all" affordance. Read at

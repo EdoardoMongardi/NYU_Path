@@ -1,16 +1,16 @@
 # confirm_plan_change — Technical Audit
 
-> Last verified against code: 2026-06-13 (doc-sync pass: PlanMutationSchema now 14 kinds incl. addSoftObjective/clearSoftObjectives, and all confirmPlanChange.ts line citations re-pinned after D6.3 insertions; prior pass 2026-06-11 re-rank provenance durability).
+> Last verified against code: 2026-06-19 (plan 37 — M1: `persistSchedule` + `persistPreferences` are now **gated on `validatorResult.feasible`** — an infeasible result lives only in the in-memory `studentDraftPlan` scratchpad and is NEVER written to the DB; the previously-committed valid plan stays live. The `force`/"override anyway" path is RETIRED — there is no override; J2: `resolveBindMutations` is called before the prefs walk to translate `bindFreeElective`/`bindPoolSlot` mutations into durable `pin(courseId, term, freeze:true)` entries; C2: `passFailConfig` from `session.schoolConfig` is threaded into `finalizeForwardSchedule` so the 8th `passFailLimitsRespected` axis fires; the tool description clarifies that `confirm_plan_change` accepts only `{ mutations }` — there is no `pendingMutationId` parameter).
 
 ## Purpose
 
-This tool runs after the student previewed a change (via [`propose_plan_change`](propose_plan_change.md)) and said "yes, do it." It takes the exact same mutation list — pin this course, drop that one, add summer, swap A for B — and actually applies it to `session.schedulePreferences`, then re-runs the planner so the saved plan reflects the change. The routing is the clever part: if the resulting plan passes the authoritative 7-axis validator (clean or with acceptable trade-offs), it is saved into the main `forwardSchedule` slot and any prior draft is cleared. If the change makes the plan infeasible, it lands in the separate `studentDraftPlan` slot instead, leaving the previously-valid plan untouched so the system never quietly endorses a broken plan. The output always reports which slot was updated. This is the only tool in the propose/confirm pair that writes session state.
+This tool runs after the student previewed a change (via [`propose_plan_change`](propose_plan_change.md)) and said "yes, do it." It takes the exact same mutation list — pin this course, drop that one, add summer, swap A for B — and actually applies it to `session.schedulePreferences`, then re-runs the planner so the saved plan reflects the change. The routing is the clever part: if the resulting plan passes the authoritative **8-axis validator** (7 graduation-path axes + the plan-37 `passFailLimitsRespected` axis), it is saved into the main `forwardSchedule` slot and any prior draft is cleared. If the change makes the plan infeasible, it lands in the separate `studentDraftPlan` slot instead, leaving the previously-valid plan untouched so the system never quietly endorses a broken plan. **Plan 37 (M1):** the DB persist (`persistSchedule` + `persistPreferences`) is **gated on feasibility** — an infeasible result is written ONLY to the in-memory `studentDraftPlan` scratchpad and NEVER to the database, so the previously-committed valid plan stays live. The `force`/"Override anyway" path is **RETIRED** — the server rejects any attempt to commit an infeasible plan and there is no override path. The output always reports which slot was updated. This is the only tool in the propose/confirm pair that writes session state.
 
 ```mermaid
 flowchart LR
     Q[Student: yes, apply that change] --> T[confirm_plan_change]
     T --> M[Mutate preferences for real]
-    M --> S[Re-solve + 7-axis validate]
+    M --> S[Re-solve + 8-axis validate]
     S --> V{validatorResult.feasible?}
     V -->|yes| MAIN[Write forwardSchedule, clear draft]
     V -->|no| DRAFT[Write studentDraftPlan, keep old main plan]
@@ -31,7 +31,7 @@ Source files:
 
 ## 1. What it does
 
-`confirm_plan_change` is the **writing** half of the two-step plan-mutation contract. It accepts the same `mutations[]` array as `propose_plan_change`, applies them to `session.schedulePreferences` (actually mutating it), re-runs the forward solver, routes the new schedule through the **authoritative 7-axis validator**, writes the result to one of two session slots per Decision #32, and (when wired) persists the schedule + preferences through `session.scheduleStore`.
+`confirm_plan_change` is the **writing** half of the two-step plan-mutation contract. It accepts the same `mutations[]` array as `propose_plan_change`, applies them to `session.schedulePreferences` (actually mutating it), re-runs the forward solver, routes the new schedule through the **authoritative 8-axis validator** (plan-37: 7 graduation-path axes + `passFailLimitsRespected`), writes the result to one of two session slots per Decision #32, and (when wired and **only when feasible**) persists the schedule + preferences through `session.scheduleStore` (M1).
 
 The routing rule keys on the **validator's verdict**, not the solver's coarse state (this is the post-rebuild PLAN-3 fix):
 
@@ -120,13 +120,15 @@ flowchart TD
     P --> Q[Return outcome + storedIn]
 ```
 
-**Step 1 — Apply mutations and write them.** `applyMutationsToPreferences(session.schedulePreferences ?? {}, mutations)` returns `{ prefs: newPrefs, noOpConsequences }`. The tool then writes `session.schedulePreferences = newPrefs` (`confirmPlanChange.ts:166`).
+**Step 0 — Resolve slot-level binds into pins (J2, plan 37).** `resolveBindMutations(currentPlan, mutations)` translates any `bindFreeElective(slotId, courseId)` or `bindPoolSlot(slotId, courseId)` mutation into a `pin(courseId, term, freeze:true)` by looking up the slot's term in the current plan. This makes the binding durable across future re-solves (the pin lands in `schedulePreferences.pins[]`). An `exclude` mutation that drops a bound course strips the matching pin. The resulting `resolvedMutations` array is what the prefs walk below operates on.
+
+**Step 1 — Apply mutations and write them.** `applyMutationsToPreferences(session.schedulePreferences ?? {}, resolvedMutations)` returns `{ prefs: newPrefs, noOpConsequences }`. The tool then writes `session.schedulePreferences = newPrefs`.
 
 **Step 2 — Build solver input + validator rules.** `buildSolverInputWithRulesFromSession(session, dpr, newPrefs)` makes ONE `buildProgramRules` call yielding both `solverInput` and `validatorRules`, with `newPrefs` as the override (identical to the just-written session value).
 
 **Step 3 — Re-solve.** `solveForwardSchedule(solverInput)` runs the rebuilt feasibility-first search + materialize. See [forward-schedule audit](../engine/forward-schedule.md).
 
-**Step 4 — Validate BEFORE + finalize AFTER through the 7-axis validator.** `runGraduationPathValidator({ plan: currentPlan, … })` produces `beforeAxes` (for `validationResultsChanges`). `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`confirmPlanChange.ts:198`) assembles `newSchedule` AND runs the validator, returning `{ newSchedule, validatorResult }`. **The routing keys on `validatorResult.feasible`, not on the solver's coarse `state`** — closing the PLAN-3 hole where a confirmed edit could be stored to `forwardSchedule` ("valid") without the 7-axis validator passing.
+**Step 4 — Validate BEFORE + finalize AFTER through the 8-axis validator (plan 37).** `runGraduationPathValidator({ plan: currentPlan, passFailConfig: session.schoolConfig?.passFail, … })` produces `beforeAxes` (for `validationResultsChanges`). `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules, session.schoolConfig?.passFail)` (C2, plan 37) assembles `newSchedule` AND runs the validator — including the 8th `passFailLimitsRespected` axis fed by the per-school `passFail` config — returning `{ newSchedule, validatorResult }`. **The routing keys on `validatorResult.feasible`, not on the solver's coarse `state`** — closing the PLAN-3 hole where a confirmed edit could be stored to `forwardSchedule` ("valid") without the full 8-axis validator passing.
 
 **Step 4a — Attach re-rank provenance (D6.3, when `rankedAlternative` was passed).** Immediately after `finalizeForwardSchedule` returns `newSchedule` and **before** the routing/persist below, if `input.rankedAlternative` is present the tool builds an `LLM_RANKED_ALTERNATIVE` Assumption `{ type, studentStatedFactor, selectedPlanIndex, reasoning, dimensionsConsidered }` and appends it to `newSchedule.assumptions[]` (immutably: `newSchedule.assumptions = [...newSchedule.assumptions, provenance]`). Because each `finalizeForwardSchedule` rebuilds `assumptions` fresh from the solver's emitted assumptions (the solver only emits `IP_COURSE_COMPLETION`, never `LLM_RANKED_ALTERNATIVE`), a prior turn's provenance is never carried into `newSchedule` — so this append yields exactly one `LLM_RANKED_ALTERNATIVE` on the live schedule and a re-confirm cannot stack duplicates (no de-dup guard needed). The append lands **before** Step 6's `persistSchedule`, so the provenance is on the row written to the store — and therefore survives `loadLatestSchedule` (P3.1) on a later turn (see §2a).
 
@@ -146,12 +148,12 @@ if (validatorResult.feasible) {
 
 A student who confirms a mutation that makes the plan infeasible **does not lose** their previous valid `forwardSchedule`. The draft sits in `studentDraftPlan`; the agent can still show the last good plan. The two slots can coexist when the latest confirm produced a draft, but cannot coexist when it produced a valid plan (the valid branch deletes the draft).
 
-**Step 6 — Persist if wired** (`confirmPlanChange.ts:252`). Only when both `scheduleStore` and `student` are present. Two separate calls, each in its own `try/catch`:
+**Step 6 — Persist if wired — ONLY when feasible (M1, plan 37).** When both `scheduleStore` and `student` are present **and `validatorResult.feasible` is `true`**, two separate `try/catch` calls run:
 
 - `scheduleStore.persistSchedule(student.id, newSchedule, computeDprFingerprint(dpr))`.
 - `scheduleStore.persistPreferences(student.id, newPrefs)`.
 
-Both errors are caught and `console.warn`-logged; they do **not** throw. Both writes happen **regardless of `storedIn`** — even infeasible drafts are persisted, so a returning student lands back in their last draft.
+Both errors are caught and `console.warn`-logged; they do **not** throw. **Critical change (M1):** before plan 37, both writes ran regardless of `storedIn` (even infeasible drafts were persisted). Now persistence is **gated on `validatorResult.feasible`** — an infeasible result lives only in the in-memory `studentDraftPlan` scratchpad and is NEVER written to the DB as the committed `forward_schedule`. The previously-committed valid plan stays live and is never superseded by a draft. The preferences write is also gated — an infeasible edit must not durably pin the mutation that broke the plan (a future re-solve would re-apply it and re-break).
 
 **Step 7 — Build the outcome.** `computeSlotDiff`, `deriveConsequences`, `buildPlanDiff(currentPlan, newSchedule, { before: beforeAxes, after: validatorResult.axisResults })`. The double-count advisory is derived via `buildDoubleCountAdvisory(dpr, session.schoolConfig)` and — when non-null — attached as the **whole structured `Disclaimer`** (id + `reason` + `bulletinSource`) to the output's `disclaimers[]` envelope field (D3.2; it is **no longer** pushed bare into `consequences`, which previously dropped the citation), mirroring `plan_forward_degree`. When `!validatorResult.feasible`, the tool also pushes an explicit consequence: `"Plan fails graduation-path validation (<failing axes>): <conflictDetail>. Stored as a draft; your last valid plan is unchanged."` (`confirmPlanChange.ts`), plus a `conflicts` entry from the validator's `infeasibilityReport`.
 
@@ -165,7 +167,7 @@ Like propose, `buildPlanDiff` here populates the five trade-off fields (`newRequ
 
 ```
 {
-  feasible: boolean,                         // validatorResult.feasible (7-axis)
+  feasible: boolean,                         // validatorResult.feasible (8-axis)
   diff: { added, removed },
   consequences: string[],                    // validator-failure line; NO double-count text (rides disclaimers[])
   conflicts?: Array<{ kind, detail }>,       // from the validator's infeasibilityReport
@@ -245,5 +247,5 @@ Compared to propose's summary: the header line differs (it reports `storedIn`); 
 
 - **The double-count advisory is now carried with its citation (D3.2 — fixed).** Same fix as propose: previously only the advisory's bare `text` was pushed into `consequences`, dropping `reason` + `bulletinSource`. It is now carried as a structured `Disclaimer` on the output's `disclaimers[]` envelope field and rendered by `summarizeResult` via `renderEnvelopeMeta`, matching `plan_forward_degree`. The inconsistency with the planner is closed.
 - **`bindFreeElective` / `unbindFreeElective` / `bindPoolSlot` are wasted work here.** They don't change `schedulePreferences`, the re-solve produces essentially the same schedule, and the tool re-persists anyway. They exist in the schema as a forward-compatibility hook; the real bindings live in the dedicated `bind_*` tools.
-- **Infeasible drafts are still persisted.** Both `persistSchedule` and `persistPreferences` run regardless of `storedIn`, so a returning student can land back in a draft state.
+- **Infeasible drafts are NOT persisted (M1 — fixed in plan 37).** `persistSchedule` and `persistPreferences` are now gated on `validatorResult.feasible`. An infeasible result lives only in the in-memory `studentDraftPlan` scratchpad; the previously-committed valid plan stays live and is never overwritten by a draft.
 - **No staleness guard between propose and confirm** (see §7) — the confirm is an independent run from the preview the student saw.

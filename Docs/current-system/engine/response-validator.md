@@ -1,6 +1,6 @@
 # Response Validator
 
-> Last verified against code: 2026-06-13 (doc-sync pass: D5.2 route wiring marked done; refreshed TIER2_ESTIMATE_TOOLS + semi_hardened-comment line cites).
+> Last verified against code: 2026-06-19 (re-verified for plans 35/36/37: no validator changes; the plan-claim check (§9.5) is unaffected; the `never-commit-invalid` contract (M1/M2) lives in the confirm route + `forwardSchedule.md` plan-state section, not here. Prior: 2026-06-13 doc-sync pass).
 
 > **Source files:** `packages/engine/src/agent/responseValidator.ts`, `agent/verifiers/blockquoteAttribution.ts`, `agent/forwardSchedule/termLabel.ts`
 

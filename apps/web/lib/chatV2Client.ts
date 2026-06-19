@@ -61,6 +61,21 @@ export type ChatV2Event =
      * PROGRAM identified by `hypotheticalProgram`.
      */
     | { kind: "whatif_audit_request"; hypotheticalProgram: string }
+    /**
+     * Task I1 — chat-proposed change surfaces the Confirm rail. Emitted
+     * at most ONCE per turn when the agent called `propose_plan_change`.
+     * Carries the staged `pendingMutationId` so the workspace Confirm
+     * button can POST to `/api/plan/confirm` and commit via the existing
+     * chokepoint. Staging ≠ committing — nothing persists until Confirm.
+     */
+    | {
+        kind: "plan_proposal";
+        pendingMutationId: string;
+        feasible: boolean;
+        consequences: string[];
+        proposedSchedule?: import("@nyupath/shared").ForwardSchedule;
+        planDiff?: import("@nyupath/shared").PlanDiff;
+    }
     | { kind: "done"; finalText: string; modelUsedId: string }
     | { kind: "error"; message: string };
 

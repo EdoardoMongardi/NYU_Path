@@ -123,6 +123,14 @@ function mapConfirmError(err: RunConfirmError): NextResponse {
         case "no_dpr":
         case "no_schedule":
             return NextResponse.json({ error: err.message, kind: err.kind }, { status: 409 });
+        // M1 (plan 37) — the re-solved plan is INFEASIBLE; the confirm path
+        // refuses to commit it. 422 Unprocessable Entity: the request was
+        // well-formed but the resulting plan can't be accepted. The
+        // failing-axis explanation rides in `error` so the UI surfaces WHY
+        // (and `applyReviewConfirm`/the bubble Confirm leave the committed
+        // plan untouched because the client sees a non-2xx → ok:false).
+        case "infeasible":
+            return NextResponse.json({ error: err.message, kind: err.kind }, { status: 422 });
         case "bad_input":
             return NextResponse.json({ error: err.message, kind: err.kind }, { status: 400 });
         case "engine_error":
@@ -209,10 +217,11 @@ export async function handleProposeWhatIfRoute<T>(
 
 /** Same shape as handleProposeRoute but for the /confirm route. The
  *  body is `{ pendingMutationId: string, force?: boolean }` and we
- *  delegate straight to runConfirmStage. The optional `force` flag
- *  routes an infeasible apply into Decision #32's
- *  `student-preferred-invalid-draft` slot rather than the default
- *  `infeasible-draft`. */
+ *  delegate straight to runConfirmStage. M1 (plan 37): an infeasible
+ *  confirm is REFUSED on every path (→ `mapConfirmError` → HTTP 422);
+ *  the prior valid plan is never overwritten. The `force` flag is inert
+ *  (kept for back-compat) — it no longer routes an infeasible apply into
+ *  any "student-preferred-invalid-draft" slot. */
 export async function handleConfirmRoute(
     req: NextRequest,
     schema: ZodTypeAny,

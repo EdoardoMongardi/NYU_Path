@@ -122,6 +122,8 @@
   ],
   "passFail": {
     "careerLimitType": "credits",
+    "careerLimitValue": null,
+    "careerLimitSourceRef": "bulletin-raw/undergraduate/engineering/academic-policies/_index.md:218 — no cap; canElect:false",
     "perTermLimit": null,
     "perTermUnit": "semester",
     "countsForMajor": false,

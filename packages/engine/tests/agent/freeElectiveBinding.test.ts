@@ -522,9 +522,9 @@ describe("bind_free_elective — pool slot rejected (wrong kind)", () => {
     });
 });
 
-// Verify validateInput rejects when no forwardSchedule
-describe("bind_free_elective — validateInput rejects without forwardSchedule", () => {
-    it("returns ok:false when no forwardSchedule", async () => {
+// Verify validateInput rejects when neither forwardSchedule nor studentDraftPlan is present
+describe("bind_free_elective — validateInput rejects when neither forwardSchedule nor studentDraftPlan is present", () => {
+    it("returns ok:false when no plan source is present", async () => {
         const session = makeSession({ forwardSchedule: undefined });
         const result = await bindFreeElectiveTool.validateInput!(
             { slotId: "free-slot-1", courseId: "HUMA-UA 1000" },
@@ -532,6 +532,40 @@ describe("bind_free_elective — validateInput rejects without forwardSchedule",
         );
         expect(result.ok).toBe(false);
         if (result.ok) return;
-        expect(result.userMessage).toMatch(/no forward plan/i);
+        expect(result.userMessage).toMatch(/don't have a plan to bind into yet/i);
+    });
+});
+
+// J1: validateInput accepts a session that has only a studentDraftPlan (infeasible plan, no forwardSchedule)
+describe("bind_free_elective — J1: accepts studentDraftPlan when forwardSchedule is absent", () => {
+    it("validateInput returns ok:true when only studentDraftPlan is present", async () => {
+        // Simulate an infeasible plan: no forwardSchedule, but studentDraftPlan holds the draft
+        const draftPlan = makeSchedule(); // valid ForwardSchedule shape used as the draft
+        const session = makeSession({ forwardSchedule: undefined, studentDraftPlan: draftPlan });
+        const result = await bindFreeElectiveTool.validateInput!(
+            { slotId: "free-slot-1", courseId: "HUMA-UA 1000" },
+            makeCtx(session),
+        );
+        expect(result.ok).toBe(true);
+    });
+
+    it("call() binds against the draft plan's free slot and does not throw", async () => {
+        // Session has no forwardSchedule but studentDraftPlan has the free-slot-1 placeholder
+        const draftPlan = makeSchedule(); // contains free-slot-1 in 2026-fall
+        const session = makeSession({ forwardSchedule: undefined, studentDraftPlan: draftPlan });
+        const output = await bindFreeElectiveTool.call(
+            { slotId: "free-slot-1", courseId: "HUMA-UA 1000" },
+            makeCtx(session),
+        );
+        // Should not crash; should find the slot and produce a valid result
+        expect(output.diff).toBeDefined();
+        // The slot was found (not "slot not found")
+        expect(output.conflicts?.some((c) => c.kind === "unknown_slot")).toBeFalsy();
+        // The bound slot is present in the diff
+        expect(output.diff.added).toHaveLength(1);
+        expect(output.diff.added[0]!.slot.kind).toBe("specific_planned");
+        if (output.diff.added[0]!.slot.kind === "specific_planned") {
+            expect(output.diff.added[0]!.slot.courseId).toBe("HUMA-UA 1000");
+        }
     });
 });
