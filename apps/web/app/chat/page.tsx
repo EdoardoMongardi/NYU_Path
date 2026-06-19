@@ -1358,12 +1358,12 @@ export default function ChatPage() {
             setTimeout(scrollToBottom, 50);
             return;
         }
-        // I4 verdict gate:
-        //   • VALID (feasible + forwardSchedule)  → addScenario a READ-ONLY
-        //     kind:"whatif" tab (no Confirm) + emit a ScheduleCard into chat.
-        //   • INVALID (feasible:false OR no schedule) → NO workspace surface
-        //     (skip setInvalidProposal AND setPendingPreview). The agent's
-        //     chat narration already explains the consequence.
+        // CONFIRMABLE gate (owner decision — Branch-B withdraw/pass-fail):
+        //   • VALID  → setPendingPreview (kind:"proposed" + Confirm button;
+        //              R1 intact — only forward_schedule persists).
+        //   • INVALID → setInvalidProposal (red explanation card; no Confirm).
+        // The audit (Branch-A program-change) path is read-only and is handled
+        // separately by buildWhatIfScenarioFromAudit (not this path).
         applyWhatIfResult(result.data, {
             planStore,
             emitScheduleCard: (msg) => {

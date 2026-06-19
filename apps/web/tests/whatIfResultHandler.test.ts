@@ -1,11 +1,17 @@
 // ============================================================
-// Task I4 — whatIfResultHandler: verdict-gated what-if surfacing
+// whatIfResultHandler — Branch-B CONFIRMABLE what-if surfacing
 // ============================================================
 // Tests call `applyWhatIfResult` — the pure helper extracted from
-// `handleWhatIfResult` in page.tsx — to verify the I4 verdict gate:
+// `handleWhatIfResult` in page.tsx — to verify the CONFIRMABLE gate
+// (owner decision, post-I4 correction):
 //
-//   • VALID what-if   → addScenario (read-only kind:"whatif" tab) + emitScheduleCard.
-//   • INVALID what-if → NO workspace surface (no addScenario, no setInvalidProposal).
+//   • VALID Branch-B what-if   → setPendingPreview (kind:"proposed" scenario
+//     with pendingMutationId / Confirm button; R1 intact).
+//   • INVALID Branch-B what-if → setInvalidProposal (red explanation card;
+//     no Confirm, no Override, NOT chat-only).
+//
+// The audit (Branch-A program-change) path (buildWhatIfScenarioFromAudit)
+// remains read-only and is tested elsewhere.
 //
 // The proposed path (applyPlanProposalEvent) is covered in
 // planProposalClientHandler.test.ts.  This file focuses on the
@@ -42,16 +48,7 @@ function makeValidSchedule() {
     ]);
 }
 
-function makeInfeasibleSchedule() {
-    const s = makeValidSchedule();
-    return {
-        ...s,
-        state: "infeasible-draft" as const,
-        feasibility: { feasible: false, constraintViolations: [], placementRationale: {} },
-    };
-}
-
-/** Minimal valid WhatIfAssumptionRouteResponse. */
+/** Minimal valid WhatIfAssumptionRouteResponse (feasible). */
 function makeValidWhatIfResponse(): WhatIfAssumptionRouteResponse {
     return {
         feasible: true,
@@ -80,124 +77,65 @@ function makeInvalidWhatIfResponse(): WhatIfAssumptionRouteResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Tests — INVALID what-if (I4: no workspace surface)
+// Tests — VALID Branch-B what-if (CONFIRMABLE: setPendingPreview)
 // ---------------------------------------------------------------------------
 
-describe("applyWhatIfResult — INVALID what-if", () => {
-    it("creates NO scenario when feasible:false", () => {
-        const store = createPlanStore();
-        const emitScheduleCard = vi.fn();
-
-        applyWhatIfResult(makeInvalidWhatIfResponse(), {
-            planStore: store,
-            emitScheduleCard,
-            now: Date.now(),
-        });
-
-        // No scenario added — scenarios list is empty.
-        expect(store.getScenarios()).toHaveLength(0);
-    });
-
-    it("does NOT set an invalidProposal (red card) when feasible:false — chat-only", () => {
+describe("applyWhatIfResult — VALID Branch-B what-if → CONFIRMABLE proposed scenario", () => {
+    it("setPendingPreview is called — pendingPreview is non-null with pendingMutationId", () => {
         const store = createPlanStore();
 
-        applyWhatIfResult(makeInvalidWhatIfResponse(), {
+        applyWhatIfResult(makeValidWhatIfResponse(), {
             planStore: store,
             emitScheduleCard: vi.fn(),
             now: Date.now(),
         });
 
-        // No red card — the agent's chat narration is the sole surface.
+        const snap = store.getSnapshot();
+        expect(snap.pendingPreview).not.toBeNull();
+        // pendingMutationId present → Confirm button is wired.
+        expect(snap.pendingPreview?.pendingMutationId).toBe(PENDING_ID);
+    });
+
+    it("the active scenario is kind:'proposed' (confirmable, not read-only kind:'whatif')", () => {
+        const store = createPlanStore();
+
+        applyWhatIfResult(makeValidWhatIfResponse(), {
+            planStore: store,
+            emitScheduleCard: vi.fn(),
+            now: Date.now(),
+        });
+
+        const active = store.getActiveScenario();
+        expect(active).not.toBeNull();
+        expect(active?.kind).toBe("proposed");
+    });
+
+    it("the proposed scenario carries the whatIfAssumption marker (badge in ScheduleWorkspace)", () => {
+        const store = createPlanStore();
+
+        applyWhatIfResult(makeValidWhatIfResponse(), {
+            planStore: store,
+            emitScheduleCard: vi.fn(),
+            now: Date.now(),
+        });
+
+        const snap = store.getSnapshot();
+        expect(snap.pendingPreview?.whatIfAssumption).toEqual(MARKER);
+    });
+
+    it("no red invalidProposal card is set on the valid path", () => {
+        const store = createPlanStore();
+
+        applyWhatIfResult(makeValidWhatIfResponse(), {
+            planStore: store,
+            emitScheduleCard: vi.fn(),
+            now: Date.now(),
+        });
+
         expect(store.getScenarioState().invalidProposal).toBeNull();
     });
 
-    it("does NOT call emitScheduleCard when feasible:false", () => {
-        const store = createPlanStore();
-        const emitScheduleCard = vi.fn();
-
-        applyWhatIfResult(makeInvalidWhatIfResponse(), {
-            planStore: store,
-            emitScheduleCard,
-            now: Date.now(),
-        });
-
-        expect(emitScheduleCard).not.toHaveBeenCalled();
-    });
-
-    it("creates NO scenario when feasible:true but forwardSchedule absent (defensive)", () => {
-        const store = createPlanStore();
-        const emitScheduleCard = vi.fn();
-
-        const resp: WhatIfAssumptionRouteResponse = {
-            ...makeValidWhatIfResponse(),
-            forwardSchedule: undefined,
-        };
-        applyWhatIfResult(resp, { planStore: store, emitScheduleCard, now: Date.now() });
-
-        expect(store.getScenarios()).toHaveLength(0);
-        expect(emitScheduleCard).not.toHaveBeenCalled();
-    });
-});
-
-// ---------------------------------------------------------------------------
-// Tests — VALID what-if (I4: read-only kind:"whatif" scenario tab)
-// ---------------------------------------------------------------------------
-
-describe("applyWhatIfResult — VALID what-if", () => {
-    it("addScenario is called — scenarios list has exactly one kind:'whatif' entry", () => {
-        const store = createPlanStore();
-
-        applyWhatIfResult(makeValidWhatIfResponse(), {
-            planStore: store,
-            emitScheduleCard: vi.fn(),
-            now: Date.now(),
-        });
-
-        const scenarios = store.getScenarios();
-        expect(scenarios).toHaveLength(1);
-        expect(scenarios[0].kind).toBe("whatif");
-    });
-
-    it("the whatif scenario has NO pendingMutationId (read-only: no Confirm button)", () => {
-        const store = createPlanStore();
-
-        applyWhatIfResult(makeValidWhatIfResponse(), {
-            planStore: store,
-            emitScheduleCard: vi.fn(),
-            now: Date.now(),
-        });
-
-        const scenario = store.getScenarios()[0];
-        expect(scenario.pendingMutationId).toBeUndefined();
-    });
-
-    it("the whatif scenario verdict is 'valid' for a valid-clean schedule", () => {
-        const store = createPlanStore();
-
-        applyWhatIfResult(makeValidWhatIfResponse(), {
-            planStore: store,
-            emitScheduleCard: vi.fn(),
-            now: Date.now(),
-        });
-
-        expect(store.getScenarios()[0].verdict).toBe("valid");
-    });
-
-    it("the whatif scenario verdict is 'trade-offs' when there are consequences", () => {
-        const resp: WhatIfAssumptionRouteResponse = {
-            ...makeValidWhatIfResponse(),
-            consequences: ["This might delay your graduation."],
-        };
-        const store = createPlanStore();
-
-        applyWhatIfResult(resp, { planStore: store, emitScheduleCard: vi.fn(), now: Date.now() });
-
-        const sc = store.getScenarios()[0];
-        expect(sc.verdict).toBe("trade-offs");
-        expect(sc.hedges).toEqual(["This might delay your graduation."]);
-    });
-
-    it("emitScheduleCard is called exactly once with a schedule_card message", () => {
+    it("emitScheduleCard is called exactly once with a schedule_card message (H4.2a)", () => {
         const store = createPlanStore();
         const emitScheduleCard = vi.fn();
 
@@ -213,24 +151,6 @@ describe("applyWhatIfResult — VALID what-if", () => {
         expect(msg.role).toBe("assistant");
     });
 
-    it("the whatif scenario carries the whatIfAssumption marker", () => {
-        const store = createPlanStore();
-
-        applyWhatIfResult(makeValidWhatIfResponse(), {
-            planStore: store,
-            emitScheduleCard: vi.fn(),
-            now: Date.now(),
-        });
-
-        const sc = store.getScenarios()[0];
-        expect(sc.whatIfAssumption).toEqual(MARKER);
-        expect(sc.rederive).toEqual({
-            via: "whatif_assumption",
-            courseId: MARKER.courseId,
-            outcome: MARKER.outcome,
-        });
-    });
-
     it("the committed plan (forwardSchedule) is NEVER mutated — R1 preserved", () => {
         const store = createPlanStore();
         // No prior committed plan.
@@ -244,41 +164,108 @@ describe("applyWhatIfResult — VALID what-if", () => {
         expect(store.getSnapshot().forwardSchedule).toBeNull();
     });
 
-    it("no red card is set on the valid path", () => {
-        const store = createPlanStore();
-
-        applyWhatIfResult(makeValidWhatIfResponse(), {
-            planStore: store,
-            emitScheduleCard: vi.fn(),
-            now: Date.now(),
-        });
-
-        expect(store.getScenarioState().invalidProposal).toBeNull();
-    });
-});
-
-// ---------------------------------------------------------------------------
-// Tests — INFEASIBLE-schedule schedule (feasible:true but state:"infeasible-draft")
-// The feasible flag comes from the route, but the schedule.state could still be
-// infeasible if the engine returns a partial plan.  We treat feasible:false as
-// the gate (not schedule.state) to align with planActionSurfaces semantics.
-// This test documents the behaviour: if feasible:true + infeasibleSchedule,
-// a scenario IS created (the route said feasible=true; the verdict is invalid).
-// ---------------------------------------------------------------------------
-
-describe("applyWhatIfResult — feasible:true but schedule state infeasible-draft", () => {
-    it("creates a scenario with verdict:'invalid' when schedule.state is infeasible-draft", () => {
+    it("consequences are threaded onto the pendingPreview", () => {
         const resp: WhatIfAssumptionRouteResponse = {
             ...makeValidWhatIfResponse(),
-            forwardSchedule: makeInfeasibleSchedule(),
+            consequences: ["This might delay your graduation."],
         };
         const store = createPlanStore();
 
         applyWhatIfResult(resp, { planStore: store, emitScheduleCard: vi.fn(), now: Date.now() });
 
-        // feasible:true gate passed → scenario created.
-        expect(store.getScenarios()).toHaveLength(1);
-        // The scenario's verdict reflects the schedule state.
-        expect(store.getScenarios()[0].verdict).toBe("invalid");
+        const snap = store.getSnapshot();
+        expect(snap.pendingPreview?.consequences).toEqual(["This might delay your graduation."]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests — INVALID Branch-B what-if (red card, NOT chat-only)
+// ---------------------------------------------------------------------------
+
+describe("applyWhatIfResult — INVALID Branch-B what-if → red explanation card", () => {
+    it("setInvalidProposal is called — red card is non-null", () => {
+        const store = createPlanStore();
+
+        applyWhatIfResult(makeInvalidWhatIfResponse(), {
+            planStore: store,
+            emitScheduleCard: vi.fn(),
+            now: Date.now(),
+        });
+
+        // Red card present (NOT chat-only — the card IS the surface).
+        expect(store.getScenarioState().invalidProposal).not.toBeNull();
+    });
+
+    it("no pendingPreview (no Confirm button) on the invalid path", () => {
+        const store = createPlanStore();
+
+        applyWhatIfResult(makeInvalidWhatIfResponse(), {
+            planStore: store,
+            emitScheduleCard: vi.fn(),
+            now: Date.now(),
+        });
+
+        expect(store.getSnapshot().pendingPreview).toBeNull();
+    });
+
+    it("NO proposed scenario is created on the invalid path", () => {
+        const store = createPlanStore();
+
+        applyWhatIfResult(makeInvalidWhatIfResponse(), {
+            planStore: store,
+            emitScheduleCard: vi.fn(),
+            now: Date.now(),
+        });
+
+        const active = store.getActiveScenario();
+        expect(active?.kind).not.toBe("proposed");
+        expect(store.getScenarios()).toHaveLength(0);
+    });
+
+    it("does NOT call emitScheduleCard on the invalid path", () => {
+        const store = createPlanStore();
+        const emitScheduleCard = vi.fn();
+
+        applyWhatIfResult(makeInvalidWhatIfResponse(), {
+            planStore: store,
+            emitScheduleCard,
+            now: Date.now(),
+        });
+
+        expect(emitScheduleCard).not.toHaveBeenCalled();
+    });
+
+    it("R1 preserved — committed plan untouched on the invalid path", () => {
+        const store = createPlanStore();
+
+        applyWhatIfResult(makeInvalidWhatIfResponse(), {
+            planStore: store,
+            emitScheduleCard: vi.fn(),
+            now: Date.now(),
+        });
+
+        expect(store.getSnapshot().forwardSchedule).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests — defensive no-op (feasible:true but no forwardSchedule)
+// ---------------------------------------------------------------------------
+
+describe("applyWhatIfResult — defensive no-op (feasible:true, no forwardSchedule)", () => {
+    it("creates no scenario and sets no card when forwardSchedule is absent", () => {
+        const store = createPlanStore();
+        const emitScheduleCard = vi.fn();
+
+        const resp: WhatIfAssumptionRouteResponse = {
+            ...makeValidWhatIfResponse(),
+            forwardSchedule: undefined,
+        };
+        applyWhatIfResult(resp, { planStore: store, emitScheduleCard, now: Date.now() });
+
+        expect(store.getScenarios()).toHaveLength(0);
+        expect(store.getSnapshot().pendingPreview).toBeNull();
+        expect(store.getScenarioState().invalidProposal).toBeNull();
+        expect(emitScheduleCard).not.toHaveBeenCalled();
     });
 });
