@@ -443,7 +443,7 @@ The plan-action routes bypass the agent loop entirely. They are the deterministi
 - **Token budget is precious.** Every edit should not cost Anthropic credits. The propose stage costs zero tokens. The polish call is optional, env-gated, and uses Anthropic Haiku (`claude-haiku-4-5-20251001`, pinned in `apps/web/lib/llmPolishPrompt.ts:96`) with a strict rewrite-only prompt; the engine output is the source of truth. (This Haiku polish model is independent of the agent loop's default primary model, `claude-sonnet-4-6`.)
 - **Side-by-side bubble UX.** The agent loop emits chat turns. The plan-action routes emit a structured `pendingMutationId` plus a deterministic template that the UI surfaces as a confirm-bubble — clearly distinct from a model reply.
 
-The two paths share the engine's two tools (`proposePlanChangeTool`, `confirmPlanChangeTool` — both still live in the registry at `packages/engine/src/agent/registry.ts`), so the validation semantics, the conflict-kind taxonomy, and the persisted state model are identical. Both tools route the post-mutation schedule through `finalizeForwardSchedule`, which runs the feasibility-first backtracking search (`findFirstValidPlan` → `localImprove` → `materializePlan`) and the authoritative 7-axis `runGraduationPathValidator` — the legacy greedy solver was removed in the Phase 0-2 rebuild (PRs #35-#41). The plan-action routes simply skip the agent shell and call the tools directly, in a fresh `ToolSession` rebuilt from the persistence stores.
+The two paths share the engine's two tools (`proposePlanChangeTool`, `confirmPlanChangeTool` — both still live in the registry at `packages/engine/src/agent/registry.ts`), so the validation semantics, the conflict-kind taxonomy, and the persisted state model are identical. Both tools route the post-mutation schedule through `finalizeForwardSchedule`, which runs the feasibility-first backtracking search (`findFirstValidPlan` → `localImprove` → `materializePlan`) and the authoritative 8-axis `runGraduationPathValidator` — the legacy greedy solver was removed in the Phase 0-2 rebuild (PRs #35-#41). The plan-action routes simply skip the agent shell and call the tools directly, in a fresh `ToolSession` rebuilt from the persistence stores.
 
 ```mermaid
 flowchart TB
@@ -457,6 +457,6 @@ flowchart TB
         PlanRoutes --> Orch[runProposeStage / runConfirmStage]
         Orch --> Tools
     end
-    Tools --> Finalize[finalizeForwardSchedule: search + 7-axis validator]
+    Tools --> Finalize[finalizeForwardSchedule: search + 8-axis validator]
     Finalize --> Store[(scheduleStore + profileStore)]
 ```

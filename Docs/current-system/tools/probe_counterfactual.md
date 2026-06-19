@@ -4,7 +4,7 @@
 
 ## Purpose
 
-When a student asks "what happens if I drop this future elective?" or "what if I had failed CSCI-UA 101?", this tool answers **without changing their plan**. It applies the hypothetical, re-runs the planner, routes the result through the **same authoritative 7-axis validator** the build path uses, and reports either the slot diff (if the plan stays valid) or the **binding constraint** (if it becomes infeasible). It writes nothing.
+When a student asks "what happens if I drop this future elective?" or "what if I had failed CSCI-UA 101?", this tool answers **without changing their plan**. It applies the hypothetical, re-runs the planner, routes the result through the **same authoritative 8-axis validator** the build path uses, and reports either the slot diff (if the plan stays valid) or the **binding constraint** (if it becomes infeasible). It writes nothing.
 
 It is the read-only what-if companion to [`propose_plan_change`](propose_plan_change.md). The difference: `propose_plan_change` previews edits to **future** placement (a mutation array) as the "try before you buy" half of a confirm contract; `probe_counterfactual` adds a second arm — **failing an already-completed course** — and is framed purely as an exploratory probe (there is no `confirm_counterfactual`; the student can't "apply" having failed a course).
 
@@ -16,7 +16,7 @@ flowchart LR
     B --> S[Synthetic DPR via applyFailedCourseToDpr]
     P --> R[Re-solve: search + finalize]
     S --> R
-    R --> V[7-axis validator verdict]
+    R --> V[8-axis validator verdict]
     V -->|valid| D[Report the slot diff + planDiff]
     V -->|infeasible| C[Report the binding constraint]
     D --> END[session UNCHANGED]
@@ -39,7 +39,7 @@ Source files:
 
 `probe_counterfactual` is a **read-only counterfactual**. It accepts ONE of two hypotheticals (a zod `discriminatedUnion("kind", …)`), re-solves the forward schedule against that hypothetical, routes the output through the authoritative validator, and returns:
 
-- a feasibility verdict from the **7-axis `runGraduationPathValidator`** (not the solver's coarse flag),
+- a feasibility verdict from the **8-axis `runGraduationPathValidator`** (not the solver's coarse flag),
 - the re-solved counterfactual `schedule` (a pure preview — never persisted),
 - the validator-derived `state` of that schedule,
 - a slot-level before/after `diff` (vs the CURRENT plan),
@@ -134,7 +134,7 @@ None of `buildSolverInputWithRulesFromSession`, `solveForwardSchedule`, or `fina
 ```
 {
   arm: "future_course" | "fail_completed",
-  feasible: boolean,                         // validatorResult.feasible (7-axis)
+  feasible: boolean,                         // validatorResult.feasible (8-axis)
   diff: { added: [...], removed: [...] },     // slot diff vs the CURRENT plan
   consequences: string[],
   conflicts?: Array<{ kind, detail }>,        // from the validator's infeasibilityReport
@@ -157,7 +157,7 @@ None of `buildSolverInputWithRulesFromSession`, `solveForwardSchedule`, or `fina
 conflicts = [{ kind: infeasibilityReport.conflictSource, detail: infeasibilityReport.conflictDetail }]
 ```
 
-`conflictDetail` is a human-readable failing-axis + reason string (e.g. `"Axes failed: requirementGroupsSatisfied: …; graduationTargetMet: …"`). This is the solver-coarse-boolean → validator-binding-constraint upgrade that the whole 7-axis architecture exists to provide.
+`conflictDetail` is a human-readable failing-axis + reason string (e.g. `"Axes failed: requirementGroupsSatisfied: …; graduationTargetMet: …"`). This is the solver-coarse-boolean → validator-binding-constraint upgrade that the whole 8-axis architecture exists to provide.
 
 `schedule`, `state`, and `planDiff` are populated whenever the re-solve ran (i.e., `currentPlan` was non-null). `conflicts` is conditional on infeasibility.
 
