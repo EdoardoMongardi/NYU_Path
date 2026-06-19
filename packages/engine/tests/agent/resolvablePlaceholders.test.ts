@@ -37,7 +37,7 @@
 // CS course pass validator axes 1/2/4 → the plan is valid-with-trade-offs.
 // ============================================================
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseDpr, type ToolSession } from "../../src/index.js";
@@ -158,21 +158,49 @@ describe("K1 — an IP course pre-registered outside its offering season does no
 });
 
 // ---------------------------------------------------------------------------
-// 3. End-to-end — the sample DPR yields a VALID plan whose two formerly-empty
-//    leaves are now RESOLVABLE (not empty REQ-<rId> placeholders).
+// 3. End-to-end — the sample DPR yields a GENUINELY-VALID plan whose two
+//    formerly-empty leaves are now RESOLVABLE (not empty REQ-<rId> placeholders)
+//    AND resolve to real FORWARD needs — NOT phantom-bound to courses the student
+//    has already completed.
+//
+//    K1 fix-loop — the CRITICAL distinction this test now enforces. R1142/20
+//    "CS-Required" lists six CSCI-UA courses, FIVE of which the student already
+//    completed (CSCI-UA 102/201/202/310, + 4) — only CSCI-UA 421 (Numerical
+//    Computing) is a genuine forward need. Before the fix the frozen greedy
+//    search "satisfied" the leaf by binding the already-completed, placement-
+//    flexible CSCI-UA 102 — scheduling NO new course while CSCI-UA 421 went
+//    unscheduled, falsely reporting the plan valid. A student following that
+//    "valid" plan would graduate MISSING CSCI-UA 421. The derivation fix excludes
+//    already-COMPLETED (and IN-PROGRESS) courses from forward candidate domains,
+//    so the leaf now resolves to the genuine CSCI-UA 421 and the plan is
+//    GENUINELY valid. This test asserts the TRUE resolution (CSCI-UA 421, a
+//    not-yet-taken course) and that NO forward slot is filled by an already-taken
+//    course — so a future regression that re-introduces phantom binding fails here.
 //
 //    Robust to the run date: we pin a generous graduation horizon
 //    (graduationTermOverride) so a spring term always exists for the spring-only
-//    CS course, and assert the two leaves resolve regardless of which future
-//    term they land in.
+//    CS course, and assert the leaves resolve regardless of which future term
+//    they land in.
 // ---------------------------------------------------------------------------
-describe("K1 — sample DPR: both unmet leaves materialise as RESOLVABLE placeholders", () => {
-    it("R1004/10 (Texts & Ideas) is a non-empty POOL placeholder and R1142/20 (CS-Required) is bound/non-empty → valid plan", () => {
+describe("K1 — sample DPR: both unmet leaves resolve to GENUINE forward needs (no phantom binding)", () => {
+    it("R1004/10 (Texts & Ideas) is a non-empty POOL placeholder and R1142/20 (CS-Required) binds the not-yet-taken CSCI-UA 421 → genuinely-valid plan", () => {
         const dpr = parsedSampleDpr();
         const session = sampleSession(dpr);
         // A generous fixed horizon guarantees at least one spring term for the
         // spring-only CS course, independent of today's date.
         const schedule = buildForwardSchedule({ session, dpr, graduationTermOverride: "2028-spring" });
+
+        // The set of courses the student has already COMPLETED — derived the same
+        // way the builder does (so the "no forward slot is a taken course" guard
+        // below is checked against the authoritative set, not a hand-listed one).
+        const { solverInput } = buildSolverInputWithRules(session, dpr, {
+            graduationTermOverride: "2028-spring",
+        });
+        const coursesTaken = solverInput.coursesTaken;
+        // Sanity: CSCI-UA 102 (the course the OLD code phantom-bound) really is a
+        // completed course, and CSCI-UA 421 (the genuine need) really is NOT.
+        expect(coursesTaken.has("CSCI-UA 102")).toBe(true);
+        expect(coursesTaken.has("CSCI-UA 421")).toBe(false);
 
         const slots = schedule.semesters.flatMap(s => s.slots);
         const slotsFor = (rId: string) =>
@@ -191,24 +219,159 @@ describe("K1 — sample DPR: both unmet leaves materialise as RESOLVABLE placeho
             expect(textsSlot.poolBinding!.candidates.length).toBeGreaterThan(0);
             // CORE-UA 402 is a real catalog member of the 400-499 range.
             expect(textsSlot.poolBinding!.candidates).toContain("CORE-UA 402");
+            // No pool candidate may be a course the student already completed
+            // (the derivation filter drops taken pool members too).
+            for (const cand of textsSlot.poolBinding!.candidates) {
+                expect(coursesTaken.has(cand)).toBe(false);
+            }
         }
         // Explicitly NOT the empty-placeholder form.
         expect(textsSlot.kind === "placeholder" && textsSlot.placeholderId === "REQ-R1004/10").toBe(false);
 
         // ---- R1142/20 (Computer Science: Required Courses) ----
+        // It must resolve to the GENUINE forward need CSCI-UA 421 as a CONCRETE,
+        // freshly-scheduled course — NOT phantom-bound to an already-completed
+        // CSCI-UA course (the false-valid the old code produced).
         const cs = slotsFor("R1142/20");
         expect(cs.length).toBeGreaterThan(0);
         const csSlot = cs[0]!;
-        // It resolves to a CONCRETE course (specific_planned) OR a resolvable
-        // pool placeholder — in either case NOT an empty REQ-<rId> placeholder.
+        expect(csSlot.kind).toBe("specific_planned");
+        if (csSlot.kind === "specific_planned") {
+            expect(csSlot.courseId).toBe("CSCI-UA 421");
+            // And it is NOT a course the student already completed.
+            expect(coursesTaken.has(csSlot.courseId)).toBe(false);
+        }
+        // It is NOT an empty REQ-<rId> placeholder.
         const csIsEmptyPlaceholder =
             csSlot.kind === "placeholder" &&
             csSlot.placeholderId === "REQ-R1142/20" &&
             csSlot.poolBinding === undefined;
         expect(csIsEmptyPlaceholder).toBe(false);
 
+        // ---- GLOBAL no-phantom guard: NO forward bound slot (specific_planned —
+        // the only kind a freshly-scheduled requirement/pin satisfier materialises
+        // as) may be filled by a course the student has already COMPLETED. This is
+        // the single assertion that distinguishes a TRUE resolution from a phantom
+        // one anywhere in the plan, not just for R1142/20.
+        for (const slot of slots) {
+            if (slot.kind === "specific_planned") {
+                expect(coursesTaken.has(slot.courseId)).toBe(false);
+            }
+        }
+
         // ---- The plan as a whole is VALID (not infeasible-draft) ----
         expect(schedule.state).toMatch(/^valid/);
         expect(schedule.feasibility.feasible).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 4. PAST/STALE IP reconciliation (K1 step 2) — DATE-INJECTED so the past-vs-
+//    current boundary is deterministic regardless of the real run date.
+//
+//    The builder infers the current term from the wall clock (deriveTemporalContext
+//    via new Date()). We freeze the clock to a Fall-2026 date with vi.useFakeTimers,
+//    so an IP row in Spring 2024 is unambiguously PAST and an IP row in Fall 2026 is
+//    the CURRENT in-session term. The past IP row must reconcile as TAKEN (counts for
+//    prereqs/credits, no forward term, no forward offering check) and must NOT appear
+//    in coursesInProgress OR offerings; the current IP row stays in-progress and has
+//    its forward offering entry dropped (an established enrollment faces no offering
+//    check). This pins the branch at buildSolverInput.ts:212-227.
+// ---------------------------------------------------------------------------
+describe("K1 — a past/stale IP row reconciles as TAKEN (date-injected)", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    function minimalDpr(
+        rows: Array<{ term: string; subject: string; catalogNbr: string; type: string; grade: string | null }>,
+    ): DegreeProgressReport {
+        return {
+            _meta: {
+                parserVersion: "1.0.0",
+                parsedAt: "2026-10-01T00:00:00Z",
+                sourceFingerprint: "sha256:test-k1-pastip",
+                sourcePdfPageCount: 1,
+                parseDurationMs: 0,
+                warnings: [],
+            },
+            reportKind: "dpr",
+            header: { studentName: "Test Student", preparedDate: "10/01/2026" },
+            programs: [],
+            advisorNotations: [],
+            cumulative: {
+                creditsRequired: 128,
+                creditsUsed: 96,
+                cumulativeGpa: 3.4,
+                cumulativeGpaRequired: 2.0,
+                residencyRequired: 64,
+                residencyUsed: 64,
+                passFailUsedUnits: 0,
+                passFailCapUnits: 32,
+                outsideHomeUsedUnits: 0,
+                outsideHomeCapUnits: 16,
+                timeLimitYears: 8,
+            },
+            requirementGroups: [],
+            courseHistory: rows.map(r => ({
+                term: r.term,
+                subject: r.subject,
+                catalogNbr: r.catalogNbr,
+                courseTitle: `${r.subject} ${r.catalogNbr}`,
+                grade: r.grade,
+                units: 4,
+                type: r.type,
+            })),
+        };
+    }
+
+    it("a Spring-2024 IP row lands in coursesTaken (NOT coursesInProgress / offerings) while a Fall-2026 IP row stays in-progress", () => {
+        // Freeze the wall clock to mid-Fall-2026 so the past/current split is fixed.
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-10-15T00:00:00Z"));
+
+        const PAST_IP = "MATH-UA 334"; // Spring 2024 — clearly past
+        const CURRENT_IP = "CSCI-UA 480"; // Fall 2026 — the in-session term
+
+        const dpr = minimalDpr([
+            { term: "2024 Spring", subject: "MATH-UA", catalogNbr: "334", type: "IP", grade: null },
+            { term: "2026 Fall", subject: "CSCI-UA", catalogNbr: "480", type: "IP", grade: null },
+        ]);
+
+        const session: ToolSession = {
+            student: {
+                id: "test-pastip",
+                catalogYear: "2024-2025",
+                homeSchool: "cas",
+                declaredPrograms: [{ programId: "computer_science", programType: "major" }],
+                coursesTaken: [],
+                visaStatus: "f1",
+            },
+            degreeProgressReport: dpr,
+            // Give BOTH IP courses a non-empty termsOffered so the gap-fill WOULD add
+            // an offering entry for them — making the "past IP never enters offerings"
+            // and "current IP offering entry dropped" assertions meaningful.
+            courses: [
+                { id: PAST_IP, title: "Past IP", credits: 4, termsOffered: ["spring"] },
+                { id: CURRENT_IP, title: "Current IP", credits: 4, termsOffered: ["fall"] },
+            ] as ToolSession["courses"],
+            prereqs: [],
+        };
+
+        const { solverInput } = buildSolverInputWithRules(session, dpr, {
+            graduationTermOverride: "2028-spring",
+        });
+
+        // Past IP → reconciled as TAKEN.
+        expect(solverInput.coursesTaken.has(PAST_IP)).toBe(true);
+        // …and NOT left in-progress, and NEVER given a forward offering entry.
+        expect(solverInput.coursesInProgress.has(PAST_IP)).toBe(false);
+        expect(solverInput.offerings.has(PAST_IP)).toBe(false);
+
+        // Current IP → stays in-progress (it is the in-session term), and its forward
+        // offering entry is dropped (established enrollment faces no offering check).
+        expect(solverInput.coursesInProgress.has(CURRENT_IP)).toBe(true);
+        expect(solverInput.coursesTaken.has(CURRENT_IP)).toBe(false);
+        expect(solverInput.offerings.has(CURRENT_IP)).toBe(false);
     });
 });

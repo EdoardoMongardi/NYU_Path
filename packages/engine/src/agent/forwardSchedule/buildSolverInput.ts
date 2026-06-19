@@ -209,6 +209,13 @@ export function buildSolverInputWithRules(
     // around). currentTerm itself is wall-clock-correct (deriveTemporalContext).
     const coursesTaken = new Set<string>();
     const coursesInProgress = new Map<string, { term: string }>();
+    // K1 (fix-loop) — ids reconciled from a PAST/STALE IP row into coursesTaken.
+    // Like a current IP enrollment, a past/stale IP is an established (here,
+    // finished-but-ungraded) enrollment, NOT a forward prediction — so it must
+    // never carry a forward offering entry either (the gap-fill below would
+    // otherwise add one from session.courses). Tracked so the offering-deletion
+    // loop drops these alongside the current-IP ids.
+    const reconciledPastIpAsTaken = new Set<string>();
     for (const row of dpr.courseHistory) {
         const key = `${row.subject} ${row.catalogNbr}`;
         if (row.type === "IP") {
@@ -216,6 +223,7 @@ export function buildSolverInputWithRules(
             // Past/stale IP (term strictly before currentTerm) → reconcile as taken.
             if (rowTerm !== null && compareSolverTerms(rowTerm, currentTerm) < 0) {
                 coursesTaken.add(key);
+                reconciledPastIpAsTaken.add(key);
                 continue;
             }
             coursesInProgress.set(key, { term: rowTerm ?? currentTerm });
@@ -252,6 +260,25 @@ export function buildSolverInputWithRules(
         declaredPrograms: student?.declaredPrograms ?? [],
     });
 
+    // K1 (fix-loop) — a course the student has ALREADY COMPLETED (coursesTaken)
+    // or is CURRENTLY TAKING (coursesInProgress) cannot be a FORWARD satisfier of a
+    // still-UNMET requirement leaf: it is already accounted for and occupies no
+    // forward term. The frozen search has no already-taken guard on a leaf's
+    // candidate domain (checkRequirementCoverage covers a leaf via a freshly-placed
+    // source ∈ {requirement, pin}, never source "ip"), so a still-listed taken
+    // candidate would PHANTOM-RESOLVE the leaf — e.g. R1142/20 "CS-Required" bound
+    // the already-completed CSCI-UA 102 and left the genuinely-missing CSCI-UA 421
+    // unscheduled, falsely reporting the plan valid. We therefore filter every
+    // candidate domain against this "already-accounted-for" set HERE, in the
+    // derivation, BEFORE the candidates reach the frozen constraint model. A leaf
+    // left with ZERO not-yet-taken candidates correctly degrades to an empty
+    // placeholder (surfaced as the genuine, honest infeasibility) rather than
+    // phantom-resolving to a course the student already finished.
+    const alreadyAccountedFor = new Set<string>([
+        ...coursesTaken,
+        ...coursesInProgress.keys(),
+    ]);
+
     const unmetReqs = notSatisfiedRequirements(dpr.requirementGroups);
     const unmetRequirements: SolverInput["unmetRequirements"] = unmetReqs.map(req => {
         const { candidateCourses, pool } = extractCandidatesAndPool(req);
@@ -260,7 +287,7 @@ export function buildSolverInputWithRules(
             title: req.title,
             category: kindByRId.get(req.rId) ?? "unknown",
             credits: inferRequirementCredits(req),
-            candidateCourses,
+            candidateCourses: candidateCourses.filter(c => !alreadyAccountedFor.has(c)),
             ...(pool !== undefined ? { pool } : {}),
         };
     });
@@ -370,13 +397,32 @@ export function buildSolverInputWithRules(
             // We drop the forward offering entry for IP course-ids (AFTER the
             // gap-fill, so neither the global cache nor session.courses can re-add
             // it) so the IP placement faces no offering check — mirroring how
-            // checkPrereqsSatisfied already exempts source:"ip". (A normal forward
-            // candidate of the same id does not arise: a course the student is
-            // currently taking is not also an unmet-requirement candidate to
-            // schedule again.)
+            // checkPrereqsSatisfied already exempts source:"ip".
+            //
+            // Deleting GLOBALLY by id (not scoped to the IP's placed term) is safe:
+            // the K1 already-accounted-for candidate filter above EXCLUDES every
+            // in-progress course id from all FORWARD candidate domains (the
+            // `specific` candidateCourses list AND the catalog-enumerated pool
+            // members in poolMembersFor), so no forward candidate of the same id
+            // can arise to be wrongly exempted. The disjointness the global delete
+            // relies on is therefore ENFORCED by derivation, not merely assumed.
+            // (The offerings map is keyed by id, not by (id, term), so a
+            // term-scoped delete is not expressible against it anyway — and is
+            // unnecessary given the enforced disjointness.)
+            //
+            // We also drop the offering entry for any PAST/STALE IP row reconciled
+            // into coursesTaken: it too is an established (finished-but-ungraded)
+            // enrollment, never a forward candidate, so a forward offering entry for
+            // it is meaningless. (Harmless if left — the K1 candidate filter already
+            // bars taken ids from forward domains — but dropped to keep the
+            // invariant "no IP-origin id carries a forward offering entry" clean.)
             for (const ipId of coursesInProgress.keys()) {
                 offerings.delete(ipId);
                 offeringConfidence.delete(ipId);
+            }
+            for (const pastIpId of reconciledPastIpAsTaken) {
+                offerings.delete(pastIpId);
+                offeringConfidence.delete(pastIpId);
             }
             return { offerings, offeringConfidence };
         })(),
