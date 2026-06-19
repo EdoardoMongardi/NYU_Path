@@ -256,10 +256,14 @@ export function applyPassFailToDpr(
     next.reportKind = "what_if";
 
     // 1. Flip matching courseHistory rows to "P" (P clears the ≥D gate →
-    //    stays in coursesTaken → credit kept).
+    //    stays in coursesTaken → credit kept). Mark the row passFailElected:
+    //    this is the ONE place we KNOW a P/F was ELECTED (the student's
+    //    what-if election) — so the P/F limit axis counts it, but native /
+    //    historical "P" rows (which never carry this flag) do NOT false-fire.
     for (const row of next.courseHistory) {
         if (rowKey(row) === targetId) {
             row.grade = PASS_GRADE;
+            row.passFailElected = true;
         }
     }
 

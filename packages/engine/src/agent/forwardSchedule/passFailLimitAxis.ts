@@ -4,17 +4,30 @@
  * Checks the per-school Pass/Fail limits against usage recorded in the
  * (possibly synthetic) DPR. TWO limits combine into a single ValidationResult:
  *
+ * ELECTED-ONLY (D-4 false-fire fix, c261395 follow-up): a grade-"P" row can be
+ * an ELECTED pass/fail (the student voluntarily P/F-ing a letter-graded course)
+ * OR a natively-P/F-only course (PE, 0-credit seminars, labs) OR immutable
+ * historical P/F. The DPR conflates them (all show grade:"P"). The per-term (B)
+ * and career-COURSES (A) caps therefore count ONLY rows we KNOW are elected —
+ * `grade === "P" && passFailElected === true` (set solely by applyPassFailToDpr
+ * on the what-if election). Native / historical "P" rows carry no flag → not
+ * counted → no false-fire; only OUR elections are HARD-checked. The historical
+ * portion is HEDGED (uncounted). The career-CREDITS cap is exempt: it reads
+ * `cumulative.passFailUsedUnits`, the registrar's authoritative ELECTED-P/F
+ * credit total (the PeopleSoft R1680/10 "Pass/Fail" requirement counter, which
+ * native-P courses do not count against) — so no conflation there.
+ *
  *   (A) the CAREER limit — three tiers (D-4):
- *     careerLimitType:"credits"            → HARD:            used > cap ⇒ fail
- *     careerLimitType:"courses"            → HARD:            count("P" rows) > cap ⇒ fail
+ *     careerLimitType:"credits"            → HARD: passFailUsedUnits > cap ⇒ fail
+ *     careerLimitType:"courses"            → HARD: count(ELECTED "P" rows) > cap ⇒ fail
  *     careerLimitType:"percent_of_program" → SOFT:            requires-approval (unit-ambiguous)
  *     careerLimitValue == null             → HEDGE:           assumed-pass + adviser note
  *
  *   (B) the PER-TERM limit (Plan 37 follow-up) — gated on `perTermLimit != null`:
- *     count("P" rows) grouped by SEMESTER (`perTermUnit:"semester"`) or by
- *     ACADEMIC YEAR (`perTermUnit:"academic_year"`); ANY group over the limit
- *     ⇒ HARD fail (HARD on the elections WE can see, D-4). Where the DPR's P/F
- *     rows lack a parseable term (grouping unreliable), the per-term check
+ *     count(ELECTED "P" rows) grouped by SEMESTER (`perTermUnit:"semester"`) or
+ *     by ACADEMIC YEAR (`perTermUnit:"academic_year"`); ANY group over the limit
+ *     ⇒ HARD fail (HARD on the elections WE can see, D-4). Where an elected P/F
+ *     row lacks a parseable term (grouping unreliable), the per-term check
  *     HEDGES — it NEVER hard-fails on unknown-term data.
  *
  *   passFail undefined / canElect:false  → PASS-BY-DEFAULT: axis is opt-in / action blocked upstream
@@ -31,9 +44,24 @@
 import type { ValidationResult, PassFailConfig } from "@nyupath/shared";
 import type { DegreeProgressReport, DPRCourseRow } from "../../dpr/schema.js";
 
-/** Count pass/fail-graded course rows on the DPR (grade === "P"). */
+/**
+ * Count ELECTED Pass/Fail course rows on the DPR (grade === "P" AND
+ * passFailElected === true). Only counts P/F elections WE made (a what-if /
+ * plan election, flagged by applyPassFailToDpr) — NEVER natively-P/F-only
+ * courses (PE, 0-credit seminars, labs) or immutable historical P/F, which
+ * carry grade "P" but no `passFailElected` flag (D-4: HARD on the elections we
+ * can see; HEDGE the rest, so native/historical P/F never false-fires the cap).
+ *
+ * LIMITATION (honest LOWER BOUND): the real DPR exposes no authoritative count
+ * of HISTORICAL elected-P/F COURSES (only `passFailUsedUnits` credits — see the
+ * credits-cap branch), so a `careerLimitType:"courses"` cap can only see OUR
+ * what-if elections. That is an acceptable under-count that never false-fires;
+ * the historical-courses portion is hedged (uncounted).
+ */
 function countPassFailCourses(dpr: DegreeProgressReport): number {
-    return dpr.courseHistory.filter((r) => r.grade === "P").length;
+    return dpr.courseHistory.filter(
+        (r) => r.grade === "P" && r.passFailElected === true,
+    ).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,15 +135,21 @@ function academicYearOf(t: {
 }
 
 /**
- * Group the DPR's P/F-graded rows (grade === "P") by the key implied by
- * `perTermUnit`:
+ * Group the DPR's ELECTED P/F-graded rows (grade === "P" AND
+ * passFailElected === true) by the key implied by `perTermUnit`:
  *   - "semester"      → the verbatim term string (e.g. "2026 Fall").
  *   - "academic_year" → the academic-year integer (Fall Y opens year Y).
  *
+ * Only OUR P/F elections count (flagged by applyPassFailToDpr) — native /
+ * historical "P" rows (PE, labs, immutable history) carry no `passFailElected`
+ * flag and are NOT counted, so they never false-fire the per-term limit (D-4:
+ * HARD on the elections we can see; HEDGE the rest).
+ *
  * Returns `{ counts, allTermsParseable }`. `counts` maps each group key to its
- * P/F-row count; `allTermsParseable` is false when ANY P/F row had an
- * unparseable term (so the caller hedges instead of hard-failing on a possibly
- * mis-grouped count). Empty input (no P rows) is trivially `allTermsParseable`.
+ * elected-P/F-row count; `allTermsParseable` is false when ANY elected P/F row
+ * had an unparseable term (so the caller hedges instead of hard-failing on a
+ * possibly mis-grouped count). Empty input (no elected P rows) is trivially
+ * `allTermsParseable`.
  */
 function groupPassFailByPeriod(
     rows: DPRCourseRow[],
@@ -125,7 +159,7 @@ function groupPassFailByPeriod(
     let allTermsParseable = true;
 
     for (const row of rows) {
-        if (row.grade !== "P") continue;
+        if (row.grade !== "P" || row.passFailElected !== true) continue;
         const parsed = parseTermYearSeason(row.term);
         if (parsed === null) {
             // A P/F row with an unparseable term: grouping is unreliable.
@@ -262,6 +296,11 @@ function checkCareerPassFail(
     const cap = passFail.careerLimitValue;
 
     if (passFail.careerLimitType === "credits") {
+        // passFailUsedUnits is the registrar's authoritative ELECTED-P/F credit
+        // total (parser.ts ← the PeopleSoft R1680/10 "Pass/Fail" requirement
+        // counter; natively-P/F-only courses are not counted against it), so no
+        // elected-vs-native conflation here — no passFailElected filter needed.
+        // A what-if PASS election increments it in applyPassFailToDpr (D-5).
         const used = dpr.cumulative.passFailUsedUnits ?? 0;
         if (used > cap) {
             return {

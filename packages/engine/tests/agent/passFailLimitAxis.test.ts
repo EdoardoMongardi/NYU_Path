@@ -7,16 +7,25 @@ const courses4: PassFailConfig  = { careerLimitType: "courses", careerLimitValue
 const pct25: PassFailConfig     = { careerLimitType: "percent_of_program", careerLimitValue: 25 };
 const noCap: PassFailConfig     = { careerLimitType: "credits", careerLimitValue: null };
 
-function dprWithPf(usedUnits: number, pCourses = 0) {
+/** Build a DPR with `pCourses` grade-"P" rows. By default the rows are ELECTED
+ *  (passFailElected:true) so they exercise the HARD career-courses-cap path;
+ *  pass `elected=false` to model NATIVE / historical P/F (PE, labs) that must
+ *  NOT be counted against the cap. */
+function dprWithPf(usedUnits: number, pCourses = 0, elected = true) {
     return {
         cumulative: { passFailUsedUnits: usedUnits, passFailCapUnits: 32, creditsRequired: 128 },
-        courseHistory: Array.from({ length: pCourses }, (_, i) => ({ subject: "X", catalogNbr: `${i}`, grade: "P", type: "EN", units: 4, term: "2024 Fall", courseTitle: `Course ${i}` })),
+        courseHistory: Array.from({ length: pCourses }, (_, i) => ({ subject: "X", catalogNbr: `${i}`, grade: "P", type: "EN", units: 4, term: "2024 Fall", courseTitle: `Course ${i}`, passFailElected: elected })),
     } as any;
 }
 
 /** Build a DPR whose courseHistory carries one grade-"P" row per entry in
- *  `pRows` ({term}); a `null`/omitted term means an unparseable term string. */
-function dprWithPfRows(pRows: Array<{ term: string | null }>, usedUnits = 0) {
+ *  `pRows` ({term, elected?}); a `null`/omitted term means an unparseable term
+ *  string. `elected` defaults to true (an ELECTED P/F WE made → counted);
+ *  set `elected:false` to model a native / historical P that must NOT count. */
+function dprWithPfRows(
+    pRows: Array<{ term: string | null; elected?: boolean }>,
+    usedUnits = 0,
+) {
     return {
         cumulative: { passFailUsedUnits: usedUnits, passFailCapUnits: 32, creditsRequired: 128 },
         courseHistory: pRows.map((r, i) => ({
@@ -27,6 +36,7 @@ function dprWithPfRows(pRows: Array<{ term: string | null }>, usedUnits = 0) {
             units: 4,
             term: r.term ?? "??unparseable??",
             courseTitle: `Course ${i}`,
+            passFailElected: r.elected ?? true,
         })),
     } as any;
 }
@@ -196,5 +206,68 @@ describe("checkPassFailLimits — career + per-term combine (worse status wins)"
     it("no perTermLimit + many same-term P-rows under the career cap → pass (gate truly off)", () => {
         // 3 P-rows all in 2024 Fall, courses4 (cap 4, no perTermLimit) → pass.
         expect(checkPassFailLimits(dprWithPf(0, 3), courses4).status).toBe("pass");
+    });
+});
+
+// ---------------------------------------------------------------------------
+// FALSE-FIRE REGRESSION (c261395 follow-up): a grade-"P" row that is NATIVE /
+// historical (passFailElected absent/false) must NOT be counted against the
+// per-term or career-COURSES cap. The DPR conflates elected P/F with natively-
+// P/F courses (PE, 0-credit seminars, labs) — both show grade:"P" — so the
+// limit checks count ONLY rows we KNOW are elected (D-4).
+// ---------------------------------------------------------------------------
+
+describe("checkPassFailLimits — native / historical P does NOT false-fire", () => {
+    it("PER-TERM: 2 NATIVE grade-'P' rows in one term + perTermLimit:1 → pass (NOT fail)", () => {
+        // e.g. a student with 2 PE courses in one term: both grade "P", neither
+        // ELECTED. Previously counted → false INFEASIBLE; now uncounted → pass.
+        const r = checkPassFailLimits(
+            dprWithPfRows([
+                { term: "2026 Fall", elected: false },
+                { term: "2026 Fall", elected: false },
+            ]),
+            semesterLimit1,
+        );
+        expect(r.status).toBe("pass");
+    });
+
+    it("PER-TERM: 1 ELECTED + 1 NATIVE in the same term + perTermLimit:1 → pass (only the elected one counts)", () => {
+        const r = checkPassFailLimits(
+            dprWithPfRows([
+                { term: "2026 Fall", elected: true },
+                { term: "2026 Fall", elected: false },
+            ]),
+            semesterLimit1,
+        );
+        expect(r.status).toBe("pass");
+    });
+
+    it("PER-TERM: 2 ELECTED in the same term still HARD-fails (the genuine case)", () => {
+        const r = checkPassFailLimits(
+            dprWithPfRows([
+                { term: "2026 Fall", elected: true },
+                { term: "2026 Fall", elected: true },
+            ]),
+            semesterLimit1,
+        );
+        expect(r.status).toBe("fail");
+    });
+
+    it("CAREER-COURSES: 5 NATIVE grade-'P' rows over the 4-course cap → pass (NOT fail)", () => {
+        // A Stern student with PE / native-P courses: grade-"P" count would be
+        // > 4, but none are ELECTED → must NOT fail the courses cap.
+        const r = checkPassFailLimits(dprWithPf(0, 5, /* elected */ false), courses4);
+        expect(r.status).toBe("pass");
+    });
+
+    it("CAREER-COURSES: 5 ELECTED grade-'P' rows over the 4-course cap still fails", () => {
+        const r = checkPassFailLimits(dprWithPf(0, 5, /* elected */ true), courses4);
+        expect(r.status).toBe("fail");
+    });
+
+    it("CAREER-CREDITS is unaffected by the flag: passFailUsedUnits drives it (authoritative elected total)", () => {
+        // The credits cap reads cumulative.passFailUsedUnits (registrar elected
+        // total), so it fires regardless of per-row passFailElected flags.
+        expect(checkPassFailLimits(dprWithPf(36, 0), credits32).status).toBe("fail");
     });
 });

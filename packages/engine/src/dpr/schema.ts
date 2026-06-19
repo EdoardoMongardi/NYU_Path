@@ -40,6 +40,15 @@ export const dprCourseRowSchema = z.object({
     type: z.string(), // "EN" | "TE" | "IP" | other (preserved verbatim)
     repeatCode: z.string().optional(), // "RI" | "R" | other
     courseTopic: z.string().optional(), // "24 - Wine and Feasting in the Anci"
+    // True iff this grade-"P" row is a Pass/Fail election WE made (a what-if /
+    // plan election the agent controls), as opposed to a natively-P/F-only
+    // course (PE, 0-credit seminars, labs) or an immutable historical P/F we
+    // can't reliably classify. The REAL DPR parser NEVER sets this — off a real
+    // DPR every row is `passFailElected !== true`, so native/historical "P"
+    // rows are not counted against the elected-P/F limits (D-4: HARD on the
+    // elections we can see, HEDGE the rest). It is set ONLY by
+    // applyPassFailToDpr on the cloned, elected row.
+    passFailElected: z.boolean().optional(),
 });
 export type DPRCourseRow = z.infer<typeof dprCourseRowSchema>;
 

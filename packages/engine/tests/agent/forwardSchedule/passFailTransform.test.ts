@@ -345,6 +345,38 @@ describe("applyPassFailToDpr", () => {
         expect(dpr.cumulative.passFailUsedUnits).toBe(0);
     });
 
+    // (PF-flag) A PASS election flags the elected row passFailElected:true so the
+    // P/F limit axis COUNTS it (D-4: HARD on the elections we can see). The input
+    // is untouched (purity), and native/historical "P" rows never carry the flag.
+    it("PASS election sets passFailElected:true on the elected row (so the limit axis counts it)", () => {
+        const dpr = makeDpr();
+        const { dpr: out } = applyPassFailToDpr(dpr, "CSCI-UA 101", "pass", "cas");
+        const row = out.courseHistory.find(
+            (r) => r.subject === "CSCI-UA" && r.catalogNbr === "101",
+        );
+        expect(row?.grade).toBe("P");
+        expect(row?.passFailElected).toBe(true);
+        // a non-elected sibling row is NOT flagged
+        const other = out.courseHistory.find((r) => r.subject === "ELEC-UA");
+        expect(other?.passFailElected).not.toBe(true);
+        // input untouched
+        const inRow = dpr.courseHistory.find(
+            (r) => r.subject === "CSCI-UA" && r.catalogNbr === "101",
+        );
+        expect(inRow?.passFailElected).toBeUndefined();
+    });
+
+    // (PF-flag-fail) A FAIL election does NOT flag passFailElected — the row
+    // becomes grade "F" and drops from coursesTaken, so there is nothing to count.
+    it("FAIL election does NOT set passFailElected:true (no P row to count)", () => {
+        const dpr = makeDpr();
+        const { dpr: out } = applyPassFailToDpr(dpr, "CSCI-UA 101", "fail", "cas");
+        const row = out.courseHistory.find(
+            (r) => r.subject === "CSCI-UA" && r.catalogNbr === "101",
+        );
+        expect(row?.passFailElected).not.toBe(true);
+    });
+
     // (9) unknown courseId → no-op (clone w/ reportKind what_if, no hedges)
     it("no-op for an unmatched courseId: clone with reportKind what_if, empty hedges", () => {
         const dpr = makeDpr();
