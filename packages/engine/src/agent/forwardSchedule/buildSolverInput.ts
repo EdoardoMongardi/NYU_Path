@@ -27,6 +27,7 @@ import { deriveTemporalContext } from "../../dpr/temporalContext.js";
 import { hashDprCourseHistory } from "./reconcile.js";
 import { classifyRequirementKind } from "./requirementKind.js";
 import { psTermToSolverTerm } from "./termLabel.js";
+import { compareSolverTerms } from "./solverHelpers.js";
 import type { SolverInput } from "./types.js";
 import { loadOffCatalogCredits, loadOfferings } from "../../dataLoader.js";
 import type { ConfidenceTier } from "@nyupath/shared";
@@ -191,14 +192,33 @@ export function buildSolverInputWithRules(
     const currentTerm = inferCurrentTerm(dpr);
 
     // ---- 4. Build coursesTaken + coursesInProgress from DPR ----
-
+    //
+    // K1 — PAST/STALE IP reconciliation. An IP row whose term is STRICTLY BEFORE
+    // the (wall-clock-derived) currentTerm is a finished-but-ungraded course from a
+    // term that is already over — the same "past / stale IP row → closed" notion
+    // ipCourseChangeability.ts already encodes. It must NOT enter coursesInProgress:
+    // the solver maps an out-of-window IP term to `currentTerm` (solver.ts), and a
+    // past SPRING IP (e.g. MATH-UA 334, spring-only) then lands in a SUMMER current
+    // term and fails the forward offering-season check on that FIXED placement —
+    // poisoning EVERY search trial (the fixed set is offering-invalid and can never
+    // be cleared) so the search returns no plan and ALL unmet leaves degrade to
+    // empty placeholders. A past/stale IP is treated as TAKEN instead: it still
+    // satisfies prereqs and counts toward earned credits, but occupies no forward
+    // term and faces no forward offering check. Only CURRENT/FUTURE IP rows remain
+    // in coursesInProgress (the genuine in-flight courses the planner schedules
+    // around). currentTerm itself is wall-clock-correct (deriveTemporalContext).
     const coursesTaken = new Set<string>();
     const coursesInProgress = new Map<string, { term: string }>();
     for (const row of dpr.courseHistory) {
         const key = `${row.subject} ${row.catalogNbr}`;
         if (row.type === "IP") {
-            const rowTerm = psTermToSolverTerm(row.term) ?? currentTerm;
-            coursesInProgress.set(key, { term: rowTerm });
+            const rowTerm = psTermToSolverTerm(row.term);
+            // Past/stale IP (term strictly before currentTerm) → reconcile as taken.
+            if (rowTerm !== null && compareSolverTerms(rowTerm, currentTerm) < 0) {
+                coursesTaken.add(key);
+                continue;
+            }
+            coursesInProgress.set(key, { term: rowTerm ?? currentTerm });
             continue;
         }
         if (row.grade && meetsGradeThreshold(row.grade, "D")) {
@@ -339,6 +359,25 @@ export function buildSolverInputWithRules(
                     }
                 }
             }
+            // K1 — an IN-PROGRESS course is an ESTABLISHED enrollment, not a
+            // forward prediction: the student is already registered for it in its
+            // term (the DPR is authoritative). A forward offering-season constraint
+            // is therefore meaningless for it — and HARMFUL when the static
+            // termsOffered data is stale/partial for that section (e.g. MATH-UA 251
+            // pre-registered in Fall though the historical pattern is spring-only):
+            // the fixed IP placement would fail checkOfferingSeasonMatch and poison
+            // EVERY search trial, degrading all unmet leaves to empty placeholders.
+            // We drop the forward offering entry for IP course-ids (AFTER the
+            // gap-fill, so neither the global cache nor session.courses can re-add
+            // it) so the IP placement faces no offering check — mirroring how
+            // checkPrereqsSatisfied already exempts source:"ip". (A normal forward
+            // candidate of the same id does not arise: a course the student is
+            // currently taking is not also an unmet-requirement candidate to
+            // schedule again.)
+            for (const ipId of coursesInProgress.keys()) {
+                offerings.delete(ipId);
+                offeringConfidence.delete(ipId);
+            }
             return { offerings, offeringConfidence };
         })(),
         courseCatalog,
@@ -426,14 +465,27 @@ export function buildProgramRules(
     // (mirrors the non-CAS deferral). Revisit when a real DPR fixture exercises
     // a course-count major floor; until then a `kind:"courses"` major leaf
     // contributes nothing to majorCreditMin (it is simply skipped below).
+    //
+    // K1 — FORWARD-REMAINING, not full-requirement. `checkMajorCreditFloor`
+    // (and validator axis-4 / checkThresholdsMet) compare this floor against the
+    // major credits placed in the FORWARD schedule ONLY — they do NOT add the
+    // major credits already earned (read from the DPR). So the floor must itself
+    // be net of completed major credits: the credits STILL NEEDED forward, i.e.
+    // `max(0, required - used)` per units-counter major leaf. A leaf that is
+    // already satisfied (used >= required, e.g. the joint-major residency
+    // "36 required, 56 used") then contributes 0 — otherwise its full 36 would be
+    // demanded from the forward plan alone, falsely making an otherwise-valid plan
+    // infeasible (the sample-DPR "major credits 0 < 36" shortfall). This is a
+    // derivation fix only; the frozen search predicate + validator axis are
+    // untouched and now agree because they share this single derived floor.
     let majorCreditMin: number | null = null;
     for (const leaf of leaves) {
         const kind = kindByRId.get(leaf.rId);
         if (kind === "major-required" || kind === "major-elective") {
             if (leaf.counter?.kind === "units") {
-                const requiredCredits = leaf.counter.required;
-                if (requiredCredits > 0) {
-                    majorCreditMin = (majorCreditMin ?? 0) + requiredCredits;
+                const remainingCredits = Math.max(0, leaf.counter.required - leaf.counter.used);
+                if (remainingCredits > 0) {
+                    majorCreditMin = (majorCreditMin ?? 0) + remainingCredits;
                 }
             }
         }
