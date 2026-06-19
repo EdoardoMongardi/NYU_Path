@@ -306,6 +306,43 @@ export function solveWhatIfAssumption(
     const hedges: string[] = [];
     if (outcome === "withdraw") {
         solveDpr = applyWithdrawalToDpr(dpr, courseId);
+
+        // D-6 (Task E2): F-1 full-time-floor advisory — ADVISORY ONLY.
+        // If the student is F-1 AND withdrawing drops the current term's
+        // recorded DPR credits below the school's F-1 full-time floor, push a
+        // STRONG advisory hedge. This does NOT change `feasible` and is NOT a
+        // conflict — there is no withdrawal-count cap; this is purely a
+        // DSO/OGS advising flag.
+        //
+        // NOTE: "registrar-approved final-term exception" (a student's LAST
+        // semester may be below 12 cr) is NOT yet modeled in the session or DPR
+        // schema. The hedge fires for all F-1 students who drop below the floor,
+        // including legitimate last-semester reduced loads. A future task can
+        // wire in a `isLastTerm` / `registrarApproved` flag and gate it here.
+        const visaStatus = session.student?.visaStatus;
+        if (visaStatus === "f1") {
+            const floor = session.schoolConfig?.f1FullTimeMinCredits ?? 12;
+            // Compute post-withdraw credits for the withdrawn course's term:
+            // sum units of all courseHistory rows for that term EXCEPT the
+            // withdrawn course. (We use the ORIGINAL dpr so the rows are
+            // unchanged — the transform already clones it.)
+            const targetId = canonicalizeCourseId(courseId);
+            const withdrawnRow = dpr.courseHistory.find(
+                (r) => rowKey(r) === targetId,
+            );
+            if (withdrawnRow) {
+                const courseTerm = withdrawnRow.term;
+                const postCredits = dpr.courseHistory
+                    .filter((r) => r.term === courseTerm && rowKey(r) !== targetId)
+                    .reduce((sum, r) => sum + r.units, 0);
+                if (postCredits < floor) {
+                    hedges.push(
+                        `Heads up: withdrawing from ${courseId} drops that term to ${postCredits} credits — below the ${floor}-credit F-1 full-time floor. ` +
+                        `This can forfeit your F-1 status unless OGS approves a Reduced Course Load BEFORE you withdraw. Talk to OGS first.`,
+                    );
+                }
+            }
+        }
     } else {
         const { dpr: pfDpr, hedges: pfHedges } = applyPassFailToDpr(
             dpr,
