@@ -1,6 +1,6 @@
 # Forward-Schedule Subsystem — Technical Audit
 
-> Last verified against code: 2026-06-19 (post plan-37 Phases J/K/L/A/B + C1/C2: added 8th validator axis `passFailLimitsRespected`; prior: 2026-06-13 PRs #35-#41 doc-sync pass).
+> Last verified against code: 2026-06-19 (Plan 37 — all phases: 8th validator axis `passFailLimitsRespected` (C1/C2/C3 + threading through `solveWhatIfAssumption`/`solveAndDiff`), `PassFailConfig.careerLimitValue` for all 11 schools (A1/A2), P/F-pass increments `passFailUsedUnits` (B1), `slotActionMatrix` (D1), E1/E2/E3 guards (`proposeWhatIfAssumption` IP-membership + canElect gates; F-1 floor advisory; course-existence), bind-on-draft (J), K1 candidate filter, K2 FOSE-availability guardrail, L optional J-term free-elective validity; prior: 2026-06-13 PRs #35-#41 doc-sync pass).
 
 ## Purpose
 
@@ -241,6 +241,40 @@ A pure detector/builder. `countDeclaredPrograms` and `detectSharedCourses` feed 
 
 `reconcileWithDpr` handles a fresh DPR upload by **rewriting**, not re-solving. `hashDprCourseHistory` (SHA-256 over sorted stable identity columns) short-circuits when unchanged. On a hash change it rewrites slots (`specific_planned` → `completed`/`in_progress` per DPR evidence; drop placeholders whose requirement is now satisfied), recomputes per-term credits, prunes stale `IP_COURSE_COMPLETION` assumptions, then re-runs `runGraduationPathValidator` for a fresh state.
 
+### 9.9 Plan 37 additions
+
+**`slotActionMatrix.ts` (D1 — pure action gate; also exported via `packages/engine/src/client.ts`)**
+
+`slotActionMatrix(slot, term, dpr, campus, calendar, passFailConfig, now)` returns a `SlotActionMatrix` — a per-action `{allowed, reason, hedge}` record for `{add, drop, withdraw, passFail}`. The gate is keyed on:
+- **Slot kind:** `completed` (FINAL) → all blocked; `in_progress` (REGISTERED) → window-gated; `specific_planned`/`placeholder` (PLANNED) → drop only (withdraw/PF not applicable to a plan slot).
+- **F3 window (`classifyIpChangeability`):** `future` → change freely; `add_drop` → clean drop (no W); `withdraw_pf` → withdraw + P/F (where the school allows); `closed` → none; `unknown` → allowed with hedge.
+- **School P/F policy (`PassFailConfig`):** `canElect:false` (Tandon) → `passFail` blocked at the matrix level; `pfEligibility` for the slot's category (major/elective) also gates the election.
+
+This module is the **single source of truth** for which slot actions are available. It is enforced both client-side (UI gate) and server-side (route/`validateInput` guard), so a stale client matrix is never a correctness hole — the server rejects anything the matrix should have blocked.
+
+**`passFailLimitAxis.ts` (C1 — pure 8th-axis function)**
+
+`checkPassFailLimits(dpr, passFailConfig) → ValidationResult`. See §7, axis 8.
+
+**`passFailTransform.ts` (B1 update — P/F pass increments `passFailUsedUnits`)**
+
+A P/F **pass** election in `applyPassFailToDpr` now increments the synthetic DPR's `cumulative.passFailUsedUnits` by the elected course's credits, so the credits-cap tier of the 8th axis engages on a what-if election. A fail does NOT increment (no credit earned). The input DPR is never mutated (R1); only the cloned synthetic DPR changes.
+
+**`whatIfAssumption.ts` (E2 — F-1 floor advisory on withdraw)**
+
+When `solveWhatIfAssumption` computes a withdraw what-if and the resulting current-term credits drop below the F-1 full-time floor (12 cr; configurable via `SchoolConfig.f1FullTimeMinCredits`) for an F-1 student, it appends a **strong advisory hedge** to `assumptions`: "Withdrawing here drops you to N credits — below the 12-credit F-1 full-time floor. This can forfeit your F-1 status unless OGS approves a Reduced Course Load FIRST. Talk to OGS before you withdraw." Advisory only (no hard block — owner decision D-6). The advisory fires only for fall/spring terms (E2 follow-up: summer/J-term withdraw does not trigger the floor warning).
+
+**Threading `passFailConfig` through the P/F election path (C2)**
+
+`solveWhatIfAssumption` and `solveAndDiff` both now accept `passFailConfig` and thread it into the `finalizeForwardSchedule` validator call, so the 8th axis engages for a what-if P/F election. Previously the what-if path was config-less — an over-cap election was unflagged. This was the C2 fix.
+
+**Plan 37 bug fixes (J / K / L)**
+
+- **J — bind tools accept the infeasible-draft plan.** `bind_pool_slot` and `bind_free_elective` previously rejected a call when `session.forwardSchedule.state === "infeasible-draft"`. They now accept it (a student should be ABLE to repair an infeasible plan by binding a course into an unresolved placeholder). A binding that produces a valid result is returned normally; the tools still report infeasibility if the binding makes things worse. A binding that survives confirm is pinned via the `pin` path so it survives the re-solve (`e5cb5c9`).
+- **K1 — candidate filter excludes already-completed courses.** `buildSolverInput` was including already-completed courses in the forward candidate domains for unmet requirements. This caused a phantom false-valid plan where the solver "resolved" an unmet requirement by placing a course the student already took (the R1142/20 bug). The fix: the candidate list for each unmet requirement now excludes any course in `alreadyAccountedFor` (coursesTaken + coursesInProgress + the fixed placements). Pins over already-satisfied requirements are unaffected (they use a separate pin path).
+- **K2 — FOSE-availability guardrail in the system prompt.** The system prompt now contains an explicit rule: "FOSE section availability does NOT mean the requirement is satisfied or the plan is feasible — those are DEGREE-level checks, not section-scheduling." This prevents the agent from conflating "sections exist" (a live FOSE scheduling signal) with "the requirement is degree-feasible" (a validator conclusion). See `Docs/memory/fose-phase-section-feasibility-notes.md` for the deferred FOSE-scheduling phase scope.
+- **L — optional J-term of free electives is valid.** The system prompt now explicitly states that a J-term carrying only free electives is VALID (useful-but-not-needed from a degree standpoint). `materializePlan` already skips padding optional (summer/J-term) terms (`:772`), so an opted-in J-term with only a few electives would not be padded to the full credit target — this is correct. The L1 test locks in that a plan with an additive J-term remains `valid-with-trade-offs` (not infeasible). L2 adds a `get_credit_caps` verbatim-quote rule to the system prompt.
+
 ---
 
 ## 10. Known limitations and test-only code
@@ -254,6 +288,9 @@ A pure detector/builder. `countDeclaredPrograms` and `detectSharedCourses` feed 
 - **Non-CAS DPR validation: the non-CAS plan SCHEDULES END-TO-END; the classifier is still CAS-coupled but that does NOT block scheduling.** `classifyRequirementKind` still keys its school-core / general-elective detection on CAS-specific structural rgId families (`RG5004`, `RG5007`, `RG5393`, `RG33308`, `RG5002`, `RG5005`, `RG31394`, `RG31395`) and the `R1142/*` major rId family; non-CAS hierarchies fall to its fallback paths (declared-program title match for the major group, else `unknown`) — that CAS coupling is real and unchanged. A **synthetic, clearly-labeled** non-CAS DPR (NYU Shanghai / CS, with deliberately non-CAS rgId/rId values) now runs through the full `classify → solve → validate` pipeline as a regression pin — `packages/engine/tests/e2e/nonCasPlan.test.ts` + `packages/engine/tests/fixtures/dpr_nonCas_synthetic.ts`. The pin asserts the forward-planner SCHEDULES THE NON-CAS PLAN END-TO-END: `buildForwardSchedule` reaches a **valid** state (`valid-with-trade-offs`) and the major-required leaf `SR7001/10` is covered by a `specific_planned` slot binding the real course `CSCI-SHU 210` (all four `-SHU` requirement courses bind — `CSCI-SHU 210` → `SR7001/10`, `CSCI-SHU 350` → `SR7001/20`, `CORE-SHU 100` → `SR8001/10`, `HUMN-SHU 101` → `SR9001/10` — even though `SR8001/10` / `SR9001/10` are classified `unknown` by the CAS-coupled classifier). The classifier resolves the major leaves via the non-CAS-safe declared-program path and falls back to `unknown` on the non-CAS core/elective leaves, and scheduling proceeds regardless. `parseDpr` is intentionally skipped — there is no real non-CAS DPR *text* to parse, and the project philosophy (`Docs/core_philosophy.md` #2) forbids fabricating unverifiable "real" data — so the pin starts from a constructed (Zod-validated) DPR object. **REAL non-CAS DPR validation still remains PENDING a real non-CAS fixture**; this test documents (and now exercises end-to-end) the non-CAS path, but it does not de-CAS the classifier.
   - **The "residual binding gate" framing was WRONG (corrected 2026-06-11).** An earlier version of this bullet claimed the non-CAS pin "still hits its honest `infeasible-draft` branch" because of a "downstream constraint-search / `materializePlan` binding gate" that emitted a placeholder for the major-required leaf. There is no such gate. The earlier `infeasible-draft` was caused entirely by the synthetic **fixture** leaving every requirement leaf's `coursesUsed[]` empty: the deliberate prereq-satisfaction policy (`src/dpr/prereqSatisfaction.ts`, `isPrereqSatisfied`) treats a completed passing course as a prereq satisfier only if the registrar recorded it in some leaf's `coursesUsed[]` (`dpr-satisfiedBy`) or there is an explicit `minGrades` entry — else `fail-no-implicit-acceptance`. With `coursesUsed[]` empty, the completed `CSCI-SHU 101` did not satisfy `CSCI-SHU 210`'s prereq, so `CSCI-SHU 210` could not bind and the plan went infeasible. A **real** DPR records completed courses in `coursesUsed[]`; the fixture now models that (a satisfied leaf `SR7001/05` whose `coursesUsed` carries `CSCI-SHU 101`), and the plan schedules end-to-end. No `src/` solver/prereq code changed — the fix was fixture realism. Offerings for session-only courses are also gap-filled from `session.courses[i].termsOffered` (see §2.1), so the synthetic `-SHU` courses carry offering rows.
 - **Upper-level credit floor is not validated** (no reliable DPR counter); the field is intentionally left null.
+- **Per-term P/F limit NOT enforced (deferred, plan 37).** The `PassFailConfig.perTermLimit` / `perTermUnit` fields exist in the type but have zero readers in the shipped C1/C2 axis. The 8th axis enforces only the CAREER cap. Per-term enforcement is deferred to a future follow-up; in the interim the system prompt hedges ("you may be limited to one P/F course per term — verify with your adviser").
+- **FOSE section-scheduling is deferred.** The engine is DEGREE-feasibility first; live FOSE section availability (time conflicts, recitation timing, etc.) is a separate scheduling layer. The K2 system-prompt guardrail prevents the agent from conflating the two. See `Docs/memory/fose-phase-section-feasibility-notes.md` for the deferred scope (Phase 15/16).
+- **Cross-school P/F eligibility for Nursing/Gallatin students is home-school-modeled only.** The dominant bulletin pattern (CAS, Stern, Tisch, Steinhardt, LS, SPS, Tandon, NYUAD) governs P/F by the student's home school regardless of where the course is offered. Nursing and Gallatin are exceptions (offering-school-based eligibility), so for a cross-school election by a Nursing/Gallatin student the engine hedges rather than asserts.
 
 ### Test-only code paths (no production caller)
 
@@ -317,7 +354,7 @@ stateDiagram-v2
   state "student-preferred-invalid-draft" as student_preferred_invalid_draft
 ```
 
-The validator only emits `valid-clean`, `valid-with-trade-offs`, or `infeasible-draft`; `student-preferred-invalid-draft` is set upstream when a student persists a knowingly invalid plan.
+The validator only emits `valid-clean`, `valid-with-trade-offs`, or `infeasible-draft`; `student-preferred-invalid-draft` was historically set upstream when a student persisted a knowingly invalid plan via the "Override anyway" path. **Plan 37 M1/M2 retired that path** — the confirm route now returns 422 on an infeasible re-solve and the Override UI is removed. The state is retained in the `PlanState` union and displayed correctly for old DB rows (back-compat), but is no longer minted by any live code path.
 
 ---
 
@@ -343,3 +380,8 @@ The validator only emits `valid-clean`, `valid-with-trade-offs`, or `infeasible-
 | Balance score | `forwardSchedule/balanceScore.ts` | `computeBalanceScore`, `classifyBalanceDelta` |
 | Requirement kind | `forwardSchedule/requirementKind.ts` | `classifyRequirementKind` |
 | Solver helpers | `forwardSchedule/solverHelpers.ts` | term/prereq primitives, `buildIpAssumptions`, `derivePlanState` |
+| Slot action matrix | `forwardSchedule/slotActionMatrix.ts` | `slotActionMatrix` — 3-state × F3-window × P/F-policy action gate (Plan 37 D1); also exported via `packages/engine/src/client.ts` |
+| P/F limit axis | `forwardSchedule/passFailLimitAxis.ts` | `checkPassFailLimits` — 8th validator axis (Plan 37 C1) |
+| P/F transform | `forwardSchedule/passFailTransform.ts` | `applyPassFailToDpr`, `applyWithdrawalToDpr`; pass now increments `passFailUsedUnits` (Plan 37 B1) |
+| P/F eligibility | `forwardSchedule/pfEligibility.ts` | `pfEligibility(schoolId, category)` — per-school P/F election eligibility (major/elective gate) |
+| Client entry | `packages/engine/src/client.ts` | Client-safe re-exports: `canonicalizeCourseId`, `SCHOOL_DISPLAY_NAMES`, `slotActionMatrix`, `classifyIpChangeability`, `NYU_ACADEMIC_CALENDAR`, `campusForHomeSchool` |

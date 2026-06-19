@@ -1,12 +1,12 @@
 # UI Components
 
-> Last verified against code: 2026-06-19 (Plan 37 G1+G2 — sidebar editing subtree deleted; shared slot/format helpers relocated to `app/chat/shared/`; SummaryCard relocated to `app/chat/profile/`).
+> Last verified against code: 2026-06-19 (Plan 37 — G1+G2 sidebar subtree deleted + helpers relocated; D1 `slotActionMatrix` + F1 `slotActionView` + F2 `SlotActionPopover` + F3 slot-editor mounted on committed plan + F4 per-term `+ Add course` affordance; I4 render-only-valid scenarios; M1/M2 never-commit-invalid + Override retired; H1 visa-mandatory; 8th validator axis; Plan 36 base).
 >
-> Prior 2026-06-18: Plan 36 — scenarios workspace UI: 3-zone shell, scenario store, ScheduleWorkspace + CompareView + ProfileRail, chat ScheduleCard/WhatIfUploadCard, 3-branch what-if; engine + R1 + frozen contract untouched. Prior 2026-06-16: Phase 4 follow-up F3 (window-aware IP slot-state); Phase 4 E3 (never-instant preview/review card; drag removed). Prior 2026-06-15: Phase 4 E2 (badge row + slot-state glyphs + violet light/dark); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Prior 2026-06-18: Plan 36 — scenarios workspace UI: 3-zone shell, scenario store, ScheduleWorkspace + CompareView + ProfileRail, chat ScheduleCard/WhatIfUploadCard, 3-branch what-if; engine untouched (Plan 37 extends the engine — see forward-schedule.md). Prior 2026-06-16: Phase 4 follow-up F3 (window-aware IP slot-state); Phase 4 E3 (never-instant preview/review card; drag removed). Prior 2026-06-15: Phase 4 E2 (badge row + slot-state glyphs + violet light/dark); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
-This is everything the student sees on screen — the landing page, the chat thread, and especially the **3-zone workspace** that lives next to the conversation. **Plan 36 replaced the single right-hand "ScheduleSidebar" with a 3-zone shell** (`ThreeZoneShell`): the chat thread becomes a supporting LEFT rail, a tabbed **ScheduleWorkspace** is the CENTER hero, and a profile-only **ProfileRail** is the RIGHT zone. The schedule is no longer edited from a sidebar ⋯-menu — **editing is now CHAT-ONLY** (propose in chat → the engine returns a labeled *scenario* → preview it as a tab → Confirm). The committed plan ("📌 My Plan") is always anchored as the first tab; every derived schedule (a proposed edit, a what-if assumption, a Branch-A audit exploration) is a labeled scenario tab (✓ committed / ⏳ proposed / 🔍 what-if), and you can put **any two** side-by-side in a CompareView with diff highlights. The workspace grids are purely presentational (read-only); the chat thread emits a compact **ScheduleCard** when a scenario is staged (Open / Compare) and a **WhatIfUploadCard** when the agent offers the Branch-A "upload your Albert What-If audit" path. The old `scheduleSidebar.tsx` and its editing subtree (`TermCard`, `SlotRow`, `slotPopover`, `AddCourseAffordance`, `SectionsView`, `PriorCreditsCard`, `slotState`) have been **deleted** (Plan 37 G2). The live shared helpers (`slotRenderHelpers`, `slotTier`, `sidebarFormatters`) now live in `app/chat/shared/`; `SummaryCard` now lives in `app/chat/profile/`.
+This is everything the student sees on screen — the landing page, the chat thread, and especially the **3-zone workspace** that lives next to the conversation. **Plan 36 replaced the single right-hand "ScheduleSidebar" with a 3-zone shell** (`ThreeZoneShell`): the chat thread becomes a supporting LEFT rail, a tabbed **ScheduleWorkspace** is the CENTER hero, and a profile-only **ProfileRail** is the RIGHT zone. **Plan 37 added a workspace slot-editor**: clicking a `specific_planned` or `in_progress` slot on the committed-plan tab opens a `<SlotActionPopover>` with matrix-gated actions (add/drop/withdraw/pass-fail); each term also shows a `+ Add course` affordance when the term is inside the add/drop window. All edits are **propose-only** — a slot action runs the same pipeline as a chat-driven change and stages a proposed scenario; the only DB commit is the "Confirm — make this My Plan" button. The committed plan ("📌 My Plan") is always anchored as the first tab; every derived schedule is a labeled scenario tab (✓ committed / ⏳ proposed / 🔍 what-if), and you can put **any two** side-by-side in a CompareView with diff highlights. Scenario/compare grids are purely presentational (no popover). The chat thread emits a compact **ScheduleCard** when a scenario is staged (Open / Compare) and a **WhatIfUploadCard** when the agent offers the Branch-A "upload your Albert What-If audit" path. The old `scheduleSidebar.tsx` and its editing subtree (`TermCard`, `SlotRow`, `slotPopover`, `AddCourseAffordance`, `SectionsView`, `PriorCreditsCard`, `slotState`) have been **deleted** (Plan 37 G2). The live shared helpers (`slotRenderHelpers`, `slotTier`, `sidebarFormatters`) now live in `app/chat/shared/`; `SummaryCard` now lives in `app/chat/profile/`.
 
 ```mermaid
 flowchart LR
@@ -16,6 +16,8 @@ flowchart LR
     Shell -->|right| Profile[ProfileRail]
     Workspace --> Tabs[📌 My Plan + scenario tabs]
     Tabs --> View[ScheduleView read-only grid]
+    Tabs --> CommittedView[📌 ScheduleView committed + slot-editor]
+    CommittedView --> Popover[SlotActionPopover: add/drop/withdraw/PF]
     Tabs --> Compare[⇄ Compare → CompareView]
     Workspace --> Actions[per-kind actions: Confirm/Cancel/Ask-why · Discard]
     Chat --> Card[ScheduleCard: Open / Compare]
@@ -34,9 +36,9 @@ The chat UI is a Next.js app with three layers:
 2. The marketing landing page (`app/page.tsx`) — static hero, features, footer, with a link to `/chat`.
 3. The chat experience — a page-level orchestrator (`app/chat/page.tsx`) that mounts the **3-zone shell**, where the CENTER zone mirrors the student's forward schedule + every derived scenario as the conversation drives changes.
 
-This doc focuses on the **scenarios workspace tree** (Plan 36), which is the densest and most stateful part of the UI. The chat page subscribes to the v2 SSE stream + plan-action route responses and dispatches them into ONE shared scenario store (`createPlanStore`, see [chat-ui-client.md](./chat-ui-client.md)); the workspace + profile rail render off that single snapshot via `useSyncExternalStore`. **Editing is chat-only** — there is NO slot ⋯-menu, no `+ Add course` input, and no drag in the live UI; a student proposes a change in the conversation, the engine returns a scenario, and the workspace previews it as a tab the student can Confirm.
+This doc covers the **scenarios workspace tree** (Plan 36 + Plan 37). The chat page subscribes to the v2 SSE stream + plan-action route responses and dispatches them into ONE shared scenario store (`createPlanStore`, see [chat-ui-client.md](./chat-ui-client.md)); the workspace + profile rail render off that single snapshot via `useSyncExternalStore`. **Plan 37** added a workspace **slot-editor**: clicking a `specific_planned` or `in_progress` slot on the committed-plan grid opens a `<SlotActionPopover>` with matrix-gated actions (add/drop/withdraw/pass-fail). All slot actions are **propose-only** — they run the same propose pipeline as a chat-driven change and stage a proposed scenario; the only DB commit is the "Confirm — make this My Plan" button. Drag and the sidebar ⋯-menu remain gone; `completed` and `placeholder` slots are non-interactive.
 
-> **Engine / R1 / frozen contract — UNTOUCHED.** Plan 36 is **web-only**: it reshaped the web state store + presentation. The engine's `finalizeForwardSchedule`, the 7-axis validator, and the solver were not modified; the only engine touch was a new `offerAuditUpload` marker + an `AUDIT_UPLOAD_OFFER:` summary line on the `what_if_audit` tool (`packages/engine/src/agent/tools/whatIfAudit.ts`), which does not touch the frozen pipeline. **R1 holds:** a what-if / synthetic schedule is NEVER written to `students.parsed_dpr`; confirming a proposed scenario persists ONLY the `forward_schedule` (via `/api/plan/confirm`); the read-only Branch-A what-if scenario has no `pendingMutationId` and is never confirmable.
+> **Engine / R1 / frozen contract.** Plan 36 was **web-only** (engine untouched). **Plan 37** extended the validator with a new **8th axis** (`passFailLimitsRespected` — per-school P/F career cap; owner-approved first deliberate extension of the formerly-frozen 7-axis contract) and added a pure `slotActionMatrix` module — the solver/search/`finalizeForwardSchedule` seam is unchanged. **R1 holds throughout:** a what-if / synthetic schedule is NEVER written to `students.parsed_dpr`; confirming a proposed scenario persists ONLY the `forward_schedule` (via `/api/plan/confirm`); the read-only Branch-A what-if scenario has no `pendingMutationId` and is never confirmable; plan 37 M1 makes both confirm paths return 422 on an infeasible re-solve (prior valid row survives).
 
 ## The 3-zone shell — `app/chat/workspace/ThreeZoneShell.tsx`
 
@@ -64,7 +66,7 @@ The CENTER hero: a tabbed workspace that shows the committed plan plus any propo
 - A **pinned 📌 "My Plan" committed tab** is always first (`:170`) — no close button.
 - One tab per proposed/whatif scenario (`:199`), each badge-colored (via `kindBadgeClass`) with a close ✕ button.
 - A `⇄ Compare` toggle (`:243`) — a SIBLING of the tablist (a tablist must contain only `role="tab"` children).
-- **NO "+ New what-if" control** — what-ifs are created from chat only (owner decision, plan 36).
+- **NO "+ New what-if" control** — what-ifs are created from chat only (owner decision, plan 36). The committed-plan slot-editor (Plan 37) can trigger Branch-B what-ifs (withdraw/pass-fail) via the popover — but the popover itself is a per-slot UI, not a "+ new what-if" affordance.
 - **ARIA tabs pattern (H6):** the tablist owns the ArrowLeft/Right roving-tabindex handler (`handleTablistKeyDown` `:130`); the active tab gets `tabIndex=0` / `aria-selected` and all others `tabIndex=-1`; each tab carries `aria-controls` pointing to the single `role="tabpanel"` body (`:256`). The close ✕ is a real sibling `<button>` (M3 restructure — no `<button>` nested in `<button>`, no hydration warning).
 
 ### Body — per-kind action bodies (`ScenarioBody`, `ScheduleWorkspace.tsx:362`)
@@ -73,9 +75,11 @@ The body renders the active scenario's header (label + kind badge + verdict glyp
 
 | Kind | Action bar | Notes |
 |---|---|---|
-| **committed** | none — "it IS the plan" | read-only grid |
-| **proposed** | **Confirm — make this My Plan** (→ `onConfirmProposed`) · **Cancel** (→ `planStore.discardScenario`) · **Ask why** (→ `onAskWhy`) | shows the assumption/hedge block (`:388`) |
-| **whatif** | **Discard** (→ `planStore.discardScenario`) — NO Confirm | + two read-only notes: "nothing is saved unless you adopt it as your plan" / "a what-if never changes your plan; to adopt it, declare it in Albert & upload a new DPR" (`:439-444`) |
+| **committed** | none — "it IS the plan" | read-only grid; slot-editor popover on `specific_planned`/`in_progress` slots (Plan 37) |
+| **proposed** (valid/trade-offs) | **Confirm — make this My Plan** (→ `onConfirmProposed`) · **Cancel** (→ `planStore.discardScenario`) · **Ask why** (→ `onAskWhy`) | shows the assumption/hedge block (`:388`) |
+| **proposed** (invalid) | no Confirm — red explanation card only | Plan 37 I4: an invalid proposed scenario shows the red card; no commit path; no Override |
+| **whatif** (Branch-B — confirmable) | **Confirm — make this My Plan** · **Discard** | Branch-B what-ifs (withdraw/pass-fail) are CONFIRMABLE per owner decision; valid → Confirm; invalid → red card only |
+| **whatif** (Branch-A audit — read-only) | **Discard** only — NO Confirm | Branch-A audit what-ifs are always read-only; `pendingMutationId` absent; adopt by declaring in Albert + uploading a new DPR |
 
 When `compare` is set the body swaps to `<CompareBody>` (`:296`) which resolves the compare pair from the store and renders `<CompareView>`. Empty states cover no-DPR and no-scenario-selected.
 
@@ -85,9 +89,26 @@ The workspace re-exports `kindBadgeLabel` / `kindBadgeClass` / `verdictDisplay` 
 
 A presentational one-schedule term grid (`ScheduleView.tsx:115`). It reuses the shared low-level helpers (`renderSlotInner` / `slotGradeText` from `app/chat/shared/slotRenderHelpers`, `formatTermLabel` / `slotCredits` from `app/chat/shared/sidebarFormatters`, `slotTierClassName` from `app/chat/shared/slotTier`) and applies diff highlights on top.
 
-- Props (`:40`): `schedule`, an optional `diff: AnnotatedColumn` (from `scheduleDiff.ts`), `readOnly` (default false), `singleColumn` (compare columns force a one-term-per-row layout).
-- **As of H6 it is PURELY presentational** — NO slot click handler, NO popover, NO "clickable" affordance (`:169-177`). Editing is chat-only, so the workspace has no slot editor; the `readOnly` prop is retained for API compatibility but the grid is non-interactive either way. The only per-slot status signal is a minimal 🔒 (completed) / ◐ (in-progress) glyph.
+- Props (`:40`): `schedule`, an optional `diff: AnnotatedColumn` (from `scheduleDiff.ts`), `readOnly` (default false), `singleColumn` (compare columns force a one-term-per-row layout), `onSlotAction` callback, and the slot-editor context props (`dpr`, `campus`, `passFailConfig`, `now`) needed by the popover.
+- **Plan 37 F3 — slot-editor on the committed-plan grid.** When `!readOnly` (committed-plan view only), clicking a `specific_planned` or `in_progress` slot opens a `<SlotActionPopover>` with matrix-gated actions (add/drop/withdraw/pass-fail). `completed` slots show a 🔒 glyph and are non-interactive; `placeholder` slots have no popover. The `readOnly` prop suppresses the popover entirely (scenario/compare views remain purely presentational). Each term also renders a `+ Add course` text input (Plan 37 F4) when the term is inside the add/drop window (window-gated per D-2, hedged with a deadline reminder).
 - **Diff keying:** `slotCourseKey` (`:107`) delegates to `scheduleDiff.slotKey` so the diff-lookup key is BYTE-IDENTICAL to the key the diff stored (canonical course id for courses, `placeholder:${placeholderId}` for placeholders) — a divergent key would silently drop highlights. `diffClassFor` (`:64`, exported for unit test) maps a course's diff annotation to a CSS-module class (`diff-added` / `-removed` / `-moved` / `-retake`; `same` → no highlight).
+
+## SlotActionPopover — `app/chat/workspace/SlotActionPopover.tsx` (Plan 37 F2)
+
+The presentational per-slot action menu, mounted by `ScheduleView` on `specific_planned` and `in_progress` slots in the committed-plan tab.
+
+- **Purely presentational** — all decision logic is in `slotActionView.ts` (the pure mapper) and the engine's `slotActionMatrix` (imported via `@nyupath/engine/client`). The popover renders whatever buttons the view mapper says to render.
+- The popover receives the slot, the pre-computed `SlotActionViewItems[]` from `slotActionView.ts`, and an `onAction(kind)` callback wired to the page's `handleSlotAction`.
+- Each action button is enabled/disabled per the matrix + carries a tooltip/hedge string from the view (`hedgeText`). A disabled button still renders (with reduced opacity) so the student can see what actions exist and why they're unavailable.
+- **Actions:** `add` (triggers the `+ Add course` affordance for the slot's term), `drop` (calls `/api/plan/drop` → propose pipeline), `withdraw` (calls `/api/plan/whatif` withdraw arm → Branch-B what-if propose pipeline), `passFail` (calls `/api/plan/whatif` pass-fail arm → Branch-B what-if propose pipeline).
+- `completed` slots: no popover (locked glyph only). `placeholder` slots: no popover.
+
+## slotActionView — `app/chat/workspace/slotActionView.ts` (Plan 37 F1)
+
+Pure client-side mapper: takes a `SlotActionMatrix` (from `slotActionMatrix()`) and produces `SlotActionViewItem[]` (one per action) with `{ kind, label, enabled, hedgeText }`. No React import, no I/O; unit-tested in node.
+
+- Maps the matrix's `{allowed, reason, hedge}` per action to a display-ready enabled/disabled item + tooltip copy.
+- Hedge strings are plain English (e.g. "Typical add/drop deadline for this season — verify with your registrar"). A `canElect:false` action (Tandon P/F) gets a clear "Your school does not allow students to elect P/F" tooltip even though the server is the enforcer.
 
 ## Schedule diff — `lib/scenarios/scheduleDiff.ts`
 
@@ -250,7 +271,7 @@ flowchart TD
     ChatThread -->|Open → setActive · Compare → openCompare| Store
 ```
 
-The workspace + profile rail are pure renderers of the one shared `createPlanStore` snapshot. Every meaningful schedule change is dispatched into the store by the chat page (SSE events, `/api/plan/*` responses, `/api/whatif-audit`), and every consumer re-renders from that single snapshot. Editing is chat-only — there is no slot-level edit input in the live UI.
+The workspace + profile rail are pure renderers of the one shared `createPlanStore` snapshot. Every meaningful schedule change is dispatched into the store by the chat page (SSE events, `/api/plan/*` responses, `/api/whatif-audit`, slot-editor popover actions), and every consumer re-renders from that single snapshot. Slot-editor actions are **propose-only** — they run the same propose pipeline as a chat-driven change and write the store only through the workspace Confirm chokepoint. The chat path and the slot-editor path use identical routes and confirm mechanics.
 
 ## Known limitations
 

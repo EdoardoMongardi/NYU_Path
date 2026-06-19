@@ -1,6 +1,6 @@
 # Tool Registry & Tool Contract
 
-> Last verified against code: 2026-06-13 (doc-sync pass: refreshed drifted registry.ts/route.ts/agentLoop.ts line citations in §5–§6).
+> Last verified against code: 2026-06-19 (Plan 37 — `proposeWhatIfAssumption` `validateInput` gains the D-7 IP-membership guard + D-4 P/F-eligibility gate; `/api/plan/add` gains the E3 course-existence 422; `/api/plan/whatif` route now runs `validateInput` before `.call`; tool count still 21).
 
 > **Source files:** `packages/engine/src/agent/tool.ts`, `packages/engine/src/agent/registry.ts`
 
@@ -131,6 +131,19 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 ```
 
 `buildDefaultRegistry()` (`registry.ts:100-102`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts:612`).
+
+### Plan 37 tool enhancements (guards on existing tools)
+
+No new tools were added; 21 tools remain. Three live tool behaviors changed:
+
+- **`propose_whatif_assumption` — D-7 IP-membership guard + D-4 P/F-eligibility gate.** `proposeWhatIfAssumptionTool.validateInput` now checks two conditions before calling the tool:
+  1. **IP-membership (D-7):** the `courseId` arg must be an `in_progress` row in the authoritative DPR. A withdraw/pass-fail targeting a `completed` or `specific_planned` course is rejected with a clear message ("Withdraw / pass-fail applies only to a course you're currently taking (in progress). <course> is <completed / planned> — to remove a planned course, drop it instead."). This makes the D-2 PLANNED-slot restriction a real engine guard, not just a dormant UI gate.
+  2. **P/F eligibility (D-4, follow-up fix):** if the action is `pass` or `fail` AND the student's home school has `canElect: false` (Tandon) OR the slot category makes the course ineligible (e.g. a course counting toward a major at a school that bans major-course P/F elections), `validateInput` rejects the call before the tool runs. This closes the D-4 eligibility gap that existed when the what-if path bypassed `validateInput`.
+  The `/api/plan/whatif` route also now **explicitly runs `validateInput` before `.call`** (this was the follow-up fix — the editor path previously bypassed validation).
+
+- **`/api/plan/add` — E3 course-existence 422.** The add-course route validates the submitted `courseId` against `courseExists(courseId, session.courses)` — a pure catalog lookup (`apps/web/lib/courseExists.ts`). An unknown course id returns HTTP 422 with a clear message. The same check also runs client-side in the `+ Add course` affordance before the route is called.
+
+- **`proposeWhatIfAssumption` threading (C2 follow-up).** The `solveWhatIfAssumption` and `solveAndDiff` helpers that this tool calls now receive `passFailConfig` from the school config and thread it into `finalizeForwardSchedule`, so the 8th `passFailLimitsRespected` axis fires for P/F elections via the what-if path.
 
 ### Removed tools (do not document as live)
 
