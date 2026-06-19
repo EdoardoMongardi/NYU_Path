@@ -202,6 +202,10 @@ export const confirmPlanChangeTool = buildTool({
             plan: currentPlan,
             dpr,
             programRules: validatorRules,
+            // Plan 37 (Task C2) — evaluate the BEFORE plan under the SAME P/F
+            // config so the per-axis before/after diff reflects only genuine
+            // plan-driven changes (the career cap is plan-independent).
+            passFailConfig: session.schoolConfig?.passFail,
         }).axisResults;
 
         const { schedule: newSchedule, validatorResult } = finalizeForwardSchedule(
@@ -209,6 +213,9 @@ export const confirmPlanChangeTool = buildTool({
             solverInput,
             dpr,
             validatorRules,
+            // Plan 37 (Task C2) — thread the session-resolved per-school P/F
+            // config so the 8th validator axis enforces the career cap.
+            session.schoolConfig?.passFail,
         );
 
         // D6.3 — rung-3 re-rank provenance. When the agent applied an

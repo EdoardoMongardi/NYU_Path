@@ -173,6 +173,9 @@ export const proposePlanChangeTool = buildTool({
             solverInput,
             dpr,
             validatorRules,
+            // Plan 37 (Task C2) — thread the session-resolved per-school P/F
+            // config so the 8th validator axis enforces the career cap.
+            session.schoolConfig?.passFail,
         );
 
         // Validate the BEFORE plan too (cheap, pure) so the planDiff can report
@@ -181,6 +184,10 @@ export const proposePlanChangeTool = buildTool({
             plan: currentPlan,
             dpr,
             programRules: validatorRules,
+            // Plan 37 (Task C2) — evaluate the BEFORE plan under the SAME P/F
+            // config so the per-axis before/after diff reflects only genuine
+            // plan-driven changes (the career cap is plan-independent).
+            passFailConfig: session.schoolConfig?.passFail,
         }).axisResults;
 
         // Compute diff and consequences
