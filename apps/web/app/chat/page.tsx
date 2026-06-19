@@ -28,6 +28,11 @@ import {
     // from the client-safe entry — see packages/engine/src/client.ts).
     classifyIpChangeability,
     deriveTemporalContext,
+    // Plan 37 follow-up — per-school PassFailConfig (client-safe static map).
+    // Lets slotActionMatrix pre-disable the Pass/Fail button at canElect:false
+    // schools (e.g. Tandon) on the CLIENT, instead of showing enabled then
+    // receiving a server-side 422. Zero node: imports — pure data in passFailDefaults.ts.
+    passFailForSchool,
 } from "@nyupath/engine/client";
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
 // H5.1 (plan 36) — the RIGHT zone is now the profile-only ProfileRail.
@@ -1867,13 +1872,15 @@ export default function ChatPage() {
     //                    own fallback). The registration windows are typical +
     //                    hedged, so a wrong campus only shifts the hedge copy.
     //       · calendar = NYU_ACADEMIC_CALENDAR (the bundled typical windows).
-    //       · passFail = undefined — the school's PassFailConfig is NOT
-    //                    client-available (loadSchoolConfig is server-only,
-    //                    node:fs). With passFail absent, slotActionMatrix
-    //                    treats canElect as UNKNOWN (not false) → pass/fail is
-    //                    offered in the withdraw window with the standard
-    //                    "verify with your registrar" hedge. (Threading the
-    //                    real PassFailConfig to the client is a follow-up.)
+    //       · passFail = passFailForSchool(homeSchool) — the school's
+    //                    PassFailConfig from the client-safe static inline map
+    //                    (packages/engine/src/data/passFailDefaults.ts). Sourced
+    //                    verbatim from data/schools/<id>.json; zero node: imports.
+    //                    At canElect:false schools (e.g. Tandon) slotActionMatrix
+    //                    returns passFail.allowed=false with the "school doesn't
+    //                    let you elect" reason → button pre-disabled on the client.
+    //                    Unknown schools → undefined → treated as "not explicitly
+    //                    blocked" (same behaviour as before this follow-up).
     //       · now      = new Date() (real "today"; tests inject their own).
     //
     //   onSlotAction(slot, term, action) → PROPOSE-ONLY dispatch (D-8). It
@@ -1912,7 +1919,10 @@ export default function ChatPage() {
                 dpr: sidebarDpr,
                 campus: campusForHomeSchool(homeSchool ?? undefined),
                 calendar: NYU_ACADEMIC_CALENDAR,
-                // passFail intentionally omitted — no client source (see note).
+                // Plan 37 follow-up: thread the per-school PassFailConfig from
+                // the client-safe static map so the button is pre-disabled at
+                // canElect:false schools (e.g. Tandon) without touching node:fs.
+                passFail: passFailForSchool(homeSchool ?? undefined),
                 now: new Date(),
             });
         },

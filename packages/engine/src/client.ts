@@ -24,6 +24,20 @@ export { canonicalizeCourseId, canonicalizeCourseIdSet } from "./courseId.js";
 export { SCHOOL_DISPLAY_NAMES } from "./data/schoolDefaults.js";
 
 // ------------------------------------------------------------
+// Plan 37 follow-up — per-school PassFailConfig (client-safe).
+// VERIFIED node-free: passFailDefaults.ts has ZERO imports beyond
+// the `PassFailConfig` TYPE from @nyupath/shared (type-only, erased
+// at runtime). The data is a static inline map; no node:fs / node:url /
+// node:crypto / schoolConfigLoader / fileURLToPath in the transitive tree.
+//
+// `passFailForSchool(homeSchool)` lets page.tsx thread the school's
+// `canElect` flag into `slotActionMatrix` so the Pass/Fail button is
+// pre-disabled on the CLIENT at a canElect:false school (e.g. Tandon)
+// instead of showing enabled and receiving a server-side 422.
+export { passFailForSchool } from "./data/passFailDefaults.js";
+export type { PassFailConfig } from "@nyupath/shared";
+
+// ------------------------------------------------------------
 // Plan 37 (slot-editor F3) — the slot-action matrix + the calendar const.
 // VERIFIED node-free (transitive tree traced): slotActionMatrix.ts →
 // {ipCourseChangeability,temporalContext,academicCalendar,dpr/schema}.ts →
