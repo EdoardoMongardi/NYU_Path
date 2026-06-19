@@ -13,8 +13,17 @@ import {
 import { getPastVerb, getThoughtSentence } from "../../lib/agentStatusVerbs";
 import { formatDuration } from "../../lib/formatDuration";
 import { renderMarkdown } from "../../lib/renderMarkdown";
-import type { ForwardSchedule, SchedulePreferences, StudentProfile } from "@nyupath/shared";
+import type { ForwardSchedule, SchedulePreferences, StudentProfile, ScheduleSlot } from "@nyupath/shared";
 import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@nyupath/engine";
+// TYPE-ONLY engine imports (pure types — no node:* pulled into the client
+// bundle). The RUNTIME slot-action builder + the calendar const are sourced
+// from the CLIENT-SAFE entry `@nyupath/engine/client` (below), NEVER the barrel.
+import type { SlotAction, SlotActionMatrix } from "@nyupath/engine";
+import {
+    slotActionMatrix,
+    NYU_ACADEMIC_CALENDAR,
+    campusForHomeSchool,
+} from "@nyupath/engine/client";
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
 // H5.1 (plan 36) — the RIGHT zone is now the profile-only ProfileRail.
 // `scheduleSidebar.tsx` lingers UNMOUNTED (its grid + slot popovers +
@@ -33,6 +42,8 @@ import {
 } from "../../lib/planActionBubbleHelpers";
 import {
     planConfirm,
+    planDrop,
+    planWhatIf,
     type PlanActionResult,
     type PlanActionRouteResponse,
     type WhatIfAssumptionRouteResponse,
@@ -1811,6 +1822,115 @@ export default function ChatPage() {
         }
     }, [sidebarDpr, visaStatus]);
 
+    // ============================================================
+    // Plan 37 F3 — committed-plan slot editor (matrix + propose dispatch)
+    // ============================================================
+    // The slot-action popover is offered ONLY on the COMMITTED plan in the
+    // CENTER-zone workspace. These two callbacks wire it:
+    //
+    //   slotMatrix(slot, term) → the per-slot action matrix (which of
+    //     drop/withdraw/passFail the slot allows), computed by the engine's
+    //     PURE `slotActionMatrix` (sourced via @nyupath/engine/client — no
+    //     node:* in the client bundle).
+    //
+    //     Inputs:
+    //       · dpr      = `sidebarDpr` — the COMMITTED, authoritative DPR
+    //                    (parsedData.kind === "dpr"). null until a DPR loads.
+    //       · campus   = `campusForHomeSchool(homeSchool)` — NY / Shanghai /
+    //                    Abu Dhabi from the confirmed home-school id; defaults
+    //                    to "ny" when homeSchool is null/unknown (the helper's
+    //                    own fallback). The registration windows are typical +
+    //                    hedged, so a wrong campus only shifts the hedge copy.
+    //       · calendar = NYU_ACADEMIC_CALENDAR (the bundled typical windows).
+    //       · passFail = undefined — the school's PassFailConfig is NOT
+    //                    client-available (loadSchoolConfig is server-only,
+    //                    node:fs). With passFail absent, slotActionMatrix
+    //                    treats canElect as UNKNOWN (not false) → pass/fail is
+    //                    offered in the withdraw window with the standard
+    //                    "verify with your registrar" hedge. (Threading the
+    //                    real PassFailConfig to the client is a follow-up.)
+    //       · now      = new Date() (real "today"; tests inject their own).
+    //
+    //   onSlotAction(slot, term, action) → PROPOSE-ONLY dispatch (D-8). It
+    //     calls EXACTLY the same client verbs a chat-driven change uses and
+    //     feeds the result into the SAME result handlers:
+    //       · drop     → planDrop({courseId,term})    → handlePlanActionResult
+    //       · withdraw → planWhatIf({courseId,outcome:"withdraw"}) → handleWhatIfResult
+    //       · passFail → planWhatIf({courseId,outcome:"pass"})     → handleWhatIfResult
+    //     It NEVER calls planConfirm / /api/plan/confirm and NEVER writes
+    //     parsed_dpr — the DB commit happens ONLY when the student clicks the
+    //     workspace "Confirm — make this My Plan" button (R1 preserved).
+    const slotMatrix = useCallback(
+        (slot: ScheduleSlot, term: string): SlotActionMatrix => {
+            // sidebarDpr is null only before a DPR loads; in that state the
+            // committed plan (and thus this editor) isn't mounted. Guard anyway
+            // so the closure is total — fall back to an empty DPR shape would
+            // be wrong, so we require it.
+            if (!sidebarDpr) {
+                // Should be unreachable (editor mounts only with a committed
+                // plan, which needs a DPR), but keep the closure total: a
+                // planned-state matrix with only drop available is the safest
+                // no-DPR default.
+                return slotActionMatrix({
+                    slot,
+                    term,
+                    dpr: { } as unknown as DegreeProgressReport,
+                    campus: campusForHomeSchool(homeSchool ?? undefined),
+                    calendar: NYU_ACADEMIC_CALENDAR,
+                    now: new Date(),
+                });
+            }
+            return slotActionMatrix({
+                slot,
+                term,
+                dpr: sidebarDpr,
+                campus: campusForHomeSchool(homeSchool ?? undefined),
+                calendar: NYU_ACADEMIC_CALENDAR,
+                // passFail intentionally omitted — no client source (see note).
+                now: new Date(),
+            });
+        },
+        [sidebarDpr, homeSchool],
+    );
+
+    const onSlotAction = useCallback(
+        async (slot: ScheduleSlot, term: string, action: SlotAction): Promise<void> => {
+            // courseId exists only on concrete (non-placeholder) slots.
+            const courseId =
+                slot.kind === "specific_planned" ||
+                slot.kind === "completed" ||
+                slot.kind === "in_progress"
+                    ? slot.courseId
+                    : null;
+            if (!courseId) return;
+
+            switch (action) {
+                case "drop": {
+                    // PROPOSE path — same as a chat-driven drop.
+                    const result = await planDrop({ courseId, term });
+                    handlePlanActionResult("drop", result);
+                    return;
+                }
+                case "withdraw": {
+                    const result = await planWhatIf({ courseId, outcome: "withdraw" });
+                    handleWhatIfResult(result);
+                    return;
+                }
+                case "passFail": {
+                    // P/F election → the whatif "pass" outcome.
+                    const result = await planWhatIf({ courseId, outcome: "pass" });
+                    handleWhatIfResult(result);
+                    return;
+                }
+                case "add":
+                    // ADD is a TERM-level affordance, never reachable from the
+                    // per-slot popover (slotActionView omits it). No-op guard.
+                    return;
+            }
+        },
+        [handlePlanActionResult, handleWhatIfResult],
+    );
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -1880,6 +2000,8 @@ export default function ChatPage() {
                 planStore={planStore}
                 onConfirmProposed={handleWorkspaceConfirm}
                 onAskWhy={handleWorkspaceAskWhy}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
                 left={
                     <>
             {/* Messages */}

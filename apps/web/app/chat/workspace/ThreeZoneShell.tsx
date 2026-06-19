@@ -35,6 +35,8 @@
 "use client";
 
 import type { ReactElement, ReactNode } from "react";
+import type { ScheduleSlot } from "@nyupath/shared";
+import type { SlotAction, SlotActionMatrix } from "@nyupath/engine";
 import type { PlanStore, Scenario } from "../planState";
 import styles from "../chat.module.css";
 import ScheduleWorkspace from "./ScheduleWorkspace";
@@ -46,6 +48,11 @@ export interface ThreeZoneShellProps {
     onConfirmProposed: (scenario: Scenario) => void;
     /** Wired to page.tsx's existing "Ask why" chat injection. */
     onAskWhy: (scenario: Scenario) => void;
+    /** Plan 37 F3 — slot-action matrix builder for the COMMITTED plan (page.tsx
+     *  builds it from the committed DPR via @nyupath/engine/client). */
+    slotMatrix?: (slot: ScheduleSlot, term: string) => SlotActionMatrix;
+    /** Plan 37 F3 — PROPOSE-ONLY per-slot dispatch for the COMMITTED plan. */
+    onSlotAction?: (slot: ScheduleSlot, term: string, action: SlotAction) => void;
     /** The chat thread + composer (rendered in the LEFT zone). */
     left: ReactNode;
     /** The existing ScheduleSidebar (rendered in the RIGHT zone, unchanged). */
@@ -56,6 +63,8 @@ export default function ThreeZoneShell({
     planStore,
     onConfirmProposed,
     onAskWhy,
+    slotMatrix,
+    onSlotAction,
     left,
     right,
 }: ThreeZoneShellProps): ReactElement {
@@ -69,6 +78,8 @@ export default function ThreeZoneShell({
                     planStore={planStore}
                     onConfirmProposed={onConfirmProposed}
                     onAskWhy={onAskWhy}
+                    slotMatrix={slotMatrix}
+                    onSlotAction={onSlotAction}
                 />
             </div>
             <div className={styles.zoneRight} data-zone="right">

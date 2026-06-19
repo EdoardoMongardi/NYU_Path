@@ -22,3 +22,26 @@
 
 export { canonicalizeCourseId, canonicalizeCourseIdSet } from "./courseId.js";
 export { SCHOOL_DISPLAY_NAMES } from "./data/schoolDefaults.js";
+
+// ------------------------------------------------------------
+// Plan 37 (slot-editor F3) — the slot-action matrix + the calendar const.
+// VERIFIED node-free (transitive tree traced): slotActionMatrix.ts →
+// {ipCourseChangeability,temporalContext,academicCalendar,dpr/schema}.ts →
+// only `zod` + each other. academicCalendar.ts has ZERO imports;
+// temporalContext + schema are type-only/zod; no node:fs / node:crypto /
+// fileURLToPath / dataLoader / schoolConfigLoader / fingerprint / catalog
+// /RAG anywhere in the tree. Safe to bundle for the browser.
+//
+// page.tsx (CLIENT) builds its per-slot `slotMatrix(slot, term)` via the
+// runtime `slotActionMatrix` function + the `NYU_ACADEMIC_CALENDAR` const,
+// so both must be importable WITHOUT touching the engine barrel.
+export { slotActionMatrix } from "./agent/forwardSchedule/slotActionMatrix.js";
+export { NYU_ACADEMIC_CALENDAR, campusForHomeSchool } from "./dpr/academicCalendar.js";
+
+export type {
+    SlotAction,
+    SlotActionDecision,
+    SlotActionMatrix,
+    SlotActionMatrixArgs,
+} from "./agent/forwardSchedule/slotActionMatrix.js";
+export type { Campus, AcademicCalendar } from "./dpr/academicCalendar.js";

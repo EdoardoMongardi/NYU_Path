@@ -10,9 +10,10 @@
 //       click / popover trigger is suppressed).
 // ============================================================
 
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
-import type { ForwardSchedule } from "@nyupath/shared";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ForwardSchedule, ScheduleSlotInProgress } from "@nyupath/shared";
+import type { SlotActionMatrix } from "@nyupath/engine";
 import type { AnnotatedColumn } from "../lib/scenarios/scheduleDiff";
 import ScheduleView from "../app/chat/workspace/ScheduleView";
 
@@ -227,5 +228,215 @@ describe("ScheduleView — non-interactive slot grid", () => {
         // The grid still renders both terms' courses.
         expect(container.querySelector("ul")).not.toBeNull();
         expect(screen.getByText(/CSCI-UA 101/)).toBeTruthy();
+    });
+});
+
+// ---- (4) F3 — interactive committed-plan slot editor -------------------------
+// Plan 37 F3: the committed-plan ScheduleView accepts `slotMatrix` +
+// `onSlotAction` props. When BOTH are present (and readOnly=false), clicking
+// a slot opens the SlotActionPopover; clicking a popover button calls
+// `onSlotAction(slot, term, action)`.
+//
+// The test schedule below has one `in_progress` slot (CSCI-UA 301 in
+// 2026-fall) — the kind that has real per-slot actions (drop / withdraw /
+// pass-fail are all potentially gated on the IP window).
+// ----------------------------------------------------------------------------
+
+/** Minimal in_progress slot. */
+const IP_SLOT: ScheduleSlotInProgress = {
+    kind: "in_progress",
+    courseId: "CSCI-UA 301",
+    title: "Data Structures",
+    credits: 4,
+};
+
+// A schedule with ONE in_progress slot so we can target it precisely.
+const IP_SCHEDULE = {
+    ...SCHEDULE,
+    semesters: [
+        {
+            term: "2026-fall",
+            locked: false,
+            plannedCredits: 4,
+            notes: [],
+            loadRationale: LOAD_RATIONALE,
+            slots: [IP_SLOT],
+        },
+    ],
+} as unknown as ForwardSchedule;
+
+/** A stub SlotActionMatrix that allows drop + withdraw, not passFail. */
+function makeMatrix(dropAllowed: boolean): SlotActionMatrix {
+    return {
+        state: "registered",
+        allowed: { add: false, drop: dropAllowed, withdraw: true, passFail: false },
+        perAction: {
+            add:      { reason: "term-level only" },
+            drop:     dropAllowed ? { hedge: "Check add/drop window" } : { reason: "closed" },
+            withdraw: { hedge: "Verify the withdraw deadline" },
+            passFail: { reason: "not offered" },
+        },
+    };
+}
+
+describe("ScheduleView — F3 interactive committed plan", () => {
+    it("clicking a slot OPENS the SlotActionPopover (Drop button appears)", () => {
+        const slotMatrix = vi.fn(() => makeMatrix(true));
+        const onSlotAction = vi.fn();
+        render(
+            <ScheduleView
+                schedule={IP_SCHEDULE}
+                readOnly={false}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
+            />,
+        );
+        // Before clicking: no popover in the DOM.
+        expect(screen.queryByRole("menu")).toBeNull();
+
+        // Click the slot (the <li> containing "CSCI-UA 301").
+        const courseEl = screen.getByText(/CSCI-UA 301/);
+        fireEvent.click(courseEl);
+
+        // After clicking: the popover should render (role="menu" on SlotActionPopover).
+        expect(screen.queryByRole("menu")).toBeTruthy();
+        // "Drop" should be visible in the popover.
+        expect(screen.getByText("Drop")).toBeTruthy();
+    });
+
+    it("clicking 'Drop' in the popover calls onSlotAction with action='drop'", () => {
+        const slotMatrix = vi.fn(() => makeMatrix(true));
+        const onSlotAction = vi.fn();
+        render(
+            <ScheduleView
+                schedule={IP_SCHEDULE}
+                readOnly={false}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
+            />,
+        );
+        // Open the popover.
+        fireEvent.click(screen.getByText(/CSCI-UA 301/));
+        // Click the "Drop" button.
+        fireEvent.click(screen.getByText("Drop"));
+
+        expect(onSlotAction).toHaveBeenCalledTimes(1);
+        // The spy is called with (slot, term, action). Verify the action arg.
+        const args = onSlotAction.mock.calls[0] as [unknown, unknown, string];
+        expect(args[2]).toBe("drop");
+    });
+
+    it("clicking 'Withdraw' in the popover calls onSlotAction with action='withdraw'", () => {
+        const slotMatrix = vi.fn(() => makeMatrix(true));
+        const onSlotAction = vi.fn();
+        render(
+            <ScheduleView
+                schedule={IP_SCHEDULE}
+                readOnly={false}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
+            />,
+        );
+        fireEvent.click(screen.getByText(/CSCI-UA 301/));
+        fireEvent.click(screen.getByText("Withdraw"));
+
+        const args = onSlotAction.mock.calls[0] as [unknown, unknown, string];
+        expect(args[2]).toBe("withdraw");
+    });
+
+    it("clicking a slot action closes the popover (popover removed after click)", () => {
+        const slotMatrix = vi.fn(() => makeMatrix(true));
+        const onSlotAction = vi.fn();
+        render(
+            <ScheduleView
+                schedule={IP_SCHEDULE}
+                readOnly={false}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
+            />,
+        );
+        fireEvent.click(screen.getByText(/CSCI-UA 301/));
+        expect(screen.queryByRole("menu")).toBeTruthy();
+        fireEvent.click(screen.getByText("Drop"));
+        // After clicking an action the popover should close.
+        expect(screen.queryByRole("menu")).toBeNull();
+    });
+
+    it("the slotMatrix callback receives the correct slot + term", () => {
+        const slotMatrix = vi.fn(() => makeMatrix(true));
+        const onSlotAction = vi.fn();
+        render(
+            <ScheduleView
+                schedule={IP_SCHEDULE}
+                readOnly={false}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
+            />,
+        );
+        // Open the popover — slotMatrix should be called at that point
+        // (the popover reads the matrix when it opens / renders).
+        fireEvent.click(screen.getByText(/CSCI-UA 301/));
+        // slotMatrix should have been called with (slot, term).
+        expect(slotMatrix).toHaveBeenCalled();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const [receivedSlot, receivedTerm] = (slotMatrix.mock.calls[0] as unknown) as [{ kind: string; courseId: string }, string];
+        expect(receivedSlot.kind).toBe("in_progress");
+        expect(receivedSlot.courseId).toBe("CSCI-UA 301");
+        expect(receivedTerm).toBe("2026-fall");
+    });
+});
+
+// ---- (5) F3 — read-only path: no popover regardless of slot click -----------
+
+describe("ScheduleView — F3 read-only path (no popover)", () => {
+    it("readOnly=true with slotMatrix+onSlotAction props: clicking slot does NOT open popover", () => {
+        const slotMatrix = vi.fn(() => makeMatrix(true));
+        const onSlotAction = vi.fn();
+        render(
+            <ScheduleView
+                schedule={IP_SCHEDULE}
+                readOnly={true}
+                slotMatrix={slotMatrix}
+                onSlotAction={onSlotAction}
+            />,
+        );
+        // Even with the editor props present, readOnly=true suppresses interactivity.
+        fireEvent.click(screen.getByText(/CSCI-UA 301/));
+        expect(screen.queryByRole("menu")).toBeNull();
+        expect(onSlotAction).not.toHaveBeenCalled();
+    });
+
+    it("WITHOUT slotMatrix/onSlotAction props: clicking slot does NOT open popover", () => {
+        render(
+            <ScheduleView
+                schedule={IP_SCHEDULE}
+                readOnly={false}
+                // slotMatrix and onSlotAction intentionally absent
+            />,
+        );
+        fireEvent.click(screen.getByText(/CSCI-UA 301/));
+        expect(screen.queryByRole("menu")).toBeNull();
+    });
+
+    it("no 'Edit this course' title attribute when read-only (no click affordance)", () => {
+        const { container } = render(
+            <ScheduleView schedule={IP_SCHEDULE} readOnly={true} />,
+        );
+        // The .slotClickable title is only set in interactive mode.
+        const slots = container.querySelectorAll("[title='Edit this course']");
+        expect(slots.length).toBe(0);
+    });
+
+    it("'Edit this course' title IS present when interactive", () => {
+        const { container } = render(
+            <ScheduleView
+                schedule={IP_SCHEDULE}
+                readOnly={false}
+                slotMatrix={vi.fn(() => makeMatrix(true))}
+                onSlotAction={vi.fn()}
+            />,
+        );
+        const slots = container.querySelectorAll("[title='Edit this course']");
+        expect(slots.length).toBeGreaterThan(0);
     });
 });

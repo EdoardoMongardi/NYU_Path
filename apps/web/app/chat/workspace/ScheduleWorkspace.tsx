@@ -29,6 +29,8 @@
 "use client";
 
 import { type ReactElement, useSyncExternalStore } from "react";
+import type { ScheduleSlot } from "@nyupath/shared";
+import type { SlotAction, SlotActionMatrix } from "@nyupath/engine";
 import type { PlanStore, Scenario } from "../planState";
 import type { ScenarioState } from "../../../lib/scenarios/scenarioModel";
 import { getScenario } from "../../../lib/scenarios/scenarioModel";
@@ -58,6 +60,15 @@ export interface ScheduleWorkspaceProps {
     onConfirmProposed: (scenario: Scenario) => void;
     /** Called when student clicks "Ask why" on a proposed scenario. */
     onAskWhy: (scenario: Scenario) => void;
+    /** Plan 37 F3 — slot-action matrix builder for the COMMITTED plan only.
+     *  Threaded into the committed ScenarioBody's ScheduleView; proposed/
+     *  whatif/compare columns never receive it (they stay read-only). When
+     *  absent (no DPR / no committed plan), the committed grid is non-editable. */
+    slotMatrix?: (slot: ScheduleSlot, term: string) => SlotActionMatrix;
+    /** Plan 37 F3 — dispatch a per-slot action for the COMMITTED plan only.
+     *  PROPOSE-ONLY (D-8): routes through the existing /api/plan/{drop,whatif}
+     *  propose pipeline; never auto-commits. */
+    onSlotAction?: (slot: ScheduleSlot, term: string, action: SlotAction) => void;
 }
 
 // ============================================================
@@ -68,6 +79,8 @@ export default function ScheduleWorkspace({
     planStore,
     onConfirmProposed,
     onAskWhy,
+    slotMatrix,
+    onSlotAction,
 }: ScheduleWorkspaceProps): ReactElement {
     // Subscribe to the store.
     // We read the full PlanState snapshot for backward-compat fields,
@@ -268,6 +281,8 @@ export default function ScheduleWorkspace({
                         onConfirmProposed={onConfirmProposed}
                         onAskWhy={onAskWhy}
                         planStore={planStore}
+                        slotMatrix={slotMatrix}
+                        onSlotAction={onSlotAction}
                     />
                 ) : committed === null ? (
                     <div className="ws-empty">
@@ -357,6 +372,9 @@ interface ScenarioBodyProps {
     planStore: PlanStore;
     onConfirmProposed: (s: Scenario) => void;
     onAskWhy: (s: Scenario) => void;
+    /** Plan 37 F3 — applied ONLY to the committed scenario's ScheduleView. */
+    slotMatrix?: (slot: ScheduleSlot, term: string) => SlotActionMatrix;
+    onSlotAction?: (slot: ScheduleSlot, term: string, action: SlotAction) => void;
 }
 
 function ScenarioBody({
@@ -364,6 +382,8 @@ function ScenarioBody({
     planStore,
     onConfirmProposed,
     onAskWhy,
+    slotMatrix,
+    onSlotAction,
 }: ScenarioBodyProps): ReactElement {
     const { kind, label, verdict, hedges, whatIfAssumption } = scenario;
     const vd = verdictDisplay(verdict);
@@ -447,14 +467,26 @@ function ScenarioBody({
 
             {/* committed: no action buttons — it IS the plan */}
 
-            {/* Schedule grid — ALL kinds render read-only (Cleanup A, H6.1):
-                the workspace has no slot editor; edits flow through chat
-                (propose → scenario → confirm). Committed included. */}
+            {/* Schedule grid (plan 37 F3): the COMMITTED plan is EDITABLE via
+                the per-slot action popover (propose-only → review → Confirm);
+                proposed/whatif columns stay READ-ONLY (a read-only scenario is
+                never directly editable — edits flow through chat). The editor
+                props are applied ONLY when this is the committed scenario AND
+                the caller supplied them (DPR present). */}
             <div className="scenario-schedule">
-                <ScheduleView
-                    schedule={scenario.schedule}
-                    readOnly={true}
-                />
+                {kind === "committed" && slotMatrix && onSlotAction ? (
+                    <ScheduleView
+                        schedule={scenario.schedule}
+                        readOnly={false}
+                        slotMatrix={slotMatrix}
+                        onSlotAction={onSlotAction}
+                    />
+                ) : (
+                    <ScheduleView
+                        schedule={scenario.schedule}
+                        readOnly={true}
+                    />
+                )}
             </div>
         </div>
     );
