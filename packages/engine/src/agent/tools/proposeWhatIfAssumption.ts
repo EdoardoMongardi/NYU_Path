@@ -29,6 +29,7 @@ import {
     whatIfAssumptionLabel,
     type WhatIfOutcome,
 } from "../forwardSchedule/whatIfAssumption.js";
+import { canonicalizeCourseId } from "../../courseId.js";
 import type {
     ForwardSchedule,
     PlanChangeOutcome,
@@ -114,7 +115,7 @@ export const proposeWhatIfAssumptionTool = buildTool({
     inputSchema: InputSchema,
     isReadOnly: true,
     maxResultChars: 4000,
-    async validateInput(_input, { session }) {
+    async validateInput(input, { session }) {
         if (!session.forwardSchedule && !session.studentDraftPlan) {
             return {
                 ok: false,
@@ -128,6 +129,30 @@ export const proposeWhatIfAssumptionTool = buildTool({
                 ok: false,
                 userMessage:
                     "No Degree Progress Report loaded. Cannot propose a what-if assumption without DPR data.",
+            };
+        }
+        // D-7 IP-membership guard: withdraw/pass/fail apply ONLY to courses the
+        // student is currently taking (type "IP" in courseHistory). Reject:
+        //   • course not on DPR at all → likely planned; tell student to drop it
+        //   • course on DPR but not IP → already completed / graded
+        const id = canonicalizeCourseId(input.courseId);
+        const row = session.degreeProgressReport.courseHistory.find(
+            (r) => canonicalizeCourseId(`${r.subject} ${r.catalogNbr}`) === id,
+        );
+        if (!row) {
+            return {
+                ok: false,
+                userMessage:
+                    `${input.courseId} isn't a course you're currently taking — ` +
+                    `it looks planned, not in progress. To remove a planned course, drop it instead.`,
+            };
+        }
+        if (row.type !== "IP") {
+            return {
+                ok: false,
+                userMessage:
+                    `Withdraw and pass/fail apply only to a course you're currently taking (in progress). ` +
+                    `${input.courseId} is already completed.`,
             };
         }
         return { ok: true };

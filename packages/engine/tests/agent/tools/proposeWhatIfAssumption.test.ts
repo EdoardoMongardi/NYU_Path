@@ -367,3 +367,164 @@ describe("propose_whatif_assumption — READ-ONLY", () => {
         expect(JSON.parse(JSON.stringify(session.degreeProgressReport))).toEqual(beforeDpr);
     });
 });
+
+// ---------------------------------------------------------------------------
+// (f) D-7 IP-membership guard (E1) — validateInput rejects non-IP targets
+// ---------------------------------------------------------------------------
+
+/**
+ * A DPR where CSCI-UA 101 is COMPLETED (type:"EN", graded) — not in-progress.
+ * The student would try to withdraw/pass-fail it, which the guard must reject.
+ */
+function makeCompletedDpr(): DegreeProgressReport {
+    const dpr: DegreeProgressReport = {
+        _meta: makeMeta(),
+        reportKind: "dpr",
+        header: { studentName: "Synthetic Student (fabricated)", preparedDate: "10/01/2026" },
+        programs: [
+            {
+                programType: "Undergraduate Career",
+                label: "UA-Coll of Arts & Sci",
+                requirementTerm: "Fall 2024",
+                requirementStatus: "not_satisfied",
+            },
+        ],
+        advisorNotations: [],
+        cumulative: {
+            creditsRequired: 128,
+            creditsUsed: 120,
+            cumulativeGpa: 3.5,
+            cumulativeGpaRequired: 2.0,
+            residencyRequired: 64,
+            residencyUsed: 64,
+            passFailUsedUnits: 0,
+            passFailCapUnits: 32,
+            outsideHomeUsedUnits: 0,
+            outsideHomeCapUnits: 16,
+            timeLimitYears: 8,
+        },
+        requirementGroups: [],
+        // CSCI-UA 101 is COMPLETED (type "EN", graded "A") — not in-progress.
+        courseHistory: [
+            {
+                term: "2025 Fall",
+                subject: "CSCI-UA",
+                catalogNbr: "101",
+                courseTitle: "Intro to CS",
+                grade: "A",
+                units: 4,
+                type: "EN",
+            },
+        ],
+    };
+    return degreeProgressReportSchema.parse(dpr);
+}
+
+/**
+ * A DPR with no mention of CSCI-UA 999 at all — the course is planned (or
+ * just unknown) but NOT on the DPR.  The guard must distinguish "not on DPR
+ * at all" from "on DPR but completed".
+ */
+function makeNoCourseOnDprDpr(): DegreeProgressReport {
+    const dpr: DegreeProgressReport = {
+        _meta: makeMeta(),
+        reportKind: "dpr",
+        header: { studentName: "Synthetic Student (fabricated)", preparedDate: "10/01/2026" },
+        programs: [
+            {
+                programType: "Undergraduate Career",
+                label: "UA-Coll of Arts & Sci",
+                requirementTerm: "Fall 2024",
+                requirementStatus: "not_satisfied",
+            },
+        ],
+        advisorNotations: [],
+        cumulative: {
+            creditsRequired: 128,
+            creditsUsed: 120,
+            cumulativeGpa: 3.5,
+            cumulativeGpaRequired: 2.0,
+            residencyRequired: 64,
+            residencyUsed: 64,
+            passFailUsedUnits: 0,
+            passFailCapUnits: 32,
+            outsideHomeUsedUnits: 0,
+            outsideHomeCapUnits: 16,
+            timeLimitYears: 8,
+        },
+        requirementGroups: [],
+        courseHistory: [], // empty — CSCI-UA 999 is simply not on the DPR
+    };
+    return degreeProgressReportSchema.parse(dpr);
+}
+
+/** Session whose DPR has CSCI-UA 101 as COMPLETED (graded "A", type "EN"). */
+function makeCompletedSession(): ToolSession {
+    const base = casStudentSession({
+        degreeProgressReport: makeCompletedDpr(),
+    });
+    const forwardSchedule = buildForwardSchedule({
+        session: base,
+        dpr: base.degreeProgressReport!,
+        graduationTermOverride: "2027-spring",
+    });
+    return { ...base, forwardSchedule };
+}
+
+/** Session whose DPR does NOT contain CSCI-UA 999 at all (planned course). */
+function makePlannedSession(): ToolSession {
+    const base = casStudentSession({
+        degreeProgressReport: makeNoCourseOnDprDpr(),
+    });
+    const forwardSchedule = buildForwardSchedule({
+        session: base,
+        dpr: base.degreeProgressReport!,
+        graduationTermOverride: "2027-spring",
+    });
+    return { ...base, forwardSchedule };
+}
+
+describe("propose_whatif_assumption — D-7 IP-membership guard (E1)", () => {
+    it("(a) COMPLETED course → validateInput returns { ok:false } with message about in-progress / completed", async () => {
+        // CSCI-UA 101 is completed (type:"EN", grade:"A") — withdraw/PF do not apply
+        const session = makeCompletedSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 101", outcome: "withdraw" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.userMessage).toMatch(/in progress|currently taking|completed/i);
+    });
+
+    it("(b) IN-PROGRESS course → validateInput returns { ok:true }", async () => {
+        // CSCI-UA 102 is in the DPR with type:"IP" — the guard should pass
+        const session = makeIpSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 102", outcome: "withdraw" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(true);
+    });
+
+    it("(c) NOT-ON-DPR course (planned/unknown) → validateInput returns { ok:false } with message about planned / drop it instead", async () => {
+        // CSCI-UA 999 is not on the DPR at all — student likely means a planned course
+        const session = makePlannedSession();
+        const ctx = makeCtx(session);
+
+        const result = await proposeWhatIfAssumptionTool.validateInput!(
+            { courseId: "CSCI-UA 999", outcome: "withdraw" } as never,
+            ctx,
+        );
+
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.userMessage).toMatch(/planned|drop it instead/i);
+    });
+});
