@@ -4,7 +4,7 @@
 
 ## Purpose
 
-When a student asks "what if I drop Calc II?", "can I move CSCI 101 to Spring?", "what if I add a summer term?", or "swap this elective for that one," this tool gives a preview without committing anything. It clones the scheduling preferences, applies the requested mutation(s) to the clone, re-runs the planner against the clone, routes the result through the **same authoritative 7-axis validator** the build path uses, and returns what would happen — the slot diff, the new feasibility verdict, credit/workload deltas, a plain-English consequence list, and the simulated post-mutation schedule. It writes nothing. It is the "try before you buy" half of a two-step contract: the student then calls its sibling [`confirm_plan_change`](confirm_plan_change.md) with the same mutation list to actually apply it.
+When a student asks "what if I drop Calc II?", "can I move CSCI 101 to Spring?", "what if I add a summer term?", or "swap this elective for that one," this tool gives a preview without committing anything. It clones the scheduling preferences, applies the requested mutation(s) to the clone, re-runs the planner against the clone, routes the result through the **same authoritative 8-axis validator** the build path uses, and returns what would happen — the slot diff, the new feasibility verdict, credit/workload deltas, a plain-English consequence list, and the simulated post-mutation schedule. It writes nothing. It is the "try before you buy" half of a two-step contract: the student then calls its sibling [`confirm_plan_change`](confirm_plan_change.md) with the same mutation list to actually apply it.
 
 ```mermaid
 flowchart LR
@@ -12,7 +12,7 @@ flowchart LR
     T --> C[Clone preferences]
     C --> A[Apply mutations to clone]
     A --> S[Re-solve: search + finalize]
-    S --> V[7-axis validator verdict]
+    S --> V[8-axis validator verdict]
     V --> R[Build slot diff + planDiff + consequences]
     R --> P[Preview + proposedSchedule]
     P --> D{Student accepts?}
@@ -35,7 +35,7 @@ Source files:
 
 `propose_plan_change` is the **read-only preview** half of the two-step plan-mutation contract. It accepts one or more `PlanMutation` operations, applies them to a **hypothetical clone** of `session.schedulePreferences`, re-runs the forward solver against that clone, routes the output through the authoritative validator, and returns:
 
-- a feasibility verdict from the **7-axis `runGraduationPathValidator`** (not the solver's coarse flag),
+- a feasibility verdict from the **8-axis `runGraduationPathValidator`** (not the solver's coarse flag),
 - a slot-level before/after diff,
 - a list of plain-English consequence strings,
 - a rich `PlanDiff` (credit/weighted-credit deltas, workload-tier shifts, balance impact, plan-state change, per-axis validation transitions, and real trade-off fields),
@@ -131,7 +131,7 @@ flowchart TD
 
 **Step 3 — Re-solve.** `solveForwardSchedule(solverInput)` runs the rebuilt feasibility-first search + materialize. (The old greedy solver is gone; see [forward-schedule audit](../engine/forward-schedule.md).)
 
-**Step 4 — Route through the AUTHORITATIVE 7-axis validator.** `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`proposePlanChange.ts:164`) assembles the `ForwardSchedule` AND runs `runGraduationPathValidator`, returning `{ schedule: proposedSchedule, validatorResult }`. **This is the key post-rebuild change:** the tool no longer trusts the solver's coarse `feasibility`/`state`. `feasible` in the output reflects the full 7-axis verdict (`validatorResult.feasible`), closing the PLAN-3 hole where an edit could preview as feasible while a 7-axis check would have failed.
+**Step 4 — Route through the AUTHORITATIVE 8-axis validator.** `finalizeForwardSchedule(solverOutput, solverInput, dpr, validatorRules)` (`proposePlanChange.ts:164`) assembles the `ForwardSchedule` AND runs `runGraduationPathValidator`, returning `{ schedule: proposedSchedule, validatorResult }`. **This is the key post-rebuild change:** the tool no longer trusts the solver's coarse `feasibility`/`state`. `feasible` in the output reflects the full 8-axis verdict (`validatorResult.feasible`), closing the PLAN-3 hole where an edit could preview as feasible while a 8-axis check would have failed.
 
 **Step 5 — Validate the BEFORE plan.** `runGraduationPathValidator({ plan: currentPlan, dpr, programRules: validatorRules })` produces `beforeAxes`, so the `planDiff` can report per-axis transitions.
 
@@ -160,7 +160,7 @@ flowchart TD
 
 ```
 {
-  feasible: boolean,                         // validatorResult.feasible (7-axis)
+  feasible: boolean,                         // validatorResult.feasible (8-axis)
   diff: { added: [...], removed: [...] },
   consequences: string[],                    // NO double-count text here (rides disclaimers[])
   conflicts?: Array<{ kind, detail }>,       // from the validator's infeasibilityReport
@@ -200,7 +200,7 @@ sequenceDiagram
 
     Agent->>Propose: mutations[]
     Propose->>Session: read forwardSchedule, schedulePreferences, DPR
-    Propose->>Propose: clone prefs, apply, re-solve, 7-axis validate
+    Propose->>Propose: clone prefs, apply, re-solve, 8-axis validate
     Propose-->>Agent: outcome + planDiff + explanation + proposedSchedule
     Note right of Session: session UNCHANGED
     Agent->>Agent: show preview to student

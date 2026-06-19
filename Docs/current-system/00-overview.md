@@ -88,7 +88,7 @@ What makes a plan "valid" is defined in exactly one place: the **graduation-path
 
 Before the advisor's draft answer reaches the student, **eight deterministic rules** inspect it (`packages/engine/src/agent/responseValidator.ts`: `checkGrounding`, `checkInvocations`, `checkCompleteness`, `checkVerbatim`, `checkAttribution`, `checkIdentityDrift`, `checkQuantitativeShortfall`, `checkPlanClaims`). The most important rule: **every number in the answer must come from a tool result that ran this turn.** If the advisor wrote "your GPA is 3.4", and no tool returned 3.4 this turn, the safety check rejects the draft. The advisor gets one chance to fix it before the answer ships anyway (the system never blocks the student with a blank screen).
 
-> Note: this response validator (which guards the *chat reply*) is a different mechanism from the 7-axis graduation-path validator (which guards the *plan*). The response validator has eight checks, the graduation-path validator has seven axes; they are unrelated.
+> Note: this response validator (which guards the *chat reply*) is a different mechanism from the 8-axis graduation-path validator (which guards the *plan*). The response validator has eight checks, the graduation-path validator has eight axes (the 8th, `passFailLimitsRespected`, was added in plan 37); they are unrelated.
 
 ---
 
@@ -143,8 +143,8 @@ graph TB
     subgraph Engine["The brain + tools (packages/engine)"]
         AGENT[Agent loop<br/>orchestrates LLM + tools]
         VALIDATOR[Response validator<br/>8 safety checks]
-        TOOLS[21 tools]
-        ALGOS[Audit, constraint-search planner,<br/>7-axis graduation-path validator,<br/>section materializer,<br/>RAG retriever, DPR parser]
+        TOOLS[22 tools]
+        ALGOS[Audit, constraint-search planner,<br/>8-axis graduation-path validator,<br/>section materializer,<br/>RAG retriever, DPR parser]
         SESSION[Session state<br/>the shared bag every<br/>tool reads from]
     end
 
@@ -206,7 +206,7 @@ Every subsystem of the AI brain. The most important ones:
 - **`session-state.md`** — the shared data bag every tool reads from
 - **`dpr.md`** — how the official transcript (Albert DPR) is parsed
 - **`audit.md`** — the degree-audit engine (does it satisfy your major?)
-- **`forward-schedule.md`** — the constraint-search multi-term planner and 7-axis validator
+- **`forward-schedule.md`** — the constraint-search multi-term planner and 8-axis validator
 - **`rag.md`** — how policy text is retrieved when the AI needs to cite the bulletin
 - **`section-materialization.md`** — how a structural plan becomes a real schedule with sections
 
@@ -272,7 +272,7 @@ sequenceDiagram
     Student->>Web: "What's my GPA and how many credits do I need?"
     Web->>DB: Load profile, saved plan, chat history
     DB-->>Web: Here you go
-    Web->>Brain: System prompt + history + question + 21 tools available
+    Web->>Brain: System prompt + history + question + 22 tools available
     Brain->>Brain: This needs the audit tool
     Brain->>Web: Please run `run_full_audit`
     Web->>Tool: Run it

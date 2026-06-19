@@ -11,7 +11,7 @@ flowchart LR
     Q[Student: use Course X for free-credit slot Y] --> T[bind_free_elective]
     T --> V[Validate: prereqs, offering, not already taken]
     V --> H[Build hypothetical schedule]
-    H --> R[Re-run 7-axis graduation validator]
+    H --> R[Re-run 8-axis graduation validator]
     R --> S[Score workload + balance shift]
     S --> P[Preview: feasible? + diff + warning level]
     P --> C[Student confirms via confirm_plan_change]
@@ -340,7 +340,7 @@ flowchart LR
 | `confirm_plan_change` | The downstream commit step. `bind_free_elective` produces the diff; [`confirm_plan_change`](./confirm_plan_change.md) is the only path that splices the new `specific_planned` slot into `session.forwardSchedule`. **Plan 37 (J2):** `confirm_plan_change` calls `resolveBindMutations(currentPlan, mutations)` before the prefs walk. This translates the `bindFreeElective(slotId, courseId)` mutation into a `pin(courseId, term, freeze:true)` by looking up the slot's term in the current plan. The resulting pin lands in `schedulePreferences.pins[]` and therefore survives a future re-solve, so the binding is durable rather than lost on the next re-plan. An `exclude` mutation that drops a bound course strips the matching pin. |
 | `search_courses` | Typical upstream source of candidate `courseId`s. |
 | `bind_pool_slot` | Sibling tool. Passing a *pool* slot's id here triggers the `wrong_slot_kind` rejection redirecting to [`bind_pool_slot`](./bind_pool_slot.md). They share the same validation skeleton; the only differences are the absence/presence of `poolBinding` and the choose-n constraint that `bind_pool_slot` adds. |
-| `runGraduationPathValidator` (internal) | Called inline at line 402 as the re-validation step. Owns the `feasible` verdict — the same authoritative 7-axis gate used everywhere else. |
+| `runGraduationPathValidator` (internal) | Called inline at line 402 as the re-validation step. Owns the `feasible` verdict — the same authoritative 8-axis gate used everywhere else. |
 | `computeBalanceScore` / `classifyBalanceDelta` (internal) | Called inline at lines 420-422; supply the balance side of the warning level. |
 | `classifyWorkloadTier` (internal) | Called inline at lines 364-374; supplies the workload side of the warning level. |
 | `isPrereqSatisfied` (internal) | Called inline in Step 4. Same helper used by the planner itself (Decision #4). |
