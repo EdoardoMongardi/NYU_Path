@@ -256,6 +256,13 @@ export interface PassFailConfig {
     // Step 8e — the P/F career-limit *value* moved to the DPR
     // (`dpr.cumulative.passFailCapUnits`, per-student). careerLimitType is
     // retained as the policy unit; the number comes from the DPR.
+    /** The numeric career P/F cap, in the unit named by `careerLimitType`
+     *  (credits | courses | percent_of_program). `null` = no cap on file for
+     *  this school → the engine hedges ("may have a limit — confirm with your
+     *  adviser") and never blocks. Bulletin-sourced; see careerLimitSourceRef. */
+    careerLimitValue?: number | null;
+    /** Bulletin path/quote backing `careerLimitValue` (provenance; "" when null). */
+    careerLimitSourceRef?: string;
     /** For percent-of-program, whether scope is total, plan, or both */
     careerLimitScope?: string;
     /** Per-term limit — null when school has no explicit limit */

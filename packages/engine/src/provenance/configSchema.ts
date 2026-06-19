@@ -62,9 +62,11 @@ const creditCapSchema = z.object({
     additionalRules: z.array(z.string()).optional(),
 }).passthrough();
 
-const passFailConfigSchema = z.object({
+export const passFailConfigSchema = z.object({
     careerLimitType: careerLimitTypeSchema,
     careerLimitScope: z.string().optional(),
+    careerLimitValue: z.number().nullable().optional(),
+    careerLimitSourceRef: z.string().optional(),
     perTermLimit: z.number().nullable().optional(),
     perTermUnit: perTermUnitSchema.optional(),
     countsForMajor: z.boolean().optional(),
