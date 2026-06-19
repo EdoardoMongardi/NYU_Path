@@ -55,7 +55,7 @@ The live chat layout. `ThreeZoneShell` is a THIN presentational component (`Thre
 - The grid columns are `minmax(320px, 1fr) minmax(420px, 1.4fr) minmax(280px, 0.9fr)` (`chat.module.css` `.threeZone` `:31-35`) — desktop-only (≥1100px), no mobile breakpoint.
 - Props (`ThreeZoneShell.tsx:42`): `planStore` (the SAME shared store `page.tsx` holds), `onConfirmProposed` + `onAskWhy` (wired to the page's existing confirm round-trip + chat injection), `left` (the chat thread + composer JSX, passed by `page.tsx`), and `right` (the JSX for the RIGHT zone).
 - The CENTER zone mounts `<ScheduleWorkspace>` directly; the LEFT and RIGHT zones render the `left` / `right` slots.
-- **The RIGHT slot is `<ProfileRail>`** (`page.tsx:2297`), NOT `ScheduleSidebar` — that's the H5 cutover. (The `ThreeZoneShell.tsx` header comment still describes the right zone as "the existing ScheduleSidebar … H5 will repurpose it"; that comment is stale prose — the working code passes `ProfileRail`.)
+- **The RIGHT slot is `<ProfileRail>`** (`page.tsx:2297`), NOT `ScheduleSidebar` — Plan 36 H5 cut the right zone over to `ProfileRail`, and Plan 37 G2 DELETED the old `scheduleSidebar.tsx` tree entirely (the `ThreeZoneShell.tsx` header comment was updated to match).
 
 ## ScheduleWorkspace — `app/chat/workspace/ScheduleWorkspace.tsx`
 

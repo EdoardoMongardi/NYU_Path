@@ -447,7 +447,7 @@ The schedule workspace IS optimistic-on-the-server-side: when `/api/plan/confirm
 - `planStore` — the SAME shared `createPlanStore` instance the page holds.
 - `onConfirmProposed={handleWorkspaceConfirm}` / `onAskWhy={handleWorkspaceAskWhy}` — the workspace's proposed-scenario callbacks.
 - `left` — the chat thread + composer JSX (messages map + the onboarding wizard + the input box), passed by the page.
-- `right={<ProfileRail … />}` — the profile-only RIGHT zone (`page.tsx:2297`). **There is no `<ScheduleSidebar>` mount any more** — the old `scheduleSidebar.tsx` is referenced only in `page.tsx` comments and is slated for deletion.
+- `right={<ProfileRail … />}` — the profile-only RIGHT zone (`page.tsx:2297`). **There is no `<ScheduleSidebar>` mount any more** — the old `scheduleSidebar.tsx` + the `sidebar/` editing subtree were DELETED in plan 37 (G2).
 
 The CENTER zone (`<ScheduleWorkspace>`, mounted inside `ThreeZoneShell`) and the RIGHT `<ProfileRail>` both read the store via `useSyncExternalStore` and are documented in [ui-components.md](./ui-components.md) ("ScheduleWorkspace" / "ProfileRail" / "ScheduleView" / "CompareView").
 
@@ -459,7 +459,7 @@ The CENTER zone (`<ScheduleWorkspace>`, mounted inside `ThreeZoneShell`) and the
 - **`handleWorkspaceAskWhy(scenario)`** (`page.tsx:1619`) — derives a verb hint from the scenario label and routes into the grounded chat agent via the SAME `handleReviewAskWhy` / `explainQuestion.ts` module the review card used.
 - **`handleWhatIfAuditUpload(file, cardMessageId)`** (`page.tsx:1377`) — the Branch-A path. POSTs the student's Albert What-If audit PDF (multipart field `dpr`) to `/api/whatif-audit`; on success builds a READ-ONLY 🔍 what-if scenario via `buildWhatIfScenarioFromAudit` (no `pendingMutationId` ⇒ NOT confirmable), calls `planStore.addScenario`, and emits a `schedule_card` + a narration message. **R1:** this NEVER calls `/api/plan/confirm` and NEVER writes `parsed_dpr`; the file bytes / PII are never logged.
 - The `whatif_audit_request` SSE event is handled in `applyEvent` (`page.tsx:619`): it appends a `whatif_upload_card` message naming the `hypotheticalProgram` (the upload round-trip is owned by `handleWhatIfAuditUpload`).
-- **Note:** `onConfirmCombination` (materialization-apply path) is not wired into `page.tsx` — it exists only in the unmounted `scheduleSidebar.tsx` / `sidebar/SectionsView.tsx` / `sidebar/TermCard.tsx` tree, which is slated for deletion. The Sections-view combination-picker path went dark with the sidebar unmount (Plan 36 H5).
+- **Note:** `onConfirmCombination` (materialization-apply path) is no longer present — it lived only in the `scheduleSidebar.tsx` / `sidebar/SectionsView.tsx` / `sidebar/TermCard.tsx` tree, which went dark with the sidebar unmount (Plan 36 H5) and was DELETED in plan 37 (G2). The Sections-view combination-picker path is therefore not wired into the live tree; re-introducing an inline section picker is a follow-on (the agent-driven `materialize_sections` path remains available).
 
 ### Workspace slot-editor flow (Plan 37 F1–F4)
 

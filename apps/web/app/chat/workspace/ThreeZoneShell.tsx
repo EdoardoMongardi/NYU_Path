@@ -19,16 +19,15 @@
 //               shared `planStore` page.tsx already uses + the two
 //               callbacks (Confirm / Ask-why) wired to page.tsx's
 //               existing confirm round-trip and chat injection.
-//   - `right` — the existing `<ScheduleSidebar>` JSX (passed by
-//               page.tsx UNCHANGED). H5 will repurpose it into a
-//               profile-only rail; for now it is mounted as-is and is
-//               redundant with the workspace.
+//   - `right` — the RIGHT-zone JSX: the profile-only `<ProfileRail>`,
+//               passed by page.tsx. (Plan 36 H5 cut the right zone over
+//               from the old ScheduleSidebar to ProfileRail; Plan 37 G2
+//               then DELETED the scheduleSidebar.tsx tree entirely.)
 //
 // Design constraints:
-//   - ADDITIVE: this does NOT change ScheduleSidebar's props/behavior.
-//     The sidebar is a `position: fixed` overlay drawer that returns
-//     null when closed, so it still floats over the RIGHT cell exactly
-//     as it does today — the cell is a layout placeholder until H5.
+//   - The right zone is a normal in-flow cell rendering the ProfileRail.
+//     (Historically it held a `position: fixed` overlay sidebar drawer;
+//     that drawer was unmounted in H5 and removed in Plan 37 G2.)
 //   - The full visual pass is H6; the grid here is functional.
 //   - This is web-only / desktop (≥1100px). No mobile breakpoint.
 // ============================================================
@@ -60,7 +59,7 @@ export interface ThreeZoneShellProps {
     onAddCourse?: (term: string, courseId: string) => void;
     /** The chat thread + composer (rendered in the LEFT zone). */
     left: ReactNode;
-    /** The existing ScheduleSidebar (rendered in the RIGHT zone, unchanged). */
+    /** The RIGHT-zone JSX (the profile-only ProfileRail), passed by page.tsx. */
     right: ReactNode;
 }
 
