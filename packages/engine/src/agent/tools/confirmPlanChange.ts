@@ -279,9 +279,11 @@ export const confirmPlanChangeTool = buildTool({
         // `forward_schedule` is never written either.) The PREFERENCES write is
         // also gated on feasibility — an infeasible edit must not durably pin
         // the mutation that broke the plan (a future re-solve would re-apply it
-        // and re-break). Both `confirm_plan_change` (this tool, the agent path)
-        // and the workspace `confirmProposed` confirm (via the route
-        // orchestrator) therefore reject an infeasible result the same way.
+        // and re-break). The invariant is COMPLETE across every confirm path:
+        // `confirm_plan_change` (this tool, the agent path), the workspace
+        // `confirmProposed` confirm (via the route orchestrator), AND the
+        // parallel what-if-assumption confirm (`runConfirmWhatIfAssumption`, M1
+        // C1) all reject an infeasible result the same way — none persists it.
         if (validatorResult.feasible && session.scheduleStore && session.student) {
             try {
                 const fingerprint = computeDprFingerprint(dpr);

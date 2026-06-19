@@ -26,7 +26,15 @@ import { _clearBuckets } from "../lib/rateLimit";
 
 const STUDENT_ID = "whatif-route-fixture";
 const IP_COURSE_TERM = "2026 Fall";
+const IP_COURSE = "ELEC-UA 200";
 
+// A FEASIBLE-on-re-solve fixture: the current-term IP course is a FREE ELECTIVE
+// (in courseHistory only — NOT tied to any named requirement leaf) and the
+// degree is already credit-complete. Withdrawing it re-opens NO requirement, so
+// the re-solve stays valid (feasible:true) and the confirm DOES persist — which
+// is what the R1 byte-identity-on-a-successful-persist test below exercises.
+// (The M1 C1 fix refuses an INFEASIBLE what-if confirm with 422; the orchestrator
+// suite `whatIfAssumptionOrchestrator.test.ts` covers that refusal directly.)
 function makeIpMajorDpr(): DegreeProgressReport {
     return {
         _meta: {
@@ -40,13 +48,12 @@ function makeIpMajorDpr(): DegreeProgressReport {
         reportKind: "dpr",
         header: { studentName: "WhatIf Route Fixture", preparedDate: "10/01/2026" },
         programs: [
-            { programType: "Undergraduate Career", label: "UA-Coll of Arts & Sci", requirementTerm: "Fall 2024", requirementStatus: "not_satisfied" },
-            { programType: "Major", label: "Computer Science", requirementTerm: "Fall 2024", requirementStatus: "not_satisfied" },
+            { programType: "Undergraduate Career", label: "UA-Coll of Arts & Sci", requirementTerm: "Fall 2024", requirementStatus: "satisfied" },
         ],
         advisorNotations: [],
         cumulative: {
             creditsRequired: 128,
-            creditsUsed: 120,
+            creditsUsed: 128,
             cumulativeGpa: 3.5,
             cumulativeGpaRequired: 2.0,
             residencyRequired: 64,
@@ -57,28 +64,10 @@ function makeIpMajorDpr(): DegreeProgressReport {
             outsideHomeCapUnits: 16,
             timeLimitYears: 8,
         },
-        requirementGroups: [
-            {
-                rgId: "RG1",
-                title: "Computer Science Major",
-                status: "not_satisfied",
-                statusText: "Not Satisfied: Complete the Computer Science major.",
-                children: [
-                    {
-                        rId: "SR/10",
-                        title: "Intro Requirement",
-                        status: "satisfied",
-                        statusText: "Satisfied: Intro completed (in progress).",
-                        counter: { kind: "courses", required: 1, used: 1, needed: 0 },
-                        coursesUsed: [
-                            { term: IP_COURSE_TERM, subject: "CSCI-UA", catalogNbr: "102", courseTitle: "Data Structures", grade: "IP", units: 4, type: "IP" },
-                        ],
-                    },
-                ],
-            },
-        ],
+        // No unsatisfied requirement leaves — nothing for the W to re-open.
+        requirementGroups: [],
         courseHistory: [
-            { term: IP_COURSE_TERM, subject: "CSCI-UA", catalogNbr: "102", courseTitle: "Data Structures", grade: "IP", units: 4, type: "IP" },
+            { term: IP_COURSE_TERM, subject: "ELEC-UA", catalogNbr: "200", courseTitle: "Free Elective", grade: "IP", units: 4, type: "IP" },
         ],
     };
 }
@@ -152,26 +141,26 @@ describe("/api/plan/whatif (G3.1)", () => {
 
     it("returns 401 with no session cookie", async () => {
         const { POST } = await import("../app/api/plan/whatif/route");
-        const res = await POST(fakeRequest(undefined, { courseId: "CSCI-UA 102", outcome: "withdraw" }) as never);
+        const res = await POST(fakeRequest(undefined, { courseId: IP_COURSE, outcome: "withdraw" }) as never);
         expect(res.status).toBe(401);
     });
 
     it("returns 400 on an invalid outcome", async () => {
         const token = await issueTestToken(STUDENT_ID);
         const { POST } = await import("../app/api/plan/whatif/route");
-        const res = await POST(fakeRequest(token, { courseId: "CSCI-UA 102", outcome: "drop" }) as never);
+        const res = await POST(fakeRequest(token, { courseId: IP_COURSE, outcome: "drop" }) as never);
         expect(res.status).toBe(400);
     });
 
     it("propose → 200 with pendingMutationId + whatIfAssumption marker + proposed plan", async () => {
         const token = await issueTestToken(STUDENT_ID);
         const { POST } = await import("../app/api/plan/whatif/route");
-        const res = await POST(fakeRequest(token, { courseId: "CSCI-UA 102", outcome: "withdraw" }) as never);
+        const res = await POST(fakeRequest(token, { courseId: IP_COURSE, outcome: "withdraw" }) as never);
         expect(res.status).toBe(200);
         const json = await res.json();
         expect(json.pendingMutationId).toMatch(/^[0-9a-f-]{36}$/);
         expect(json.whatIfAssumption).toBeDefined();
-        expect(json.whatIfAssumption.courseId).toBe("CSCI-UA 102");
+        expect(json.whatIfAssumption.courseId).toBe(IP_COURSE);
         expect(json.whatIfAssumption.outcome).toBe("withdraw");
         expect(typeof json.whatIfAssumption.label).toBe("string");
         expect(json.forwardSchedule).toBeDefined();
@@ -182,7 +171,7 @@ describe("/api/plan/whatif (G3.1)", () => {
         const stores = getStores({});
         const before = await stores.scheduleStore.loadLatestSchedule(STUDENT_ID);
         const { POST } = await import("../app/api/plan/whatif/route");
-        await POST(fakeRequest(token, { courseId: "CSCI-UA 102", outcome: "withdraw" }) as never);
+        await POST(fakeRequest(token, { courseId: IP_COURSE, outcome: "withdraw" }) as never);
         const after = await stores.scheduleStore.loadLatestSchedule(STUDENT_ID);
         expect(after?.schedule.computedAt).toBe(before?.schedule.computedAt);
         expect(after?.schedule.dprCourseHistoryHash).toBe("seed-hash");
@@ -195,7 +184,7 @@ describe("/api/plan/whatif (G3.1)", () => {
 
         const { POST: whatifPOST } = await import("../app/api/plan/whatif/route");
         const proposeRes = await whatifPOST(
-            fakeRequest(token, { courseId: "CSCI-UA 102", outcome: "withdraw" }) as never,
+            fakeRequest(token, { courseId: IP_COURSE, outcome: "withdraw" }) as never,
         );
         expect(proposeRes.status).toBe(200);
         const pendingMutationId = (await proposeRes.json()).pendingMutationId;
