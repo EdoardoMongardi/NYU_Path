@@ -70,6 +70,7 @@ import ScheduleCard from "./ScheduleCard";
 import WhatIfUploadCard from "./WhatIfUploadCard";
 import { buildScheduleCardMessage } from "./buildScheduleCardMessage";
 import { applyPlanProposalEvent } from "./planProposalEvent";
+import { applyWhatIfResult } from "./whatIfResultHandler";
 import {
     buildWhatIfScenarioFromAudit,
     type WhatIfAuditResponse,
@@ -1357,25 +1358,20 @@ export default function ChatPage() {
             setTimeout(scrollToBottom, 50);
             return;
         }
-        // A what-if assumption is a feasible preview carrying the
-        // whatIfAssumption marker → stage the preview + labeled review card.
-        const surfaces = planActionSurfaces(result.data);
-        if (surfaces.invalidCard) {
-            planStore.setInvalidProposal(surfaces.invalidCard);
-            planStore.clearPendingPreview();
-        } else if (surfaces.preview) {
-            planStore.setPendingPreview(surfaces.preview);
-            planStore.clearInvalidProposal();
-            // H4.2a — emit a ScheduleCard into the chat thread so the
-            // student can open/compare the new what-if scenario from the
-            // conversation (feasible path ONLY; invalid stays card-only).
-            const activeSc = planStore.getActiveScenario();
-            if (activeSc && activeSc.kind === "proposed") {
-                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
-                setMessages(prev => [...prev, buildScheduleCardMessage(activeSc, cardMsgId, new Date()) as Message]);
+        // I4 verdict gate:
+        //   • VALID (feasible + forwardSchedule)  → addScenario a READ-ONLY
+        //     kind:"whatif" tab (no Confirm) + emit a ScheduleCard into chat.
+        //   • INVALID (feasible:false OR no schedule) → NO workspace surface
+        //     (skip setInvalidProposal AND setPendingPreview). The agent's
+        //     chat narration already explains the consequence.
+        applyWhatIfResult(result.data, {
+            planStore,
+            emitScheduleCard: (msg) => {
+                setMessages(prev => [...prev, msg as Message]);
                 setTimeout(scrollToBottom, 50);
-            }
-        }
+            },
+            now: Date.now(),
+        });
     }, []);
 
     /** Confirm — apply the staged mutation. */
@@ -1471,14 +1467,26 @@ export default function ChatPage() {
                 // Build the read-only what-if scenario + register it.
                 const scenarioId = "whatif-audit-" + Date.now().toString() + Math.random().toString(36).slice(2, 6);
                 const scenario = buildWhatIfScenarioFromAudit(data, scenarioId, Date.now());
-                planStore.addScenario(scenario);
 
-                // 🔍 schedule card so the student can Open/Compare it.
-                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                // I4 verdict gate: an invalid audit what-if is chat-only —
+                // no workspace tab, no ScheduleCard.  The summary + narration
+                // below explain the consequence; a tab adds no value since
+                // the student cannot adopt or meaningfully compare an invalid
+                // hypothetical plan.
+                if (scenario.verdict !== "invalid") {
+                    planStore.addScenario(scenario);
+
+                    // 🔍 schedule card so the student can Open/Compare it.
+                    const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                    setMessages(prev => [
+                        ...prev,
+                        buildScheduleCardMessage(scenario, cardMsgId, new Date()) as Message,
+                    ]);
+                }
+
                 const narrationId = Date.now().toString() + Math.random().toString(36).slice(2, 6) + "-n";
                 setMessages(prev => [
                     ...prev,
-                    buildScheduleCardMessage(scenario, cardMsgId, new Date()) as Message,
                     {
                         id: narrationId,
                         role: "assistant",

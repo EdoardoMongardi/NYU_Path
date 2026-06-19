@@ -227,6 +227,57 @@ describe("plan_proposal client handler — INFEASIBLE path", () => {
 });
 
 // ---------------------------------------------------------------------------
+// I4 regression — PROPOSED path contract unchanged after I4 what-if gating
+// ---------------------------------------------------------------------------
+// I4 changed the WHAT-IF path (handleWhatIfResult / applyWhatIfResult).
+// The PROPOSED path (applyPlanProposalEvent) must be unchanged:
+//   • VALID proposed   → kind:"proposed" scenario + Confirm (pendingMutationId present).
+//   • INVALID proposed → red invalidProposal card; NO proposed scenario.
+// ---------------------------------------------------------------------------
+
+describe("plan_proposal — I4 regression: VALID proposed → kind:'proposed' + Confirm", () => {
+    it("valid proposal creates a kind:'proposed' scenario with pendingMutationId", () => {
+        const ev: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: true,
+            pendingMutationId: PENDING_ID,
+            consequences: [],
+            proposedSchedule: makeProposed(),
+        };
+        const store = createPlanStore();
+        applyPlanProposalEvent(ev, { planStore: store, emitScheduleCard: vi.fn() });
+
+        const active = store.getActiveScenario();
+        expect(active?.kind).toBe("proposed");
+        // pendingMutationId present → Confirm button is wired.
+        expect(active?.pendingMutationId).toBe(PENDING_ID);
+        // No red card.
+        expect(store.getSnapshot().invalidProposal).toBeNull();
+    });
+});
+
+describe("plan_proposal — I4 regression: INVALID proposed → red card, no proposed scenario", () => {
+    it("invalid proposal sets the red card and does NOT create a proposed scenario", () => {
+        const ev: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: false,
+            pendingMutationId: PENDING_ID,
+            consequences: [],
+        };
+        const store = createPlanStore();
+        applyPlanProposalEvent(ev, { planStore: store, emitScheduleCard: vi.fn() });
+
+        // Red card present.
+        expect(store.getSnapshot().invalidProposal).not.toBeNull();
+        // NO proposed scenario (and no kind:"proposed" active scenario).
+        const active = store.getActiveScenario();
+        expect(active?.kind).not.toBe("proposed");
+        // R1 — committed plan untouched.
+        expect(store.getSnapshot().forwardSchedule).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
 // Mapping invariant — proposedSchedule → forwardSchedule rename
 // ---------------------------------------------------------------------------
 
