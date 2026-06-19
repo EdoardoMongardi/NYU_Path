@@ -11,6 +11,7 @@ import type {
     SchedulePreferences,
     ForwardSchedule,
     ScheduleSlot,
+    ScheduleSlotPlaceholder,
     PlanChangeOutcome,
     PlanDiff,
     PlanState,
@@ -184,31 +185,43 @@ export function resolveBindMutations(
         if (m.kind !== "bindPoolSlot" && m.kind !== "bindFreeElective") {
             return m;
         }
-        const term = findPlaceholderTerm(plan, m.slotId);
-        if (term == null) {
+        const found = findPlaceholderSlot(plan, m.slotId);
+        if (found == null) {
             // Unresolvable slot — leave the bind in place so the prefs walk
             // emits its no-op consequence (unchanged behavior for bad input).
             return m;
         }
         // A binding is the student's explicit, durable choice → freeze: true.
-        return { kind: "pin", courseId: m.courseId, term, freeze: true };
+        return { kind: "pin", courseId: m.courseId, term: found.term, freeze: true };
     });
 }
 
 /**
- * Find the containing semester `term` of the placeholder slot with
- * `placeholderId === slotId`, or null when absent. Mirrors the
- * `findSlotWithTerm` lookup used by the bind tools.
+ * Find the placeholder slot with `placeholderId === slotId` and its containing
+ * semester `term`, or `null` when absent. Scans
+ * `plan.semesters[].slots[]` for a `kind === "placeholder"` slot whose
+ * `placeholderId` matches.
+ *
+ * J2 follow-up — the single shared slot-by-id lookup. Previously three
+ * near-identical copies existed: `findPlaceholderTerm` here (term-only) plus a
+ * `findSlotWithTerm` in each of `bindPoolSlot.ts` / `bindFreeElective.ts`
+ * (`{ slot, term }`). The bind tools need both the slot AND the term; this
+ * caller derives `.term` from the same return. Behavior is identical to the
+ * removed duplicates (same predicate, same first-match order).
+ *
+ * Accepts `ForwardSchedule | undefined` so `resolveBindMutations` (which may
+ * hold no active plan) can pass through; the bind tools pass a concrete
+ * `ForwardSchedule` (assignable).
  */
-function findPlaceholderTerm(
+export function findPlaceholderSlot(
     plan: ForwardSchedule | undefined,
     slotId: string,
-): string | null {
+): { slot: ScheduleSlotPlaceholder; term: string } | null {
     if (!plan) return null;
     for (const sem of plan.semesters) {
         for (const slot of sem.slots) {
             if (slot.kind === "placeholder" && slot.placeholderId === slotId) {
-                return sem.term;
+                return { slot, term: sem.term };
             }
         }
     }
