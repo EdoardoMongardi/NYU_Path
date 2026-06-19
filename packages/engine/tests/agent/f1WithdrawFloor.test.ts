@@ -283,4 +283,125 @@ describe("solveWhatIfAssumption — F-1 full-time-floor advisory (E2, D-6)", () 
 
         expect(result.hedges.some((h) => F1_HEDGE_RE.test(h))).toBe(false);
     });
+
+    // -------------------------------------------------------------------------
+    // Plan 37 Phase L — season guard: summer / J-term carry NO 12-credit floor
+    // -------------------------------------------------------------------------
+
+    it("(f) F-1 student withdrawing a SUMMER IP course (drops below 12 cr) → NO F-1 floor advisory (no floor in summer)", () => {
+        // The F-1 12-credit floor is a fall/spring floor only. Withdrawing
+        // a summer course — even if it drops the term below 12 credits — must
+        // NOT fire the advisory (plan 37 Phase L).
+        const SUMMER_TERM = "2026 Summer";
+        const session = makeSession("f1", {
+            courseHistory: [
+                {
+                    term: SUMMER_TERM,
+                    subject: "CSCI-UA",
+                    catalogNbr: "102",
+                    courseTitle: "Data Structures",
+                    grade: "IP",
+                    units: IP_COURSE_UNITS,
+                    type: "IP",
+                },
+            ],
+            requirementGroups: [
+                {
+                    rgId: "RG1",
+                    title: "Computer Science Major",
+                    status: "not_satisfied",
+                    statusText: "Not Satisfied: Complete the Computer Science major.",
+                    children: [
+                        {
+                            rId: "SR/10",
+                            title: "Intro Requirement",
+                            status: "satisfied",
+                            statusText: "Satisfied: Intro completed (in progress).",
+                            counter: { kind: "courses", required: 1, used: 1, needed: 0 },
+                            coursesUsed: [
+                                {
+                                    term: SUMMER_TERM,
+                                    subject: "CSCI-UA",
+                                    catalogNbr: "102",
+                                    courseTitle: "Data Structures",
+                                    grade: "IP",
+                                    units: IP_COURSE_UNITS,
+                                    type: "IP",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        });
+        const currentPlan = session.forwardSchedule!;
+
+        const result = solveWhatIfAssumption(session, currentPlan, {
+            courseId: IP_COURSE_ID,
+            outcome: "withdraw",
+            // Use a date mid-summer so the window caveat resolves consistently.
+            now: new Date(Date.UTC(2026, 6, 15)),
+        });
+
+        // The summer term has no F-1 full-time floor → no advisory hedge.
+        const hasF1Hedge = result.hedges.some((h) => F1_HEDGE_RE.test(h));
+        expect(hasF1Hedge).toBe(false);
+    });
+
+    it("(g) F-1 student withdrawing a JANUARY (J-term) IP course → NO F-1 floor advisory (no floor in J-term)", () => {
+        // Same guard: J-term sessions (january) carry no 12-credit floor.
+        const JANUARY_TERM = "2026 January";
+        const session = makeSession("f1", {
+            courseHistory: [
+                {
+                    term: JANUARY_TERM,
+                    subject: "CSCI-UA",
+                    catalogNbr: "102",
+                    courseTitle: "Data Structures",
+                    grade: "IP",
+                    units: IP_COURSE_UNITS,
+                    type: "IP",
+                },
+            ],
+            requirementGroups: [
+                {
+                    rgId: "RG1",
+                    title: "Computer Science Major",
+                    status: "not_satisfied",
+                    statusText: "Not Satisfied: Complete the Computer Science major.",
+                    children: [
+                        {
+                            rId: "SR/10",
+                            title: "Intro Requirement",
+                            status: "satisfied",
+                            statusText: "Satisfied: Intro completed (in progress).",
+                            counter: { kind: "courses", required: 1, used: 1, needed: 0 },
+                            coursesUsed: [
+                                {
+                                    term: JANUARY_TERM,
+                                    subject: "CSCI-UA",
+                                    catalogNbr: "102",
+                                    courseTitle: "Data Structures",
+                                    grade: "IP",
+                                    units: IP_COURSE_UNITS,
+                                    type: "IP",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        });
+        const currentPlan = session.forwardSchedule!;
+
+        const result = solveWhatIfAssumption(session, currentPlan, {
+            courseId: IP_COURSE_ID,
+            outcome: "withdraw",
+            now: new Date(Date.UTC(2026, 0, 15)),
+        });
+
+        // January / J-term has no F-1 full-time floor → no advisory hedge.
+        const hasF1Hedge = result.hedges.some((h) => F1_HEDGE_RE.test(h));
+        expect(hasF1Hedge).toBe(false);
+    });
 });

@@ -45,6 +45,7 @@ import {
     deriveTemporalContext,
     campusForHomeSchool,
     NYU_ACADEMIC_CALENDAR,
+    seasonOfTerm,
 } from "../../dpr/index.js";
 import type { DegreeProgressReport } from "../../dpr/schema.js";
 import type {
@@ -332,14 +333,22 @@ export function solveWhatIfAssumption(
             );
             if (withdrawnRow) {
                 const courseTerm = withdrawnRow.term;
-                const postCredits = dpr.courseHistory
-                    .filter((r) => r.term === courseTerm && rowKey(r) !== targetId)
-                    .reduce((sum, r) => sum + r.units, 0);
-                if (postCredits < floor) {
-                    hedges.push(
-                        `Heads up: withdrawing from ${courseId} drops that term to ${postCredits} credits — below the ${floor}-credit F-1 full-time floor. ` +
-                        `This can forfeit your F-1 status unless OGS approves a Reduced Course Load BEFORE you withdraw. Talk to OGS first.`,
-                    );
+                // The F-1 full-time floor (12 credits) is a fall/spring-semester
+                // floor only; summer sessions and J-term (January) carry no
+                // 12-credit minimum (plan 37 Phase L). Guard so the advisory
+                // never fires for a summer or J-term withdrawal.
+                const termSeason = seasonOfTerm(courseTerm);
+                const isFloorTerm = termSeason === "fall" || termSeason === "spring";
+                if (isFloorTerm) {
+                    const postCredits = dpr.courseHistory
+                        .filter((r) => r.term === courseTerm && rowKey(r) !== targetId)
+                        .reduce((sum, r) => sum + r.units, 0);
+                    if (postCredits < floor) {
+                        hedges.push(
+                            `Heads up: withdrawing from ${courseId} drops that term to ${postCredits} credits — below the ${floor}-credit F-1 full-time floor. ` +
+                            `This can forfeit your F-1 status unless OGS approves a Reduced Course Load BEFORE you withdraw. Talk to OGS first.`,
+                        );
+                    }
                 }
             }
         }
