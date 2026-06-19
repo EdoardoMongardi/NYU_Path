@@ -111,6 +111,8 @@
   ],
   "passFail": {
     "careerLimitType": "courses",
+    "careerLimitValue": 4,
+    "careerLimitSourceRef": "bulletin-raw/undergraduate/business/academic-policies/_index.md:398",
     "perTermLimit": 1,
     "perTermUnit": "academic_year",
     "countsForMajor": true,

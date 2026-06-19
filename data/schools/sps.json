@@ -50,6 +50,8 @@
   ],
   "passFail": {
     "careerLimitType": "credits",
+    "careerLimitValue": 16,
+    "careerLimitSourceRef": "bulletin-raw/undergraduate/professional-studies/academic-policies/_index.md",
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,

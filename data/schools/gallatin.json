@@ -41,6 +41,8 @@
   ],
   "passFail": {
     "careerLimitType": "courses",
+    "careerLimitValue": 4,
+    "careerLimitSourceRef": "bulletin-raw/undergraduate/individualized-study/academic-policies/_index.md:60",
     "perTermLimit": 1,
     "perTermUnit": "academic_year",
     "countsForMajor": false,

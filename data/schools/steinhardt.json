@@ -32,7 +32,9 @@
     }
   ],
   "passFail": {
-    "careerLimitType": "percent_of_program"
+    "careerLimitType": "percent_of_program",
+    "careerLimitValue": 25,
+    "careerLimitSourceRef": "bulletin-raw/undergraduate/culture-education-human-development/academic-policies/_index.md (25% of program)"
   },
   "transferCreditLimits": {
     "transferStudentMaxTotal": 72

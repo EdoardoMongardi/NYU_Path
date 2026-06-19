@@ -30,6 +30,8 @@
   ],
   "passFail": {
     "careerLimitType": "credits",
+    "careerLimitValue": 32,
+    "careerLimitSourceRef": "bulletin-raw/undergraduate/arts/academic-policies/_index.md:438",
     "perTermLimit": 1,
     "perTermUnit": "semester",
     "countsForMajor": false,
