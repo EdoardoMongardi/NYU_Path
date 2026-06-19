@@ -1,10 +1,10 @@
 # Forward-Schedule Subsystem — Technical Audit
 
-> Last verified against code: 2026-06-13 (post planning-engine rebuild, PRs #35-#41; doc-sync pass: corrected stale module file count and per-file line counts).
+> Last verified against code: 2026-06-19 (post plan-37 Phases J/K/L/A/B + C1/C2: added 8th validator axis `passFailLimitsRespected`; prior: 2026-06-13 PRs #35-#41 doc-sync pass).
 
 ## Purpose
 
-This is the brain that lays out an entire degree plan from now until graduation, term by term. Think of it like a constraint solver for course planning: it takes every requirement the student still needs, plus prerequisites, credit limits, F-1 visa rules, and the student's own preferences, and assigns each requirement a specific future term and a specific course such that the *whole* plan works end-to-end. Unlike the old greedy version, it does this with a real backtracking **feasibility-first search**: it explores placements, undoes ones that hit a dead end, and returns the first plan that passes every hard constraint — then nudges it toward the student's preferred balance with a small local-improvement step. After a plan is built, a separate 7-axis **graduation-path validator** is the authoritative gate that decides whether the student really would graduate on time; that verdict (not the solver's own coarse guess) sets the plan's state. The subsystem also produces diverse alternative plans, a "what if you fail your in-progress class" fallback path, reconciliation when a fresh degree report arrives, and a cited advisory for students juggling multiple majors/minors.
+This is the brain that lays out an entire degree plan from now until graduation, term by term. Think of it like a constraint solver for course planning: it takes every requirement the student still needs, plus prerequisites, credit limits, F-1 visa rules, and the student's own preferences, and assigns each requirement a specific future term and a specific course such that the *whole* plan works end-to-end. Unlike the old greedy version, it does this with a real backtracking **feasibility-first search**: it explores placements, undoes ones that hit a dead end, and returns the first plan that passes every hard constraint — then nudges it toward the student's preferred balance with a small local-improvement step. After a plan is built, a separate 8-axis **graduation-path validator** is the authoritative gate that decides whether the student really would graduate on time; that verdict (not the solver's own coarse guess) sets the plan's state. The subsystem also produces diverse alternative plans, a "what if you fail your in-progress class" fallback path, reconciliation when a fresh degree report arrives, and a cited advisory for students juggling multiple majors/minors.
 
 ```mermaid
 flowchart LR
@@ -15,7 +15,7 @@ flowchart LR
     Search --> Improve[localImprove]
     Improve --> Mat[materializePlan]
     Mat --> Final[finalizeForwardSchedule]
-    Final --> Validator{runGraduationPathValidator<br/>7 axes}
+    Final --> Validator{runGraduationPathValidator<br/>8 axes}
     Validator -->|feasible| Done[Final ForwardSchedule + state]
     Validator -->|infeasible + derived horizon| Relax[add-a-term relax loop]
     Relax --> Solver
@@ -42,7 +42,7 @@ The forward-schedule subsystem builds a forward-looking, multi-term degree plan 
 
 ### How the pipeline fits together
 
-`build.ts`'s `buildForwardSchedule` is the entry point. It composes a `SolverInput` (via the shared builder in `buildSolverInput.ts`), calls `solveForwardSchedule` (`solver.ts`), and then routes the result through the shared `finalizeForwardSchedule` step — which assembles the `ForwardSchedule`, runs the 7-axis `runGraduationPathValidator`, and overrides the solver's coarse state with the validator's verdict. The same `finalizeForwardSchedule` seam is reused by the edit tools (propose / confirm) and the alternatives path, so **every** plan-producing path runs through the one authoritative gate.
+`build.ts`'s `buildForwardSchedule` is the entry point. It composes a `SolverInput` (via the shared builder in `buildSolverInput.ts`), calls `solveForwardSchedule` (`solver.ts`), and then routes the result through the shared `finalizeForwardSchedule` step — which assembles the `ForwardSchedule`, runs the 8-axis `runGraduationPathValidator`, and overrides the solver's coarse state with the validator's verdict. The same `finalizeForwardSchedule` seam is reused by the edit tools (propose / confirm) and the alternatives path, so **every** plan-producing path runs through the one authoritative gate.
 
 Internally, `solveForwardSchedule` is a thin orchestrator over four pure, individually-tested modules:
 
@@ -176,7 +176,7 @@ Turns the search's `PartialPlan` into the full `SolverOutput` — the verbatim t
 
 ## 7. Graduation-path validator (`graduationPathValidator.ts`, 655 ln)
 
-`runGraduationPathValidator` is the authoritative final gate, routed through `finalizeForwardSchedule` on every build + propose + confirm + simulate path. It runs 7 axes; each returns a `ValidationResult` of status `pass` / `fail` / `assumed-pass` / `requires-approval`.
+`runGraduationPathValidator` is the authoritative final gate, routed through `finalizeForwardSchedule` on every build + propose + confirm + simulate path. It runs 8 axes; each returns a `ValidationResult` of status `pass` / `fail` / `assumed-pass` / `requires-approval`.
 
 | # | Axis | What it checks |
 |---|------|----------------|
@@ -185,8 +185,11 @@ Turns the search's `PartialPlan` into the full `SolverOutput` — the verbatim t
 | 3 | `totalCreditsMeetMinimum` | `creditsEarned + Σ plannedCredits ≥ degreeCreditMinimum`. |
 | 4 | `thresholdsMet` | Residency: `residencyUsed + plannedResidency ≥ residencyMin` (counts `specific_planned` + `in_progress` + resolvable pool placeholders). Major: `Σ credits` over `specific_planned` (and resolvable pool placeholders) with `workloadTier ∈ {major-required, major-elective}` ≥ `majorCreditMinimum`. **Null residency or major floor → `requires-approval`** (never a silent pass — the PLAN-4 Bug-A fix). Minor / school-core nulls are silent-skipped. Upper-level floor is intentionally NOT checked (no reliable DPR counter). |
 | 5 | `visaAxesPass` | Any `feasibility.constraintViolations` of kind `credit_floor` / `credit_ceiling` / `gpa_floor` → fail. Any semester note containing `ogs` / `rcl` / `cpt` → `requires-approval` (authority `"OGS"`). |
-| 6 | `assumptionsExplicit` | For each IP course in `dpr.courseHistory`, if an `IP_COURSE_COMPLETION` assumption for that exact course has cascading slots in the plan, the course must be listed in `coveredByAssumptions`. Narrowly scoped to avoid cross-course false positives. |
+| 6 | `assumptionsExplicit` | For each IP course in `dpr.courseHistory`, if an `IP_COURSE_COMPLETION` assumption for that exact course has cascading slots in the plan, the course must be listed in `coveredByAssumptions`. Narrowly scoped to avoid cross-cross false positives. |
 | 7 | `graduationTargetMet` | Accumulate credits chronologically; the first term reaching the degree minimum is the completion term. Never reached → fail; later than `graduationTargetTerm` → fail. |
+| 8 | `passFailLimitsRespected` | Per-school career Pass/Fail cap, implemented in `passFailLimitAxis.ts` (`checkPassFailLimits(dpr, passFailConfig)`), threaded via the per-school `SchoolConfig.passFail` config. **Tiered semantics (D-4):** (a) `credits` cap (CAS/Tisch 32 cr, LS/SPS 16 cr) → HARD `fail` if `cumulative.passFailUsedUnits > cap`; (b) `courses` cap (Stern/Gallatin 4 courses, NYUAD 3 courses) → HARD `fail` if count of P-grade rows > cap; (c) `percent_of_program` (Steinhardt/Nursing 25%) → SOFT `requires-approval` (unit-ambiguous, never a hard fail); (d) `careerLimitValue: null` (Tandon — `canElect:false`; Shanghai) → `assumed-pass` + adviser hedge, never blocks; absent config or `canElect:false` → `pass` (pass-by-default). **This axis is pass-by-default:** an absent config or null cap cannot flip `feasible`; only a `fail` status does. A P/F-pass election (`applyPassFailToDpr`) increments the synthetic DPR's `cumulative.passFailUsedUnits` so the credits-cap tier engages on a what-if election; the synthetic DPR is never written to `parsed_dpr` (R1). |
+
+> **Note — first deliberate extension of the formerly-frozen 7-axis contract (owner-approved, plan-37 phases J–C2).** P/F career caps make a plan genuinely invalid (a student who elects P/F above their school's career cap cannot graduate on those terms), so enforcing the cap as a validator axis is the correct architectural home. The solver/search seam (`solveForwardSchedule` / `finalizeForwardSchedule` solve / `searchBestPlan` / `searchTopKPlans`) is unchanged; only the validator gained an axis. This is distinguished from a soft-objective preference (which biases ranking without defining validity) — a cap violation is a hard `fail`.
 
 `feasible = no axis is "fail"`. On infeasibility, an `infeasibilityReport` is attached with `conflictSource: "other"`, a `conflictDetail` listing the failing axes, and an empty `relaxationSuggestions`.
 
@@ -272,7 +275,7 @@ flowchart TD
   MAT["materializePlan<br/>(materializePlan.ts):<br/>slots, pool/req placeholders,<br/>free-elective fill, visa, Stage-8"]
   DIV["findDiverseValidPlans (k=5)<br/>→ alternativeCandidates"]
   FIN["finalizeForwardSchedule<br/>(build.ts): assemble + validate"]
-  VAL["runGraduationPathValidator<br/>(7 axes)"]
+  VAL["runGraduationPathValidator<br/>(8 axes)"]
   DERIVE["derivePlanStateFromValidator<br/>→ authoritative state"]
   FEAS{"validator feasible?"}
   RELAX["add-a-term relax loop<br/>(derived horizon only,<br/>MAX_HORIZON_RELAX_TERMS=2)"]
