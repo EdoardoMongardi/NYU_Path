@@ -70,6 +70,7 @@ import OnboardingWizard from "./wizard/OnboardingWizard";
 import ScheduleCard from "./ScheduleCard";
 import WhatIfUploadCard from "./WhatIfUploadCard";
 import { buildScheduleCardMessage } from "./buildScheduleCardMessage";
+import { applyPlanProposalEvent } from "./planProposalEvent";
 import {
     buildWhatIfScenarioFromAudit,
     type WhatIfAuditResponse,
@@ -634,18 +635,9 @@ export default function ChatPage() {
                 planStore.setForwardSchedule(ev.schedule);
                 break;
             case "plan_proposal": {
-                // Task I2 — the agent called `propose_plan_change` this turn
-                // and the v2 route staged the mutations + emitted this event.
-                // Surface the proposal as a PROPOSED scenario so the workspace
-                // "Confirm — make this My Plan" rail appears.
-                //
-                // Routing: map the event to the PlanActionResponse shape the
-                // `planActionSurfaces` helper expects (the SSE event field is
-                // named `proposedSchedule`; the route response calls the same
-                // field `forwardSchedule`), then call `planActionSurfaces` —
-                // the SAME pure decision helper used by every sidebar verb.
-                // This reuses the identical surfacing path without duplicating
-                // the feasible/infeasible branching.
+                // Task I2 (refactored) — thin adapter; logic lives in
+                // planProposalEvent.ts so it can be unit-tested without a
+                // React-DOM render harness.
                 //
                 // NOT routed through `forward_schedule_update`: that path
                 // would COMMIT the plan + drop all scenarios (planState.ts
@@ -654,40 +646,13 @@ export default function ChatPage() {
                 //
                 // R1 holds: staging a proposed scenario never writes to
                 // `students.parsed_dpr`; only /api/plan/confirm commits.
-                const proposalResponse: PlanActionRouteResponse = {
-                    feasible: ev.feasible,
-                    pendingMutationId: ev.pendingMutationId,
-                    consequences: ev.consequences,
-                    // `diff` (added/removed slot pairs from PlanChangeOutcome)
-                    // is not surfaced in the SSE event; provide an empty
-                    // sentinel so planActionSurfaces (which doesn't read it)
-                    // satisfies the type contract.
-                    diff: { added: [], removed: [] },
-                    ...(ev.proposedSchedule ? { forwardSchedule: ev.proposedSchedule } : {}),
-                    ...(ev.planDiff ? { planDiff: ev.planDiff } : {}),
-                    explanation: "",
-                    futureTerms: [],
-                };
-                const proposalSurfaces = planActionSurfaces(proposalResponse, "propose");
-                if (proposalSurfaces.invalidCard) {
-                    planStore.setInvalidProposal(proposalSurfaces.invalidCard);
-                    planStore.clearPendingPreview();
-                } else if (proposalSurfaces.preview) {
-                    planStore.setPendingPreview(proposalSurfaces.preview);
-                    planStore.clearInvalidProposal();
-                    // H4.2a — emit a ScheduleCard into the chat thread so the
-                    // student can open/compare the proposed scenario directly
-                    // from the conversation (mirrors the sidebar verb path).
-                    const activeSc = planStore.getActiveScenario();
-                    if (activeSc && activeSc.kind === "proposed") {
-                        const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
-                        setMessages(prev => [
-                            ...prev,
-                            buildScheduleCardMessage(activeSc, cardMsgId, new Date()) as Message,
-                        ]);
+                applyPlanProposalEvent(ev, {
+                    planStore,
+                    emitScheduleCard: (msg) => {
+                        setMessages(prev => [...prev, msg as Message]);
                         setTimeout(scrollToBottom, 50);
-                    }
-                }
+                    },
+                });
                 break;
             }
             case "whatif_audit_request": {

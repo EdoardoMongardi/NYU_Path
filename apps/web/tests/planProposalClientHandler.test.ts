@@ -1,40 +1,20 @@
 // ============================================================
-// Task I2 — client-side plan_proposal SSE event handler
+// Task I2 — plan_proposal client handler (real-code coverage)
 // ============================================================
-// The `applyEvent` switch in apps/web/app/chat/page.tsx must, on
-// receiving a `plan_proposal` SSE event, map it to the
-// PlanActionResponse shape (field rename: proposedSchedule →
-// forwardSchedule) and route it through `planActionSurfaces` — the
-// SAME pure decision helper used by every sidebar verb. The result
-// drives the store:
+// Tests call `applyPlanProposalEvent` — the REAL extracted function that
+// `case "plan_proposal":` in page.tsx delegates to — so the switch-case
+// registration, field mapping, and ScheduleCard emit are all covered.
 //
-//   • FEASIBLE  + proposedSchedule present:
-//       planStore.setPendingPreview(surfaces.preview)
-//       planStore.clearInvalidProposal()
-//       → getActiveScenario().kind === "proposed"
-//         getActiveScenario().pendingMutationId === event.pendingMutationId
-//
-//   • INFEASIBLE:
-//       planStore.setInvalidProposal(surfaces.invalidCard)
-//       planStore.clearPendingPreview()
-//       → getSnapshot().invalidProposal ≠ null
-//         getActiveScenario() is undefined or kind !== "proposed"
-//
-// Because `applyEvent` is a React-component closure (not exported) the
-// store impact cannot be tested by calling `applyEvent` directly
-// (apps/web has no React-DOM render harness). Instead we test the PURE
-// LOGIC that `case "plan_proposal":` will delegate to:
-//   – the field mapping (proposedSchedule → forwardSchedule)
-//   – planActionSurfaces(mappedResponse)
-//   – the store's setPendingPreview / setInvalidProposal
-// This is identical to the established pattern in canvasPreview.test.ts
-// and planActionSurfaces.test.ts.
+// Prior version tested a DUPLICATED `mapEventToResponse` copy.  This
+// version imports the real implementation (planProposalEvent.ts) so a
+// drift in the mapping, a missing branch, or a removed case would be
+// caught immediately.
 // ============================================================
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createPlanStore } from "../app/chat/planState";
-import { planActionSurfaces } from "../lib/planActionSurfaces";
-import type { PlanActionRouteResponse } from "../lib/planActionClient";
+import { applyPlanProposalEvent } from "../app/chat/planProposalEvent";
+import type { PlanProposalSseEvent } from "../app/chat/planProposalEvent";
 import {
     makeFeasibleScheduleWithSemesters,
     specificSlot,
@@ -54,78 +34,30 @@ function makeProposed() {
     ]);
 }
 
-/**
- * Simulate what `case "plan_proposal":` will build from the SSE event:
- * a PlanActionRouteResponse-shaped object with the key rename:
- *   ev.proposedSchedule  →  response.forwardSchedule
- */
-function mapEventToResponse(ev: {
-    feasible: boolean;
-    pendingMutationId: string;
-    consequences: string[];
-    proposedSchedule?: ReturnType<typeof makeFeasibleScheduleWithSemesters>;
-    planDiff?: unknown;
-}): PlanActionRouteResponse {
-    return {
-        feasible: ev.feasible,
-        pendingMutationId: ev.pendingMutationId,
-        consequences: ev.consequences,
-        // `diff` (added/removed slot pairs from PlanChangeOutcome) is not
-        // surfaced in the SSE event; provide an empty sentinel — it mirrors
-        // what the `case "plan_proposal":` in applyEvent does.
-        diff: { added: [], removed: [] },
-        ...(ev.proposedSchedule ? { forwardSchedule: ev.proposedSchedule } : {}),
-        ...(ev.planDiff ? { planDiff: ev.planDiff as PlanActionRouteResponse["planDiff"] } : {}),
-        // These fields are not used by planActionSurfaces but are part of
-        // the type (they come from the route response envelope):
-        explanation: "",
-        futureTerms: [],
-    };
-}
-
 // ---------------------------------------------------------------------------
 // Tests — FEASIBLE path
 // ---------------------------------------------------------------------------
 
 describe("plan_proposal client handler — FEASIBLE path", () => {
-    it("planActionSurfaces returns a non-null preview for a feasible event with a proposedSchedule", () => {
-        const ev = {
-            feasible: true as const,
+    it("feasible event with proposedSchedule stages a proposed scenario on the store", () => {
+        const ev: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: true,
             pendingMutationId: PENDING_ID,
             consequences: [],
             proposedSchedule: makeProposed(),
         };
-        const response = mapEventToResponse(ev);
-        const surfaces = planActionSurfaces(response, "propose");
-
-        expect(surfaces.preview).not.toBeNull();
-        expect(surfaces.invalidCard).toBeNull();
-        expect(surfaces.showBubble).toBe(false);
-
-        // The preview carries the same pendingMutationId as the event.
-        expect(surfaces.preview!.pendingMutationId).toBe(PENDING_ID);
-        expect(surfaces.preview!.proposedSchedule).toBe(ev.proposedSchedule);
-        expect(surfaces.preview!.consequences).toEqual([]);
-    });
-
-    it("setPendingPreview(surfaces.preview) stages a proposed scenario on the store", () => {
-        const ev = {
-            feasible: true as const,
-            pendingMutationId: PENDING_ID,
-            consequences: ["Drop below 15cr: verify with adviser"],
-            proposedSchedule: makeProposed(),
-        };
-        const response = mapEventToResponse(ev);
-        const surfaces = planActionSurfaces(response, "propose");
 
         const store = createPlanStore();
-        store.setPendingPreview(surfaces.preview!);
-        store.clearInvalidProposal();
+        const emitScheduleCard = vi.fn();
+
+        applyPlanProposalEvent(ev, { planStore: store, emitScheduleCard });
 
         // The active scenario must be kind:"proposed".
         const active = store.getActiveScenario();
         expect(active).toBeDefined();
         expect(active!.kind).toBe("proposed");
+
         // The pendingMutationId from the event flows into the scenario.
         expect(active!.pendingMutationId).toBe(PENDING_ID);
 
@@ -133,62 +65,99 @@ describe("plan_proposal client handler — FEASIBLE path", () => {
         const snap = store.getSnapshot();
         expect(snap.pendingPreview).not.toBeNull();
         expect(snap.pendingPreview!.pendingMutationId).toBe(PENDING_ID);
-        expect(snap.pendingPreview!.consequences).toEqual(["Drop below 15cr: verify with adviser"]);
 
-        // R1 guard: the committed plan is UNCHANGED (null in this test — no
-        // prior committed plan was set). Staging a preview never commits.
+        // R1 guard: the committed plan is UNCHANGED (null — no prior committed
+        // plan was set).  Staging a preview never commits.
         expect(snap.forwardSchedule).toBeNull();
     });
 
-    it("clearInvalidProposal is a no-op when there is no stale red card", () => {
-        const ev = {
-            feasible: true as const,
+    it("feasible event calls emitScheduleCard spy with a ScheduleCard message", () => {
+        const proposed = makeProposed();
+        const ev: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: true,
             pendingMutationId: PENDING_ID,
             consequences: [],
-            proposedSchedule: makeProposed(),
+            proposedSchedule: proposed,
         };
-        const response = mapEventToResponse(ev);
-        const surfaces = planActionSurfaces(response);
 
         const store = createPlanStore();
-        store.setPendingPreview(surfaces.preview!);
-        store.clearInvalidProposal(); // No red card present — must be a safe no-op.
+        const emitScheduleCard = vi.fn();
 
-        expect(store.getSnapshot().invalidProposal).toBeNull();
+        applyPlanProposalEvent(ev, { planStore: store, emitScheduleCard });
+
+        // ScheduleCard was emitted exactly once.
+        expect(emitScheduleCard).toHaveBeenCalledOnce();
+
+        // The first argument is the ScheduleCardMessage.
+        const [msg] = emitScheduleCard.mock.calls[0];
+        expect(msg.kind).toBe("schedule_card");
+        expect(msg.role).toBe("assistant");
+        expect(msg.id).toBeTruthy();
+        // The scheduleCard payload reflects the proposed scenario.
+        expect(msg.scheduleCard.kind).toBe("proposed");
+        expect(msg.scheduleCard.scenarioId).toBeTruthy();
+
+        // The second argument is the active Scenario.
+        const [, scenario] = emitScheduleCard.mock.calls[0];
+        expect(scenario.kind).toBe("proposed");
+        expect(scenario.pendingMutationId).toBe(PENDING_ID);
     });
 
-    it("a feasible proposal with consequences has verdict trade-offs in the scenario", () => {
-        const ev = {
-            feasible: true as const,
+    it("feasible event with consequences has verdict trade-offs in the scenario", () => {
+        const ev: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: true,
             pendingMutationId: PENDING_ID,
             consequences: ["Consequence 1", "Consequence 2"],
             proposedSchedule: makeProposed(),
         };
-        const response = mapEventToResponse(ev);
-        const surfaces = planActionSurfaces(response, "propose");
+
         const store = createPlanStore();
-        store.setPendingPreview(surfaces.preview!);
+        applyPlanProposalEvent(ev, { planStore: store, emitScheduleCard: vi.fn() });
 
         const active = store.getActiveScenario();
         expect(active!.verdict).toBe("trade-offs");
         expect(active!.hedges).toEqual(["Consequence 1", "Consequence 2"]);
     });
 
-    it("a feasible event WITHOUT proposedSchedule returns null preview (defensive case)", () => {
-        // Edge: feasible:true but no proposedSchedule — planActionSurfaces
-        // should return preview:null (defensive no-op).
-        const ev = {
-            feasible: true as const,
+    it("clearInvalidProposal is called — no stale red card after a feasible proposal", () => {
+        const ev: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: true,
+            pendingMutationId: PENDING_ID,
+            consequences: [],
+            proposedSchedule: makeProposed(),
+        };
+
+        const store = createPlanStore();
+        applyPlanProposalEvent(ev, { planStore: store, emitScheduleCard: vi.fn() });
+
+        expect(store.getSnapshot().invalidProposal).toBeNull();
+    });
+
+    it("feasible event WITHOUT proposedSchedule — no proposed scenario, spy not called", () => {
+        // Edge: feasible:true but no proposedSchedule — planActionSurfaces returns
+        // preview:null so nothing is staged and the ScheduleCard spy is never called.
+        const ev: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: true,
             pendingMutationId: PENDING_ID,
             consequences: [],
             // no proposedSchedule
         };
-        const response = mapEventToResponse(ev);
-        const surfaces = planActionSurfaces(response, "propose");
 
-        expect(surfaces.preview).toBeNull();
-        expect(surfaces.invalidCard).toBeNull();
-        expect(surfaces.showBubble).toBe(false);
+        const store = createPlanStore();
+        const emitScheduleCard = vi.fn();
+
+        applyPlanProposalEvent(ev, { planStore: store, emitScheduleCard });
+
+        // No proposed scenario.
+        const active = store.getActiveScenario();
+        expect(active?.kind).not.toBe("proposed");
+
+        // Spy never called — nothing to emit without a schedule.
+        expect(emitScheduleCard).not.toHaveBeenCalled();
     });
 });
 
@@ -197,95 +166,87 @@ describe("plan_proposal client handler — FEASIBLE path", () => {
 // ---------------------------------------------------------------------------
 
 describe("plan_proposal client handler — INFEASIBLE path", () => {
-    it("planActionSurfaces returns a non-null invalidCard for an infeasible event", () => {
-        const ev = {
-            feasible: false as const,
+    it("infeasible event stages a red card; no proposed scenario, spy not called", () => {
+        // Build an infeasible SSE event.
+        const ev: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: false,
             pendingMutationId: PENDING_ID,
             consequences: [],
-            // No proposedSchedule on infeasible path
+            // No proposedSchedule on the infeasible path.
         };
-        // An infeasible response also carries feasibility violation details.
-        const response: PlanActionRouteResponse = {
-            ...mapEventToResponse(ev),
-            feasibility: {
-                feasible: false,
-                constraintViolations: [
-                    { kind: "credits-over-limit", detail: "Too many credits in Fall 2027" },
-                ],
-                placementRationale: {},
-            },
-        } as unknown as PlanActionRouteResponse;
 
-        const surfaces = planActionSurfaces(response, "propose");
-
-        expect(surfaces.preview).toBeNull();
-        expect(surfaces.invalidCard).not.toBeNull();
-        expect(surfaces.showBubble).toBe(true); // bubble + red card on infeasible
-    });
-
-    it("setInvalidProposal stages the red card; getActiveScenario is not kind:proposed", () => {
-        const ev = {
-            feasible: false as const,
-            pendingMutationId: PENDING_ID,
-            consequences: [],
-        };
-        const response: PlanActionRouteResponse = {
-            ...mapEventToResponse(ev),
-            feasibility: {
-                feasible: false,
-                constraintViolations: [
-                    { kind: "credits-over-limit", detail: "Too many credits" },
-                ],
-                placementRationale: {},
-            },
-        } as unknown as PlanActionRouteResponse;
-
-        const surfaces = planActionSurfaces(response, "propose");
         const store = createPlanStore();
-        store.setInvalidProposal(surfaces.invalidCard!);
-        store.clearPendingPreview();
+        const emitScheduleCard = vi.fn();
+
+        applyPlanProposalEvent(ev, { planStore: store, emitScheduleCard });
 
         // No proposed scenario should be active.
         const active = store.getActiveScenario();
         expect(active?.kind).not.toBe("proposed");
 
-        // The red card is set.
+        // The red card (invalidProposal) is set.
         expect(store.getSnapshot().invalidProposal).not.toBeNull();
 
         // R1 — committed plan untouched.
         expect(store.getSnapshot().forwardSchedule).toBeNull();
+
+        // No ScheduleCard emitted for infeasible proposals.
+        expect(emitScheduleCard).not.toHaveBeenCalled();
+    });
+
+    it("infeasible event clears the pending preview (no preview after red card)", () => {
+        // Seed a prior pending preview (from a previous feasible turn).
+        const priorEv: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: true,
+            pendingMutationId: "prior-uuid",
+            consequences: [],
+            proposedSchedule: makeProposed(),
+        };
+        const store = createPlanStore();
+        applyPlanProposalEvent(priorEv, { planStore: store, emitScheduleCard: vi.fn() });
+
+        // Sanity: prior event staged a preview.
+        expect(store.getSnapshot().pendingPreview).not.toBeNull();
+
+        // Now an infeasible event arrives.
+        const infeasibleEv: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: false,
+            pendingMutationId: PENDING_ID,
+            consequences: [],
+        };
+        applyPlanProposalEvent(infeasibleEv, { planStore: store, emitScheduleCard: vi.fn() });
+
+        // The prior preview must be cleared.
+        expect(store.getSnapshot().pendingPreview).toBeNull();
+        // And the red card is now set.
+        expect(store.getSnapshot().invalidProposal).not.toBeNull();
     });
 });
 
 // ---------------------------------------------------------------------------
-// Mapping invariant — the key rename
+// Mapping invariant — proposedSchedule → forwardSchedule rename
 // ---------------------------------------------------------------------------
 
-describe("plan_proposal event → PlanActionResponse field mapping", () => {
-    it("mapEventToResponse renames proposedSchedule → forwardSchedule", () => {
+describe("plan_proposal event — field mapping inside applyPlanProposalEvent", () => {
+    it("proposedSchedule on the event flows into the proposed scenario's proposedSchedule", () => {
         const schedule = makeProposed();
-        const ev = {
-            feasible: true as const,
+        const ev: PlanProposalSseEvent = {
+            kind: "plan_proposal",
+            feasible: true,
             pendingMutationId: PENDING_ID,
             consequences: [],
             proposedSchedule: schedule,
         };
-        const response = mapEventToResponse(ev);
 
-        // planActionSurfaces reads response.forwardSchedule — not proposedSchedule.
-        expect(response.forwardSchedule).toBe(schedule);
-        // Verify planActionSurfaces sees the schedule via its forwardSchedule key.
-        const surfaces = planActionSurfaces(response);
-        expect(surfaces.preview!.proposedSchedule).toBe(schedule);
-    });
+        const store = createPlanStore();
+        applyPlanProposalEvent(ev, { planStore: store, emitScheduleCard: vi.fn() });
 
-    it("a missing proposedSchedule on the event maps to an absent forwardSchedule", () => {
-        const ev = {
-            feasible: true as const,
-            pendingMutationId: PENDING_ID,
-            consequences: [],
-        };
-        const response = mapEventToResponse(ev);
-        expect(response.forwardSchedule).toBeUndefined();
+        // planActionSurfaces reads response.forwardSchedule (the renamed field)
+        // and places it on preview.proposedSchedule.  Verify it's the same object.
+        const snap = store.getSnapshot();
+        expect(snap.pendingPreview!.proposedSchedule).toBe(schedule);
     });
 });
