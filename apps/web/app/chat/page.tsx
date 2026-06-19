@@ -39,7 +39,6 @@ import ProfileRail from "./ProfileRail";
 import {
     bubbleSlotKey,
     bubbleHasButtons,
-    bubbleHasOverrideButton,
     initBubbleState,
     applyPolishEvent,
     applyStage2Event,
@@ -145,7 +144,7 @@ interface Message {
     /** Phase 17 Task D follow-up — populated only when
      *  `kind === "plan_action_bubble"`. Holds the bubble's
      *  template/polished text, the verb, the pendingMutationId
-     *  (Confirm / Override-anyway target), the bubble category
+     *  (Confirm target), the bubble category
      *  (clean | trade_offs | soft_refusal | hard_refusal), and the
      *  Stage 2 enrichment Map. Mutated by the polish + Stage 2 SSE
      *  reducers. */
@@ -153,9 +152,9 @@ interface Message {
     /** Phase 17 Task D follow-up — verb that triggered the bubble
      *  (used for analytics + the bubble's lead-in). */
     bubbleVerb?: "add" | "swap" | "drop" | "lock" | "move";
-    /** Phase 17 Task D follow-up — true once Confirm / Keep-as-is /
-     *  Override-anyway has fired so we can disable the buttons +
-     *  hide them while the confirm round-trip is in flight. */
+    /** Phase 17 Task D follow-up — true once Confirm / Keep-as-is
+     *  has fired so we can disable the buttons + hide them while the
+     *  confirm round-trip is in flight. */
     bubbleResolved?: boolean;
     /** Per-message tool-invocation log (rendered inline above the bubble) */
     toolStatuses?: ToolStatus[];
@@ -1109,7 +1108,8 @@ export default function ChatPage() {
     // `plan_action_bubble` Message into the chat thread for non-clean
     // outcomes (clean applies stay silent — the sidebar's own state
     // re-render is the only feedback). The bubble carries Confirm +
-    // Keep-as-is buttons (and Override-anyway for soft refusals); a
+    // Keep-as-is buttons (soft refusals: Cancel + Ask-why only — no
+    // Override-anyway after M2); a
     // background polish stream (gated on
     // NEXT_PUBLIC_PLAN_CHANGE_LLM_POLISH=1) replaces the deterministic
     // template text once Anthropic Haiku returns; Stage 2 streams
@@ -1137,9 +1137,9 @@ export default function ChatPage() {
 
     /**
      * Per-bubble AbortController registry. When the user clicks
-     * Confirm / Keep-as-is / Override-anyway we want to abort any
-     * in-flight polish + Stage 2 streams so we don't burn Anthropic +
-     * FOSE tokens after the bubble is resolved. Keyed by messageId.
+     * Confirm / Keep-as-is we want to abort any in-flight polish +
+     * Stage 2 streams so we don't burn Anthropic + FOSE tokens after
+     * the bubble is resolved. Keyed by messageId.
      *
      * Stored as a ref (not state) because abort signaling is an
      * imperative side-effect, not a render-driving value.
@@ -1230,9 +1230,9 @@ export default function ChatPage() {
 
     /**
      * Abort any in-flight polish + Stage 2 streams for a bubble. Called
-     * by all three resolution handlers (Confirm / Keep-as-is /
-     * Override-anyway) so the network round-trips stop the moment the
-     * user picks an action — no orphan token spend.
+     * by resolution handlers (Confirm / Keep-as-is) so the network
+     * round-trips stop the moment the user picks an action — no orphan
+     * token spend.
      */
     const abortBubbleEnrichers = useCallback((messageId: string): void => {
         const aborter = bubbleAbortersRef.current.get(messageId);
@@ -1285,7 +1285,7 @@ export default function ChatPage() {
         //     naming the binding constraint(s) from the response's OWN
         //     fields, the committed plan byte-identical, any stale preview
         //     cleared. The chat bubble is ALSO minted (it carries
-        //     Override-anyway / hard-refusal copy the red card doesn't).
+        //     soft/hard-refusal copy the red card doesn't).
         //
         // Either way the committed plan (planStore.forwardSchedule) is
         // NEVER mutated here — only Confirm commits.
@@ -1526,38 +1526,6 @@ export default function ChatPage() {
             bubbleResolved: true,
             content: "Kept the plan as-is.",
         });
-    }, [patchMessage, abortBubbleEnrichers]);
-
-    /** Override-anyway — apply with `force: true` (Decision #32). */
-    const handleBubbleOverrideAnyway = useCallback(async (messageId: string, pendingMutationId: string): Promise<void> => {
-        patchMessage(messageId, { bubbleResolved: true });
-        abortBubbleEnrichers(messageId);
-        try {
-            const result = await planConfirm({ pendingMutationId, force: true });
-            if (!result.ok) {
-                patchMessage(messageId, {
-                    bubbleResolved: false,
-                    content: `Override failed (${result.status}): ${result.error}`,
-                });
-                return;
-            }
-            if (result.data.forwardSchedule) {
-                planStore.setForwardSchedule(result.data.forwardSchedule);
-            }
-            // E3.1 — the bubble is resolved; drop any PENDING overlay so
-            // the sidebar shows the now-committed (student-preferred)
-            // plan rather than a stale preview.
-            planStore.clearPendingPreview();
-            patchMessage(messageId, {
-                bubbleResolved: true,
-                content: "⚠ Override applied — plan saved as student-preferred-invalid-draft.",
-            });
-        } catch (err) {
-            patchMessage(messageId, {
-                bubbleResolved: false,
-                content: `Override failed: ${err instanceof Error ? err.message : String(err)}`,
-            });
-        }
     }, [patchMessage, abortBubbleEnrichers]);
 
     // ----------------------------------------------------------------
@@ -2155,13 +2123,12 @@ export default function ChatPage() {
                     // text + reasoning columns.
                     if (msg.kind === "plan_action_bubble" && msg.bubble) {
                         const buttons = bubbleHasButtons(msg.bubble.kind);
-                        const showOverride = bubbleHasOverrideButton(msg.bubble.kind);
                         const stage2Entries = Array.from(msg.bubble.stage2.values());
                         // While the bubble is unresolved, the bubble text
                         // is the source of truth (the polish reducer writes
-                        // to it). Once the user clicks Confirm / Keep-as-is /
-                        // Override-anyway, `msg.content` carries the
-                        // resolved-state caption ("✓ Applied." etc).
+                        // to it). Once the user clicks Confirm / Keep-as-is,
+                        // `msg.content` carries the resolved-state caption
+                        // ("✓ Applied." etc).
                         const displayedText = msg.bubbleResolved ? msg.content : msg.bubble.text;
                         return (
                             <div
@@ -2233,22 +2200,6 @@ export default function ChatPage() {
                                             >
                                                 Keep as-is
                                             </button>
-                                            {showOverride && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void handleBubbleOverrideAnyway(msg.id, msg.bubble!.pendingMutationId)}
-                                                    style={{
-                                                        padding: "6px 12px",
-                                                        borderRadius: 6,
-                                                        background: "#fff",
-                                                        color: "#dc3545",
-                                                        border: "1px solid #dc3545",
-                                                        cursor: "pointer",
-                                                    }}
-                                                >
-                                                    Override anyway
-                                                </button>
-                                            )}
                                         </div>
                                     )}
                                 </div>

@@ -29,12 +29,12 @@
 //     route polish + Stage 2 events back to the right bubble in a
 //     multi-bubble UI.
 //
-// The classification is intentionally INFORMATIONAL — it follows
-// the locked design choice in `docs/PHASE_17_PLAN.md` §7 (hard
-// refusals show a refusal-bubble with no buttons; soft refusals
-// show one with Override-anyway). It does not influence engine
-// behavior — `force: true` is the wire-level signal the route
-// uses to reclassify an infeasible apply via Decision #32.
+// The classification is intentionally INFORMATIONAL — it distinguishes
+// hard refusals (no buttons — pure refusal text) from soft refusals
+// (buttons present — Cancel + Ask-why only; no Override-anyway after M2).
+// M2 (plan 37): `bubbleHasOverrideButton` always returns false;
+// `force:true` is inert/deprecated at the server since M1; no UI path
+// passes it.
 // ============================================================
 
 import type { PlanActionRouteResponse } from "./planActionClient.js";
@@ -53,9 +53,9 @@ import type { PlanActionBubbleSseEvent } from "./chatV2Client.js";
  *   - `trade_offs`   → feasible apply with non-empty consequences.
  *                      Buttons: Confirm + Keep-as-is.
  *   - `soft_refusal` → feasible: false, but the violations are caps /
- *                      floors / exclusion sets the student can
- *                      override. Buttons: Confirm + Keep-as-is +
- *                      Override-anyway.
+ *                      floors / exclusion sets. M2: same button set as
+ *                      `trade_offs` — Cancel + Ask-why ONLY. An invalid
+ *                      plan is never committed; Override-anyway is retired.
  *   - `hard_refusal` → feasible: false with prereq / graduation /
  *                      offering violations the student cannot
  *                      override at the engine level. NO buttons —
@@ -69,15 +69,16 @@ export type PlanActionBubbleKind =
 
 /**
  * Conflict-kind strings produced by the solver that the UI treats
- * as HARD (no Override-anyway). Anything else → soft.
+ * as HARD (hard_refusal — no buttons at all). Anything else → soft
+ * (soft_refusal — Cancel + Ask-why buttons; no Override-anyway after M2).
  *
  * The list is intentionally narrow — solver kinds tagged here all
  * correspond to violations the student literally cannot satisfy by
- * "going anyway" (you can't take a course whose prereqs aren't
+ * re-enrolling (you can't take a course whose prereqs aren't
  * scheduled yet; an offering pattern of "fall only" is not a
- * preference). Capacity / floor / cap kinds stay soft because
- * Decision #32's `student-preferred-invalid-draft` slot is exactly
- * the affordance for "I know it's over the cap, do it anyway".
+ * preference). Capacity / floor / cap kinds stay soft so the agent
+ * can explain the issue and suggest alternatives (adjust credits,
+ * move the course to a different term, etc.).
  */
 export const HARD_CONFLICT_KINDS: ReadonlySet<string> = new Set([
     "prereq_unsatisfiable",
@@ -124,11 +125,14 @@ export function bubbleHasButtons(kind: PlanActionBubbleKind): boolean {
 
 /**
  * Whether the bubble should render the Override-anyway button.
- * Only soft refusals expose the Decision #32 override path.
- * Trade-offs are already feasible — there's nothing to override.
+ *
+ * M2 (plan 37): ALWAYS returns false. An invalid plan is NEVER
+ * committed — the server refuses with 422 regardless of `force`.
+ * The "Override anyway" affordance is fully retired: the invalid
+ * review card offers ONLY Cancel + Ask-why (adjust-and-retry).
  */
-export function bubbleHasOverrideButton(kind: PlanActionBubbleKind): boolean {
-    return kind === "soft_refusal";
+export function bubbleHasOverrideButton(_kind: PlanActionBubbleKind): boolean {
+    return false;
 }
 
 /**
@@ -138,8 +142,8 @@ export function bubbleHasOverrideButton(kind: PlanActionBubbleKind): boolean {
  *
  * Keyed on `pendingMutationId` because each route response mints a
  * fresh uuid; the bubble lifecycle ends when the user hits
- * Confirm / Keep-as-is / Override-anyway, which consumes (or
- * discards) the mutation. So the id is unique per bubble lifetime.
+ * Confirm / Keep-as-is, which consumes (or discards) the mutation.
+ * So the id is unique per bubble lifetime.
  */
 export function bubbleSlotKey(pendingMutationId: string): string {
     return `bubble:${pendingMutationId}`;
@@ -172,8 +176,8 @@ export interface PlanActionBubbleState {
     /** Echo of the response's bubble kind so the reducer doesn't
      *  re-classify on every reduce. */
     kind: PlanActionBubbleKind;
-    /** The pendingMutationId — Confirm / Override-anyway fire a
-     *  /api/plan/confirm with this id. */
+    /** The pendingMutationId — Confirm fires a /api/plan/confirm
+     *  with this id. (Override-anyway retired in M2.) */
     pendingMutationId: string;
     /** Future-term hint copied from the route response — drives
      *  Stage 2 fan-out. */

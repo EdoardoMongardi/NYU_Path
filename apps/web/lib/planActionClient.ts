@@ -121,10 +121,10 @@ export interface PlanMoveInput {
 
 export interface PlanConfirmInput {
     pendingMutationId: string;
-    /** Phase 17 Task D — when `true`, the route reclassifies an
-     *  infeasible apply as `student-preferred-invalid-draft` (Decision
-     *  #32). Drives the inline confirm bubble's "Override anyway"
-     *  button. */
+    /** DEPRECATED / INERT (M1 plan 37). The "Override anyway" affordance
+     *  has been retired. This field is still in the schema for back-compat
+     *  but is ignored by the server: an infeasible confirm returns 422
+     *  regardless of force. No UI path passes force:true after M2. */
     force?: boolean;
 }
 
@@ -247,11 +247,9 @@ export async function planConfirm(
     input: PlanConfirmInput,
     init: { signal?: AbortSignal } = {},
 ): Promise<PlanActionResult<PlanConfirmRouteResponse>> {
-    // Drop `force` when undefined / false so the strict Zod schema
-    // doesn't see `force: undefined` (legitimate plain confirms stay
-    // wire-identical to the Phase 17 Task B baseline).
-    const body: PlanConfirmInput = input.force === true
-        ? { pendingMutationId: input.pendingMutationId, force: true }
-        : { pendingMutationId: input.pendingMutationId };
+    // Always send only pendingMutationId. `force` is deprecated/inert
+    // after M1 (plan 37) and no UI path passes it after M2 — omit it
+    // so the wire stays clean and matches the Phase 17 Task B baseline.
+    const body: PlanConfirmInput = { pendingMutationId: input.pendingMutationId };
     return postJson<PlanConfirmRouteResponse>("/api/plan/confirm", body, init);
 }

@@ -30,6 +30,7 @@ import {
     applyStage2Event,
     HARD_CONFLICT_KINDS,
     type PlanActionBubbleState,
+    type PlanActionBubbleKind,
 } from "../lib/planActionBubbleHelpers";
 import {
     streamPlanActionStage2,
@@ -182,15 +183,18 @@ describe("classifyPlanActionOutcome (Phase 17 Task D)", () => {
 // Button-set decisions — drives which buttons render in the page.
 // ===========================================================================
 
-describe("bubbleHasButtons / bubbleHasOverrideButton (Phase 17 Task D)", () => {
+describe("bubbleHasButtons / bubbleHasOverrideButton (Phase 17 Task D → M2 retired)", () => {
     it("trade_offs → buttons + NO override-anyway", () => {
         expect(bubbleHasButtons("trade_offs")).toBe(true);
         expect(bubbleHasOverrideButton("trade_offs")).toBe(false);
     });
 
-    it("soft_refusal → buttons + override-anyway", () => {
+    // M2: soft_refusal NO LONGER shows an Override-anyway button.
+    // An invalid plan is NEVER committed — the server refuses (422).
+    // The card shows ONLY Cancel + Ask-why.
+    it("soft_refusal → buttons present BUT no override-anyway (M2)", () => {
         expect(bubbleHasButtons("soft_refusal")).toBe(true);
-        expect(bubbleHasOverrideButton("soft_refusal")).toBe(true);
+        expect(bubbleHasOverrideButton("soft_refusal")).toBe(false);
     });
 
     it("hard_refusal → NO buttons (pure refusal text)", () => {
@@ -202,6 +206,14 @@ describe("bubbleHasButtons / bubbleHasOverrideButton (Phase 17 Task D)", () => {
         // Clean is suppressed at the call site (no bubble injected),
         // but the helpers still answer sensibly.
         expect(bubbleHasOverrideButton("clean")).toBe(false);
+    });
+
+    // M2: no bubble kind should ever return true for bubbleHasOverrideButton.
+    it("M2 — bubbleHasOverrideButton is false for every bubble kind (override affordance fully retired)", () => {
+        const allKinds: PlanActionBubbleKind[] = ["clean", "trade_offs", "soft_refusal", "hard_refusal"];
+        for (const kind of allKinds) {
+            expect(bubbleHasOverrideButton(kind)).toBe(false);
+        }
     });
 });
 
@@ -557,30 +569,33 @@ describe("plan_action_bubble button flows (Phase 17 Task D)", () => {
         expect("force" in body).toBe(false);
     });
 
-    it("Override-anyway: POSTs to /api/plan/confirm with {pendingMutationId, force: true}", async () => {
+    // M2: the "Override-anyway" affordance is RETIRED. The UI no longer
+    // offers an override button and never calls planConfirm with force:true.
+    // This test verifies that planConfirm omits force when called without
+    // it (the only valid call-site after M2), and that force:true is inert
+    // on the wire (the server refuses 422 regardless — see planConfirmRoute.test.ts).
+    it("M2 retired — Override-anyway: planConfirm called WITHOUT force sends no force field", async () => {
         const calls: Array<{ url: string; init: RequestInit }> = [];
         installFetch(async (url, init) => {
             calls.push({ url, init });
             return jsonResponse(200, {
-                feasible: false,
+                feasible: true,
                 diff: { added: [], removed: [] },
-                consequences: ["Term over the 18-cap."],
-                storedIn: "studentDraftPlan",
+                consequences: [],
+                storedIn: "forwardSchedule",
                 consumedMutationId: "soft-refusal-uuid-1234567890ab",
             });
         });
+        // The UI only calls planConfirm WITHOUT force after M2.
         const r = await planConfirm({
             pendingMutationId: "soft-refusal-uuid-1234567890ab",
-            force: true,
         });
         expect(r.ok).toBe(true);
         expect(calls).toHaveLength(1);
         const body = JSON.parse(calls[0]!.init.body as string);
-        expect(body.force).toBe(true);
-        // Override-anyway routes the apply into student-preferred-invalid-draft.
-        if (r.ok) {
-            expect(r.data.storedIn).toBe("studentDraftPlan");
-        }
+        // CRITICAL: force must never appear in the request body from the UI.
+        expect("force" in body).toBe(false);
+        expect(body.force).toBeUndefined();
     });
 
     it("Keep-as-is: makes NO network call (pure UI dismiss)", async () => {
