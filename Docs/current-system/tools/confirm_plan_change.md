@@ -10,7 +10,7 @@ This tool runs after the student previewed a change (via [`propose_plan_change`]
 flowchart LR
     Q[Student: yes, apply that change] --> T[confirm_plan_change]
     T --> M[Mutate preferences for real]
-    M --> S[Re-solve + 7-axis validate]
+    M --> S[Re-solve + 8-axis validate]
     S --> V{validatorResult.feasible?}
     V -->|yes| MAIN[Write forwardSchedule, clear draft]
     V -->|no| DRAFT[Write studentDraftPlan, keep old main plan]
@@ -167,7 +167,7 @@ Like propose, `buildPlanDiff` here populates the five trade-off fields (`newRequ
 
 ```
 {
-  feasible: boolean,                         // validatorResult.feasible (7-axis)
+  feasible: boolean,                         // validatorResult.feasible (8-axis)
   diff: { added, removed },
   consequences: string[],                    // validator-failure line; NO double-count text (rides disclaimers[])
   conflicts?: Array<{ kind, detail }>,       // from the validator's infeasibilityReport
