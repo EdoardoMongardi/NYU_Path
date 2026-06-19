@@ -1,6 +1,6 @@
 # UI Components
 
-> Last verified against code: 2026-06-19 (Plan 37 — G1+G2 sidebar subtree deleted + helpers relocated; D1 `slotActionMatrix` + F1 `slotActionView` + F2 `SlotActionPopover` + F3 slot-editor mounted on committed plan + F4 per-term `+ Add course` affordance; I4 render-only-valid scenarios; M1/M2 never-commit-invalid + Override retired; H1 visa-mandatory; 8th validator axis; Plan 36 base).
+> Last verified against code: 2026-06-19 (Plan 37 — G1+G2 sidebar subtree deleted + helpers relocated; D1 `slotActionMatrix` + F1 `slotActionView` + F2 `SlotActionPopover` + F3 slot-editor mounted on committed plan + F4 per-term `+ Add course` affordance; I4 render-only-valid scenarios; M1/M2 never-commit-invalid + Override retired; H1 visa-mandatory; 8th validator axis; Plan 36 base; **Plan 37 follow-ups**: `passFailForSchool` client threading → `canElect:false` P/F button pre-disabled in popover; `setForwardSchedule` draft-slotting state-routing).
 >
 > Prior 2026-06-18: Plan 36 — scenarios workspace UI: 3-zone shell, scenario store, ScheduleWorkspace + CompareView + ProfileRail, chat ScheduleCard/WhatIfUploadCard, 3-branch what-if; engine untouched (Plan 37 extends the engine — see forward-schedule.md). Prior 2026-06-16: Phase 4 follow-up F3 (window-aware IP slot-state); Phase 4 E3 (never-instant preview/review card; drag removed). Prior 2026-06-15: Phase 4 E2 (badge row + slot-state glyphs + violet light/dark); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
@@ -108,7 +108,7 @@ The presentational per-slot action menu, mounted by `ScheduleView` on `specific_
 Pure client-side mapper: takes a `SlotActionMatrix` (from `slotActionMatrix()`) and produces `SlotActionViewItem[]` (one per action) with `{ kind, label, enabled, hedgeText }`. No React import, no I/O; unit-tested in node.
 
 - Maps the matrix's `{allowed, reason, hedge}` per action to a display-ready enabled/disabled item + tooltip copy.
-- Hedge strings are plain English (e.g. "Typical add/drop deadline for this season — verify with your registrar"). A `canElect:false` action (Tandon P/F) gets a clear "Your school does not allow students to elect P/F" tooltip even though the server is the enforcer.
+- Hedge strings are plain English (e.g. "Typical add/drop deadline for this season — verify with your registrar"). A `canElect:false` action (Tandon P/F) gets a **disabled** button with a "Your school does not allow students to elect pass/fail" tooltip. **Plan 37 follow-up:** `page.tsx` now passes `passFail: passFailForSchool(homeSchool)` (from `@nyupath/engine/client`) into the `slotMatrix` call, so the matrix returns `passFail.allowed=false` at `canElect:false` schools and `slotActionView` maps that to a disabled button — the P/F option is visibly locked in the popover before any server contact. The server (`/api/plan/whatif`) enforces the same rule with HTTP 422 as the authoritative guard.
 
 ## Schedule diff — `lib/scenarios/scheduleDiff.ts`
 
@@ -164,7 +164,7 @@ A `whatif_upload_card` chat-message artifact (`WhatIfUploadCard.tsx:42`) the pag
 
 ### Historical note — `scheduleSidebar.tsx` (Plan 37 G2: DELETED)
 
-The old `scheduleSidebar.tsx` and its editing subtree (`TermCard`, `SlotRow`, `slotPopover`, `AddCourseAffordance`, `SectionsView`, `PriorCreditsCard`, `sidebar/slotState.ts`, `lib/groupCoursesByTerm.ts`, `lib/whatIfSlotControl.ts`) were deleted in Plan 37 G2. The live shared helpers (`slotRenderHelpers`, `slotTier`, `sidebarFormatters`) now live in `app/chat/shared/`; `SummaryCard` now lives in `app/chat/profile/`. Editing is CHAT-ONLY — the 3-zone workspace is purely presentational.
+The old `scheduleSidebar.tsx` and its editing subtree (`TermCard`, `SlotRow`, `slotPopover`, `AddCourseAffordance`, `SectionsView`, `PriorCreditsCard`, `sidebar/slotState.ts`, `lib/groupCoursesByTerm.ts`, `lib/whatIfSlotControl.ts`) were deleted in Plan 37 G2. The live shared helpers (`slotRenderHelpers`, `slotTier`, `sidebarFormatters`) now live in `app/chat/shared/`; `SummaryCard` now lives in `app/chat/profile/`. **Note:** the 3-zone workspace is NOT purely presentational — Plan 37 added the workspace **slot-editor** (per-slot `SlotActionPopover` on `specific_planned`/`in_progress` slots + per-term `+ Add course`). Editing via the **old sidebar** is gone; editing via the **workspace slot-editor** or **chat** are both live. Scenario/compare grids remain read-only (no popover).
 
 ### Plan-level badge row — `lib/planBadges.ts` + `PlanBadges` (Phase 4 E2.1)
 

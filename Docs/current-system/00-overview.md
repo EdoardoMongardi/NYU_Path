@@ -1,8 +1,8 @@
 # NYU Path — Project Audit
 
-> Last verified against code: 2026-06-16 (Phase 4 — Experience & continuity — complete). Prior: 2026-06-15 (cohort gate subsystem removed); 2026-06-13: added probe_counterfactual to the tool catalog, corrected the response validator to 8 checks, marked the Phase-3 advisor layer shipped, fixed the engine-docs count to 23.
+> Last verified against code: 2026-06-19 (Plans 35/36/37 — what-if taxonomy, scenarios workspace, slot-editor — reflected below). Prior: 2026-06-16 (Phase 4 complete); 2026-06-15 (cohort gate subsystem removed); 2026-06-13: added probe_counterfactual to the tool catalog, corrected the response validator to 8 checks, marked the Phase-3 advisor layer shipped, fixed the engine-docs count to 23.
 
-> **Status — Phase 4 (Experience & continuity) is COMPLETE (2026-06-16).** Built ON TOP of the unchanged Phases 0–3 engine + advisor (it rebuilt no validity logic): the user-facing workspace (advisor chat left + plan canvas right over **one shared live state**), the chat↔sidebar bidirectional sync that closes PLAN-14, the **propose → preview → confirm** edit model (every gesture's already-staged proposal renders as a read-only canvas preview + review card; a clean apply is no longer a silent commit; `feasible:false` proposals never preview), the canvas-click → pre-filled-chat shortcut to the Phase-3 introspection/probe tools, an onboarding/preference wizard (home-school propose+confirm, the `correcting_data`-persists fix, free-text → the Phase-3 preference ladder — **built but its mount is DEFERRED**), and the DB wiring. Both verbatim design-§10 exit gates are **MET and verified LIVE against Neon**: (1) the chat/sidebar parity tests (`apps/web/tests/chatSidebarParity.test.ts`), and (2) e2e confirm→persist (`apps/web/tests/e2eConfirmPersist.test.ts`, plus the OTP-login smoke `otpLoginSmoke.test.ts`). See [`web/db-and-stores.md`](web/db-and-stores.md), [`web/plan-action-orchestrator.md`](web/plan-action-orchestrator.md), and the plan `Docs/plans/33-2026-06-15-planning-engine-phase4-experience.md`.
+> **Status — Phase 4 (Experience & continuity) is COMPLETE (2026-06-16)** and **Plans 35, 36, 37 are COMPLETE (2026-06-18/19, on `feat/plan37-slot-editor`, not yet merged)**. Phase 4 built ON TOP of the unchanged Phases 0–3 engine + advisor: the user-facing workspace (advisor chat left + plan canvas right over **one shared live state**), the **propose → preview → confirm** edit model, and the DB wiring. **Plan 35** added the 3-branch what-if taxonomy (Branch A = program-change Albert What-If audit upload; Branch B = current-term withdraw/pass-fail via DPR transforms + confirmable `propose_whatif_assumption`; Branch C = confidence-disclaimed estimate) and W/pass-fail → requirement-engine modeling. **Plan 36** replaced the single sidebar with a **3-zone shell** (`ThreeZoneShell`: chat LEFT rail · `ScheduleWorkspace` CENTER hero · `ProfileRail` RIGHT zone), a scenario model (`committed anchor + proposed/whatif scenarios + compare`), `scheduleDiff.ts`, `CompareView`, chat `ScheduleCard` / `WhatIfUploadCard`, and the `@nyupath/engine/client` client-safe entry (fixes the `node:` bundle crash that prevented `/chat` from loading in a browser). **Plan 37** added a **workspace slot-editor** (per-slot `SlotActionPopover` on `specific_planned`/`in_progress` slots + per-term `+ Add course`; all propose-only, same pipeline as chat), the **chat-confirm bridge** (`plan_proposal` SSE event → proposed scenario + Confirm rail; typed "confirm"/"yes" intercept; consume-once store), **render-only-valid** (invalid proposed → red card, no Confirm; Override retired), **never-commit-invalid** (both confirm paths return HTTP 422 on infeasible), and an **8th validator axis** (`passFailLimitsRespected` — per-school P/F career cap). Both verbatim design-§10 exit gates are **MET and verified LIVE against Neon**: (1) the chat/sidebar parity tests (`apps/web/tests/chatSidebarParity.test.ts`), and (2) e2e confirm→persist (`apps/web/tests/e2eConfirmPersist.test.ts`, plus the OTP-login smoke `otpLoginSmoke.test.ts`). See [`web/db-and-stores.md`](web/db-and-stores.md), [`web/plan-action-orchestrator.md`](web/plan-action-orchestrator.md), and the plans `Docs/plans/33-2026-06-15-planning-engine-phase4-experience.md`, `35-2026-06-17-whatif-and-wpf-requirement-modeling.md`, `36-2026-06-18-scenarios-workspace-ui.md`, `37-2026-06-19-slot-editor-and-pf-validation.md`.
 
 > **About this document set.** This is a code-truth audit of the NYU Path codebase. Every claim was derived from reading the actual source files. No code comments, no existing documentation, and no narrative prose were used as evidence. Where code and surrounding writing disagreed, the code won.
 
@@ -82,7 +82,7 @@ There are **21 of them** (the live registry is `packages/engine/src/agent/regist
 
 The term-by-term planner is not a greedy "fill each term until it's full" loop — that old greedy solver was deleted in the Phase 0-2 rebuild. The planner is now a **feasibility-first constraint search**. Given the student's remaining requirements, in-progress courses, and pinned choices, it searches for the **first complete plan that satisfies every constraint** (backtracking with forward-checking over a node budget), then polishes that plan with a local-improvement pass. The single entry point `solveForwardSchedule` runs the pipeline: `buildConstraintContext` (precompute the problem) → `findFirstValidPlan` (the backtracking search) → `localImprove` (refine) → `materializePlan` (assemble the full schedule). Alternatives ("what if I add a summer term?") come from `findDiverseValidPlans`, which finds distinct valid plans rather than re-ranking one. Code lives under `packages/engine/src/agent/forwardSchedule/` (`solver.ts`, `search.ts`, `localImprove.ts`, `materializePlan.ts`, `alternatives.ts`).
 
-What makes a plan "valid" is defined in exactly one place: the **7-axis graduation-path validator** (`runGraduationPathValidator` in `forwardSchedule/graduationPathValidator.ts`). Its seven axes are: requirement groups satisfied, pool slots resolvable, total credits meet the minimum, thresholds met, visa axes pass, assumptions explicit, and graduation target met. This validator is the **contract**: every path that produces or mutates a plan — building (`plan_forward_degree`), proposing a change (`propose_plan_change`), confirming a change (`confirm_plan_change`), and simulating alternatives (`simulate_alternatives`) — routes its output back through `finalizeForwardSchedule`, which runs the validator and attaches the per-axis verdict. A plan the validator marks infeasible carries an honest infeasibility report rather than being silently shipped.
+What makes a plan "valid" is defined in exactly one place: the **graduation-path validator** (`runGraduationPathValidator` in `forwardSchedule/graduationPathValidator.ts`). It started with 7 axes (requirement groups satisfied, pool slots resolvable, total credits meet the minimum, thresholds met, visa axes pass, assumptions explicit, graduation target met) and gained an **8th axis in Plan 37** (`passFailLimitsRespected` — per-school P/F career cap; the first deliberate extension of the formerly-frozen contract). This validator is the **contract**: every path that produces or mutates a plan — building (`plan_forward_degree`), proposing a change (`propose_plan_change`), confirming a change (`confirm_plan_change`), and simulating alternatives (`simulate_alternatives`) — routes its output back through `finalizeForwardSchedule`, which runs the validator and attaches the per-axis verdict. A plan the validator marks infeasible carries an honest infeasibility report rather than being silently shipped.
 
 ### The safety check (response validator)
 
@@ -129,7 +129,7 @@ graph TB
 graph TB
     subgraph Browser["What the student sees (Browser)"]
         UI[Chat page<br/>app/chat/page.tsx]
-        SIDEBAR[Schedule sidebar with<br/>term-by-term plan]
+        WORKSPACE[3-zone shell:<br/>ScheduleWorkspace + ProfileRail<br/>(Plan 36/37 — sidebar removed)]
     end
 
     subgraph NextJS["The web server (Next.js — apps/web)"]
@@ -164,7 +164,7 @@ graph TB
     end
 
     UI <-->|SSE| CHATAPI
-    SIDEBAR -->|fetch| PLANAPI
+    WORKSPACE -->|fetch| PLANAPI
     CHATAPI --> AGENT
     PLANAPI --> TOOLS
     ONBOARD --> ALGOS
@@ -184,7 +184,7 @@ graph TB
 
 **What lives where:**
 
-- **`apps/web/`** — the Next.js website. The chat page, the sidebar, the database, the login flow, the streaming endpoint, the deterministic plan-edit endpoints.
+- **`apps/web/`** — the Next.js website. The chat page, the 3-zone workspace (ScheduleWorkspace + ProfileRail; the old sidebar was removed in Plan 37 G2), the database, the login flow, the streaming endpoint, the deterministic plan-edit endpoints.
 - **`apps/cli/`** — a tiny command-line front end (mostly for debugging/scripting, not the main product).
 - **`packages/engine/`** — the brain and the toolbox. Everything that thinks, retrieves, calculates, or validates lives here.
 - **`packages/shared/`** — type definitions and grade utilities shared between engine and web.
@@ -216,7 +216,7 @@ Plus smaller pieces: the clarifier (handles ambiguous questions), the template m
 One file per **live** tool the AI can call. Each explains: what it does, what it needs, the algorithm, what it returns, and what other tools it works with. See the [tool catalog table](#8-quick-tool-catalog) below.
 
 ### `current-system/web/` — 12 documents
-The Next.js website pieces: the chat endpoint, the chat UI, the plan-edit endpoints, the login flow, the database schema and stores, the sidebar components, the rate limiter.
+The Next.js website pieces: the chat endpoint (SSE streaming), the chat UI (3-zone shell + scenario workspace + slot-editor), the plan-edit endpoints, the login flow, the database schema and stores, the rate limiter. (The old sidebar components are deleted — Plan 37 G2.)
 
 ### `current-system/surrounding/` — 3 documents
 - The shared types package
