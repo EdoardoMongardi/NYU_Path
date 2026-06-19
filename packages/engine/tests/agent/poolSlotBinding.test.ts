@@ -571,9 +571,9 @@ describe("bind_pool_slot — duplicate_courseId", () => {
     });
 });
 
-// validateInput rejects when no forwardSchedule
-describe("bind_pool_slot — validateInput rejects without forwardSchedule", () => {
-    it("returns ok:false when no forwardSchedule", async () => {
+// validateInput rejects when neither forwardSchedule nor studentDraftPlan is present
+describe("bind_pool_slot — validateInput rejects when neither forwardSchedule nor studentDraftPlan is present", () => {
+    it("returns ok:false when no plan source is present", async () => {
         const session = makeSession({ forwardSchedule: undefined });
         const result = await bindPoolSlotTool.validateInput!(
             { slotId: "pool-slot-1", courseId: "CSCI-UA 480" },
@@ -581,6 +581,40 @@ describe("bind_pool_slot — validateInput rejects without forwardSchedule", () 
         );
         expect(result.ok).toBe(false);
         if (result.ok) return;
-        expect(result.userMessage).toMatch(/no forward plan/i);
+        expect(result.userMessage).toMatch(/don't have a plan to bind into yet/i);
+    });
+});
+
+// J1: validateInput accepts a session that has only a studentDraftPlan (infeasible plan, no forwardSchedule)
+describe("bind_pool_slot — J1: accepts studentDraftPlan when forwardSchedule is absent", () => {
+    it("validateInput returns ok:true when only studentDraftPlan is present", async () => {
+        // Simulate an infeasible plan: no forwardSchedule, but studentDraftPlan holds the draft
+        const draftPlan = makeSchedule(); // valid ForwardSchedule shape used as the draft
+        const session = makeSession({ forwardSchedule: undefined, studentDraftPlan: draftPlan });
+        const result = await bindPoolSlotTool.validateInput!(
+            { slotId: "pool-slot-1", courseId: "CSCI-UA 480" },
+            makeCtx(session),
+        );
+        expect(result.ok).toBe(true);
+    });
+
+    it("call() binds against the draft plan's slot and does not throw", async () => {
+        // Session has no forwardSchedule but studentDraftPlan has the pool-slot-1 placeholder
+        const draftPlan = makeSchedule(); // contains pool-slot-1 in 2026-fall
+        const session = makeSession({ forwardSchedule: undefined, studentDraftPlan: draftPlan });
+        const output = await bindPoolSlotTool.call(
+            { slotId: "pool-slot-1", courseId: "CSCI-UA 480" },
+            makeCtx(session),
+        );
+        // Should not crash; should find the slot and produce a valid (feasible or infeasible) result
+        expect(output.diff).toBeDefined();
+        // The slot was found and processed (not "slot not found")
+        expect(output.conflicts?.some((c) => c.kind === "unknown_slot")).toBeFalsy();
+        // The bound slot is present in the diff
+        expect(output.diff.added).toHaveLength(1);
+        expect(output.diff.added[0]!.slot.kind).toBe("specific_planned");
+        if (output.diff.added[0]!.slot.kind === "specific_planned") {
+            expect(output.diff.added[0]!.slot.courseId).toBe("CSCI-UA 480");
+        }
     });
 });

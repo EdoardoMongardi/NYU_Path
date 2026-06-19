@@ -242,12 +242,11 @@ export const bindPoolSlotTool = buildTool({
     isReadOnly: true,
     maxResultChars: 3000,
     async validateInput(_input, { session }) {
-        if (!session.forwardSchedule) {
+        if (!session.forwardSchedule && !session.studentDraftPlan) {
             return {
                 ok: false,
                 userMessage:
-                    "No forward plan exists in this session. " +
-                    "Call plan_forward_degree first, then bind pool slots.",
+                    "I don't have a plan to bind into yet — let me build your forward plan first.",
             };
         }
         if (!session.degreeProgressReport) {
@@ -265,7 +264,7 @@ export const bindPoolSlotTool = buildTool({
         "choose_n constraint, duplicates, and computes a warning level. " +
         "Returns warningLevel: none | mild | strong based on workload + balance impact.",
     async call(input, { session }): Promise<BindPoolSlotOutput> {
-        const schedule = session.forwardSchedule!;
+        const schedule = session.forwardSchedule ?? session.studentDraftPlan!;
         const dpr = session.degreeProgressReport!;
         const courses = session.courses ?? [];
         const prereqsAll = session.prereqs ?? [];
