@@ -24,7 +24,7 @@ import { renderSectionsView } from "./SectionsView";
 // (default-export omitted — TermCard uses the renderer directly inline.)
 import { gatherAddCourseSuggestions } from "./slotPopover";
 import type { SlotPopoverHandlers } from "./slotPopover";
-import { formatTermLabel, slotCredits } from "./sidebarFormatters";
+import { formatTermLabel, slotCredits } from "../shared/sidebarFormatters";
 
 interface TermCardProps {
     bucket: TermBucket;

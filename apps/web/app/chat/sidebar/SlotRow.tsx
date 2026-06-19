@@ -17,8 +17,8 @@ import type { Fragment } from "react";
 import type { ForwardSchedule, ScheduleSlot } from "@nyupath/shared";
 import styles from "../chat.module.css";
 import { renderSlotPopover, type SlotPopoverHandlers } from "./slotPopover";
-import { renderSlotInner, slotGradeText } from "./slotRenderHelpers";
-import { slotTierClassName } from "./slotTier";
+import { renderSlotInner, slotGradeText } from "../shared/slotRenderHelpers";
+import { slotTierClassName } from "../shared/slotTier";
 import { computeSlotState, type SlotIpChangeability } from "./slotState";
 
 interface SlotRowProps {

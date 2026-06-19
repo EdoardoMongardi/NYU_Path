@@ -23,9 +23,9 @@ import {
 } from "../../lib/planActionClient";
 import styles from "./chat.module.css";
 import TermCard from "./sidebar/TermCard";
-import SummaryCard from "./sidebar/SummaryCard";
+import SummaryCard from "./profile/SummaryCard";
 import PriorCreditsCard from "./sidebar/PriorCreditsCard";
-import { assumptionLabel, formatTermLabel } from "./sidebar/sidebarFormatters";
+import { assumptionLabel, formatTermLabel } from "./shared/sidebarFormatters";
 import type { SlotPopoverHandlers } from "./sidebar/slotPopover";
 
 // Phase 16 Task B — env-flag-gated Clear button. The flag is read at

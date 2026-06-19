@@ -26,7 +26,7 @@
 // ============================================================
 
 import type { ForwardSchedule, PlanState } from "@nyupath/shared";
-import { formatTermLabel } from "../app/chat/sidebar/sidebarFormatters";
+import { formatTermLabel } from "../app/chat/shared/sidebarFormatters";
 
 export interface PlanBadgeData {
     /** ✓ for valid-clean / valid-with-trade-offs; clearly-marked
