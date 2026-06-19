@@ -624,8 +624,8 @@ The editor is offered ONLY on the COMMITTED plan (the `committed` scenario), nev
 
 **Files:** Modify `ScheduleView.tsx` (a per-term "+ Add course" control on the committed plan) + `page.tsx`. Test: extend the render test.
 
-- [ ] **Step 1 — failing render test:** an "+ Add course" control renders per term on the committed plan; entering `CSCI-UA 101` + submit calls `onAddCourse(term, "CSCI-UA 101")`; the control is absent when `readOnly`.
-- [ ] **Step 2/3 — implement** a minimal inline input (reusing the §9 styles) that calls `onAddCourse(term, courseId)`. In `page.tsx`, `onAddCourse` → `/api/plan/add` (which now validates existence, Task E3) → `handlePlanActionResult("add", …)`. On a 422 (unknown course) show the route's message as an assistant chat line.
+- [ ] **Step 1 — failing render test:** an "+ Add course" control renders on FUTURE/planned terms + on the CURRENT term while it is inside its add/drop window (hedged); it is ABSENT on a current term whose add/drop window has closed, and absent when `readOnly` (per D-2). Entering `CSCI-UA 101` + submit calls `onAddCourse(term, "CSCI-UA 101")`.
+- [ ] **Step 2/3 — implement** a minimal inline input (reusing the §9 styles) that calls `onAddCourse(term, courseId)`, **gated by the term window per D-2** — reuse the same campus/season window the matrix uses (`classifyIpChangeability` for the term) so add is offered freely on future terms, hedged on the current term inside add/drop ("registering this late is deadline-gated — verify"), and hidden once that window has closed. In `page.tsx`, `onAddCourse` → `/api/plan/add` (which now validates existence, Task E3) → `handlePlanActionResult("add", …)`. On a 422 (unknown course) show the route's message as an assistant chat line.
 - [ ] **Step 4 — run PASS. Step 5 — commit.**
 
 ---
