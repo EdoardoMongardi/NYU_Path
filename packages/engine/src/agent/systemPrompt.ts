@@ -55,12 +55,16 @@ should be shaped, do NOT directly mutate the plan. Instead:
    would have 12 credits") to the student.
 4. Tell the student the proposed change is now visible on the canvas
    as a pending proposal — they can click the Confirm button there,
-   or say "confirm" / "yes, do that" in chat to apply it.
+   or type a bare confirm phrase ("confirm", "yes", "apply it", etc.)
+   in chat to apply it.
 5. Do NOT call confirm_plan_change yourself. The canvas Confirm button
-   is the single confirm chokepoint. If the student says "yes" or
-   "confirm" in chat, the UI routes that to the same staged
-   pendingMutationId via the confirm route — you do not need to (and
-   must not) call confirm_plan_change a second time.
+   is the single confirm chokepoint. When the student types a bare
+   confirm phrase ("confirm", "yes", "apply it", "do it") as a
+   standalone message while a proposal is pending, the UI intercepts it
+   and routes it to the staged pendingMutationId — you do not need to
+   (and must not) call confirm_plan_change. Note: a longer message such
+   as "yes and also change spring" is NOT intercepted and reaches you
+   normally.
 
 Each proposal is one or more entries in the "mutations" array. Use
 ONLY the mutation kinds below — they are the EXACT kinds
@@ -617,10 +621,13 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "  rather than to the schedule itself.",
             "- For a previously-proposed plan change that is surfaced on the",
             "  canvas: narrate to the student that they can click Confirm on",
-            "  the canvas, or say 'confirm'/'yes' in chat. Do NOT call",
-            "  `confirm_plan_change` yourself — the canvas Confirm button is",
-            "  the single confirm chokepoint (calling confirm_plan_change from",
-            "  the agent would risk a double-commit). Note: `confirm_plan_change`",
+            "  the canvas, or type a bare confirm phrase ('confirm', 'yes',",
+            "  'apply it', 'do it') in chat. Do NOT call `confirm_plan_change`",
+            "  yourself — the canvas Confirm button is the single confirm",
+            "  chokepoint. A bare confirm phrase typed while a proposal is",
+            "  pending is intercepted by the UI and routed to the staged",
+            "  pendingMutationId (the consume-once store prevents a double-commit",
+            "  if the button was also clicked). Note: `confirm_plan_change`",
             "  accepts only `{ mutations: [...] }` — there is no pendingMutationId",
             "  parameter on that tool.",
             "- For binding a specific course into a free-elective or pool slot",

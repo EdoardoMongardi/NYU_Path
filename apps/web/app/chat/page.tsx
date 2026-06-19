@@ -76,6 +76,7 @@ import {
     type WhatIfAuditResponse,
 } from "./buildWhatIfScenarioFromAudit";
 import type { ScenarioKind } from "./workspace/scenarioBadges";
+import { shouldInterceptAsConfirm } from "./typedConfirmIntercept";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -750,12 +751,32 @@ export default function ChatPage() {
         if (!text || isLoading) return;
 
         setInput("");
-        addMessage("user", text);
         setIsLoading(true);
 
         try {
+            // I3 — typed-confirm intercept.
+            // If the student types a bare confirm phrase ("confirm", "yes",
+            // "apply it", etc.) WHILE a proposed scenario is pending, route
+            // the message to the SAME canvas-Confirm chokepoint instead of
+            // the agent.  The consume-once pending-mutation store ensures this
+            // is idempotent: button-then-typed (or typed-then-button) commits
+            // exactly once.  The student's message is still shown in the
+            // thread so the conversation stays readable.
+            const activeSc = planStore.getActiveScenario();
+            const hasPendingProposal =
+                activeSc?.kind === "proposed" && !!activeSc.pendingMutationId;
+            if (shouldInterceptAsConfirm(text, hasPendingProposal)) {
+                // Show the user message in the thread.
+                addMessage("user", text);
+                // Route to the existing chokepoint (same as the canvas Confirm button).
+                // `activeSc` is definitely defined + proposed + has pendingMutationId here.
+                await handleWorkspaceConfirm(activeSc!);
+                return;
+            }
+
             // Onboarding turns and pre-transcript chitchat → legacy v1.
             // Post-onboarding (parsedData present + step=complete) → v2 SSE.
+            addMessage("user", text);
             const useV2 = onboardingStep === "complete" && parsedData;
             if (useV2) {
                 await handleSendV2(text);
