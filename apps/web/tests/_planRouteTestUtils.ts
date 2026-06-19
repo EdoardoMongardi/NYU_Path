@@ -166,14 +166,20 @@ export interface FakeRequest {
     cookies?: { get: (name: string) => { value: string } | undefined };
     headers: { get: (name: string) => string | null };
     json: () => Promise<unknown>;
+    clone: () => FakeRequest;
 }
 
 export function fakeRequest(cookieValue: string | undefined, body: unknown): FakeRequest {
-    return {
+    const self: FakeRequest = {
         cookies: cookieValue
             ? { get: (n: string) => (n === SESSION_COOKIE ? { value: cookieValue } : undefined) }
             : { get: () => undefined },
         headers: { get: () => null },
         json: async () => body,
+        // clone() returns a new FakeRequest over the same body — mirrors the
+        // real NextRequest.clone() behaviour that the add route uses for its
+        // E3 existence pre-check (peek body without consuming the original stream).
+        clone: () => fakeRequest(cookieValue, body),
     };
+    return self;
 }

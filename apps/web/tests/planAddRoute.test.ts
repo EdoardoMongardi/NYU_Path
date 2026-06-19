@@ -116,4 +116,32 @@ describe("/api/plan/add (Phase 17 Task B)", () => {
         // that would re-merge the chat + plan-action buckets.
         expect(_RATE_BUCKET_PREFIX_FOR_TESTS).toBe("plan-action");
     });
+
+    // E3 — course-existence validation
+    it("returns 422 when the courseId is not in the NYU catalog", async () => {
+        const studentId = "add_nonexistent_course";
+        await seedStudentState(studentId);
+        const token = await issueTestToken(studentId);
+        const { POST } = await import("../app/api/plan/add/route");
+        const res = await POST(fakeRequest(token, {
+            courseId: "ZZZZ-UA 9999",
+            term: "2026-fall",
+        }) as never);
+        expect(res.status).toBe(422);
+        const json = await res.json();
+        expect(json.message).toMatch(/ZZZZ-UA 9999/);
+        expect(json.message).toMatch(/NYU course catalog/);
+    });
+
+    it("still returns 200 for a valid catalog course after E3 (regression guard)", async () => {
+        const studentId = "add_valid_course_e3";
+        await seedStudentState(studentId);
+        const token = await issueTestToken(studentId);
+        const { POST } = await import("../app/api/plan/add/route");
+        const res = await POST(fakeRequest(token, {
+            courseId: "CSCI-UA 101",
+            term: "2026-fall",
+        }) as never);
+        expect(res.status).toBe(200);
+    });
 });
