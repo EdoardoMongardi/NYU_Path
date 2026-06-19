@@ -14,6 +14,23 @@ function dprWithPf(usedUnits: number, pCourses = 0) {
     } as any;
 }
 
+/** Build a DPR whose courseHistory carries one grade-"P" row per entry in
+ *  `pRows` ({term}); a `null`/omitted term means an unparseable term string. */
+function dprWithPfRows(pRows: Array<{ term: string | null }>, usedUnits = 0) {
+    return {
+        cumulative: { passFailUsedUnits: usedUnits, passFailCapUnits: 32, creditsRequired: 128 },
+        courseHistory: pRows.map((r, i) => ({
+            subject: "X",
+            catalogNbr: `${i}`,
+            grade: "P",
+            type: "EN",
+            units: 4,
+            term: r.term ?? "??unparseable??",
+            courseTitle: `Course ${i}`,
+        })),
+    } as any;
+}
+
 describe("checkPassFailLimits (8th axis)", () => {
     it("credits cap not exceeded → pass", () => {
         expect(checkPassFailLimits(dprWithPf(28), credits32).status).toBe("pass");
@@ -38,5 +55,146 @@ describe("checkPassFailLimits (8th axis)", () => {
     });
     it("no passFail config → pass (axis is opt-in)", () => {
         expect(checkPassFailLimits(dprWithPf(40), undefined).status).toBe("pass");
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Per-term P/F limit (Plan 37 follow-up — perTermLimit / perTermUnit).
+// ---------------------------------------------------------------------------
+
+// A CAS-style config: 1 P/F course per SEMESTER, generous career cap.
+const semesterLimit1: PassFailConfig = {
+    careerLimitType: "credits",
+    careerLimitValue: 32,
+    perTermLimit: 1,
+    perTermUnit: "semester",
+};
+
+// A Stern/Gallatin-style config: 1 P/F course per ACADEMIC YEAR.
+const academicYearLimit1: PassFailConfig = {
+    careerLimitType: "courses",
+    careerLimitValue: 8,
+    perTermLimit: 1,
+    perTermUnit: "academic_year",
+};
+
+describe("checkPassFailLimits — per-term limit (perTermUnit:'semester')", () => {
+    it("2 grade-'P' rows in the SAME term → fail (per-term exceeded)", () => {
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: "2026 Fall" }, { term: "2026 Fall" }]),
+            semesterLimit1,
+        );
+        expect(r.status).toBe("fail");
+        expect((r as any).reason).toMatch(/2026 Fall/);
+        expect((r as any).reason).toMatch(/1 per term/);
+    });
+
+    it("1 P-row per term across 2 DIFFERENT terms → pass", () => {
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: "2026 Fall" }, { term: "2027 Spring" }]),
+            semesterLimit1,
+        );
+        expect(r.status).toBe("pass");
+    });
+
+    it("the common single-election case (1 P-row) → pass (no false-fire)", () => {
+        const r = checkPassFailLimits(dprWithPfRows([{ term: "2026 Fall" }]), semesterLimit1);
+        expect(r.status).toBe("pass");
+    });
+
+    it("accepts the '2024 Spr' display abbreviation when grouping by semester", () => {
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: "2024 Spr" }, { term: "2024 Spr" }]),
+            semesterLimit1,
+        );
+        expect(r.status).toBe("fail");
+    });
+});
+
+describe("checkPassFailLimits — per-term limit (perTermUnit:'academic_year')", () => {
+    it("2 P-rows in the SAME academic year (Fall 2026 + Spring 2027) → fail", () => {
+        // NYU academic year: Fall 2026 opens AY2026; Spring 2027 belongs to AY2026.
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: "2026 Fall" }, { term: "2027 Spring" }]),
+            academicYearLimit1,
+        );
+        expect(r.status).toBe("fail");
+        expect((r as any).reason).toMatch(/academic year 2026/);
+        expect((r as any).reason).toMatch(/1 per academic year/);
+    });
+
+    it("the same 2 P-rows split across DIFFERENT academic years → pass", () => {
+        // Spring 2026 belongs to AY2025; Fall 2026 opens AY2026 → different years.
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: "2026 Spring" }, { term: "2026 Fall" }]),
+            academicYearLimit1,
+        );
+        expect(r.status).toBe("pass");
+    });
+
+    it("a January term groups with the prior Fall's academic year (Fall 2026 + January 2027 → AY2026, fail)", () => {
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: "2026 Fall" }, { term: "2027 J-Term" }]),
+            academicYearLimit1,
+        );
+        expect(r.status).toBe("fail");
+        expect((r as any).reason).toMatch(/academic year 2026/);
+    });
+});
+
+describe("checkPassFailLimits — per-term limit hedges on unreliable terms", () => {
+    it("2 P-rows with NO parseable term + a perTermLimit set → does NOT hard-fail (hedge)", () => {
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: null }, { term: null }]),
+            semesterLimit1,
+        );
+        // Career cap is comfortably met (0 used) → the un-groupable per-term rows
+        // must NOT escalate to a fail.
+        expect(r.status).not.toBe("fail");
+        expect(r.status).toBe("pass");
+    });
+
+    it("mix of one parseable + one unparseable in the same term → only the parseable counts (no false fail under the limit)", () => {
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: "2026 Fall" }, { term: null }]),
+            semesterLimit1,
+        );
+        // Only 1 reliably-grouped P-row in 2026 Fall ≤ limit 1 → pass.
+        expect(r.status).toBe("pass");
+    });
+});
+
+describe("checkPassFailLimits — career + per-term combine (worse status wins)", () => {
+    it("career cap fail is preserved (credit phrasing) even when per-term also fails", () => {
+        // 36 used > 32 cap (career fail) AND 2 P-rows in one term (per-term fail).
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: "2026 Fall" }, { term: "2026 Fall" }], 36),
+            semesterLimit1,
+        );
+        expect(r.status).toBe("fail");
+        // Career-credit phrasing is kept (preferred when the career cap fails).
+        expect((r as any).reason).toMatch(/career limit/);
+    });
+
+    it("a per-term violation ESCALATES an otherwise-passing career result to fail", () => {
+        // 8 used ≤ 32 cap (career pass) but 2 P-rows in one term → per-term fail.
+        const r = checkPassFailLimits(
+            dprWithPfRows([{ term: "2026 Fall" }, { term: "2026 Fall" }], 8),
+            semesterLimit1,
+        );
+        expect(r.status).toBe("fail");
+        expect((r as any).reason).toMatch(/per term/);
+    });
+
+    it("existing axis tests with NO perTermLimit are unaffected: 5 P-rows in one term + courses4 (no perTermLimit) → career-only fail", () => {
+        // courses4 has no perTermLimit → gate off; 5 > 4 career-course cap → fail.
+        const r = checkPassFailLimits(dprWithPf(0, 5), courses4);
+        expect(r.status).toBe("fail");
+        expect((r as any).reason).toMatch(/career limit/);
+    });
+
+    it("no perTermLimit + many same-term P-rows under the career cap → pass (gate truly off)", () => {
+        // 3 P-rows all in 2024 Fall, courses4 (cap 4, no perTermLimit) → pass.
+        expect(checkPassFailLimits(dprWithPf(0, 3), courses4).status).toBe("pass");
     });
 });

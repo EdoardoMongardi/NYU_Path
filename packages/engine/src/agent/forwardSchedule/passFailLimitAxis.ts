@@ -1,35 +1,215 @@
 /**
  * passFailLimitAxis — 8th validator axis (Task C1 of Plan 37).
  *
- * Checks the per-school career Pass/Fail limit against usage recorded in the
- * (possibly synthetic) DPR.  Three limit tiers (D-4):
+ * Checks the per-school Pass/Fail limits against usage recorded in the
+ * (possibly synthetic) DPR. TWO limits combine into a single ValidationResult:
  *
- *   careerLimitType:"credits"            → HARD:            used > cap ⇒ fail
- *   careerLimitType:"courses"            → HARD:            count("P" rows) > cap ⇒ fail
- *   careerLimitType:"percent_of_program" → SOFT:            requires-approval (unit-ambiguous)
- *   careerLimitValue == null             → HEDGE:           assumed-pass + adviser note
+ *   (A) the CAREER limit — three tiers (D-4):
+ *     careerLimitType:"credits"            → HARD:            used > cap ⇒ fail
+ *     careerLimitType:"courses"            → HARD:            count("P" rows) > cap ⇒ fail
+ *     careerLimitType:"percent_of_program" → SOFT:            requires-approval (unit-ambiguous)
+ *     careerLimitValue == null             → HEDGE:           assumed-pass + adviser note
+ *
+ *   (B) the PER-TERM limit (Plan 37 follow-up) — gated on `perTermLimit != null`:
+ *     count("P" rows) grouped by SEMESTER (`perTermUnit:"semester"`) or by
+ *     ACADEMIC YEAR (`perTermUnit:"academic_year"`); ANY group over the limit
+ *     ⇒ HARD fail (HARD on the elections WE can see, D-4). Where the DPR's P/F
+ *     rows lack a parseable term (grouping unreliable), the per-term check
+ *     HEDGES — it NEVER hard-fails on unknown-term data.
+ *
  *   passFail undefined / canElect:false  → PASS-BY-DEFAULT: axis is opt-in / action blocked upstream
+ *
+ * COMBINING (A)+(B): the WORSE status wins. A `fail` from EITHER the career cap
+ * OR the per-term limit ⇒ `fail` (the career result is preferred when it is the
+ * one that fails, so its credit/percentage phrasing is preserved). Otherwise the
+ * career result is returned unchanged (per-term only ever ESCALATES to `fail`;
+ * it never relaxes a career `fail`/`requires-approval`/`assumed-pass`).
  *
  * PURE: no I/O, no mutation.
  */
 
 import type { ValidationResult, PassFailConfig } from "@nyupath/shared";
-import type { DegreeProgressReport } from "../../dpr/schema.js";
+import type { DegreeProgressReport, DPRCourseRow } from "../../dpr/schema.js";
 
 /** Count pass/fail-graded course rows on the DPR (grade === "P"). */
 function countPassFailCourses(dpr: DegreeProgressReport): number {
     return dpr.courseHistory.filter((r) => r.grade === "P").length;
 }
 
+// ---------------------------------------------------------------------------
+// Per-term grouping helpers (Plan 37 follow-up)
+// ---------------------------------------------------------------------------
+
+const SEASON_TOKEN_TO_LABEL: Record<string, "Spring" | "Summer" | "Fall" | "Winter" | "January"> = {
+    Spr: "Spring",
+    Spring: "Spring",
+    Sum: "Summer",
+    Summer: "Summer",
+    Fall: "Fall",
+    Fa: "Fall",
+    Win: "Winter",
+    Winter: "Winter",
+    "J-Term": "January",
+    JTerm: "January",
+    Jan: "January",
+    January: "January",
+};
+
 /**
- * 8th validator axis — per-school career P/F limit (Plan 37, D-4).
+ * Parse a PeopleSoft-style DPR term string into `{ year, season }`, or `null`
+ * when the string is unparseable (so the caller HEDGES rather than mis-group).
+ * Accepts both "<year> <season>" (PeopleSoft canonical, e.g. "2026 Fall",
+ * "2024 Spr") and the "<season> <year>" display form. Mirrors the private
+ * `parseTerm` in dpr/temporalContext.ts (kept local so this axis stays a leaf
+ * with no cross-module coupling).
+ */
+function parseTermYearSeason(
+    s: string,
+): { year: number; season: "Spring" | "Summer" | "Fall" | "Winter" | "January" } | null {
+    const trimmed = s.trim();
+    let m = trimmed.match(/^(\d{4})\s+([A-Za-z-]+)$/);
+    let year: number;
+    let raw: string;
+    if (m) {
+        year = parseInt(m[1]!, 10);
+        raw = m[2]!;
+    } else {
+        m = trimmed.match(/^([A-Za-z-]+)\s+(\d{4})$/);
+        if (!m) return null;
+        raw = m[1]!;
+        year = parseInt(m[2]!, 10);
+    }
+    const season = SEASON_TOKEN_TO_LABEL[raw];
+    if (!season) return null;
+    return { year, season };
+}
+
+/**
+ * Map a parsed term to its NYU ACADEMIC YEAR (the integer year the academic
+ * year OPENS). NYU's academic year runs Fall Y → January(Y+1) → Spring(Y+1) →
+ * Summer(Y+1), so a Fall term opens the year and the following J-term, Spring,
+ * and Summer all belong to that SAME academic year `Y`.
+ *
+ *   Fall 2026   → 2026
+ *   January 2027→ 2026
+ *   Spring 2027 → 2026
+ *   Summer 2027 → 2026
+ *   Fall 2027   → 2027
+ */
+function academicYearOf(t: {
+    year: number;
+    season: "Spring" | "Summer" | "Fall" | "Winter" | "January";
+}): number {
+    // Fall opens the academic year ⇒ the academic year IS the calendar year.
+    // Every other season falls AFTER a Fall, so it belongs to the PRIOR
+    // calendar year's academic year (year - 1).
+    return t.season === "Fall" ? t.year : t.year - 1;
+}
+
+/**
+ * Group the DPR's P/F-graded rows (grade === "P") by the key implied by
+ * `perTermUnit`:
+ *   - "semester"      → the verbatim term string (e.g. "2026 Fall").
+ *   - "academic_year" → the academic-year integer (Fall Y opens year Y).
+ *
+ * Returns `{ counts, allTermsParseable }`. `counts` maps each group key to its
+ * P/F-row count; `allTermsParseable` is false when ANY P/F row had an
+ * unparseable term (so the caller hedges instead of hard-failing on a possibly
+ * mis-grouped count). Empty input (no P rows) is trivially `allTermsParseable`.
+ */
+function groupPassFailByPeriod(
+    rows: DPRCourseRow[],
+    perTermUnit: "semester" | "academic_year",
+): { counts: Map<string, number>; allTermsParseable: boolean } {
+    const counts = new Map<string, number>();
+    let allTermsParseable = true;
+
+    for (const row of rows) {
+        if (row.grade !== "P") continue;
+        const parsed = parseTermYearSeason(row.term);
+        if (parsed === null) {
+            // A P/F row with an unparseable term: grouping is unreliable.
+            allTermsParseable = false;
+            continue;
+        }
+        const key =
+            perTermUnit === "academic_year"
+                ? String(academicYearOf(parsed))
+                : `${parsed.year} ${parsed.season}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    return { counts, allTermsParseable };
+}
+
+/**
+ * Per-term P/F check (limit (B)). Returns a `fail` ValidationResult naming the
+ * over-limit group, or `null` when the per-term limit is not violated / not
+ * applicable / cannot be reliably evaluated (so the caller falls back to the
+ * career result). NEVER returns a fail on unknown-term data.
+ */
+function checkPerTermPassFail(
+    dpr: DegreeProgressReport,
+    passFail: PassFailConfig,
+): ValidationResult | null {
+    const perTermLimit = passFail.perTermLimit;
+    // Gate: no per-term limit configured → no per-term check (pass-by-default,
+    // so synthetic-config axis tests that set no perTermLimit are UNAFFECTED).
+    if (perTermLimit == null) return null;
+
+    const perTermUnit: "semester" | "academic_year" = passFail.perTermUnit ?? "semester";
+    const unitLabel = perTermUnit === "academic_year" ? "academic year" : "term";
+
+    const { counts, allTermsParseable } = groupPassFailByPeriod(
+        dpr.courseHistory,
+        perTermUnit,
+    );
+
+    // Find the worst-offending group among those we CAN group reliably.
+    let worstKey: string | null = null;
+    let worstCount = 0;
+    for (const [key, count] of counts) {
+        if (count > perTermLimit && count > worstCount) {
+            worstKey = key;
+            worstCount = count;
+        }
+    }
+
+    if (worstKey !== null) {
+        // HARD fail on what we can see (D-4).
+        return {
+            status: "fail",
+            reason:
+                `You have ${worstCount} Pass/Fail courses in ${unitLabel} ${worstKey}, ` +
+                `which exceeds your school's limit of ${perTermLimit} per ${unitLabel}.`,
+        };
+    }
+
+    // No reliable group is over the limit. If some P/F rows had an unparseable
+    // term we could not group them — but we still do NOT hard-fail on unknown
+    // data; the caller's career result (with its hedge/pass) stands. We simply
+    // return null so the per-term check escalates nothing here.
+    // (`allTermsParseable` is intentionally unused as an escalation trigger; it
+    // only documents that an absent fail under unparseable terms is a hedge,
+    // not a clean pass.)
+    void allTermsParseable;
+    return null;
+}
+
+/**
+ * 8th validator axis — per-school P/F limits (Plan 37, D-4 + per-term
+ * follow-up).
  *
  * Pass-by-default: if no `passFail` config is supplied (school does not have
  * the axis configured) or the school cannot elect P/F at all (`canElect:false`,
- * e.g. Tandon), the axis returns a non-blocking `pass`.  The `canElect:false`
+ * e.g. Tandon), the axis returns a non-blocking `pass`. The `canElect:false`
  * guard is a safety net; the upstream action-matrix already prevents a student
  * from electing P/F at Tandon, but the axis must not block if it is somehow
  * reached.
+ *
+ * Returns a SINGLE ValidationResult combining the career cap (A) and the
+ * per-term limit (B): a `fail` from EITHER ⇒ `fail`. The per-term check only
+ * ever ESCALATES to `fail`; otherwise the career result is returned unchanged.
  */
 export function checkPassFailLimits(
     dpr: DegreeProgressReport,
@@ -45,6 +225,29 @@ export function checkPassFailLimits(
         return { status: "pass", verifiedFrom: "bulletin" };
     }
 
+    // ---- (A) Career limit ----
+    const careerResult = checkCareerPassFail(dpr, passFail);
+
+    // ---- (B) Per-term limit (gated on perTermLimit != null) ----
+    const perTermFail = checkPerTermPassFail(dpr, passFail);
+
+    // ---- Combine: a per-term fail ESCALATES the career result to fail ----
+    // If the career result already fails, keep it (preserves its credit/percent
+    // phrasing). Otherwise, a per-term fail wins. Never relax a career fail.
+    if (careerResult.status === "fail") return careerResult;
+    if (perTermFail !== null) return perTermFail;
+    return careerResult;
+}
+
+/**
+ * Career-limit check (limit (A)) — three tiers (D-4). Factored out of
+ * `checkPassFailLimits` so the per-term check can be layered on top without
+ * duplicating the career logic. Returns the career ValidationResult.
+ */
+function checkCareerPassFail(
+    dpr: DegreeProgressReport,
+    passFail: PassFailConfig,
+): ValidationResult {
     // No cap on file → hedge, never block.
     if (passFail.careerLimitValue == null) {
         return {
