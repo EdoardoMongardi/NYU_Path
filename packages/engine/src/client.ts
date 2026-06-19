@@ -18,7 +18,7 @@
 // (verified): courseId.ts and data/schoolDefaults.ts are pure.
 //
 // This is the "client-safe entry" seam; it does not touch the frozen engine
-// contract (finalizeForwardSchedule / the 7-axis validator / the solver).
+// contract (finalizeForwardSchedule / the 8-axis validator / the solver).
 
 export { canonicalizeCourseId, canonicalizeCourseIdSet } from "./courseId.js";
 export { SCHOOL_DISPLAY_NAMES } from "./data/schoolDefaults.js";

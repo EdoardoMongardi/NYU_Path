@@ -12,7 +12,10 @@
  * predicate here also passes `runGraduationPathValidator`. The per-placement
  * predicates (offering / prereq / NOT / coreq) mirror the placement-time checks
  * the old greedy solver applied (now in solverHelpers.ts / materializePlan.ts);
- * the per-term and completion predicates mirror the validator's 7 axes.
+ * the per-term and completion predicates mirror the validator's search-facing
+ * axes (7 of the validator's 8 — the 8th, passFailLimitsRespected, is
+ * validate-only: the solver never searches over P/F elections, so no predicate
+ * mirrors it).
  *
  * Reuses the pure primitives from solverHelpers.ts (enumerateMainTerms,
  * parseTerm, compareSolverTerms, computePrereqDepths, buildDependentsIndex,
@@ -505,7 +508,8 @@ export function checkPerTermCeiling(plan: PartialPlan, ctx: ConstraintContext): 
 }
 
 // ===========================================================================
-// Completion predicates (mirror the validator's 7 axes)
+// Completion predicates (mirror the validator's 7 search-facing axes; the 8th,
+// passFailLimitsRespected, is validate-only and has no search predicate)
 // ===========================================================================
 
 /** perTermFloor — mirrors the materializePlan.ts visa-floor check (visaValidator per

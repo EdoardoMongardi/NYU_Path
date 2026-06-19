@@ -12,12 +12,12 @@
 // (applyWithdrawalToDpr / applyPassFailToDpr — the original DPR is NEVER
 // mutated; the clone carries reportKind:"what_if"), re-solve through the SAME
 // frozen pipeline the build path uses (buildSolverInputWithRulesFromSession →
-// solveForwardSchedule → finalizeForwardSchedule + the 7-axis validator), and
+// solveForwardSchedule → finalizeForwardSchedule + the 8-axis validator), and
 // compute the diff / rich planDiff / binding-constraint conflicts vs the
 // CURRENT plan, plus the school-specific P/F hedges + the F3 registrar-window
 // caveat + the universal verify/not-official rail (CORE RULE 15).
 //
-// The frozen contract (finalizeForwardSchedule + the 7-axis validator + the
+// The frozen contract (finalizeForwardSchedule + the 8-axis validator + the
 // solver + the search) is unchanged — this module only CALLS it.
 //
 // PURITY / R1 GUARDRAIL: `solveAndDiff` + `solveWhatIfAssumption` NEVER write
@@ -108,7 +108,7 @@ export function solveAndDiff(
 ): SolveAndDiffResult {
     // Identical seam to proposePlanChange: one buildProgramRules call yields
     // BOTH the solverInput and the validatorRules; solve; then route through
-    // the SAME authoritative 7-axis finalize the build path uses. NONE of
+    // the SAME authoritative 8-axis finalize the build path uses. NONE of
     // this writes to session.
     const { solverInput, validatorRules } = buildSolverInputWithRulesFromSession(
         session,
@@ -116,20 +116,34 @@ export function solveAndDiff(
         solvePrefs,
     );
     const solverOutput = solveForwardSchedule(solverInput);
+    // Plan 37 (Task C2 fix-loop) — thread the session-resolved per-school P/F
+    // config so the 8th validator axis (passFailLimitsRespected) enforces the
+    // career cap. This is THE flow where the cap can change: a P/F PASS election
+    // (applyPassFailToDpr, B1) increments `solveDpr.cumulative.passFailUsedUnits`,
+    // and the axis reads that. Without the config the axis ran pass-by-default,
+    // so an over-cap election went unflagged (feasible:true).
+    const passFailConfig = session.schoolConfig?.passFail;
     const { schedule: probedSchedule, validatorResult } = finalizeForwardSchedule(
         solverOutput,
         solverInput,
         solveDpr,
         validatorRules,
+        passFailConfig,
     );
 
     // Validate the BEFORE plan too (cheap, pure) so the planDiff can report
     // per-axis transitions. The before plan is validated against the
-    // ORIGINAL dpr — that is the world the student is in today.
+    // ORIGINAL dpr — that is the world the student is in today (so its
+    // `passFailUsedUnits` carries NO election; the before/after diff is honest:
+    // an already-over-cap student shows fail on BOTH worlds — no spurious NEW
+    // transition — while an election that newly crosses the cap shows pass→fail).
     const beforeAxes = runGraduationPathValidator({
         plan: currentPlan,
         dpr: originalDpr,
         programRules: validatorRules,
+        // SAME P/F config as the after world (the career cap is plan-independent;
+        // only the DPR's used-units differ between before/after).
+        passFailConfig,
     }).axisResults;
 
     // -- Diff + rich planDiff vs the CURRENT plan --------------------------

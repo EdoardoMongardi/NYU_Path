@@ -3,7 +3,7 @@
  *
  * The second half of D2.1 (the pure DPR transform `applyFailedCourseToDpr`
  * is D2.1a). A read-only counterfactual: apply a hypothetical → re-solve →
- * run the authoritative 7-axis validator → report the diff (valid) or the
+ * run the authoritative 8-axis validator → report the diff (valid) or the
  * binding constraint (infeasible).
  *
  * FOUR ARMS (zod discriminatedUnion on "kind"):
@@ -26,7 +26,7 @@
  *
  * Arms B/C/D all build a SYNTHETIC DPR via the matching pure transform and feed
  * it to the SAME frozen solve/diff seam (the shared `solveAndDiff` helper). The
- * frozen contract (finalizeForwardSchedule + the 7-axis validator + the solver)
+ * frozen contract (finalizeForwardSchedule + the 8-axis validator + the solver)
  * is unchanged — these arms only CALL it. Arms C/D additionally carry honest
  * hedges + the F3 window caveat + the universal "unverified assumption — verify
  * with your adviser; nothing is official until your next DPR" rail (CORE RULE 15).
@@ -168,7 +168,7 @@ export const probeCounterfactualTool = buildTool({
     name: "probe_counterfactual",
     description:
         "Read-only WHAT-IF probe. Apply a hypothetical, re-solve, run the " +
-        "authoritative 7-axis validator, and report the diff (if still valid) " +
+        "authoritative 8-axis validator, and report the diff (if still valid) " +
         "or the binding constraint (if it becomes infeasible). Four arms:\n\n" +
         "  • { kind: \"future_course\", mutations: [...] } — what if I drop / " +
         "swap / pin a FUTURE course? (same mutation vocabulary as " +
@@ -215,7 +215,7 @@ export const probeCounterfactualTool = buildTool({
         "requirement), withdraw (current-term course → 'W', re-opens; GPA- " +
         "neutral), and pass_fail (current-term course → P/F; 'pass' may not " +
         "satisfy a major/minor/core requirement — school-specific + hedged; " +
-        "'fail' re-opens + lowers GPA). Re-solves + 7-axis-validates and " +
+        "'fail' re-opens + lowers GPA). Re-solves + 8-axis-validates and " +
         "returns the diff or the binding constraint. The withdraw / pass_fail " +
         "arms add the registrar add/drop-or-withdraw window caveat + honest " +
         "hedges (an UNVERIFIED current-term change; nothing is official until " +

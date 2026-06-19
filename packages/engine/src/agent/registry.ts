@@ -33,7 +33,7 @@
 //   materialize_sections, confirm_section_combination
 // Phase 3 (advisor) D2.1 addition:
 //   probe_counterfactual — read-only what-if (Arm A future_course mutations /
-//   Arm B fail_completed synthetic-DPR transform). Re-solves + 7-axis-validates
+//   Arm B fail_completed synthetic-DPR transform). Re-solves + 8-axis-validates
 //   without writing session; the diff (valid) or binding constraint (infeasible).
 //
 // REMOVED (improvement plan, Phase F decommission):

@@ -2,7 +2,8 @@
  * Phase 13 Task 3.2 — Final plan-validation gate (Decision #41).
  *
  * Runs at Stage 8 after Stage 7 has converged. Produces per-axis
- * ValidationResult for 7 axes and derives PlanState per Decision #32.
+ * ValidationResult for 8 axes (Plan 37 added the 8th, passFailLimitsRespected)
+ * and derives PlanState per Decision #32.
  *
  * Same logic is invoked from Stage 7's full-revalidation (Decision #36)
  * with a cheaper subset — that wiring is Phase 14's responsibility.

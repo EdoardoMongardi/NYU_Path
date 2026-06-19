@@ -99,7 +99,7 @@ export const proposeWhatIfAssumptionTool = buildTool({
         "Propose a current-term IP-course WHAT-IF ASSUMPTION the student can " +
         "Confirm onto their canvas. The student claims 'I withdrew / I'll take " +
         "pass-fail for course X'; we treat it as an ASSUMPTION, build a synthetic " +
-        "in-memory DPR, re-solve through the authoritative 7-axis pipeline, and " +
+        "in-memory DPR, re-solve through the authoritative 8-axis pipeline, and " +
         "return the PROPOSED (un-persisted) plan + a whatIfAssumption marker " +
         "(label + course/outcome + honest hedges + the registrar-window caveat).\n\n" +
         "  • outcome 'withdraw' — a \"W\" (GPA-neutral; the requirement re-opens).\n" +

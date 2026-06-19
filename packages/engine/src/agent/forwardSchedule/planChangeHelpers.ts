@@ -715,7 +715,7 @@ export function buildPlanDiff(
             const b = beforeAxes[axis];
             // Record an axis only when a `before` exists AND the result changed
             // (by status or reason/payload). The validator always emits the same
-            // 7 axes for both plans, so a missing `before` is not an expected
+            // 8 axes for both plans, so a missing `before` is not an expected
             // transition and is skipped rather than recorded as before===after.
             if (b && !validationResultsEqual(b, a)) {
                 validationResultsChanges[axis] = { before: b, after: a };

@@ -161,13 +161,13 @@ export const proposePlanChangeTool = buildTool({
         // Run the solver (read-only — we never write the result to session)
         const solverOutput = solveForwardSchedule(solverInput);
 
-        // ---- Route through the AUTHORITATIVE 7-axis validator (P2.7/PLAN-3) ----
+        // ---- Route through the AUTHORITATIVE 8-axis validator (P2.7/PLAN-3) ----
         //
         // The solver's coarse `feasibility`/`state` is NOT trusted here. We run
         // the SAME finalize step the build path uses, so the proposed schedule
         // carries the validator-derived state and `feasible` reflects the full
-        // 7-axis verdict — closing the PLAN-3 hole where an edit could preview
-        // as feasible while a 7-axis check would have failed.
+        // 8-axis verdict — closing the PLAN-3 hole where an edit could preview
+        // as feasible while an 8-axis check would have failed.
         const { schedule: proposedSchedule, validatorResult } = finalizeForwardSchedule(
             solverOutput,
             solverInput,

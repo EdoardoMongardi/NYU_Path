@@ -187,7 +187,7 @@ export const confirmPlanChangeTool = buildTool({
         );
         const solverOutput = solveForwardSchedule(solverInput);
 
-        // ---- Route through the AUTHORITATIVE 7-axis validator (P2.7/PLAN-3) ----
+        // ---- Route through the AUTHORITATIVE 8-axis validator (P2.7/PLAN-3) ----
         //
         // PLAN-3 hole: previously the Decision #32 routing keyed on the SOLVER's
         // coarse `state`, so a confirmed edit could be stored to
