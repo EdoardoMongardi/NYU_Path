@@ -43,6 +43,7 @@ import {
     prevStep,
     skipStep,
     skipAll,
+    canBuildPlan,
     type WizardState,
     type WizardStepId,
     type WizardValues,
@@ -195,8 +196,13 @@ export default function OnboardingWizard({
     // CHANGES an already-persisted profile (the same persist path
     // confirm_profile_update / the E5.2 home-school correction use), so the
     // correction survives the next turn (and is read back by E1.2).
+    //
+    // H1 — also sets `visaChosen: true` so `canBuildPlan` returns true once
+    // the student has actively selected a value. The F-1 12-credit floor
+    // advisory fires only when `visa === "f1"`, so silently defaulting to
+    // "domestic" for an actual F-1 student would produce an invalid plan.
     const setVisa = useCallback((visa: WizardValues["visa"]) => {
-        setState((s) => ({ ...s, values: { ...s.values, visa } }));
+        setState((s) => ({ ...s, values: { ...s.values, visa, visaChosen: true } }));
     }, []);
 
     // E5.4 — Goals + Preferences setters. These set the matching
@@ -412,16 +418,24 @@ export default function OnboardingWizard({
 
                         {/* E5.3 — visa-status correction. Sent as
                             body.visaStatus; the v2 route persists a CHANGE so
-                            it survives the next turn (read back by E1.2). */}
+                            it survives the next turn (read back by E1.2).
+                            H1 — the placeholder DISABLED option is shown when
+                            the student hasn't chosen yet (visaChosen=false),
+                            forcing an active selection before proceeding. */}
                         <label className={styles.fieldLabel} htmlFor="wizard-visa-status">
                             Visa status
                         </label>
                         <select
                             id="wizard-visa-status"
                             className={styles.select}
-                            value={state.values.visa}
+                            value={state.values.visaChosen ? state.values.visa : ""}
                             onChange={(e) => setVisa(e.target.value as WizardValues["visa"])}
                         >
+                            {!state.values.visaChosen && (
+                                <option value="" disabled>
+                                    — select your visa status —
+                                </option>
+                            )}
                             <option value="domestic">Domestic / not on an F-1 visa</option>
                             <option value="f1">F-1 visa (full-time enrollment required)</option>
                         </select>
@@ -514,16 +528,22 @@ export default function OnboardingWizard({
                         />
 
                         {/* Echoes the SAME values.visa as Confirm-profile —
-                            one source of truth, no duplicate persistence. */}
+                            one source of truth, no duplicate persistence.
+                            H1 — same placeholder pattern: forced explicit pick. */}
                         <label className={styles.fieldLabel} htmlFor="wizard-goals-visa">
                             Visa status
                         </label>
                         <select
                             id="wizard-goals-visa"
                             className={styles.select}
-                            value={state.values.visa}
+                            value={state.values.visaChosen ? state.values.visa : ""}
                             onChange={(e) => setVisa(e.target.value as WizardValues["visa"])}
                         >
+                            {!state.values.visaChosen && (
+                                <option value="" disabled>
+                                    — select your visa status —
+                                </option>
+                            )}
                             <option value="domestic">Domestic / not on an F-1 visa</option>
                             <option value="f1">F-1 visa (full-time enrollment required)</option>
                         </select>
@@ -670,9 +690,25 @@ export default function OnboardingWizard({
                         </button>
                     )}
                     {onPlan && (
+                        // H1 — "Build my plan" is gated on BOTH a parsed DPR
+                        // AND an explicit visa choice. A silently-defaulted
+                        // "domestic" visa for an F-1 student would suppress the
+                        // F-1 12-credit floor advisory, potentially producing an
+                        // invalid plan. `canBuildPlan` returns false until the
+                        // student actively chooses their visa status. The
+                        // `title` surfaces the missing requirement for keyboard
+                        // and hover users.
                         <button
                             type="button"
                             className={styles.primaryBtn}
+                            disabled={!canBuildPlan(state, parsedDpr)}
+                            title={
+                                !parsedDpr
+                                    ? "Upload your DPR first"
+                                    : !state.values.visaChosen
+                                      ? "Choose your visa status first (Go back to Goals or Confirm profile)"
+                                      : undefined
+                            }
                             onClick={() => onReachPlan?.(state.values, parsedDpr)}
                         >
                             Build my plan

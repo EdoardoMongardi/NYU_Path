@@ -32,6 +32,14 @@ import type { DegreeProgressReport } from "@nyupath/engine";
 import OnboardingWizard from "../app/chat/wizard/OnboardingWizard";
 import type { WizardValues } from "../lib/wizard/wizardMachine";
 
+// Minimal DPR fixture reused across tests.
+const minimalDpr = {
+    header: { studentName: "Test Student" },
+    programs: [],
+    courseHistory: [],
+    advisorNotations: [],
+} as unknown as DegreeProgressReport;
+
 // React Testing Library's auto-cleanup hook only registers when the test
 // framework exposes a global `afterEach`; we register it explicitly so each
 // test starts from a clean DOM regardless of config.
@@ -78,12 +86,6 @@ describe("F1 — mounted OnboardingWizard render", () => {
         // iterate over undefined). No school indicator → the proposal stays
         // school-agnostic, but the Confirm-profile step is skippable either
         // way so the path to Plan is unaffected.
-        const minimalDpr = {
-            header: { studentName: "Test Student" },
-            programs: [],
-            courseHistory: [],
-            advisorNotations: [],
-        } as unknown as DegreeProgressReport;
         const fetchMock = vi.fn(
             async (_input: RequestInfo | URL, _init?: RequestInit) =>
                 ({
@@ -109,23 +111,134 @@ describe("F1 — mounted OnboardingWizard render", () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(fetchMock).toHaveBeenCalledWith("/api/onboard", expect.anything());
 
-        // confirm_profile → goals → preferences are each optional + skippable.
-        // Use the Skip affordance on each to walk to Plan WITHOUT dead-ending.
+        // confirm_profile is skippable — skip it.
+        fireEvent.click(within(screen.getByText("Confirm your profile").closest("section")!).getByText("Skip"));
+        await screen.findByText("Your goals");
+
+        // H1 — visa must be EXPLICITLY chosen before "Build my plan" is enabled.
+        // On the Goals step, select F-1 to mark visaChosen = true, then advance.
+        const goalsSection = screen.getByText("Your goals").closest("section")!;
+        const visaSelect = within(goalsSection).getByRole("combobox") as HTMLSelectElement;
+        fireEvent.change(visaSelect, { target: { value: "f1" } });
+        fireEvent.click(within(goalsSection).getByText("Next"));
+
+        await screen.findByText("Your preferences");
+        fireEvent.click(within(screen.getByText("Your preferences").closest("section")!).getByText("Skip"));
+
+        // Terminal Plan step reached with visa explicitly chosen.
+        await screen.findByText("Your plan");
+        expect(screen.queryByText("Step 5/5")).not.toBeNull();
+
+        // "Build my plan" is now ENABLED (DPR present + visa chosen).
+        // It hands the collected values (+ the parsed DPR) off.
+        onReachPlan.mockClear();
+        const buildBtn = screen.getByText("Build my plan") as HTMLButtonElement;
+        expect(buildBtn.disabled).toBe(false);
+        fireEvent.click(buildBtn);
+        expect(onReachPlan).toHaveBeenCalledTimes(1);
+        const [, dpr] = onReachPlan.mock.calls[0]!;
+        expect(dpr).toBe(minimalDpr);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// H1 — "Build my plan" is disabled until BOTH a DPR and visa are present.
+// ---------------------------------------------------------------------------
+
+describe("H1 — visa is mandatory before Build my plan", () => {
+    beforeEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    /** Helper: upload a DPR (via mocked fetch) and walk to the plan step,
+     *  skipping ALL optional steps (so visa stays at default = unchosen). */
+    async function uploadDprAndSkipToPlanning() {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => ({
+                ok: true,
+                json: async () => ({ parsedData: { kind: "dpr", report: minimalDpr } }),
+            })),
+        );
+        const onReachPlan = vi.fn<(values: WizardValues, dpr: DegreeProgressReport | null) => void>();
+        const { container } = render(<OnboardingWizard onReachPlan={onReachPlan} />);
+
+        // Upload DPR.
+        const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+        const pdf = new File(["%PDF-1.4 fake"], "dpr.pdf", { type: "application/pdf" });
+        fireEvent.change(fileInput, { target: { files: [pdf] } });
+        await screen.findByText("Confirm your profile");
+
+        // Skip all optional steps → land on plan WITHOUT choosing visa.
         fireEvent.click(within(screen.getByText("Confirm your profile").closest("section")!).getByText("Skip"));
         await screen.findByText("Your goals");
         fireEvent.click(within(screen.getByText("Your goals").closest("section")!).getByText("Skip"));
         await screen.findByText("Your preferences");
         fireEvent.click(within(screen.getByText("Your preferences").closest("section")!).getByText("Skip"));
-
-        // Terminal Plan step reached by skipping every optional step.
         await screen.findByText("Your plan");
-        expect(screen.queryByText("Step 5/5")).not.toBeNull();
 
-        // "Build my plan" hands the collected values (+ the parsed DPR) off.
-        onReachPlan.mockClear();
-        fireEvent.click(screen.getByText("Build my plan"));
+        return { onReachPlan, container };
+    }
+
+    it("'Build my plan' is DISABLED when DPR is present but visa was never explicitly chosen", async () => {
+        await uploadDprAndSkipToPlanning();
+        const buildBtn = screen.getByText("Build my plan") as HTMLButtonElement;
+        expect(buildBtn.disabled).toBe(true);
+    });
+
+    it("'Build my plan' shows a tooltip explaining what is missing (visa)", async () => {
+        await uploadDprAndSkipToPlanning();
+        const buildBtn = screen.getByText("Build my plan") as HTMLButtonElement;
+        // The title attribute carries the hint so assistive tech + hover can surface it.
+        expect(buildBtn.title).toMatch(/visa/i);
+    });
+
+    it("clicking disabled 'Build my plan' does NOT fire onReachPlan", async () => {
+        const { onReachPlan } = await uploadDprAndSkipToPlanning();
+        const buildBtn = screen.getByText("Build my plan") as HTMLButtonElement;
+        expect(buildBtn.disabled).toBe(true);
+        fireEvent.click(buildBtn);
+        expect(onReachPlan).not.toHaveBeenCalled();
+    });
+
+    it("'Build my plan' ENABLES after choosing a visa on confirm_profile", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(async () => ({
+                ok: true,
+                json: async () => ({ parsedData: { kind: "dpr", report: minimalDpr } }),
+            })),
+        );
+        const onReachPlan = vi.fn<(values: WizardValues, dpr: DegreeProgressReport | null) => void>();
+        const { container } = render(<OnboardingWizard onReachPlan={onReachPlan} />);
+
+        // Upload DPR.
+        const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+        const pdf = new File(["%PDF-1.4 fake"], "dpr.pdf", { type: "application/pdf" });
+        fireEvent.change(fileInput, { target: { files: [pdf] } });
+        await screen.findByText("Confirm your profile");
+
+        // Choose visa on confirm_profile (the wizard-visa-status select).
+        const visaSelect = screen.getByLabelText("Visa status") as HTMLSelectElement;
+        fireEvent.change(visaSelect, { target: { value: "domestic" } });
+
+        // Skip the rest.
+        fireEvent.click(within(screen.getByText("Confirm your profile").closest("section")!).getByText("Skip"));
+        await screen.findByText("Your goals");
+        fireEvent.click(within(screen.getByText("Your goals").closest("section")!).getByText("Skip"));
+        await screen.findByText("Your preferences");
+        fireEvent.click(within(screen.getByText("Your preferences").closest("section")!).getByText("Skip"));
+        await screen.findByText("Your plan");
+
+        // Button is now ENABLED — visa was explicitly chosen.
+        const buildBtn = screen.getByText("Build my plan") as HTMLButtonElement;
+        expect(buildBtn.disabled).toBe(false);
+
+        fireEvent.click(buildBtn);
         expect(onReachPlan).toHaveBeenCalledTimes(1);
-        const [, dpr] = onReachPlan.mock.calls[0]!;
+        const [values, dpr] = onReachPlan.mock.calls[0]!;
         expect(dpr).toBe(minimalDpr);
+        expect(values.visa).toBe("domestic");
+        expect(values.visaChosen).toBe(true);
     });
 });

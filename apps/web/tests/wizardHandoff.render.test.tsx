@@ -189,15 +189,18 @@ describe("F1 fix — wizard→chat handoff completes onboarding", () => {
 
         await uploadDpr(container);
 
-        // Skip every optional step. Skipping the LAST one (preferences)
-        // lands the wizard on its terminal `plan` step. Reaching plan no
-        // longer fires the handoff (that would update the parent during
-        // render) — the student SEES the plan + clicks "Build my plan" to
-        // confirm. All-default values → buildPreferenceTurns returns []
-        // → NO immediate v2 turn (we isolate the FUTURE-turn path here).
+        // Skip confirm_profile; on Goals, choose visa explicitly (H1 requires
+        // it before "Build my plan" is enabled — a silently-defaulted "domestic"
+        // for an F-1 student would suppress the 12-credit floor advisory).
+        // All other optional fields stay at their defaults; preferences is skipped.
         await skipStep("Confirm your profile");
         await screen.findByText("Your goals");
-        await skipStep("Your goals");
+        // H1 — choose visa on the Goals step so canBuildPlan returns true.
+        const goalsSection = screen.getByText("Your goals").closest("section")!;
+        await act(async () => {
+            fireEvent.change(within(goalsSection).getByRole("combobox"), { target: { value: "domestic" } });
+        });
+        fireEvent.click(within(goalsSection).getByText("Next"));
         await screen.findByText("Your preferences");
         await skipStep("Your preferences");
 
@@ -252,9 +255,17 @@ describe("F1 fix — wizard→chat handoff completes onboarding", () => {
         // runs in the SAME tick as the parsedData/step setters. Without the
         // seed threading the DPR, this turn's parsedData would be null
         // (stale closure) and the turn would mis-route.
+        //
+        // H1 — visa must be explicitly chosen before "Build my plan" enables.
+        // We choose it on Goals (then Next) to satisfy canBuildPlan while
+        // keeping other values at their defaults for the preference-turn test.
         await skipStep("Confirm your profile");
         await screen.findByText("Your goals");
-        await skipStep("Your goals");
+        const goalsSection2 = screen.getByText("Your goals").closest("section")!;
+        await act(async () => {
+            fireEvent.change(within(goalsSection2).getByRole("combobox"), { target: { value: "domestic" } });
+        });
+        fireEvent.click(within(goalsSection2).getByText("Next"));
         await screen.findByText("Your preferences");
 
         const workload = screen.getByLabelText("Course-load distribution") as HTMLSelectElement;
