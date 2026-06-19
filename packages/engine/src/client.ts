@@ -45,3 +45,29 @@ export type {
     SlotActionMatrixArgs,
 } from "./agent/forwardSchedule/slotActionMatrix.js";
 export type { Campus, AcademicCalendar } from "./dpr/academicCalendar.js";
+
+// ------------------------------------------------------------
+// Plan 37 (slot-editor F4) — the IP-changeability TERM classifier.
+// VERIFIED node-free (same tree as slotActionMatrix above):
+// ipCourseChangeability.ts + temporalContext.ts import only
+// academicCalendar.ts (zero imports) + dpr/schema.ts (zod) — no
+// node:fs / node:crypto / fileURLToPath. Safe to bundle for the browser.
+//
+// page.tsx (CLIENT) needs to classify a whole TERM's add/drop window
+// (not a single slot) to decide whether the per-term "+ Add course"
+// control is offered (FUTURE → free; current in add/drop → hedged;
+// current past add/drop → hidden). It calls `classifyIpChangeability`
+// with `deriveTemporalContext(dpr, { now })` directly — both must be
+// importable WITHOUT touching the engine barrel.
+export { classifyIpChangeability } from "./dpr/ipCourseChangeability.js";
+export { deriveTemporalContext } from "./dpr/temporalContext.js";
+
+export type {
+    IpChangeWindow,
+    IpChangeabilityResult,
+    ClassifyIpChangeabilityArgs,
+} from "./dpr/ipCourseChangeability.js";
+export type {
+    DprTemporalContext,
+    DeriveTemporalContextOptions,
+} from "./dpr/temporalContext.js";

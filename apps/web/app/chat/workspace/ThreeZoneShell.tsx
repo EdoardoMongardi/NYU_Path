@@ -53,6 +53,11 @@ export interface ThreeZoneShellProps {
     slotMatrix?: (slot: ScheduleSlot, term: string) => SlotActionMatrix;
     /** Plan 37 F3 — PROPOSE-ONLY per-slot dispatch for the COMMITTED plan. */
     onSlotAction?: (slot: ScheduleSlot, term: string, action: SlotAction) => void;
+    /** Plan 37 F4 — per-term add-eligibility (window-gated) for the COMMITTED
+     *  plan; page.tsx builds it from the committed DPR via @nyupath/engine/client. */
+    addTermState?: (term: string) => { allowed: boolean; hedge?: string };
+    /** Plan 37 F4 — PROPOSE-ONLY per-term add dispatch for the COMMITTED plan. */
+    onAddCourse?: (term: string, courseId: string) => void;
     /** The chat thread + composer (rendered in the LEFT zone). */
     left: ReactNode;
     /** The existing ScheduleSidebar (rendered in the RIGHT zone, unchanged). */
@@ -65,6 +70,8 @@ export default function ThreeZoneShell({
     onAskWhy,
     slotMatrix,
     onSlotAction,
+    addTermState,
+    onAddCourse,
     left,
     right,
 }: ThreeZoneShellProps): ReactElement {
@@ -80,6 +87,8 @@ export default function ThreeZoneShell({
                     onAskWhy={onAskWhy}
                     slotMatrix={slotMatrix}
                     onSlotAction={onSlotAction}
+                    addTermState={addTermState}
+                    onAddCourse={onAddCourse}
                 />
             </div>
             <div className={styles.zoneRight} data-zone="right">

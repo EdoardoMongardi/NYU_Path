@@ -169,8 +169,17 @@ async function postJson<TResp>(
         return { ok: true, data: {} as TResp };
     }
     if (!response.ok) {
-        const obj = (parsed ?? {}) as { error?: unknown; kind?: unknown };
-        const error = typeof obj.error === "string" ? obj.error : `HTTP ${response.status}`;
+        const obj = (parsed ?? {}) as { error?: unknown; message?: unknown; kind?: unknown };
+        // Most plan-action routes report failures via `{ error }`; the
+        // /api/plan/add existence check (E3) reports its 422 via `{ message }`
+        // (a student-facing "I couldn't find …" string). Surface whichever is
+        // present so the caller can show the route's own copy verbatim.
+        const error =
+            typeof obj.error === "string"
+                ? obj.error
+                : typeof obj.message === "string"
+                    ? obj.message
+                    : `HTTP ${response.status}`;
         const kind = typeof obj.kind === "string" ? obj.kind : undefined;
         return {
             ok: false,

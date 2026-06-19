@@ -596,3 +596,159 @@ describe("ScheduleView — F3 polish: completed/placeholder slots are NOT clicka
         expect(screen.queryByRole("menu")).toBeTruthy();
     });
 });
+
+// ---- (7) F4 — per-term "+ Add course" affordance (window-gated, D-2) --------
+// Plan 37 F4: the committed-plan ScheduleView accepts `addTermState` +
+// `onAddCourse` props. When BOTH are present (and readOnly=false), each term
+// `addTermState(term).allowed === true` renders a "+ Add course" control: a
+// button that expands to a text input; submitting a non-empty trimmed value
+// calls `onAddCourse(term, courseId)`. A term with `{ allowed: false }`
+// renders NO control, and readOnly suppresses ALL add controls.
+// ----------------------------------------------------------------------------
+
+describe("ScheduleView — F4 per-term add affordance", () => {
+    it("renders a '+ Add course' control on a FUTURE/planned term (allowed:true)", () => {
+        const addTermState = vi.fn(() => ({ allowed: true }));
+        const onAddCourse = vi.fn();
+        render(
+            <ScheduleView
+                schedule={SCHEDULE}
+                readOnly={false}
+                addTermState={addTermState}
+                onAddCourse={onAddCourse}
+            />,
+        );
+        // SCHEDULE has two terms → both eligible → two "+ Add course" buttons.
+        const addButtons = screen.getAllByRole("button", { name: /Add a course to/i });
+        expect(addButtons.length).toBe(2);
+    });
+
+    it("shows the hedge on a current term with { allowed:true, hedge }", () => {
+        const HEDGE = "Typical add/drop deadline — verify; registering this late is deadline-gated.";
+        // Single-term schedule so we target one control unambiguously.
+        const oneTerm = {
+            ...SCHEDULE,
+            semesters: [SCHEDULE.semesters[0]],
+        } as unknown as ForwardSchedule;
+        const addTermState = vi.fn(() => ({ allowed: true, hedge: HEDGE }));
+        const onAddCourse = vi.fn();
+        render(
+            <ScheduleView
+                schedule={oneTerm}
+                readOnly={false}
+                addTermState={addTermState}
+                onAddCourse={onAddCourse}
+            />,
+        );
+        // The hedge is surfaced as the button's title (and as caption text once
+        // expanded). Open the control, then assert the hedge text is present.
+        fireEvent.click(screen.getByRole("button", { name: /Add a course to/i }));
+        expect(screen.getByText(HEDGE)).toBeTruthy();
+    });
+
+    it("renders NO add control on a term with { allowed:false }", () => {
+        const addTermState = vi.fn(() => ({ allowed: false }));
+        const onAddCourse = vi.fn();
+        render(
+            <ScheduleView
+                schedule={SCHEDULE}
+                readOnly={false}
+                addTermState={addTermState}
+                onAddCourse={onAddCourse}
+            />,
+        );
+        expect(screen.queryAllByRole("button", { name: /Add a course to/i }).length).toBe(0);
+    });
+
+    it("renders NO add control when readOnly=true (even with the props present)", () => {
+        const addTermState = vi.fn(() => ({ allowed: true }));
+        const onAddCourse = vi.fn();
+        render(
+            <ScheduleView
+                schedule={SCHEDULE}
+                readOnly={true}
+                addTermState={addTermState}
+                onAddCourse={onAddCourse}
+            />,
+        );
+        expect(screen.queryAllByRole("button", { name: /Add a course to/i }).length).toBe(0);
+    });
+
+    it("entering 'CSCI-UA 101' and submitting calls onAddCourse(term, 'CSCI-UA 101')", () => {
+        const oneTerm = {
+            ...SCHEDULE,
+            semesters: [SCHEDULE.semesters[0]], // term "2026-fall"
+        } as unknown as ForwardSchedule;
+        const addTermState = vi.fn(() => ({ allowed: true }));
+        const onAddCourse = vi.fn();
+        render(
+            <ScheduleView
+                schedule={oneTerm}
+                readOnly={false}
+                addTermState={addTermState}
+                onAddCourse={onAddCourse}
+            />,
+        );
+        // Expand the control.
+        fireEvent.click(screen.getByRole("button", { name: /Add a course to/i }));
+        // Type into the input.
+        const input = screen.getByRole("textbox", { name: /Course to add to/i });
+        fireEvent.change(input, { target: { value: "CSCI-UA 101" } });
+        // Submit via the "Add" button.
+        fireEvent.click(screen.getByRole("button", { name: /^Add CSCI-UA 101 to/i }));
+
+        expect(onAddCourse).toHaveBeenCalledTimes(1);
+        expect(onAddCourse).toHaveBeenCalledWith("2026-fall", "CSCI-UA 101");
+    });
+
+    it("submitting via Enter also calls onAddCourse(term, courseId)", () => {
+        const oneTerm = {
+            ...SCHEDULE,
+            semesters: [SCHEDULE.semesters[0]],
+        } as unknown as ForwardSchedule;
+        const onAddCourse = vi.fn();
+        render(
+            <ScheduleView
+                schedule={oneTerm}
+                readOnly={false}
+                addTermState={vi.fn(() => ({ allowed: true }))}
+                onAddCourse={onAddCourse}
+            />,
+        );
+        fireEvent.click(screen.getByRole("button", { name: /Add a course to/i }));
+        const input = screen.getByRole("textbox", { name: /Course to add to/i });
+        fireEvent.change(input, { target: { value: "MATH-UA 121" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+
+        expect(onAddCourse).toHaveBeenCalledTimes(1);
+        expect(onAddCourse).toHaveBeenCalledWith("2026-fall", "MATH-UA 121");
+    });
+
+    it("an empty / whitespace value does NOT call onAddCourse", () => {
+        const oneTerm = {
+            ...SCHEDULE,
+            semesters: [SCHEDULE.semesters[0]],
+        } as unknown as ForwardSchedule;
+        const onAddCourse = vi.fn();
+        render(
+            <ScheduleView
+                schedule={oneTerm}
+                readOnly={false}
+                addTermState={vi.fn(() => ({ allowed: true }))}
+                onAddCourse={onAddCourse}
+            />,
+        );
+        fireEvent.click(screen.getByRole("button", { name: /Add a course to/i }));
+        const input = screen.getByRole("textbox", { name: /Course to add to/i });
+        // Whitespace-only value.
+        fireEvent.change(input, { target: { value: "   " } });
+        // Enter submit — guard should no-op.
+        fireEvent.keyDown(input, { key: "Enter" });
+        expect(onAddCourse).not.toHaveBeenCalled();
+    });
+
+    it("WITHOUT the add props: no add control renders (read-only display grid)", () => {
+        render(<ScheduleView schedule={SCHEDULE} readOnly={false} />);
+        expect(screen.queryAllByRole("button", { name: /Add a course to/i }).length).toBe(0);
+    });
+});

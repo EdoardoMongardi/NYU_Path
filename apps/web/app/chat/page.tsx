@@ -23,6 +23,11 @@ import {
     slotActionMatrix,
     NYU_ACADEMIC_CALENDAR,
     campusForHomeSchool,
+    // Plan 37 F4 — the IP-changeability TERM classifier, used to window-gate
+    // the per-term "+ Add course" affordance. Both are node-free (re-exported
+    // from the client-safe entry — see packages/engine/src/client.ts).
+    classifyIpChangeability,
+    deriveTemporalContext,
 } from "@nyupath/engine/client";
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
 // H5.1 (plan 36) — the RIGHT zone is now the profile-only ProfileRail.
@@ -41,6 +46,7 @@ import {
     type PlanActionBubbleState,
 } from "../../lib/planActionBubbleHelpers";
 import {
+    planAdd,
     planConfirm,
     planDrop,
     planWhatIf,
@@ -1932,6 +1938,86 @@ export default function ChatPage() {
         [handlePlanActionResult, handleWhatIfResult],
     );
 
+    // ============================================================
+    // Plan 37 F4 — committed-plan per-term "+ Add course" affordance
+    // ============================================================
+    // The "+ Add course" control is offered ONLY on the COMMITTED plan, and
+    // ONLY for terms whose registration window still allows adding. A whole
+    // TERM is classified (not a single slot) via the SAME pure F3 classifier
+    // (classifyIpChangeability over deriveTemporalContext), sourced from
+    // @nyupath/engine/client (no node:* in the client bundle):
+    //
+    //   window → add-eligibility (D-2):
+    //     future       → add FREE   (a future / planned term — pure planning).
+    //     add_drop     → add HEDGED (current term inside add/drop; carry the
+    //                    classifier's add/drop hedge — registering this late is
+    //                    deadline-gated, verify).
+    //     unknown      → add allowed + the generic hedge (cautious — we don't
+    //                    suppress the control just because we lack exact dates).
+    //     withdraw_pf  → add HIDDEN (add/drop period is over).
+    //     closed       → add HIDDEN (registration for that term is over).
+    //
+    // sidebarDpr is null only before a DPR loads (the committed plan always has
+    // one), so the editor is effectively never null here; the null branch
+    // returns { allowed: false } (no control) defensively.
+    const addTermState = useCallback(
+        (term: string): { allowed: boolean; hedge?: string } => {
+            if (!sidebarDpr) return { allowed: false };
+            const result = classifyIpChangeability({
+                ipTerm: term,
+                temporalContext: deriveTemporalContext(sidebarDpr, { now: new Date() }),
+                campus: campusForHomeSchool(homeSchool ?? undefined),
+                calendar: NYU_ACADEMIC_CALENDAR,
+                now: new Date(),
+            });
+            switch (result.window) {
+                case "future":
+                    return { allowed: true };
+                case "add_drop":
+                case "unknown":
+                    return result.hedge
+                        ? { allowed: true, hedge: result.hedge }
+                        : { allowed: true };
+                case "withdraw_pf":
+                case "closed":
+                    // Add/drop period is over for this term — control absent.
+                    return { allowed: false };
+            }
+        },
+        [sidebarDpr, homeSchool],
+    );
+
+    // PROPOSE-ONLY (D-8): an add NEVER auto-confirms. It routes through the
+    // SAME /api/plan/add propose pipeline a chat-driven add uses, and feeds the
+    // result into the SAME `handlePlanActionResult("add", …)` handler the F3
+    // slot actions use → a violet PENDING preview + a review card; the DB
+    // commit happens ONLY when the student clicks the workspace Confirm button
+    // (R1 preserved — parsed_dpr is never written here).
+    //
+    // The /api/plan/add route (E3) returns 422 with `{ message }` for an
+    // unknown courseId; planAdd → postJson surfaces that message via
+    // `result.error` (postJson now falls back to the route's `message` field).
+    // On a 422 we do NOT treat the add as success — we surface the route's
+    // student-facing copy as an assistant chat line and leave the plan
+    // untouched.
+    const onAddCourse = useCallback(
+        async (term: string, courseId: string): Promise<void> => {
+            const trimmed = courseId.trim();
+            if (!trimmed) return; // empty / whitespace → no-op (ScheduleView also guards).
+            const result = await planAdd({ courseId: trimmed, term });
+            if (!result.ok && result.status === 422) {
+                // Unknown course — surface the route's "I couldn't find …"
+                // message as an assistant chat line; the plan stays untouched.
+                addMessage("assistant", result.error);
+                return;
+            }
+            // Success OR any other failure routes through the shared handler
+            // (which itself injects a brief failure bubble for non-2xx).
+            handlePlanActionResult("add", result);
+        },
+        [handlePlanActionResult],
+    );
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
@@ -2003,6 +2089,8 @@ export default function ChatPage() {
                 onAskWhy={handleWorkspaceAskWhy}
                 slotMatrix={slotMatrix}
                 onSlotAction={onSlotAction}
+                addTermState={addTermState}
+                onAddCourse={onAddCourse}
                 left={
                     <>
             {/* Messages */}

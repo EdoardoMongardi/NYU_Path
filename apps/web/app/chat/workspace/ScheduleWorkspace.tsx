@@ -69,6 +69,12 @@ export interface ScheduleWorkspaceProps {
      *  PROPOSE-ONLY (D-8): routes through the existing /api/plan/{drop,whatif}
      *  propose pipeline; never auto-commits. */
     onSlotAction?: (slot: ScheduleSlot, term: string, action: SlotAction) => void;
+    /** Plan 37 F4 — per-term add-eligibility (window-gated) for the COMMITTED
+     *  plan only. Threaded into the committed ScenarioBody's ScheduleView. */
+    addTermState?: (term: string) => { allowed: boolean; hedge?: string };
+    /** Plan 37 F4 — add a course to a term for the COMMITTED plan only.
+     *  PROPOSE-ONLY (D-8): routes through /api/plan/add; never auto-commits. */
+    onAddCourse?: (term: string, courseId: string) => void;
 }
 
 // ============================================================
@@ -81,6 +87,8 @@ export default function ScheduleWorkspace({
     onAskWhy,
     slotMatrix,
     onSlotAction,
+    addTermState,
+    onAddCourse,
 }: ScheduleWorkspaceProps): ReactElement {
     // Subscribe to the store.
     // We read the full PlanState snapshot for backward-compat fields,
@@ -283,6 +291,8 @@ export default function ScheduleWorkspace({
                         planStore={planStore}
                         slotMatrix={slotMatrix}
                         onSlotAction={onSlotAction}
+                        addTermState={addTermState}
+                        onAddCourse={onAddCourse}
                     />
                 ) : committed === null ? (
                     <div className="ws-empty">
@@ -375,6 +385,9 @@ interface ScenarioBodyProps {
     /** Plan 37 F3 — applied ONLY to the committed scenario's ScheduleView. */
     slotMatrix?: (slot: ScheduleSlot, term: string) => SlotActionMatrix;
     onSlotAction?: (slot: ScheduleSlot, term: string, action: SlotAction) => void;
+    /** Plan 37 F4 — applied ONLY to the committed scenario's ScheduleView. */
+    addTermState?: (term: string) => { allowed: boolean; hedge?: string };
+    onAddCourse?: (term: string, courseId: string) => void;
 }
 
 function ScenarioBody({
@@ -384,6 +397,8 @@ function ScenarioBody({
     onAskWhy,
     slotMatrix,
     onSlotAction,
+    addTermState,
+    onAddCourse,
 }: ScenarioBodyProps): ReactElement {
     const { kind, label, verdict, hedges, whatIfAssumption } = scenario;
     const vd = verdictDisplay(verdict);
@@ -480,6 +495,8 @@ function ScenarioBody({
                         readOnly={false}
                         slotMatrix={slotMatrix}
                         onSlotAction={onSlotAction}
+                        addTermState={addTermState}
+                        onAddCourse={onAddCourse}
                     />
                 ) : (
                     <ScheduleView
