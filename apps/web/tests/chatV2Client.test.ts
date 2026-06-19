@@ -9,7 +9,7 @@
 // ============================================================
 
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { streamChatV2, extractPendingMutationId, type ChatV2Event } from "../lib/chatV2Client";
+import { streamChatV2, extractPendingMutationId, extractAuditUploadOffer, type ChatV2Event } from "../lib/chatV2Client";
 
 /** Build a Response whose body emits the given chunks in order. */
 function fakeResponse(chunks: string[], opts: { status?: number; ok?: boolean } = {}): Response {
@@ -181,5 +181,36 @@ after: "f1"`;
         expect(extractPendingMutationId("APPLIED visaStatus: domestic → f1")).toBeNull();
         expect(extractPendingMutationId(undefined)).toBeNull();
         expect(extractPendingMutationId("")).toBeNull();
+    });
+});
+
+describe("extractAuditUploadOffer (Plan 36 H4.2b)", () => {
+    it("extracts the label from a multi-line what_if_audit summary", () => {
+        const summary = `WHAT-IF (estimate — there is no DPR for a hypothetical program)
+  Requested program(s): econ-ba
+  Guidance: explore via Albert What-If
+  REQUIRED DISCLAIMER (must appear verbatim in your reply): This is an estimate…
+AUDIT_UPLOAD_OFFER: Economics (BA)`;
+        expect(extractAuditUploadOffer(summary)).toBe("Economics (BA)");
+    });
+
+    it("handles a multi-word label with surrounding/trailing whitespace", () => {
+        const summary = "AUDIT_UPLOAD_OFFER:   Computer Science (BA) + Mathematics minor   ";
+        expect(extractAuditUploadOffer(summary)).toBe("Computer Science (BA) + Mathematics minor");
+    });
+
+    it("returns null when the marker line is absent", () => {
+        expect(extractAuditUploadOffer("STATUS: pending_confirmation\nfield: visaStatus")).toBeNull();
+        expect(extractAuditUploadOffer(undefined)).toBeNull();
+        expect(extractAuditUploadOffer("")).toBeNull();
+    });
+
+    it("returns null for an empty or whitespace-only label (no blank-program event)", () => {
+        // review sse-correctness-1: the lazy `(.+?)` could capture a lone
+        // space from an all-whitespace label; the trim collapses it to null.
+        expect(extractAuditUploadOffer("AUDIT_UPLOAD_OFFER:")).toBeNull();
+        expect(extractAuditUploadOffer("AUDIT_UPLOAD_OFFER: ")).toBeNull();
+        expect(extractAuditUploadOffer("AUDIT_UPLOAD_OFFER:      ")).toBeNull();
+        expect(extractAuditUploadOffer("AUDIT_UPLOAD_OFFER:\t \t")).toBeNull();
     });
 });

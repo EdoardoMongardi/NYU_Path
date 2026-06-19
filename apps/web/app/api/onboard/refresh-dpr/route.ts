@@ -42,6 +42,11 @@ interface RefreshDprResponse {
     changed: boolean;
     schedule?: import("@nyupath/shared").ForwardSchedule;
     state?: string;
+    /** The freshly-parsed DPR — echoed on success so the client can
+     *  update its `parsedData` state immediately without a page reload.
+     *  Shape: `{ kind: "dpr", report: DegreeProgressReport }` —
+     *  mirrors the discriminated ParsedTranscript the page uses. */
+    dpr?: { kind: "dpr"; report: DegreeProgressReport };
     /** When `changed: false`, the stored schedule (if any) is echoed
      *  back so the UI can re-sync if it drifted from the DB. */
     error?: string;
@@ -277,9 +282,13 @@ export async function POST(req: NextRequest): Promise<NextResponse<RefreshDprRes
 
     // The tool already persisted via session.scheduleStore (its
     // existing 16.A wiring), so we just return the schedule.
+    // Echo the parsed DPR so the client can update its parsedData
+    // without a page reload (FIX 2 — CORE RULE 14 safe: this is the
+    // REAL corrected DPR, not a synthetic/what-if DPR).
     return NextResponse.json({
         changed: true,
         schedule: planOutput.schedule,
         state: planOutput.schedule.state,
+        dpr: { kind: "dpr" as const, report: newDpr },
     });
 }

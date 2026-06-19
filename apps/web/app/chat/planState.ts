@@ -1,43 +1,72 @@
 // ============================================================
 // planState — single source of truth for the chat page's live
-// plan state (Phase 4 Task E1.1).
+// plan state.
 // ============================================================
-// Today the chat page held three INDEPENDENT `useState`s for the
-// plan, written ONLY by server-push sources (SSE events +
-// /api/plan/* HTTP responses). That meant a chat-driven update and
-// a sidebar-driven edit could not write to the same place, and
-// every consumer had to be threaded the right setter. This module
-// lifts those three fields into ONE shared, subscribable store so
-// chat-driven updates and sidebar-driven edits write to the SAME
-// state and every consumer re-renders from it.
+// ORIGIN (Phase 4 Task E1.1). The chat page once held three
+// INDEPENDENT `useState`s for the plan, written ONLY by server-push
+// sources (SSE events + /api/plan/* HTTP responses). That meant a
+// chat-driven update and a sidebar-driven edit could not write to the
+// same place, and every consumer had to be threaded the right setter.
+// E1.1 lifted those three fields into ONE shared, subscribable store;
+// E3.1/E3.3 appended the staged-proposal preview + the invalid-proposal
+// red card.
+//
+// H0.2 (plan 36 — scenarios workspace). The store's INTERNAL state is
+// now the pure `ScenarioState` model (apps/web/lib/scenarios/scenarioModel.ts:
+// a committed anchor + a list of proposed/whatif scenarios + an activeId
+// + a compare pair) PLUS the two orthogonal fields the scenario model
+// does NOT own (`schedulePreferences`, `forwardMaterialization`). The
+// state-transition logic lives in the model's PURE reducers — this module
+// only wraps them in a `useSyncExternalStore`-compatible subscribe/snapshot
+// surface and exposes BOTH:
+//   - the NEW scenario API (setCommitted/addScenario/setActive/openCompare/
+//     closeCompare/discardScenario/confirmProposed/setInvalidProposal +
+//     selectors getCommitted/getScenarios/getActiveScenario/getScenarioState),
+//   - a backward-COMPAT facade (the original `PlanState` snapshot shape +
+//     the original setters) so the pre-H2 consumers (page.tsx, the sidebar)
+//     and the existing tests keep working UNCHANGED. The 3-zone UI that
+//     fully adopts the scenario model is a LATER task (H2/H4/H5); H0.2 only
+//     lands the foundation and keeps everything green.
 //
 // This module is PURE TypeScript with NO React import on purpose:
 //   - apps/web has no React-DOM render harness (vitest runs in the
 //     node env), so the store must be unit-testable in isolation
-//     (see apps/web/tests/sharedPlanState.test.ts).
+//     (see apps/web/tests/sharedPlanState.test.ts + planStore.scenarios.test.ts).
 //   - the `useSyncExternalStore` BINDING lives in page.tsx; this
 //     module just exposes the vanilla `subscribe` / `getSnapshot`
 //     surface React 19 expects.
 //
 // Contract for React 19's useSyncExternalStore:
 //   - getSnapshot MUST return a STABLE reference when nothing has
-//     changed (we keep the current snapshot in a field and return
-//     it; we never allocate on a plain read), otherwise React logs
-//     "getSnapshot should be cached" and can infinite-loop.
-//   - each setter replaces the snapshot with a NEW object so React's
-//     referential-equality check fires and consumers re-render.
-//
-// Scope: the three E1.1 fields + their setters, PLUS the E3.1
-// "pending preview" slot appended here (the E1.1 doc left room for
-// exactly one such field). The pending preview is a STAGED proposal
-// the canvas overlays read-only; it is NEVER the committed plan and
-// is cleared on Confirm / Cancel / Keep-as-is.
+//     changed (we materialize the compat snapshot ONCE per mutation
+//     and return that cached object on every plain read), otherwise
+//     React logs "getSnapshot should be cached" and can infinite-loop.
+//   - each mutation re-materializes the snapshot as a NEW object so
+//     React's referential-equality check fires and consumers re-render.
 // ============================================================
 
 import type { ForwardSchedule, PlanDiff, SchedulePreferences } from "@nyupath/shared";
 import type { ForwardMaterializationPayload } from "../../lib/chatV2Client";
 import type { InvalidProposalCard } from "../../lib/reviewCard";
 import type { WhatIfAssumptionMarker } from "@nyupath/engine";
+import {
+    initialState,
+    setCommitted as reduceSetCommitted,
+    addScenario as reduceAddScenario,
+    setActive as reduceSetActive,
+    openCompare as reduceOpenCompare,
+    closeCompare as reduceCloseCompare,
+    discardScenario as reduceDiscardScenario,
+    confirmProposed as reduceConfirmProposed,
+    setInvalidProposal as reduceSetInvalidProposal,
+    activeScenario,
+    type Scenario,
+    type ScenarioState,
+} from "../../lib/scenarios/scenarioModel";
+
+// Re-export the scenario-model types so consumers of the new store API can
+// import them from a single place (the store) without reaching into the model.
+export type { Scenario, ScenarioState } from "../../lib/scenarios/scenarioModel";
 
 /**
  * Phase 4 Task E3.1 — a STAGED (not-yet-committed) plan proposal the
@@ -49,6 +78,9 @@ import type { WhatIfAssumptionMarker } from "@nyupath/engine";
  *
  * Crucially this is a DISTINCT slot from `forwardSchedule` (the
  * committed plan): pushing a preview NEVER mutates the committed plan.
+ *
+ * H0.2 — in the scenario model a preview is a `kind:"proposed"` scenario;
+ * this `PendingPreview` is the COMPAT view the legacy consumers still read.
  */
 export interface PendingPreview {
     /** The read-only proposed schedule the student would land on. */
@@ -70,10 +102,16 @@ export interface PendingPreview {
 }
 
 /**
- * The one live plan snapshot every workspace consumer reads. The first
- * three are exactly the values `<ScheduleSidebar>` is fed today
- * (`schedule`, `schedulePreferences`, `materialization`); `pendingPreview`
- * is the E3.1 staged-proposal overlay (null at rest).
+ * The one live plan snapshot every LEGACY workspace consumer reads (the
+ * backward-COMPAT facade — see the module header). The first three are
+ * exactly the values `<ScheduleSidebar>` is fed today (`schedule`,
+ * `schedulePreferences`, `materialization`); `pendingPreview` is the
+ * E3.1 staged-proposal overlay (null at rest), DERIVED from the active
+ * `kind:"proposed"` scenario; `invalidProposal` is the model's red card.
+ *
+ * H0.2 derivation: `forwardSchedule ⇐ scenario.committed`;
+ * `pendingPreview ⇐` the active scenario when it is `kind:"proposed"`
+ * (else null); `invalidProposal ⇐ scenario.invalidProposal`.
  */
 export interface PlanState {
     forwardSchedule: ForwardSchedule | null;
@@ -96,12 +134,18 @@ export interface PlanState {
  * `useSyncExternalStore`. `subscribe` + `getSnapshot` are the two
  * React reads for; the typed setters are how chat (SSE) and sidebar
  * (HTTP) writers dispatch into the single snapshot.
+ *
+ * Exposes BOTH the backward-COMPAT facade (the original `PlanState`
+ * snapshot + original setters) AND the H0.2 scenario API.
  */
 export interface PlanStore {
-    /** Stable-reference snapshot read (never allocates on a no-op read). */
+    // ---- React 19 useSyncExternalStore surface ----
+    /** Stable-reference COMPAT snapshot read (never allocates on a no-op read). */
     getSnapshot(): PlanState;
     /** Register a listener; returns an unsubscribe fn. */
     subscribe(listener: () => void): () => void;
+
+    // ---- backward-COMPAT facade (legacy setters; unchanged semantics) ----
     setForwardSchedule(s: ForwardSchedule | null): void;
     setSchedulePreferences(p: SchedulePreferences | null): void;
     setForwardMaterialization(m: ForwardMaterializationPayload | null): void;
@@ -114,36 +158,117 @@ export interface PlanStore {
     setInvalidProposal(c: InvalidProposalCard | null): void;
     /** E3.3 — clear the RED card (Dismiss, or a later feasible preview). */
     clearInvalidProposal(): void;
+
+    // ---- H0.2 scenario API (thin wrappers over scenarioModel reducers) ----
+    /** Replace the committed anchor schedule (does NOT clear scenarios). */
+    setCommitted(schedule: ForwardSchedule): void;
+    /** Append (or replace by id) a scenario; makes it active; clears compare. */
+    addScenario(scenario: Scenario): void;
+    /** Set the active tab ("committed" or a scenario id); clears compare. */
+    setActive(id: string): void;
+    /** Open the side-by-side compare view. */
+    openCompare(leftId: string, rightId: string): void;
+    /** Close the compare view. */
+    closeCompare(): void;
+    /** Remove a scenario by id (no-op if absent; falls back to "committed"). */
+    discardScenario(id: string): void;
+    /** Confirm a proposed scenario — commits its schedule, drops it, active→committed. */
+    confirmProposed(id: string): void;
+
+    // ---- H0.2 scenario selectors ----
+    /** The committed anchor schedule (null when no DPR loaded). */
+    getCommitted(): ForwardSchedule | null;
+    /** The proposed + whatif scenarios (NOT the committed anchor). */
+    getScenarios(): Scenario[];
+    /** Resolve the currently-active scenario (or undefined). */
+    getActiveScenario(): Scenario | undefined;
+    /** The full underlying scenario state (for compare-view consumers). */
+    getScenarioState(): ScenarioState;
 }
 
-const EMPTY_STATE: PlanState = {
-    forwardSchedule: null,
-    schedulePreferences: null,
-    forwardMaterialization: null,
-    pendingPreview: null,
-    invalidProposal: null,
-};
+// ---------------------------------------------------------------------------
+// Internal store state: the scenario model + the two orthogonal fields the
+// model does not own, + a side-table preserving the EXACT PendingPreview
+// object a legacy `setPendingPreview` was handed (the scenario model's
+// `Scenario` has no PendingPreview slot, but the compat facade's identity
+// contract — `getSnapshot().pendingPreview === the object passed in` — must
+// be preserved, so we stash it here keyed by the proposed scenario's id).
+// ---------------------------------------------------------------------------
+
+/** A monotonically-increasing id for compat-facade-staged previews. */
+let previewSeq = 0;
 
 /**
  * Build a fresh plan store. Pass `initial` to seed any subset of the
- * three fields (the rest default to null).
+ * legacy `PlanState` fields (the rest default to null). The `initial`
+ * fields are mapped onto the scenario model:
+ *   - `forwardSchedule` → the committed anchor,
+ *   - `pendingPreview` → a staged proposed scenario (active),
+ *   - `invalidProposal` → the model's red card,
+ *   - `schedulePreferences` / `forwardMaterialization` → orthogonal fields.
  */
 export function createPlanStore(initial?: Partial<PlanState>): PlanStore {
-    // The current snapshot is held in a single field; getSnapshot returns
-    // it by reference so React's caching check is satisfied. Setters swap
-    // this field for a NEW object (never mutate in place) so prior snapshots
-    // captured by a stale render stay frozen.
-    let snapshot: PlanState = initial
-        ? { ...EMPTY_STATE, ...initial }
-        : EMPTY_STATE;
+    // --- core scenario state (pure model) ---
+    let scenario: ScenarioState = initialState(initial?.forwardSchedule ?? null);
+    if (initial?.invalidProposal != null) {
+        scenario = reduceSetInvalidProposal(scenario, initial.invalidProposal);
+    }
+
+    // --- orthogonal fields the scenario model does not own ---
+    let schedulePreferences: SchedulePreferences | null = initial?.schedulePreferences ?? null;
+    let forwardMaterialization: ForwardMaterializationPayload | null =
+        initial?.forwardMaterialization ?? null;
+
+    // --- side-table: proposed-scenario id → the exact PendingPreview object ---
+    const previewObjects = new Map<string, PendingPreview>();
+
+    // Seed an initial pendingPreview (if any) as a proposed scenario.
+    if (initial?.pendingPreview != null) {
+        const id = `preview-${previewSeq++}`;
+        previewObjects.set(id, initial.pendingPreview);
+        scenario = reduceAddScenario(scenario, previewToScenario(id, initial.pendingPreview));
+    }
 
     const listeners = new Set<() => void>();
 
-    function emit(): void {
+    // The cached COMPAT snapshot — materialized once per mutation, returned
+    // by reference on every plain read (React 19 caching requirement).
+    let snapshot: PlanState = materialize();
+
+    function materialize(): PlanState {
+        const active = activeScenario(scenario);
+        const pendingPreview =
+            active && active.kind === "proposed"
+                ? previewObjects.get(active.id) ?? scenarioToPreview(active)
+                : null;
+        return {
+            forwardSchedule: scenario.committed,
+            schedulePreferences,
+            forwardMaterialization,
+            pendingPreview,
+            invalidProposal: scenario.invalidProposal,
+        };
+    }
+
+    /** Re-materialize the compat snapshot and notify subscribers. */
+    function commit(): void {
+        snapshot = materialize();
         for (const listener of listeners) listener();
     }
 
+    /**
+     * Apply a scenario-model reducer. If it returns the SAME reference (a
+     * model no-op, e.g. discarding an absent scenario), we skip the commit
+     * so subscribers don't needlessly re-render (referential stability).
+     */
+    function applyScenario(next: ScenarioState): void {
+        if (next === scenario) return;
+        scenario = next;
+        commit();
+    }
+
     return {
+        // ---- React surface ----
         getSnapshot(): PlanState {
             return snapshot;
         },
@@ -153,48 +278,163 @@ export function createPlanStore(initial?: Partial<PlanState>): PlanStore {
                 listeners.delete(listener);
             };
         },
+
+        // ---- backward-COMPAT facade ----
         setForwardSchedule(s: ForwardSchedule | null): void {
             // Committing a new plan supersedes ANY pending proposal card —
             // a staged preview (E3.1) or an invalid-proposal red card (E3.3)
             // both describe a proposal against the PRIOR committed plan, so
-            // they are stale the moment the committed plan changes. Clearing
-            // both here (the single commit chokepoint) is intentional: it
-            // closes the stale-card lingering that an explicit per-call-site
-            // clear would otherwise have to enumerate (clean apply, bubble
-            // confirm, override-anyway, SSE forward_schedule_update, DPR
-            // refresh all commit through this one setter).
-            snapshot = { ...snapshot, forwardSchedule: s, pendingPreview: null, invalidProposal: null };
-            emit();
+            // they are stale the moment the committed plan changes. We
+            // reproduce the original single-commit-chokepoint semantics:
+            // drop ALL staged scenarios + clear invalidProposal + reset
+            // active to "committed".
+            //
+            // (The original null-able `setForwardSchedule(null)` path is kept:
+            // the model's `committed` is `ForwardSchedule | null`, but the
+            // reducer `setCommitted` is non-null, so we go through it only for
+            // a real schedule and fall back to a direct state build for null.)
+            previewObjects.clear();
+            const cleared: ScenarioState = {
+                committed: s,
+                scenarios: [],
+                activeId: "committed",
+                compare: null,
+                invalidProposal: null,
+            };
+            applyScenario(cleared);
         },
         setSchedulePreferences(p: SchedulePreferences | null): void {
-            snapshot = { ...snapshot, schedulePreferences: p };
-            emit();
+            schedulePreferences = p;
+            commit();
         },
         setForwardMaterialization(m: ForwardMaterializationPayload | null): void {
-            snapshot = { ...snapshot, forwardMaterialization: m };
-            emit();
+            forwardMaterialization = m;
+            commit();
         },
         setPendingPreview(p: PendingPreview | null): void {
-            // Swap ONLY the pendingPreview slot — forwardSchedule (the
-            // committed plan) is carried over by reference, so staging a
-            // preview can never mutate the committed plan.
-            snapshot = { ...snapshot, pendingPreview: p };
-            emit();
+            // Legacy single-preview semantics: at most ONE staged preview at
+            // a time. Drop any prior compat-staged proposed scenario, then —
+            // when `p` is non-null — stage it as a fresh proposed scenario
+            // (active), stashing the exact object for identity-preserving
+            // reads. Staging a preview NEVER touches the committed anchor.
+            let next = dropCompatPreviews(scenario);
+            if (p == null) {
+                // Returned to the committed anchor with no preview.
+                if (next.activeId !== "committed") next = reduceSetActive(next, "committed");
+            } else {
+                const id = `preview-${previewSeq++}`;
+                previewObjects.set(id, p);
+                next = reduceAddScenario(next, previewToScenario(id, p));
+            }
+            applyScenario(next);
         },
         clearPendingPreview(): void {
-            snapshot = { ...snapshot, pendingPreview: null };
-            emit();
+            // Confirm / Cancel / Keep-as-is: drop the compat-staged preview
+            // (if any) and return active → committed. Committed plan untouched.
+            let next = dropCompatPreviews(scenario);
+            if (next.activeId !== "committed") next = reduceSetActive(next, "committed");
+            applyScenario(next);
         },
         setInvalidProposal(c: InvalidProposalCard | null): void {
-            // Swap ONLY the invalidProposal slot — forwardSchedule (the
-            // committed plan) is carried over by reference, so staging a
-            // red card can never mutate the committed plan.
-            snapshot = { ...snapshot, invalidProposal: c };
-            emit();
+            applyScenario(reduceSetInvalidProposal(scenario, c));
         },
         clearInvalidProposal(): void {
-            snapshot = { ...snapshot, invalidProposal: null };
-            emit();
+            applyScenario(reduceSetInvalidProposal(scenario, null));
         },
+
+        // ---- H0.2 scenario API ----
+        setCommitted(schedule: ForwardSchedule): void {
+            applyScenario(reduceSetCommitted(scenario, schedule));
+        },
+        addScenario(s: Scenario): void {
+            applyScenario(reduceAddScenario(scenario, s));
+        },
+        setActive(id: string): void {
+            applyScenario(reduceSetActive(scenario, id));
+        },
+        openCompare(leftId: string, rightId: string): void {
+            applyScenario(reduceOpenCompare(scenario, leftId, rightId));
+        },
+        closeCompare(): void {
+            applyScenario(reduceCloseCompare(scenario));
+        },
+        discardScenario(id: string): void {
+            previewObjects.delete(id);
+            applyScenario(reduceDiscardScenario(scenario, id));
+        },
+        confirmProposed(id: string): void {
+            previewObjects.delete(id);
+            applyScenario(reduceConfirmProposed(scenario, id));
+        },
+
+        // ---- H0.2 selectors ----
+        getCommitted(): ForwardSchedule | null {
+            return scenario.committed;
+        },
+        getScenarios(): Scenario[] {
+            return scenario.scenarios;
+        },
+        getActiveScenario(): Scenario | undefined {
+            return activeScenario(scenario);
+        },
+        getScenarioState(): ScenarioState {
+            return scenario;
+        },
+    };
+
+    // --- closures over `previewObjects` ---
+
+    /**
+     * PURE w.r.t. `scenario`: returns a new ScenarioState with every
+     * compat-staged proposed scenario removed (returns `s` unchanged when
+     * there are none, preserving referential stability). Also clears the
+     * `previewObjects` identity-cache side-table for the dropped ids.
+     */
+    function dropCompatPreviews(s: ScenarioState): ScenarioState {
+        let next = s;
+        for (const id of previewObjects.keys()) {
+            next = reduceDiscardScenario(next, id);
+        }
+        previewObjects.clear();
+        return next;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Pure mapping helpers (compat ⇆ scenario model)
+// ---------------------------------------------------------------------------
+
+/** Map a legacy `PendingPreview` to a `kind:"proposed"` Scenario. */
+function previewToScenario(id: string, p: PendingPreview): Scenario {
+    return {
+        id,
+        kind: "proposed",
+        label: p.verb ? `Proposed: ${p.verb}` : "Proposed change",
+        schedule: p.proposedSchedule,
+        // The compat facade has no engine verdict here (the review card is
+        // computed elsewhere from the route response); a staged feasible
+        // preview is at least "trade-offs" when it carries consequences,
+        // else "valid". This verdict is advisory metadata only — the legacy
+        // consumers read `pendingPreview`, not the scenario verdict.
+        verdict: p.consequences.length > 0 ? "trade-offs" : "valid",
+        ...(p.consequences.length > 0 ? { hedges: p.consequences } : {}),
+        pendingMutationId: p.pendingMutationId,
+        ...(p.whatIfAssumption ? { whatIfAssumption: p.whatIfAssumption } : {}),
+        createdAt: 0,
+    };
+}
+
+/**
+ * Fallback map of a proposed Scenario back to a `PendingPreview` — used ONLY
+ * when a proposed scenario was created via the NEW `addScenario` API (not the
+ * compat `setPendingPreview`), so there is no stashed original object. The
+ * legacy consumers can still read a coherent preview overlay from it.
+ */
+function scenarioToPreview(s: Scenario): PendingPreview {
+    return {
+        proposedSchedule: s.schedule,
+        pendingMutationId: s.pendingMutationId ?? "",
+        consequences: s.hedges ?? [],
+        ...(s.whatIfAssumption ? { whatIfAssumption: s.whatIfAssumption } : {}),
     };
 }

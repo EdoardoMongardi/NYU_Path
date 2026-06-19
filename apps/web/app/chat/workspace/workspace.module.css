@@ -1,0 +1,96 @@
+/* ============================================================
+ * workspace.module.css — scenarios workspace surfaces
+ * ============================================================
+ * Plan 36 §9 (H6.1) — the CENTER workspace zone is the HERO. The
+ * schedule grid reads like a dense registrar planner: term cards
+ * tiled on a responsive grid, 1px hairline borders + a soft panel
+ * shadow, tabular numerals on every credit / term number, status
+ * colour only on diff tints + the legend swatches (never a flood).
+ *
+ * The diff-highlight classes wrap the <li> that SlotRow renders, so
+ * the slot's own tier/state classes remain unaffected — we only add
+ * a left-accent + tint layer. All colours resolve from the shared
+ * --diff-* tokens defined in globals.css (light + dark aware).
+ * ============================================================ */
+
+/* ---- Diff-highlight row wrappers --------------------------------- */
+
+/* added: new course in this scenario — green tint + left accent */
+.diffAdded {
+    background-color: var(--diff-added-bg);
+    box-shadow: inset 3px 0 0 var(--diff-added);
+    border-radius: 3px;
+}
+
+/* removed: course present in base but absent here — red, struck */
+.diffRemoved {
+    background-color: var(--diff-removed-bg);
+    box-shadow: inset 3px 0 0 var(--diff-removed);
+    border-radius: 3px;
+    opacity: 0.78;
+    text-decoration: line-through;
+}
+
+/* retake: same course pushed to a later term — violet tint */
+.diffRetake {
+    background-color: var(--diff-retake-bg);
+    box-shadow: inset 3px 0 0 var(--diff-retake);
+    border-radius: 3px;
+}
+
+/* moved: course shifted between terms — amber tint */
+.diffMoved {
+    background-color: var(--diff-moved-bg);
+    box-shadow: inset 3px 0 0 var(--diff-moved);
+    border-radius: 3px;
+}
+
+/* ---- Schedule grid — the HERO term planner ----------------------- */
+/* Term cards tile on a dense responsive grid (registrar planner feel),
+   not a single airy column. Each card is a hairline-bordered panel
+   with a soft shadow. The min track (190px) keeps two-to-four columns
+   in the workspace zone, collapsing to one on a narrow panel. */
+.scheduleGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 12px;
+    width: 100%;
+    align-items: start;
+}
+
+/* Workspace term card — overrides the sidebar's stacked .semesterCard
+   margins so the grid gap governs spacing. The card itself reuses the
+   sidebar's interior slot styling (course rows, grade column, glyphs). */
+.scheduleGrid :global(.semesterCard) {
+    margin: 0;
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-panel);
+    overflow: hidden;
+}
+
+/* Term header — a tinted strip reading the term + tabular credit count
+   on the right, mirroring the mockup's .t-head. */
+.scheduleGrid :global(.semesterCardHeader) {
+    margin: -12px -12px 8px;
+    padding: 7px 10px;
+    background: var(--surface-violet);
+    border-bottom: 1px solid var(--border-light);
+}
+.scheduleGrid :global(.semesterCardHeader h3) {
+    font-size: var(--fs-13);
+    font-weight: var(--fw-bold);
+    color: var(--nyu-violet);
+    letter-spacing: -0.01em;
+}
+/* Credit count reads as a tabular number so credit columns line up
+   across every term card. */
+.scheduleGrid :global(.semesterCredits) {
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--fw-semibold);
+}
+
+/* Single-column variant — the compare columns force one term per row so
+   the two sides stay readable side-by-side. */
+.scheduleGridSingle {
+    grid-template-columns: 1fr;
+}

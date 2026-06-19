@@ -17,6 +17,49 @@
     position: relative;
 }
 
+/* ---- H2.1 (plan 36) — 3-zone shell ----------------------------------
+   chat (LEFT) | ScheduleWorkspace (CENTER) | existing sidebar (RIGHT).
+   Sits BELOW the header + disclaimer banner and fills the remaining
+   height. Web-only / desktop (≥1100px); no mobile breakpoint per the
+   plan-36 owner decision. The full visual pass is H6 — this is the
+   functional layout only.
+
+   The RIGHT zone is a layout placeholder: the existing ScheduleSidebar
+   is a `position: fixed` overlay drawer (returns null when closed), so
+   it floats over this cell exactly as it does today. H5 replaces it
+   with an in-flow profile-only rail. */
+.threeZone {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.4fr) minmax(280px, 0.9fr);
+    overflow: hidden;
+}
+
+.zoneLeft {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--border-light);
+}
+
+.zoneCenter {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    border-right: 1px solid var(--border-light);
+}
+
+.zoneRight {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* ---- Header ---- */
 .header {
     display: flex;
@@ -45,22 +88,27 @@
     border-radius: var(--radius-full);
 }
 
-/* ---- Messages ---- */
+/* ---- Messages ----
+   Plan 36 §9 (H6.1): the chat is the LEFT supporting RAIL, not a centred
+   chatbot. Bubbles are compact (smaller radius, no violet shadow flood,
+   wider max-width so text uses the narrow rail), the avatar is a small
+   quiet glyph, and the rail backdrop is the secondary surface so the
+   centre workspace reads as the hero. The old centred max-width:800px is
+   dropped — the rail width governs. */
 .messages {
     flex: 1;
     overflow-y: auto;
-    padding: 24px 24px 16px;
+    padding: 16px 16px 12px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    max-width: 800px;
+    gap: 12px;
     width: 100%;
-    margin: 0 auto;
+    background: var(--bg-secondary);
 }
 
 .messageBubble {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     animation: fadeInUp 0.3s ease-out both;
 }
 
@@ -69,27 +117,27 @@
 }
 
 .avatar {
-    width: 36px;
-    height: 36px;
+    width: 26px;
+    height: 26px;
     border-radius: var(--radius-full);
     background: var(--nyu-violet-faint);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
+    font-size: 0.8rem;
     flex-shrink: 0;
     border: 1px solid var(--border-light);
 }
 
 .bubbleContent {
-    max-width: 70%;
+    max-width: 88%;
 }
 
 .bubbleText {
-    padding: 14px 18px;
-    border-radius: var(--radius-lg);
-    font-size: 0.925rem;
-    line-height: 1.6;
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    font-size: var(--fs-13);
+    line-height: 1.5;
     word-wrap: break-word;
 }
 
@@ -98,14 +146,12 @@
     color: var(--text-primary);
     border: 1px solid var(--border-light);
     border-bottom-left-radius: 4px;
-    box-shadow: var(--shadow-sm);
 }
 
 .user .bubbleText {
     background: var(--nyu-violet);
     color: #fff;
     border-bottom-right-radius: 4px;
-    box-shadow: var(--shadow-violet);
 }
 
 .bubbleText strong {
@@ -128,10 +174,10 @@
 .typing {
     display: flex;
     gap: 5px;
-    padding: 14px 18px;
+    padding: 10px 14px;
     background: var(--bg-primary);
     border: 1px solid var(--border-light);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     border-bottom-left-radius: 4px;
 }
 
@@ -153,22 +199,21 @@
 
 /* ---- Input Area ---- */
 .inputArea {
-    padding: 16px 24px 24px;
+    padding: 12px 16px 16px;
     background: var(--bg-primary);
     border-top: 1px solid var(--border-light);
     flex-shrink: 0;
 }
 
 .inputContainer {
-    max-width: 800px;
-    margin: 0 auto;
+    width: 100%;
     display: flex;
     align-items: flex-end;
-    gap: 8px;
+    gap: 6px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-light);
-    border-radius: var(--radius-xl);
-    padding: 6px 6px 6px 16px;
+    border-radius: var(--radius-lg);
+    padding: 5px 5px 5px 12px;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -196,13 +241,13 @@
 }
 
 .uploadBtn {
-    width: 40px;
-    height: 40px;
+    width: 34px;
+    height: 34px;
     border-radius: var(--radius-full);
     border: none;
     background: var(--nyu-violet-faint);
     cursor: pointer;
-    font-size: 1.1rem;
+    font-size: 1rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -216,14 +261,14 @@
 }
 
 .sendBtn {
-    width: 40px;
-    height: 40px;
+    width: 34px;
+    height: 34px;
     border-radius: var(--radius-full);
     border: none;
     background: var(--nyu-violet);
     color: #fff;
     cursor: pointer;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 700;
     display: flex;
     align-items: center;
@@ -1635,4 +1680,330 @@ button.reasoningHeader:focus-visible {
 .sidebarToast::before {
     content: "⏳";
     font-size: 0.95em;
+}
+
+/* ------------------------------------------------------------------
+   H4.1 (plan 36) — ScheduleCard — chat-thread schedule card.
+   Appears in the assistant message stream whenever the engine
+   produces a new schedule (proposed edit, what-if, or probe result).
+   Visual structure mirrors the mockup's .card (scenarios-ui-mockup.html):
+   - Card top: kind badge + label + verdict glyph (inline)
+   - Card body: optional one-line summary
+   - Card footer: Open + Compare action buttons
+   The .badge / .badge-* / .verdict-* classes are plain globals
+   (defined globally alongside the workspace badge CSS) so both
+   ScheduleWorkspace and ScheduleCard share the same badge styling.
+   Full visual polish is H6; this is the functional layout.
+   ------------------------------------------------------------------ */
+.scheduleCard {
+    align-self: stretch;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--bg-primary, #fff);
+    overflow: hidden;
+    transition: box-shadow 0.12s, border-color 0.12s;
+    margin: 4px 0 8px 0;
+    /* NYU-violet left accent — on-brand affordance matching reviewCard */
+    border-left: 3px solid var(--nyu-violet);
+}
+.scheduleCard:hover {
+    box-shadow: 0 2px 10px rgba(87, 6, 140, 0.10);
+    border-color: var(--nyu-violet);
+}
+
+.scheduleCardTop {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.scheduleCardLabel {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.scheduleCardSummary {
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.scheduleCardActions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+}
+
+.scheduleCardBtn {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.78em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border-light);
+    background: var(--bg-primary, transparent);
+    color: var(--text-primary);
+    transition: background 0.1s, border-color 0.1s;
+}
+.scheduleCardBtn:hover {
+    border-color: var(--nyu-violet);
+    color: var(--nyu-violet);
+}
+
+/* Open — primary accent (NYU-violet) */
+.scheduleCardBtnOpen {
+    background: var(--nyu-violet);
+    border-color: var(--nyu-violet);
+    color: #fff;
+}
+.scheduleCardBtnOpen:hover {
+    background: var(--nyu-violet-light, #7b21b3);
+    border-color: var(--nyu-violet-light, #7b21b3);
+    color: #fff;
+}
+
+/* Compare — ghost/subtle */
+.scheduleCardBtnCompare {
+    background: var(--nyu-violet-faint);
+    border-color: var(--nyu-violet);
+    color: var(--nyu-violet);
+}
+.scheduleCardBtnCompare:hover {
+    background: var(--nyu-violet);
+    color: #fff;
+}
+
+/* ============================================================
+   WhatIfUploadCard — H4.2b-3 (Branch-A audit-upload offer)
+   Visually consistent with .scheduleCard: NYU-violet left accent,
+   same border / radius. Heading + body + an Upload button.
+   ============================================================ */
+.whatifUploadCard {
+    align-self: stretch;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--bg-primary, #fff);
+    overflow: hidden;
+    margin: 4px 0 8px 0;
+    border-left: 3px solid var(--nyu-violet);
+    padding: 10px 12px;
+}
+
+.whatifUploadHeading {
+    margin: 0 0 4px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--nyu-violet);
+}
+
+.whatifUploadBody {
+    margin: 0 0 10px 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
+.whatifUploadBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--nyu-violet);
+    background: var(--nyu-violet);
+    color: #fff;
+    transition: background 0.1s, border-color 0.1s, opacity 0.1s;
+}
+.whatifUploadBtn:hover:not(:disabled) {
+    background: var(--nyu-violet-light, #7b21b3);
+    border-color: var(--nyu-violet-light, #7b21b3);
+}
+.whatifUploadBtn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+/* Inline spinner shown while an upload is in flight. */
+.whatifUploadSpinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: whatifSpin 0.7s linear infinite;
+}
+@keyframes whatifSpin {
+    to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .whatifUploadSpinner { animation: none; }
+}
+
+.whatifUploadError {
+    margin: 8px 0 0 0;
+    font-size: 12px;
+    color: var(--danger, #c0392b);
+}
+
+/* ============================================================
+   ProfileRail — H5.1 (plan 36 scenarios workspace UI)
+   The RIGHT-zone profile-only rail: SummaryCard + DPR-refresh +
+   the scenarios list + the privacy note + account actions.
+
+   .profileRail is the ROOT class — it MUST be IN NORMAL FLOW so it
+   fills the ThreeZoneShell's .zoneRight grid cell. No position:fixed,
+   no fixed width, no z-index, no animation. Full visual polish H6.
+   Inner chrome reuses the sidebar shell classes (.scheduleSidebarHeader /
+   .scheduleSidebarBody / .sidebarToolbar / .sidebarClearBtn).
+   ============================================================ */
+.profileRail {
+    height: 100%;
+    overflow-y: auto;
+    background: var(--bg-primary);
+    border-left: 1px solid var(--border-light);
+}
+.profileRailNote {
+    margin: 16px 20px 4px;
+    padding: 10px 12px;
+    font-size: 0.78em;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    background: var(--nyu-violet-faint, rgba(87, 6, 140, 0.05));
+    border-left: 3px solid var(--nyu-violet);
+    border-radius: 6px;
+}
+.profileRailNote strong { color: var(--text-primary); }
+
+.profileRailScenarios {
+    padding: 8px 20px 0;
+}
+
+.profileRailScenariosHeader {
+    margin: 12px 0 8px;
+    font-size: 0.78em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+}
+
+.profileRailScenarioList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.profileRailScenarioEmpty {
+    font-size: 0.82em;
+    color: var(--text-secondary);
+    padding: 8px 10px;
+    border: 1px dashed var(--border-light);
+    border-radius: 8px;
+}
+
+.profileRailScenarioRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    transition: border-color 0.12s, box-shadow 0.12s;
+}
+.profileRailScenarioRow:hover {
+    border-color: var(--nyu-violet);
+}
+.profileRailScenarioRowActive {
+    border-color: var(--nyu-violet);
+    box-shadow: inset 0 0 0 1px var(--nyu-violet);
+    background: var(--nyu-violet-faint, rgba(87, 6, 140, 0.05));
+}
+
+.profileRailScenarioSelect {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: var(--text-primary);
+}
+
+.profileRailScenarioPin {
+    flex: none;
+}
+
+.profileRailScenarioLabel {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.86em;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The verdict inside a rail row is a bare COLOURED GLYPH, not a pill — a
+   full pill (padding + tinted bg) would over-weight the compact row. Strip
+   the global .verdict pill chrome and keep only the status colour. The same
+   .verdict class keeps its pill treatment in the workspace header. */
+.profileRailScenarioSelect :global(.verdict) {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    font-size: 0.9em;
+    flex: none;
+}
+
+/* The kind badge in a rail row stays a small pill, sized down to read quietly. */
+.profileRailScenarioSelect :global(.badge) {
+    flex: none;
+}
+
+.profileRailScenarioCompare {
+    flex: none;
+    margin-right: 8px;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--nyu-violet);
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+.profileRailScenarioCompare:hover {
+    background: var(--nyu-violet);
+    border-color: var(--nyu-violet);
+    color: #fff;
+}
+.profileRailScenarioCompare:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+    border-color: var(--nyu-violet);
 }

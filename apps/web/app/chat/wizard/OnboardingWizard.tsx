@@ -645,7 +645,16 @@ export default function OnboardingWizard({
                 </div>
 
                 <div className={styles.footerRight}>
-                    {!onPlan && (
+                    {/* "Skip all" jumps to the plan step, skipping the OPTIONAL
+                        config — but the DPR is MANDATORY (no DPR → no plan; core
+                        philosophy). So it only appears once a DPR is uploaded.
+                        On the `upload` step with no DPR there is no Skip-all and
+                        no Next (the upload auto-advances on a successful parse),
+                        so uploading is the only way forward — the DPR can't be
+                        skipped. Without this gate, Skip-all from the upload step
+                        landed the student on "Build my plan" with a null DPR,
+                        which derives no plan (handleWizardReachPlan's !dpr arm). */}
+                    {!onPlan && parsedDpr && (
                         <button type="button" className={styles.linkBtn} onClick={skipEverything}>
                             Skip all → see my plan
                         </button>

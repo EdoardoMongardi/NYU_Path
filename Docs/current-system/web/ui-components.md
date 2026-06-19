@@ -1,23 +1,27 @@
 # UI Components
 
-> Last verified against code: 2026-06-16 (Phase 4 follow-up F3: in-progress slot-state is now WINDOW-AWARE — IP editable/label/hedge from `classifyIpChangeability`, the prior "deferred open question" resolved). Prior 2026-06-16: Phase 4 E3 (never-instant preview/review card; drag removed). Prior: 2026-06-15 (Phase 4 E2: badge row + slot-state glyphs + violet light/dark); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-18 (Plan 36 — scenarios workspace UI: 3-zone shell, scenario store, ScheduleWorkspace + CompareView + ProfileRail, chat ScheduleCard/WhatIfUploadCard, 3-branch what-if; engine + R1 + frozen contract untouched).
+>
+> Prior 2026-06-16: Phase 4 follow-up F3 (window-aware IP slot-state); Phase 4 E3 (never-instant preview/review card; drag removed). Prior 2026-06-15: Phase 4 E2 (badge row + slot-state glyphs + violet light/dark); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
-This is everything the student sees on screen — the landing page, the chat thread, and especially the sidebar that lives next to the conversation. The sidebar is the dense, interactive part: it shows a card per academic term, each with the courses planned for it, the credit total, and a row of little pill-shaped buttons for actions like swap, drop, lock, or move. The student opens a slot's ⋯ menu to pick a verb, or types a new course id into a free-form "+ Add course" input (Phase 4 E3 removed drag-and-drop — the ⋯ menu is now the only edit input). Every edit is *previewed* before it applies: the sidebar shows a read-only "◷ Preview" of the proposed plan with the credit delta and a review card (✓/⚠ verdict + Confirm / Cancel / Ask-why), and the committed plan stays untouched until Confirm; an invalid change shows a red card instead. For the very next term, if section times have been loaded, the sidebar swaps the basic course list for a richer "Sections" view showing meeting patterns, instructors, and CRNs. The whole sidebar is a pure reflection of state piped in from the chat page — it never fetches its own data, just renders what's handed to it.
+This is everything the student sees on screen — the landing page, the chat thread, and especially the **3-zone workspace** that lives next to the conversation. **Plan 36 replaced the single right-hand "ScheduleSidebar" with a 3-zone shell** (`ThreeZoneShell`): the chat thread becomes a supporting LEFT rail, a tabbed **ScheduleWorkspace** is the CENTER hero, and a profile-only **ProfileRail** is the RIGHT zone. The schedule is no longer edited from a sidebar ⋯-menu — **editing is now CHAT-ONLY** (propose in chat → the engine returns a labeled *scenario* → preview it as a tab → Confirm). The committed plan ("📌 My Plan") is always anchored as the first tab; every derived schedule (a proposed edit, a what-if assumption, a Branch-A audit exploration) is a labeled scenario tab (✓ committed / ⏳ proposed / 🔍 what-if), and you can put **any two** side-by-side in a CompareView with diff highlights. The workspace grids are purely presentational (read-only); the chat thread emits a compact **ScheduleCard** when a scenario is staged (Open / Compare) and a **WhatIfUploadCard** when the agent offers the Branch-A "upload your Albert What-If audit" path. The old `scheduleSidebar.tsx` still exists on disk but is **no longer mounted** (slated for deletion — see "Deprecated / unmounted" below).
 
 ```mermaid
 flowchart LR
-    Page[Chat page] -->|schedule + materialization + profile| Sidebar[Schedule sidebar]
-    Sidebar --> Summary[Student summary card]
-    Sidebar --> Terms[One card per term]
-    Terms --> Slots[Course slot rows]
-    Terms --> Sections[Sections view for next term]
-    Slots --> Popover[⋯ verb popover: swap / drop / lock / move]
-    Terms --> AddCourse[+ Add course input]
-    Popover --> Action[Fires plan-action request → stages a proposal]
-    AddCourse --> Action
-    Action --> Preview[◷ Preview overlay + review card / red card]
+    Page[Chat page] --> Shell[ThreeZoneShell]
+    Shell -->|left| Chat[Chat thread + composer]
+    Shell -->|center| Workspace[ScheduleWorkspace]
+    Shell -->|right| Profile[ProfileRail]
+    Workspace --> Tabs[📌 My Plan + scenario tabs]
+    Tabs --> View[ScheduleView read-only grid]
+    Tabs --> Compare[⇄ Compare → CompareView]
+    Workspace --> Actions[per-kind actions: Confirm/Cancel/Ask-why · Discard]
+    Chat --> Card[ScheduleCard: Open / Compare]
+    Chat --> Upload[WhatIfUploadCard: Branch-A audit]
+    Profile --> Summary[SummaryCard read-only DPR fields]
+    Profile --> ScenList[Scenarios list + DPR refresh + account actions]
 ```
 
 ---
@@ -28,13 +32,122 @@ The chat UI is a Next.js app with three layers:
 
 1. The Next.js root layout (`app/layout.tsx`) — `<html>` and `<body>` plus global metadata.
 2. The marketing landing page (`app/page.tsx`) — static hero, features, footer, with a link to `/chat`.
-3. The chat experience, which is split into a page-level orchestrator and a live sidebar that mirrors the student's forward schedule as the conversation drives changes.
+3. The chat experience — a page-level orchestrator (`app/chat/page.tsx`) that mounts the **3-zone shell**, where the CENTER zone mirrors the student's forward schedule + every derived scenario as the conversation drives changes.
 
-This doc focuses on the sidebar tree, which is the densest and most stateful part of the UI. The sidebar receives schedule snapshots from the chat page (which streams them out of the chat v2 SSE channel) and renders per-term cards. Each card lists slots with verbs (Swap / Drop / Lock / Move) reachable through a per-slot ⋯ menu — the **sole edit input** since Phase 4 E3 removed drag-and-drop — plus an inline `+ Add course` affordance. When the IMMEDIATE term has materialized section data, the structural slot list is swapped for a Sections view. As of Phase 4 E3 the sidebar also renders three **canvas edit-model surfaces** derived from a staged proposal: the "◷ Preview" overlay, the review card, and the RED invalid-proposal card (see "Canvas edit-model surfaces" below).
+This doc focuses on the **scenarios workspace tree** (Plan 36), which is the densest and most stateful part of the UI. The chat page subscribes to the v2 SSE stream + plan-action route responses and dispatches them into ONE shared scenario store (`createPlanStore`, see [chat-ui-client.md](./chat-ui-client.md)); the workspace + profile rail render off that single snapshot via `useSyncExternalStore`. **Editing is chat-only** — there is NO slot ⋯-menu, no `+ Add course` input, and no drag in the live UI; a student proposes a change in the conversation, the engine returns a scenario, and the workspace previews it as a tab the student can Confirm.
 
-## The chat sidebar — `app/chat/scheduleSidebar.tsx`
+> **Engine / R1 / frozen contract — UNTOUCHED.** Plan 36 is **web-only**: it reshaped the web state store + presentation. The engine's `finalizeForwardSchedule`, the 7-axis validator, and the solver were not modified; the only engine touch was a new `offerAuditUpload` marker + an `AUDIT_UPLOAD_OFFER:` summary line on the `what_if_audit` tool (`packages/engine/src/agent/tools/whatIfAudit.ts`), which does not touch the frozen pipeline. **R1 holds:** a what-if / synthetic schedule is NEVER written to `students.parsed_dpr`; confirming a proposed scenario persists ONLY the `forward_schedule` (via `/api/plan/confirm`); the read-only Branch-A what-if scenario has no `pendingMutationId` and is never confirmable.
 
-The single live component that owns sidebar state. It is rendered by the chat page when the user opens the sidebar.
+## The 3-zone shell — `app/chat/workspace/ThreeZoneShell.tsx`
+
+The live chat layout. `ThreeZoneShell` is a THIN presentational component (`ThreeZoneShell.tsx:55`) that renders a CSS-grid of three zones and is mounted in `page.tsx` (`page.tsx:1879`):
+
+```
+┌──────────────┬──────────────────────┬────────────────┐
+│  chat (LEFT) │  ScheduleWorkspace   │  ProfileRail   │
+│  thread +    │  (CENTER — the HERO) │  (RIGHT)       │
+│  composer    │  tabs + scenarios    │  profile-only  │
+└──────────────┴──────────────────────┴────────────────┘
+```
+
+- The grid columns are `minmax(320px, 1fr) minmax(420px, 1.4fr) minmax(280px, 0.9fr)` (`chat.module.css` `.threeZone` `:31-35`) — desktop-only (≥1100px), no mobile breakpoint.
+- Props (`ThreeZoneShell.tsx:42`): `planStore` (the SAME shared store `page.tsx` holds), `onConfirmProposed` + `onAskWhy` (wired to the page's existing confirm round-trip + chat injection), `left` (the chat thread + composer JSX, passed by `page.tsx`), and `right` (the JSX for the RIGHT zone).
+- The CENTER zone mounts `<ScheduleWorkspace>` directly; the LEFT and RIGHT zones render the `left` / `right` slots.
+- **The RIGHT slot is `<ProfileRail>`** (`page.tsx:2297`), NOT `ScheduleSidebar` — that's the H5 cutover. (The `ThreeZoneShell.tsx` header comment still describes the right zone as "the existing ScheduleSidebar … H5 will repurpose it"; that comment is stale prose — the working code passes `ProfileRail`.)
+
+## ScheduleWorkspace — `app/chat/workspace/ScheduleWorkspace.tsx`
+
+The CENTER hero: a tabbed workspace that shows the committed plan plus any proposed/whatif scenarios and lets the student confirm, cancel, ask-why, discard, or compare them. It reads scenario state via `useSyncExternalStore` (`ScheduleWorkspace.tsx:76`) and holds NO local copy of the scenario list — all writes go through the store.
+
+### Tab bar (`ScheduleWorkspace.tsx:161`)
+
+- A **pinned 📌 "My Plan" committed tab** is always first (`:170`) — no close button.
+- One tab per proposed/whatif scenario (`:199`), each badge-colored (via `kindBadgeClass`) with a close ✕ button.
+- A `⇄ Compare` toggle (`:243`) — a SIBLING of the tablist (a tablist must contain only `role="tab"` children).
+- **NO "+ New what-if" control** — what-ifs are created from chat only (owner decision, plan 36).
+- **ARIA tabs pattern (H6):** the tablist owns the ArrowLeft/Right roving-tabindex handler (`handleTablistKeyDown` `:130`); the active tab gets `tabIndex=0` / `aria-selected` and all others `tabIndex=-1`; each tab carries `aria-controls` pointing to the single `role="tabpanel"` body (`:256`). The close ✕ is a real sibling `<button>` (M3 restructure — no `<button>` nested in `<button>`, no hydration warning).
+
+### Body — per-kind action bodies (`ScenarioBody`, `ScheduleWorkspace.tsx:362`)
+
+The body renders the active scenario's header (label + kind badge + verdict glyph), an optional assumption/hedge block, a per-kind action bar, and a read-only `<ScheduleView>` of the scenario's schedule:
+
+| Kind | Action bar | Notes |
+|---|---|---|
+| **committed** | none — "it IS the plan" | read-only grid |
+| **proposed** | **Confirm — make this My Plan** (→ `onConfirmProposed`) · **Cancel** (→ `planStore.discardScenario`) · **Ask why** (→ `onAskWhy`) | shows the assumption/hedge block (`:388`) |
+| **whatif** | **Discard** (→ `planStore.discardScenario`) — NO Confirm | + two read-only notes: "nothing is saved unless you adopt it as your plan" / "a what-if never changes your plan; to adopt it, declare it in Albert & upload a new DPR" (`:439-444`) |
+
+When `compare` is set the body swaps to `<CompareBody>` (`:296`) which resolves the compare pair from the store and renders `<CompareView>`. Empty states cover no-DPR and no-scenario-selected.
+
+The workspace re-exports `kindBadgeLabel` / `kindBadgeClass` / `verdictDisplay` + the `ScenarioKind` type (`:48-49`) so older consumers that imported them from here keep working (the real source is `scenarioBadges.ts`).
+
+## ScheduleView — `app/chat/workspace/ScheduleView.tsx`
+
+A presentational one-schedule term grid (`ScheduleView.tsx:115`). It reuses the sidebar low-level helpers (`renderSlotInner` / `slotGradeText` from `slotRenderHelpers`, `formatTermLabel` / `slotCredits` from `sidebarFormatters`, `slotTierClassName` from `slotTier`) and applies diff highlights on top.
+
+- Props (`:40`): `schedule`, an optional `diff: AnnotatedColumn` (from `scheduleDiff.ts`), `readOnly` (default false), `singleColumn` (compare columns force a one-term-per-row layout).
+- **As of H6 it is PURELY presentational** — NO slot click handler, NO popover, NO "clickable" affordance (`:169-177`). Editing is chat-only, so the workspace has no slot editor; the `readOnly` prop is retained for API compatibility but the grid is non-interactive either way. The only per-slot status signal is a minimal 🔒 (completed) / ◐ (in-progress) glyph.
+- **Diff keying:** `slotCourseKey` (`:107`) delegates to `scheduleDiff.slotKey` so the diff-lookup key is BYTE-IDENTICAL to the key the diff stored (canonical course id for courses, `placeholder:${placeholderId}` for placeholders) — a divergent key would silently drop highlights. `diffClassFor` (`:64`, exported for unit test) maps a course's diff annotation to a CSS-module class (`diff-added` / `-removed` / `-moved` / `-retake`; `same` → no highlight).
+
+## Schedule diff — `lib/scenarios/scheduleDiff.ts`
+
+The pure compare engine (`scheduleDiff.ts:164`). `diffSchedules(base, other) → { base, other }` — two `AnnotatedColumn`s for a side-by-side view. PURE: no React, no I/O, no `Date.now()`; reads the engine only via the public barrel (`canonicalizeCourseId`).
+
+- `CourseDiff` is `same | added | removed | moved | retake` (`:55`).
+- `slotKey(slot)` (`:86`, exported) is the SINGLE keying source — `placeholder:${placeholderId}` for placeholders, the canonical course id otherwise — shared with `ScheduleView` so highlights can't miss.
+- `termOrdinal(term)` (`:389`) = `year*10 + {spring:0, summer:1, fall:2, january:3}`, mirroring the engine's `SEASON_ORD` (J-term follows fall of the SAME label-year, no year rollover) — used for the retake heuristic (a course removed from its base term that re-appears at a strictly later term in `other`).
+
+## CompareView — `app/chat/workspace/CompareView.tsx`
+
+Presentational side-by-side comparison of ANY two scenarios (`CompareView.tsx:58`) — no store reads; all data is passed as props so it is trivially unit-testable.
+
+- Props (`:43`): `left` + `right` (resolved `Scenario`s, either may be the committed anchor), `options` (ALL selectable scenarios for the two pickers), and `onPick(side, id)`.
+- Two `<select>` pickers (`:88` / `:114`); the left picker disables the option equal to `right.id` and vice-versa, so the student can never submit a same-scenario pair (the store's `openCompare` throws on equal ids).
+- Computes `diffSchedules(left.schedule, right.schedule)` and feeds `d.base` → the left column and `d.other` → the right column (`:65`, `:144` / `:155`); each column is a `singleColumn readOnly` `<ScheduleView>` with a column header (label + kind badge).
+- A `DiffLegend` (`:221`) maps each diff color to a description (added / removed / moved / retake).
+
+`CompareBody` in `ScheduleWorkspace.tsx` (`:296`) is the store-connected wrapper: it resolves the pair via `getScenario`, builds the `options` list (committed anchor + `state.scenarios`), and the `onPick` handler keeps the unchanged side stable + guards against equal ids before calling `openCompare`.
+
+## Scenario badges — `app/chat/workspace/scenarioBadges.ts`
+
+Pure shared badge helpers (no React, no I/O) consumed by the workspace, the profile rail, and both chat cards (`scenarioBadges.ts`):
+
+- `kindBadgeLabel(kind)` — `✓ Committed` / `⏳ Proposed` / `🔍 What-if` (`:14`).
+- `kindBadgeClass(kind)` — `badge badge-committed` / `badge-proposed` / `badge-whatif` (`:23`).
+- `verdictDisplay(verdict)` — `{ glyph, label, className }` for `valid` (✓) / `trade-offs` (⚠) / `invalid` (✗) (`:32`).
+
+## ProfileRail — `app/chat/ProfileRail.tsx`
+
+The RIGHT zone (`ProfileRail.tsx:89`) — profile-only; it **replaces the schedule sidebar's render duties**. The schedule grid + slot editing moved to the CENTER workspace; what-if creation is chat-only (the rail has NO spawn control). It subscribes to the store via `useSyncExternalStore` (`:106`) so the scenarios list re-renders on every mutation, and it holds NO decision logic (badge labels/classes come from `scenarioBadges`; the SummaryCard owns its own field derivation).
+
+Top → bottom (`:123`):
+1. A "Your profile" header.
+2. **`<SummaryCard>`** (`:135`) — the DPR-derived READ-ONLY fields (home school / major-minor / catalog year / GPA / credits / grad target; CORE RULE 14 — change only via a corrected DPR). It is fed the **COMMITTED schedule** (not an active scenario), so the profile always reflects the authoritative plan, never a hypothetical.
+3. The **"↻ Update DPR"** refresh control (`:139`) — the single path to change the authoritative plan (upload a fresh DPR PDF); driven by the page's `onRefreshDpr` + `refreshing` busy state. (On success the page now updates BOTH the committed schedule AND the parsed DPR so the profile fields don't go stale — see [chat-ui-client.md](./chat-ui-client.md).)
+4. The **scenarios list** (`ScenarioList`, `:237`) — the committed anchor pinned at top as "📌 My Plan" (✓ committed, NO compare affordance) + one `ScenarioRow` (`:301`) per proposed/whatif scenario (badge-colored; click the row body → `onSelectScenario` → `store.setActive`; the per-row ⇄ Compare → `onCompareScenario` → `store.openCompare("committed", id)`). The select control + the compare control are SIBLINGS (`data-select` / `data-compare`) so neither nests inside the other. A muted placeholder row shows when no DPR is loaded.
+5. The privacy note (`:179`) — "Only **My Plan** is saved. Your DPR is never changed … Proposed changes and what-ifs are explorations and are not recorded until you confirm them into My Plan." — plus the STANDING self-serve **Delete my account & data** action (`:189`, always shown to a signed-in student) and the env-gated **⚠ Clear all data** test affordance (`:204`, gated on `NEXT_PUBLIC_ENABLE_TEST_CLEAR === "1"`, read at render time).
+
+## Chat cards — `ScheduleCard.tsx` + `WhatIfUploadCard.tsx`
+
+Two compact card variants the chat thread renders (both presentational — no store reads; the page owns the wiring):
+
+### ScheduleCard — `app/chat/ScheduleCard.tsx`
+
+A `schedule_card` chat-message artifact (`ScheduleCard.tsx:52`): a kind badge + label + an optional one-line summary + a verdict glyph + two buttons — **Open** (→ `onOpen(scenarioId)` → `store.setActive`) and **Compare** (→ `onCompare(scenarioId)` → `store.openCompare` vs committed). It is emitted into the chat thread by `page.tsx` whenever a proposed scenario is staged (the `handlePlanActionResult` / `handleWhatIfResult` feasible path) or a Branch-A what-if scenario is built — built by the pure `buildScheduleCardMessage(scenario, id, timestamp)` (`app/chat/buildScheduleCardMessage.ts:105`), which derives the label (prefers `whatIfAssumption.label`) + summary (prefers the first hedge) from the scenario.
+
+### WhatIfUploadCard — `app/chat/WhatIfUploadCard.tsx`
+
+A `whatif_upload_card` chat-message artifact (`WhatIfUploadCard.tsx:42`) the page renders when the agent offers the Branch-A "explore precisely" path: an "Explore precisely" heading, a body naming the `hypotheticalProgram`, and an **Upload What-If audit (PDF)** button (hidden file input, PDF-only) → `onUpload(file)`. The page's `handleWhatIfAuditUpload` POSTs the audit to `/api/whatif-audit` and builds a READ-ONLY 🔍 what-if scenario (see [chat-ui-client.md](./chat-ui-client.md) for the full flow). Shows a spinner while uploading + an inline error on failure.
+
+---
+
+## Deprecated / unmounted (`app/chat/scheduleSidebar.tsx`)
+
+> **`scheduleSidebar.tsx` STILL EXISTS on disk but is NO LONGER MOUNTED** (Plan 36, H5). The chat page imports `ProfileRail` for the RIGHT zone instead; `ScheduleSidebar` is referenced only in `page.tsx` *comments*. Its render duties were split: the schedule grid → the CENTER `ScheduleWorkspace` (read-only `ScheduleView`), slot editing → CHAT-ONLY (propose → scenario → Confirm), the profile fields + DPR refresh + account actions → `ProfileRail`. It is slated for deletion in a follow-up. The sections below describe the sidebar as it stood at the end of Phase 4 (E3 + F3) and are retained for historical reference only — they no longer reflect the LIVE UI.
+
+### The chat sidebar — `app/chat/scheduleSidebar.tsx` (historical)
+
+The single live component that owned sidebar state. It was rendered by the chat page when the user opened the sidebar.
 
 ### Props received (`scheduleSidebar.tsx:133`)
 
@@ -342,7 +455,7 @@ The title span is rendered only when `title` is present and differs from the cou
 
 ## SummaryCard — `app/chat/sidebar/SummaryCard.tsx`
 
-Top-of-sidebar identity + degree progress widget.
+> **STILL LIVE** (despite the `sidebar/` path): `ProfileRail` reuses `<SummaryCard>` for the RIGHT-zone profile fields (`ProfileRail.tsx:135`), fed the COMMITTED schedule. It is the identity + degree-progress widget; only the *sidebar that hosted it* is deprecated.
 
 ### What it pulls from where
 
@@ -396,35 +509,27 @@ The marketing landing page. Pure server component, no state. Layout:
 
 Styling comes from `./page.module.css`.
 
-## State flow
+## State flow (Plan 36)
 
 ```mermaid
 flowchart TD
-    Chat[/api/chat/v2 SSE/] -->|forward_schedule_update| Page[Chat page state]
-    Chat -->|forward_materialization_update| Page
-    Restore[/api/session/restore/] -->|StudentProfile, DPR, SchedulePreferences| Page
-    Page -->|schedule, materialization, student, dpr, prefs| Sidebar[ScheduleSidebar]
-    Sidebar -->|frozenKeys, pendingSlots| TermCards[TermCard per term]
-    TermCards -->|slot pills| SlotRow
-    SlotRow -->|popover| Popover[slotPopover]
-    Popover -->|verb click| Handlers[scheduleSidebar handlers]
-    TermCards -->|+ Add course| AddAff[AddCourseAffordance]
-    AddAff -->|onSubmit| Handlers
-    Handlers -->|HTTP POST| PlanAPI[/api/plan/<verb>/]
-    PlanAPI -->|deterministic result| Handlers
-    Handlers -->|onPlanActionResult| Page
-    Page -->|planActionSurfaces: stage preview / red card| Sidebar
-    Page -->|feasible:false only → bubble| ChatThread[Chat thread]
-    Page -->|fire-and-forget| Polish[/api/plan/explain-polish/]
-    Polish -->|SSE polish chunks| ChatThread
-    TermCards -->|IMMEDIATE term| SectionsView
-    SectionsView -->|Apply combination| Page
+    Chat[/api/chat/v2 SSE/] -->|forward_schedule_update / whatif_audit_request| Page[Chat page + createPlanStore]
+    Restore[/api/session/restore/] -->|StudentProfile, DPR, prefs, committed schedule| Page
+    PlanAPI[/api/plan/whatif · /api/whatif-audit/] -->|scenario| Page
+    Page -->|addScenario / setCommitted / setActive / openCompare| Store[(scenario store)]
+    Store -->|useSyncExternalStore| Workspace[ScheduleWorkspace]
+    Store -->|useSyncExternalStore| Profile[ProfileRail]
+    Workspace -->|active scenario| View[ScheduleView read-only grid]
+    Workspace -->|compare pair| Compare[CompareView ⇄]
+    Workspace -->|Confirm proposed| Confirm[/api/plan/confirm → setCommitted]
+    Page -->|schedule_card / whatif_upload_card| ChatThread[Chat thread]
+    ChatThread -->|Open → setActive · Compare → openCompare| Store
 ```
 
-The sidebar is a pure renderer of its props plus its local interaction state. Every meaningful schedule change comes in via `schedule` and `materialization` props from the chat page, which in turn derives them from the v2 SSE stream and the session-restore call.
+The workspace + profile rail are pure renderers of the one shared `createPlanStore` snapshot. Every meaningful schedule change is dispatched into the store by the chat page (SSE events, `/api/plan/*` responses, `/api/whatif-audit`), and every consumer re-renders from that single snapshot. Editing is chat-only — there is no slot-level edit input in the live UI.
 
 ## Known limitations
 
-- **Render-state is shared in-session; AGENT visibility is still next-turn.** Since Phase 4 E1.1 the chat page and the sidebar read ONE shared `createPlanStore` snapshot, so a sidebar-driven edit and a chat-driven update write the same state and every consumer re-renders with no server round-trip. What is still next-turn (by design) is the AGENT *seeing* a sidebar edit: a slot the student swapped, locked, or moved (via the ⋯ menu — drag is gone) is only visible to the agent on the next chat turn, once the persisted `forwardSchedule` is reloaded into the request body. There is no mid-turn back-channel from the sidebar into the live agent loop. (See [chat-ui-client.md](./chat-ui-client.md) "Known limitations" for the full framing.)
-- **The `plan_action_bubble` text the sidebar's verbs produce is rendered by the chat page via `dangerouslySetInnerHTML`** (the markup transform lives in `apps/web/lib/renderMarkdown.ts`, not in the sidebar tree). `renderMarkdown` HTML-escapes `&`/`<`/`>` before applying its markdown transforms, so raw HTML in the bubble text is neutralized rather than rendered as live markup.
-- **`gatherAddCourseSuggestions` / `gatherSwapAlternatives` are V1 client-side stubs.** Both only match against course IDs already present in the loaded `forwardSchedule` — they do NOT hit the catalog. The eventual catalog-backed autocomplete (`/api/v2/search-courses`, see [course-catalog-search.md](./course-catalog-search.md)) is not wired in yet.
+- **Render-state is shared in-session; AGENT visibility is still next-turn.** Since Phase 4 E1.1 the chat page and the workspace/profile rail read ONE shared `createPlanStore` snapshot, so a chat-driven update and a confirm/round-trip write the same state and every consumer re-renders with no server round-trip. What is still next-turn (by design) is the AGENT *seeing* a confirmed change: it becomes visible to the agent on the next chat turn, once the persisted `forwardSchedule` is reloaded into the request body. There is no mid-turn back-channel into the live agent loop. (See [chat-ui-client.md](./chat-ui-client.md) "Known limitations" for the full framing.)
+- **Scenarios are session-state, not server-persisted.** Only the committed plan ("My Plan") persists (to `forward_schedules`); proposed/whatif scenarios live in the in-page store. The chat *thread* persists (Phase 4), so the schedule **cards** persist; re-deriving a scenario from a stale card (re-running its `rederive` spec) is a deferred follow-on. **R1:** a what-if / synthetic DPR is NEVER stored — confirming a proposed scenario persists only the `forward_schedule`.
+- **Chat bubble markup is rendered by the chat page via `dangerouslySetInnerHTML`** (the markup transform lives in `apps/web/lib/renderMarkdown.ts`). `renderMarkdown` HTML-escapes `&`/`<`/`>` before applying its markdown transforms, so raw HTML is neutralized rather than rendered as live markup.

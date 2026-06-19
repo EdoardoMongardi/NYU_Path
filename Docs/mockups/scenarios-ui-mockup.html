@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NYU Path — Scenarios UI mockup</title>
+<style>
+  :root{
+    --violet:#57068C; --violet-700:#420468; --violet-50:#f4ecfa; --violet-100:#ebdcf6;
+    --ink:#1b1620; --muted:#6b6577; --line:#e6e1ec; --bg:#faf8fc; --panel:#ffffff;
+    --committed:#0a7d3c; --committed-bg:#e7f6ec;
+    --proposed:#b4690e; --proposed-bg:#fdf1df;
+    --whatif:#1f6fb2; --whatif-bg:#e7f1fa;
+    --added:#0a7d3c; --added-bg:#e7f6ec; --removed:#b00020; --removed-bg:#fdeaec;
+    --retake:#7a4ad1; --retake-bg:#f1ebfb;
+    --radius:12px; --radius-sm:8px;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+  /* ---- top bar ---- */
+  header.topbar{display:flex;align-items:center;gap:12px;padding:10px 18px;background:var(--violet);color:#fff}
+  .logo{font-weight:800;letter-spacing:.3px}
+  .logo .dot{opacity:.7;font-weight:400}
+  header.topbar .who{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px;opacity:.95}
+  .avatar{width:28px;height:28px;border-radius:50%;background:#fff;color:var(--violet);display:grid;place-items:center;font-weight:700}
+  /* ---- 3-zone shell ---- */
+  .shell{display:grid;grid-template-columns:330px 1fr 280px;gap:0;height:calc(100vh - 49px);min-height:620px}
+  .zone{overflow:auto;background:var(--panel)}
+  .chat{border-right:1px solid var(--line);display:flex;flex-direction:column}
+  .workspace{background:var(--bg)}
+  .profile{border-left:1px solid var(--line);padding:16px}
+  .zone-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 16px 8px}
+  /* ---- chat ---- */
+  .chat .msgs{flex:1;overflow:auto;padding:4px 14px 14px;display:flex;flex-direction:column;gap:12px}
+  .bubble{max-width:94%;padding:9px 12px;border-radius:12px;font-size:13px}
+  .bubble.user{align-self:flex-end;background:var(--violet);color:#fff;border-bottom-right-radius:4px}
+  .bubble.bot{align-self:flex-start;background:#f1eef5;color:var(--ink);border-bottom-left-radius:4px}
+  .card{align-self:stretch;border:1px solid var(--line);border-radius:var(--radius-sm);background:#fff;overflow:hidden;cursor:pointer;transition:box-shadow .12s,border-color .12s}
+  .card:hover{box-shadow:0 2px 10px rgba(87,6,140,.10);border-color:var(--violet-100)}
+  .card .card-top{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px;font-weight:600}
+  .card .card-body{padding:8px 10px;font-size:12px;color:var(--muted)}
+  .card .open-hint{margin-left:auto;font-size:11px;color:var(--violet);font-weight:600}
+  .composer{border-top:1px solid var(--line);padding:10px 12px;display:flex;gap:8px}
+  .composer input{flex:1;border:1px solid var(--line);border-radius:20px;padding:8px 12px;font-size:13px;outline:none}
+  .composer button{border:none;background:var(--violet);color:#fff;border-radius:20px;padding:0 14px;font-weight:600;cursor:pointer}
+  /* ---- badges ---- */
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .badge.committed{color:var(--committed);background:var(--committed-bg)}
+  .badge.proposed{color:var(--proposed);background:var(--proposed-bg)}
+  .badge.whatif{color:var(--whatif);background:var(--whatif-bg)}
+  /* ---- workspace tabs ---- */
+  .ws-head{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 16px 0}
+  .tabs{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .tab{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:10px 10px 0 0;padding:8px 12px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:1px solid var(--line);position:relative;top:1px}
+  .tab .pin{font-size:11px}
+  .tab.active{color:var(--ink);border-color:var(--line);border-bottom-color:#fff;background:#fff}
+  .tab.committed.active{box-shadow:inset 0 2px 0 var(--committed)}
+  .tab.proposed.active{box-shadow:inset 0 2px 0 var(--proposed)}
+  .tab.whatif.active{box-shadow:inset 0 2px 0 var(--whatif)}
+  .tab .x{opacity:.45;font-weight:700}
+  .tab .x:hover{opacity:1}
+  .tab.add{border-style:dashed;color:var(--violet);background:transparent}
+  .compare-btn{margin-left:auto;border:1px solid var(--violet-100);background:var(--violet-50);color:var(--violet);font-weight:700;font-size:12px;padding:7px 12px;border-radius:8px;cursor:pointer}
+  .compare-btn.on{background:var(--violet);color:#fff}
+  /* ---- the schedule panel ---- */
+  .ws-body{border-top:1px solid var(--line);margin:0 16px;background:#fff;border:1px solid var(--line);border-top:none;border-radius:0 0 var(--radius) var(--radius);padding:14px 16px 20px}
+  .ctx{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+  .ctx h2{font-size:16px;margin:0}
+  .verdict{font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px}
+  .verdict.ok{color:var(--committed);background:var(--committed-bg)}
+  .verdict.warn{color:var(--proposed);background:var(--proposed-bg)}
+  .hedge{font-size:12.5px;color:var(--proposed);background:var(--proposed-bg);border:1px solid #f3dcb6;border-radius:8px;padding:8px 11px;margin:8px 0 4px}
+  .hedge b{color:#8a4d05}
+  .actionbar{display:flex;gap:8px;margin:12px 0 4px}
+  .btn{border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer}
+  .btn.primary{background:var(--violet);color:#fff}
+  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .btn.subtle{background:var(--violet-50);color:var(--violet)}
+  .note{font-size:12px;color:var(--muted);margin-top:8px}
+  /* schedule grid */
+  .terms{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:14px}
+  .term{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+  .term .t-head{font-size:12px;font-weight:700;padding:7px 10px;background:#faf7fd;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;color:var(--violet-700)}
+  .term .t-head .cr{font-weight:600;color:var(--muted)}
+  .term.current .t-head{background:var(--violet-50)}
+  .course{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid #f3f0f7;font-size:12.5px}
+  .course:last-child{border-bottom:none}
+  .course .ic{width:15px;text-align:center;font-size:11px}
+  .course .code{font-weight:700;font-variant-numeric:tabular-nums}
+  .course .ti{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .course.done .ic{color:var(--committed)} .course.ip .ic{color:var(--whatif)}
+  .course.locked .ic{color:var(--muted)}
+  /* diff states (compare + proposed) */
+  .course.added{background:var(--added-bg)} .course.added .code{color:var(--added)}
+  .course.removed{background:var(--removed-bg);text-decoration:line-through;opacity:.7} .course.removed .code{color:var(--removed)}
+  .course.retake{background:var(--retake-bg)} .course.retake .code{color:var(--retake)}
+  /* compare columns */
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+  .col h3{font-size:13px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
+  .col .terms{grid-template-columns:1fr}
+  .difflegend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+  .difflegend span{display:inline-flex;align-items:center;gap:5px}
+  .sw{width:11px;height:11px;border-radius:3px;display:inline-block}
+  /* profile */
+  .profile h4{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:18px 0 8px}
+  .profile .pf{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid #f3f0f7}
+  .profile .pf .k{color:var(--muted)} .profile .pf .v{font-weight:600}
+  .readonly-tag{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 5px;margin-left:6px}
+  .scn{display:flex;align-items:center;gap:8px;padding:8px 9px;border:1px solid var(--line);border-radius:8px;margin-bottom:7px;cursor:pointer;font-size:12.5px;background:#fff}
+  .scn:hover{border-color:var(--violet-100);background:var(--violet-50)}
+  .scn.active{border-color:var(--violet);box-shadow:inset 3px 0 0 var(--violet)}
+  .scn .lab{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .scn .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .legendbar{font-size:11px;color:var(--muted);padding:8px 16px;border-top:1px solid var(--line);display:flex;gap:16px;flex-wrap:wrap;background:#fff}
+  .legendbar b{color:var(--ink)}
+  .mock-note{font-size:11px;color:var(--muted);font-style:italic;padding:2px 16px 10px}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="logo">NYU&nbsp;Path <span class="dot">· academic adviser</span></div>
+  <div class="who"><span>CAS · Computer Science / Mathematics</span><span class="avatar">AC</span></div>
+</header>
+
+<div class="shell">
+  <!-- ============ ZONE 1: CHAT ============ -->
+  <section class="zone chat">
+    <div class="zone-title">Conversation</div>
+    <div class="msgs">
+      <div class="bubble bot">Hi Alex — your plan to graduate Spring 2028 is valid. Want to look at anything before you register?</div>
+      <div class="bubble user">What if I drop Analysis (MATH-UA 325) this semester?</div>
+      <div class="bubble bot">A withdrawal posts a “W” — it earns no credit and won’t fulfill the Analysis requirement, so you’d retake it. I built that as a proposed change; here’s how your plan would look.</div>
+      <div class="card" data-open="withdraw">
+        <div class="card-top"><span class="badge proposed">⏳ Proposed edit</span><span>Withdraw MATH-UA 325</span><span class="open-hint">open ›</span></div>
+        <div class="card-body">Re-opens the Analysis requirement · plans a retake in Spring 2027 · still graduates Spr 2028. <b>Verify the deadline.</b></div>
+      </div>
+      <div class="bubble user">And just out of curiosity — what would adding an Econ minor look like?</div>
+      <div class="bubble bot">Here’s a read-only what-if. It fits without delaying graduation, using two of your free-elective slots.</div>
+      <div class="card" data-open="econ">
+        <div class="card-top"><span class="badge whatif">🔍 What-if</span><span>+ Economics minor</span><span class="open-hint">open ›</span></div>
+        <div class="card-body">Read-only exploration · adds 4 ECON courses · 0 extra terms. Nothing committed.</div>
+      </div>
+      <div class="bubble bot">Tip: open both and hit <b>Compare</b> to see them next to your real plan.</div>
+    </div>
+    <div class="composer"><input placeholder="Ask anything, or describe a change…" /><button>Send</button></div>
+  </section>
+
+  <!-- ============ ZONE 2: SCHEDULE WORKSPACE ============ -->
+  <section class="zone workspace">
+    <div class="ws-head">
+      <div class="tabs" id="tabs">
+        <!-- tabs injected by JS -->
+        <button class="compare-btn" id="compareBtn">⇄ Compare</button>
+      </div>
+    </div>
+    <div class="ws-body" id="wsBody"><!-- schedule injected by JS --></div>
+    <p class="mock-note">Mockup — sample data. Demonstrates the layout, statuses, and compare flow only.</p>
+  </section>
+
+  <!-- ============ ZONE 3: PROFILE + SCENARIOS ============ -->
+  <aside class="zone profile">
+    <div class="zone-title" style="padding-left:0">Your profile</div>
+    <div class="pf"><span class="k">Home school</span><span class="v">CAS <span class="readonly-tag">from DPR</span></span></div>
+    <div class="pf"><span class="k">Major</span><span class="v">CS / Math</span></div>
+    <div class="pf"><span class="k">Catalog year</span><span class="v">2024</span></div>
+    <div class="pf"><span class="k">Cumulative GPA</span><span class="v">3.42</span></div>
+    <div class="pf"><span class="k">Credits</span><span class="v">84 / 128</span></div>
+    <div class="pf"><span class="k">Grad target</span><span class="v">Spring 2028</span></div>
+
+    <h4>Scenarios</h4>
+    <div id="scnList"><!-- scenario list injected by JS --></div>
+    <p class="note">Only <b>My Plan</b> is real &amp; saved. What-ifs live for this session; a proposed edit becomes My Plan only when you confirm.</p>
+  </aside>
+</div>
+
+<div class="legendbar">
+  <span><b>Statuses:</b></span>
+  <span class="badge committed">✓ Committed (your plan)</span>
+  <span class="badge proposed">⏳ Proposed (confirm to apply)</span>
+  <span class="badge whatif">🔍 What-if (read-only)</span>
+  <span style="margin-left:auto">course: ✓ done · ◐ in&nbsp;progress · ○ planned · 🔒 locked</span>
+</div>
+
+<script>
+// ---------- sample data ----------
+const C = (code,title,state,diff)=>({code,title,state,diff:diff||null});
+const baseFall = {term:"Fall 2026", current:true, cr:16, courses:[
+  C("CSCI-UA 310","Basic Algorithms","ip"),
+  C("MATH-UA 325","Analysis","ip"),
+  C("CSCI-UA 472","Artificial Intelligence","ip"),
+  C("CORE-UA 400","Texts & Ideas","ip"),
+]};
+const baseSpr = {term:"Spring 2027", cr:16, courses:[
+  C("CSCI-UA 480","Special Topics: Systems","planned"),
+  C("MATH-UA 343","Algebra","planned"),
+  C("CSCI-UA 467","Machine Learning","planned"),
+  C("ELEC","Free elective","planned"),
+]};
+const baseFall27 = {term:"Fall 2027", cr:12, courses:[
+  C("CSCI-UA 490","Capstone","planned"),
+  C("MATH-UA 377","Differential Geometry","planned"),
+  C("ELEC","Free elective","planned"),
+]};
+const baseSpr28 = {term:"Spring 2028", cr:12, courses:[
+  C("CSCI-UA 4xx","CS elective","planned"),
+  C("ELEC","Free elective","planned"),
+  C("ELEC","Free elective","planned"),
+]};
+
+const scenarios = {
+  committed:{ id:"committed", kind:"committed", label:"My Plan", verdict:"ok",
+    terms:[baseFall, baseSpr, baseFall27, baseSpr28] },
+
+  withdraw:{ id:"withdraw", kind:"proposed", label:"Withdraw MATH-UA 325", verdict:"warn",
+    hedge:"Assumes you withdraw from <b>MATH-UA 325</b> this term — a “W” (no credit, doesn’t fulfill the requirement). Verify the withdrawal deadline with your adviser; it shows on your next DPR, not now.",
+    terms:[
+      {term:"Fall 2026", current:true, cr:12, courses:[
+        C("CSCI-UA 310","Basic Algorithms","ip"),
+        C("MATH-UA 325","Analysis — withdrawn (W)","removed","removed"),
+        C("CSCI-UA 472","Artificial Intelligence","ip"),
+        C("CORE-UA 400","Texts & Ideas","ip"),
+      ]},
+      {term:"Spring 2027", cr:16, courses:[
+        C("MATH-UA 325","Analysis — retake","retake","retake"),
+        C("CSCI-UA 480","Special Topics: Systems","planned"),
+        C("MATH-UA 343","Algebra","planned"),
+        C("CSCI-UA 467","Machine Learning","planned"),
+      ]},
+      baseFall27, baseSpr28,
+    ]},
+
+  econ:{ id:"econ", kind:"whatif", label:"+ Economics minor", verdict:"ok",
+    hedge:"Read-only exploration. To make this your plan, declare the minor in Albert and upload your new DPR.",
+    terms:[
+      baseFall,
+      {term:"Spring 2027", cr:16, courses:[
+        C("CSCI-UA 480","Special Topics: Systems","planned"),
+        C("MATH-UA 343","Algebra","planned"),
+        C("CSCI-UA 467","Machine Learning","planned"),
+        C("ECON-UA 1","Intro to Microeconomics","added","added"),
+      ]},
+      {term:"Fall 2027", cr:12, courses:[
+        C("CSCI-UA 490","Capstone","planned"),
+        C("ECON-UA 2","Intro to Macroeconomics","added","added"),
+        C("ECON-UA 10","Intermediate Micro","added","added"),
+      ]},
+      {term:"Spring 2028", cr:12, courses:[
+        C("CSCI-UA 4xx","CS elective","planned"),
+        C("ECON-UA 18","Statistics","added","added"),
+        C("ELEC","Free elective","planned"),
+      ]},
+    ]},
+};
+const order = ["committed","withdraw","econ"];
+const dotColor = {committed:"var(--committed)", proposed:"var(--proposed)", whatif:"var(--whatif)"};
+const badgeLabel = {committed:"✓ Committed", proposed:"⏳ Proposed", whatif:"🔍 What-if"};
+const stateIcon = {done:"✓", ip:"◐", planned:"○", locked:"🔒", removed:"✗", retake:"↻", added:"＋"};
+
+let active = "committed";
+let compareMode = false;
+
+// ---------- render ----------
+function courseRow(c){
+  const cls = ["course", c.state, c.diff].filter(Boolean).join(" ");
+  return `<div class="${cls}"><span class="ic">${stateIcon[c.diff]||stateIcon[c.state]||"○"}</span>
+    <span class="code">${c.code}</span><span class="ti">${c.title}</span></div>`;
+}
+function termCard(t){
+  return `<div class="term ${t.current?"current":""}">
+    <div class="t-head"><span>${t.term}${t.current?" · now":""}</span><span class="cr">${t.cr} cr</span></div>
+    ${t.courses.map(courseRow).join("")}</div>`;
+}
+function scheduleGrid(s){ return `<div class="terms">${s.terms.map(termCard).join("")}</div>`; }
+
+function renderTabs(){
+  const tabs = order.map(id=>{
+    const s=scenarios[id]; const isC=id==="committed";
+    return `<button class="tab ${s.kind} ${active===id&&!compareMode?"active":""}" data-tab="${id}">
+      <span class="pin">${isC?"📌":""}</span>${badgeLabel[s.kind].split(" ")[0]} ${s.label}
+      ${isC?"":'<span class="x" title="close" data-close="'+id+'">×</span>'}</button>`;
+  }).join("");
+  document.getElementById("tabs").innerHTML =
+    tabs + `<button class="tab add">＋ New what-if</button>`
+    + `<button class="compare-btn ${compareMode?"on":""}" id="compareBtn">⇄ Compare${compareMode?" ✓":""}</button>`;
+}
+
+function panelHeader(s){
+  const v = s.verdict==="ok"
+    ? '<span class="verdict ok">✓ Valid · graduates Spring 2028</span>'
+    : '<span class="verdict warn">⚠ Valid with trade-offs</span>';
+  const badge = `<span class="badge ${s.kind}">${badgeLabel[s.kind]}</span>`;
+  let actions = "";
+  if(s.kind==="proposed") actions =
+    `<div class="actionbar"><button class="btn primary">Confirm — make this My Plan</button>
+       <button class="btn ghost">Cancel</button><button class="btn subtle">Ask why</button></div>`;
+  else if(s.kind==="whatif") actions =
+    `<div class="actionbar"><button class="btn subtle">Keep this scenario</button>
+       <button class="btn ghost">Discard</button></div>
+     <div class="note">Read-only — a what-if never changes your plan. To adopt it, declare it in Albert &amp; upload a new DPR.</div>`;
+  const hedge = s.hedge ? `<div class="hedge">${s.kind==="proposed"?"<b>Assumption:</b> ":""}${s.hedge}</div>` : "";
+  return `<div class="ctx"><h2>${s.label}</h2>${badge}${v}</div>${hedge}${actions}`;
+}
+
+function renderBody(){
+  const body=document.getElementById("wsBody");
+  if(compareMode){
+    const left=scenarios.committed, right=scenarios[active==="committed"?"withdraw":active];
+    body.innerHTML = `
+      <div class="ctx"><h2>Compare</h2><span class="badge whatif">side-by-side</span></div>
+      <div class="compare">
+        <div class="col"><h3><span class="badge committed">✓ Committed</span> ${left.label}</h3>${scheduleGrid(left)}</div>
+        <div class="col"><h3><span class="badge ${right.kind}">${badgeLabel[right.kind]}</span> ${right.label}</h3>${scheduleGrid(right)}</div>
+      </div>
+      <div class="difflegend">
+        <span><span class="sw" style="background:var(--added-bg);border:1px solid var(--added)"></span> added</span>
+        <span><span class="sw" style="background:var(--removed-bg);border:1px solid var(--removed)"></span> removed / withdrawn</span>
+        <span><span class="sw" style="background:var(--retake-bg);border:1px solid var(--retake)"></span> retake</span>
+      </div>`;
+  } else {
+    const s=scenarios[active];
+    body.innerHTML = panelHeader(s) + scheduleGrid(s);
+  }
+}
+
+function renderScenarios(){
+  document.getElementById("scnList").innerHTML = order.map(id=>{
+    const s=scenarios[id];
+    return `<div class="scn ${active===id&&!compareMode?"active":""}" data-tab="${id}">
+      <span class="dot" style="background:${dotColor[s.kind]}"></span>
+      <span class="lab">${s.label}</span>
+      <span class="badge ${s.kind}" style="margin-left:auto">${badgeLabel[s.kind].split(" ")[0]}</span></div>`;
+  }).join("");
+}
+
+function render(){ renderTabs(); renderBody(); renderScenarios(); bind(); }
+
+function bind(){
+  document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=e=>{
+    if(e.target.dataset.close) return;
+    compareMode=false; active=el.dataset.tab; render();
+  });
+  document.querySelectorAll("[data-close]").forEach(el=>el.onclick=e=>{e.stopPropagation();});
+  const cb=document.getElementById("compareBtn");
+  if(cb) cb.onclick=()=>{ compareMode=!compareMode; if(active==="committed"&&compareMode) active="withdraw"; render(); };
+  document.querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>{
+    compareMode=false; active=el.dataset.open; render();
+    document.querySelector(".workspace").scrollTo({top:0,behavior:"smooth"});
+  });
+}
+render();
+</script>
+</body>
+</html>

@@ -16,7 +16,12 @@ import { renderMarkdown } from "../../lib/renderMarkdown";
 import type { ForwardSchedule, SchedulePreferences, StudentProfile } from "@nyupath/shared";
 import type { ChatMessageRecord, ToolInvocation, DegreeProgressReport } from "@nyupath/engine";
 import { buildStudentProfileFromDpr } from "../../lib/buildSession";
-import ScheduleSidebar from "./scheduleSidebar";
+// H5.1 (plan 36) — the RIGHT zone is now the profile-only ProfileRail.
+// `scheduleSidebar.tsx` lingers UNMOUNTED (its grid + slot popovers +
+// review/preview card moved to the CENTER-zone ScheduleWorkspace; its
+// G3.2 what-if control is intentionally removed — what-ifs are chat-only).
+// H7 decides the dead file's fate.
+import ProfileRail from "./ProfileRail";
 import {
     bubbleSlotKey,
     bubbleHasButtons,
@@ -32,7 +37,8 @@ import {
     type PlanActionRouteResponse,
     type WhatIfAssumptionRouteResponse,
 } from "../../lib/planActionClient";
-import { createPlanStore } from "./planState";
+import { createPlanStore, type Scenario } from "./planState";
+import ThreeZoneShell from "./workspace/ThreeZoneShell";
 import { applyReviewConfirm, applyReviewCancel } from "../../lib/reviewCard";
 import { planActionSurfaces } from "../../lib/planActionSurfaces";
 import {
@@ -44,6 +50,14 @@ import { buildPreferenceTurns } from "../../lib/wizard/preferenceTurns";
 import { buildIntendedMajorPreviewTurn } from "../../lib/wizard/intendedMajor";
 import type { WizardValues } from "../../lib/wizard/wizardMachine";
 import OnboardingWizard from "./wizard/OnboardingWizard";
+import ScheduleCard from "./ScheduleCard";
+import WhatIfUploadCard from "./WhatIfUploadCard";
+import { buildScheduleCardMessage } from "./buildScheduleCardMessage";
+import {
+    buildWhatIfScenarioFromAudit,
+    type WhatIfAuditResponse,
+} from "./buildWhatIfScenarioFromAudit";
+import type { ScenarioKind } from "./workspace/scenarioBadges";
 
 // Char-reveal rates for the ChatGPT-style typewriter animations.
 // Tuned by feel: thinking should read like deliberative reasoning;
@@ -87,8 +101,28 @@ interface Message {
     /** Phase 17 Task D follow-up — discriminator for the new
      *  `plan_action_bubble` kind. `undefined` = a regular chat
      *  bubble (the existing render path); `"plan_action_bubble"`
-     *  swaps the render to the bubble + buttons block. */
-    kind?: "plan_action_bubble";
+     *  swaps the render to the bubble + buttons block.
+     *  H4.2a — `"schedule_card"` swaps the render to the ScheduleCard
+     *  component, showing an openable/comparable artifact in the chat
+     *  thread whenever the engine produces a new proposed schedule.
+     *  H4.2b-3 — `"whatif_upload_card"` swaps the render to the
+     *  WhatIfUploadCard, offering a Branch-A Albert What-If audit upload
+     *  for a hypothetical PROGRAM (→ a read-only 🔍 what-if scenario). */
+    kind?: "plan_action_bubble" | "schedule_card" | "whatif_upload_card";
+    /** H4.2a — populated only when `kind === "schedule_card"`. Holds
+     *  the scenario id, kind, label, optional summary, and optional
+     *  verdict to render as a ScheduleCard in the chat thread. */
+    scheduleCard?: {
+        scenarioId: string;
+        kind: ScenarioKind;
+        label: string;
+        summary?: string;
+        verdict?: "valid" | "trade-offs" | "invalid";
+    };
+    /** H4.2b-3 — populated only when `kind === "whatif_upload_card"`.
+     *  Holds the hypothetical program the agent offered to explore via a
+     *  Branch-A Albert What-If audit upload. */
+    whatifUpload?: { hypotheticalProgram: string };
     /** Phase 17 Task D follow-up — populated only when
      *  `kind === "plan_action_bubble"`. Holds the bubble's
      *  template/polished text, the verb, the pendingMutationId
@@ -193,11 +227,21 @@ export default function ChatPage() {
     const planStore = useMemo(() => createPlanStore(), []);
     const { forwardSchedule, schedulePreferences, forwardMaterialization, pendingPreview, invalidProposal } =
         useSyncExternalStore(planStore.subscribe, planStore.getSnapshot, planStore.getSnapshot);
-    const [sidebarOpen, setSidebarOpen] = useState(false);
     // Phase 4 Task E6.4 — in-flight guard for the standing
     // self-serve account-deletion control (disables the button so a
     // student can't fire DELETE /api/session/delete twice).
     const [deletingAccount, setDeletingAccount] = useState(false);
+    // H5.1 (plan 36) — in-flight guard for the ProfileRail "↻ Update DPR"
+    // control. The scheduleSidebar formerly held this `refreshing` state
+    // internally; with the profile-level concerns lifted to the rail, the
+    // page owns it (the rail's `refreshing` prop only disables + relabels
+    // the button — the actual fetch lives in handleRefreshDpr below).
+    const [refreshingDpr, setRefreshingDpr] = useState(false);
+    // H4.2b-3 — per-card busy/error state for the Branch-A What-If audit
+    // upload cards, keyed by the card message id (so multiple offer cards
+    // in the thread track independently).
+    const [whatifUploadBusy, setWhatifUploadBusy] = useState<Record<string, boolean>>({});
+    const [whatifUploadError, setWhatifUploadError] = useState<Record<string, string>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -572,6 +616,28 @@ export default function ChatPage() {
             case "forward_schedule_update":
                 planStore.setForwardSchedule(ev.schedule);
                 break;
+            case "whatif_audit_request": {
+                // H4.2b-3 — the agent offered a Branch-A "explore precisely"
+                // path this turn (hypothetical PROGRAM change). Inject a
+                // WhatIfUploadCard into the thread so the student can upload
+                // their Albert What-If audit → a read-only 🔍 what-if
+                // scenario. No store/DPR write happens here; the upload
+                // round-trip is owned by handleWhatIfAuditUpload.
+                const uploadCardId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                setMessages(prev => [
+                    ...prev,
+                    {
+                        id: uploadCardId,
+                        role: "assistant",
+                        content: "",
+                        timestamp: new Date(),
+                        kind: "whatif_upload_card",
+                        whatifUpload: { hypotheticalProgram: ev.hypotheticalProgram },
+                    },
+                ]);
+                setTimeout(scrollToBottom, 50);
+                break;
+            }
             case "forward_materialization_update":
                 // Phase 15 Task 8 — `materialize_sections` produced a
                 // result this turn. Hold it in state so the sidebar
@@ -1171,6 +1237,15 @@ export default function ChatPage() {
             planStore.setPendingPreview(surfaces.preview);
             // A feasible preview supersedes any stale red card.
             planStore.clearInvalidProposal();
+            // H4.2a — emit a ScheduleCard into the chat thread so the
+            // student can open/compare the new proposed scenario from
+            // the conversation (feasible path ONLY; invalid stays card-only).
+            const activeSc = planStore.getActiveScenario();
+            if (activeSc && activeSc.kind === "proposed") {
+                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                setMessages(prev => [...prev, buildScheduleCardMessage(activeSc, cardMsgId, new Date()) as Message]);
+                setTimeout(scrollToBottom, 50);
+            }
         }
         // E3.4 bubble↔card dedup — mint the chat bubble ONLY for the
         // feasible:false path (showBubble). The feasible path's sole
@@ -1231,6 +1306,15 @@ export default function ChatPage() {
         } else if (surfaces.preview) {
             planStore.setPendingPreview(surfaces.preview);
             planStore.clearInvalidProposal();
+            // H4.2a — emit a ScheduleCard into the chat thread so the
+            // student can open/compare the new what-if scenario from the
+            // conversation (feasible path ONLY; invalid stays card-only).
+            const activeSc = planStore.getActiveScenario();
+            if (activeSc && activeSc.kind === "proposed") {
+                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                setMessages(prev => [...prev, buildScheduleCardMessage(activeSc, cardMsgId, new Date()) as Message]);
+                setTimeout(scrollToBottom, 50);
+            }
         }
     }, []);
 
@@ -1275,6 +1359,97 @@ export default function ChatPage() {
             });
         }
     }, [patchMessage, abortBubbleEnrichers]);
+
+    /**
+     * H4.2b-3 — Branch-A "explore precisely" upload handler.
+     *
+     * POSTs the student's Albert What-If audit PDF (multipart field `dpr`,
+     * matching the wizard's /api/onboard shape) to /api/whatif-audit. On
+     * success, builds a READ-ONLY 🔍 what-if scenario from the response,
+     * adds it to the workspace, emits a schedule_card into the chat, and
+     * appends a narration message clearly framing it as a hypothetical
+     * (NOT committed).
+     *
+     * R1: this NEVER calls /api/plan/confirm and NEVER writes parsed_dpr.
+     * The scenario it builds has no pendingMutationId — it cannot be
+     * confirmed/committed. We never log the file bytes or any PII.
+     */
+    const handleWhatIfAuditUpload = useCallback(
+        async (file: File, cardMessageId: string): Promise<void> => {
+            // Client-side PDF guard mirrors the wizard + the route.
+            if (!file.name.toLowerCase().endsWith(".pdf")) {
+                setWhatifUploadError(prev => ({
+                    ...prev,
+                    [cardMessageId]: "Please upload your Albert What-If report as a PDF.",
+                }));
+                return;
+            }
+            setWhatifUploadBusy(prev => ({ ...prev, [cardMessageId]: true }));
+            setWhatifUploadError(prev => {
+                const next = { ...prev };
+                delete next[cardMessageId];
+                return next;
+            });
+            try {
+                const formData = new FormData();
+                formData.append("dpr", file);
+                const res = await fetch("/api/whatif-audit", { method: "POST", body: formData });
+                let data: WhatIfAuditResponse & { message?: string };
+                try {
+                    data = (await res.json()) as WhatIfAuditResponse & { message?: string };
+                } catch {
+                    data = {} as WhatIfAuditResponse & { message?: string };
+                }
+                if (!res.ok || !data.exploration) {
+                    setWhatifUploadError(prev => ({
+                        ...prev,
+                        [cardMessageId]: data?.message ?? "Upload failed. Please try again.",
+                    }));
+                    return;
+                }
+
+                // Build the read-only what-if scenario + register it.
+                const scenarioId = "whatif-audit-" + Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                const scenario = buildWhatIfScenarioFromAudit(data, scenarioId, Date.now());
+                planStore.addScenario(scenario);
+
+                // 🔍 schedule card so the student can Open/Compare it.
+                const cardMsgId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+                const narrationId = Date.now().toString() + Math.random().toString(36).slice(2, 6) + "-n";
+                setMessages(prev => [
+                    ...prev,
+                    buildScheduleCardMessage(scenario, cardMsgId, new Date()) as Message,
+                    {
+                        id: narrationId,
+                        role: "assistant",
+                        // `data.label` already ends with "— not your committed
+                        // plan." and `data.cta` already carries the upload-a-DPR
+                        // instruction, so let each be the sole voice for its
+                        // point — no redundant/duplicated CTA (review scope-ux-1).
+                        content:
+                            `${data.exploration.summary}\n\n` +
+                            `_${data.label}_ This is a **read-only hypothetical**. ${data.cta}`,
+                        timestamp: new Date(),
+                    },
+                ]);
+                setTimeout(scrollToBottom, 50);
+            } catch {
+                // Network / unexpected failure — surface a friendly error,
+                // never crash. Do NOT log the file or its contents.
+                setWhatifUploadError(prev => ({
+                    ...prev,
+                    [cardMessageId]: "I had trouble processing that file. Please try again.",
+                }));
+            } finally {
+                setWhatifUploadBusy(prev => {
+                    const next = { ...prev };
+                    delete next[cardMessageId];
+                    return next;
+                });
+            }
+        },
+        [planStore],
+    );
 
     /** Keep-as-is — discard the bubble without applying. */
     const handleBubbleKeepAsIs = useCallback((messageId: string): void => {
@@ -1390,6 +1565,64 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isLoading]);
 
+    // ----------------------------------------------------------------
+    // H2.1 (plan 36) — CENTER-zone ScheduleWorkspace callbacks.
+    // The workspace surfaces proposed scenarios with Confirm / Ask-why
+    // buttons keyed by a `Scenario`. We map each back onto the EXISTING
+    // confirm round-trip / Ask-why chat injection so the workspace and
+    // the (still-mounted) review card share ONE commit path — neither
+    // can double-commit, and R1 holds (planConfirm persists only the
+    // forward_schedule; `parsed_dpr` is never written).
+    // ----------------------------------------------------------------
+
+    /** Workspace Confirm — a proposed scenario carries the same
+     *  `pendingMutationId` the review card uses. Reuse `applyReviewConfirm`
+     *  (the shared `planConfirm` → `setForwardSchedule` → `clearPendingPreview`
+     *  path); on success ALSO promote the scenario in the model
+     *  (`confirmProposed`) so a scenario created via the NEW addScenario
+     *  API — not the compat preview path — is committed + dropped. */
+    const handleWorkspaceConfirm = useCallback(async (scenario: Scenario): Promise<void> => {
+        const pendingMutationId = scenario.pendingMutationId;
+        if (!pendingMutationId) {
+            // A proposed scenario with no mutation id cannot be confirmed
+            // server-side; nothing to commit. (Defensive — proposed
+            // scenarios always carry one in the live flow.)
+            return;
+        }
+        const res = await applyReviewConfirm(planStore, planConfirm, pendingMutationId);
+        if (!res.ok) {
+            // Retry-able failure: the preview/scenario stays staged
+            // (handled inside applyReviewConfirm). Surface a brief note.
+            const msg: Message = {
+                id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
+                role: "assistant",
+                content: "Couldn't apply that change — it may have expired or conflicted. Try again from the canvas.",
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, msg]);
+            setTimeout(scrollToBottom, 50);
+            return;
+        }
+        // Commit succeeded. `applyReviewConfirm` already committed the new
+        // forward_schedule (which, via the compat facade, supersedes ALL
+        // scenarios + resets active to "committed"). Promoting the scenario
+        // explicitly is a no-op in that case, but covers the path where the
+        // confirm route returned no `forwardSchedule` so scenarios survived.
+        planStore.confirmProposed(scenario.id);
+    }, []);
+
+    /** Workspace Ask-why — route into the grounded chat agent via the
+     *  SAME shared question-builder the review card uses. Derive a verb
+     *  hint from the proposed scenario label (the compat facade labels a
+     *  staged preview `Proposed: <verb>`); falls back to a generic
+     *  proposal question when no verb is present. */
+    const handleWorkspaceAskWhy = useCallback((scenario: Scenario): void => {
+        const verb = scenario.label.startsWith("Proposed: ")
+            ? scenario.label.slice("Proposed: ".length)
+            : undefined;
+        void handleReviewAskWhy(scenario.pendingMutationId ?? "", verb);
+    }, [handleReviewAskWhy]);
+
     /**
      * Phase 16 Task B — Update-DPR sidebar affordance.
      * POSTs the new PDF to /api/onboard/refresh-dpr; the route
@@ -1404,6 +1637,9 @@ export default function ChatPage() {
             window.alert("DPR file must be a PDF.");
             return;
         }
+        // H5.1 — drive the ProfileRail's busy state for the duration of the
+        // round-trip (the rail relabels "↻ Update DPR" → "Updating…").
+        setRefreshingDpr(true);
         const formData = new FormData();
         formData.append("dpr", file);
         try {
@@ -1416,6 +1652,7 @@ export default function ChatPage() {
                 changed?: boolean;
                 schedule?: ForwardSchedule;
                 state?: string;
+                dpr?: { kind: "dpr"; report: import("@nyupath/engine").DegreeProgressReport };
                 error?: string;
             };
             if (!res.ok) {
@@ -1429,9 +1666,21 @@ export default function ChatPage() {
             if (data.schedule) {
                 planStore.setForwardSchedule(data.schedule);
             }
+            // FIX 2 — update parsedData so SummaryCard re-derives from the
+            // fresh DPR immediately (without a page reload). Shape mirrors
+            // the discriminated ParsedTranscript the restore path uses:
+            //   setParsedData({ kind: "dpr", report: <DegreeProgressReport> })
+            // CORE RULE 14 safe: this is the REAL corrected DPR (reportKind
+            // "dpr"), not a synthetic/what-if DPR. assertAuthoritativeDpr
+            // is not touched.
+            if (data.dpr) {
+                setParsedData(data.dpr);
+            }
             window.alert("Schedule updated to reflect your new DPR.");
         } catch (err) {
             window.alert(`Update DPR failed: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+            setRefreshingDpr(false);
         }
     }, []);
 
@@ -1580,24 +1829,9 @@ export default function ChatPage() {
             <header className={styles.header}>
                 <a href="/" className={styles.headerLogo}>🎓 NYU Path</a>
                 <span className={styles.headerBadge}>AI Advisor</span>
-                {/* Schedule toggle is ALWAYS visible (May 2026 post-mortem
-                    fix). Even before a forward plan exists, the sidebar
-                    surfaces the empty state ("Ask me what to take next
-                    semester to compute one"), the Update DPR / Clear
-                    affordances, and — once a DPR is loaded — the
-                    historical + IP term cards. The Phase 13 gate that
-                    hid the button until `forwardSchedule !== null` left
-                    students with no obvious way to inspect what data
-                    the agent already had. */}
-                <button
-                    type="button"
-                    className={styles.scheduleToggle}
-                    onClick={() => setSidebarOpen(o => !o)}
-                    aria-label="Toggle schedule sidebar"
-                    aria-expanded={sidebarOpen}
-                >
-                    📅 Schedule
-                </button>
+                {/* H5 (plan 36): the sidebar toggle is gone — the 3 zones are
+                    always visible (no collapse; no mobile). The ProfileRail
+                    is permanently mounted in ThreeZoneShell's .zoneRight. */}
             </header>
 
             {/* Phase 7-E W10.3 — persistent disclaimer banner.
@@ -1634,6 +1868,20 @@ export default function ChatPage() {
                 </div>
             )}
 
+            {/* H2.1 (plan 36) — 3-zone shell:
+                chat (LEFT) | ScheduleWorkspace (CENTER) | sidebar (RIGHT).
+                The chat thread + composer become the LEFT zone; the new
+                ScheduleWorkspace is mounted in the CENTER fed the SAME
+                `planStore`; the existing ScheduleSidebar is passed UNCHANGED
+                as the RIGHT zone (it stays a `position: fixed` overlay drawer
+                toggled by the 📅 header button — H5 repurposes it into an
+                in-flow profile-only rail). */}
+            <ThreeZoneShell
+                planStore={planStore}
+                onConfirmProposed={handleWorkspaceConfirm}
+                onAskWhy={handleWorkspaceAskWhy}
+                left={
+                    <>
             {/* Messages */}
             <div className={styles.messages}>
                 {messages.map((msg, i) => {
@@ -1749,6 +1997,73 @@ export default function ChatPage() {
                                             )}
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    // H4.2b-3 — whatif_upload_card: render the Branch-A
+                    // "explore precisely" upload offer. Uploading the
+                    // student's Albert What-If audit produces a read-only
+                    // 🔍 what-if scenario (never confirmable).
+                    if (msg.kind === "whatif_upload_card" && msg.whatifUpload) {
+                        return (
+                            <div
+                                key={msg.id}
+                                className={`${styles.messageBubble} ${styles.assistant}`}
+                                style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}
+                                data-kind="whatif_upload_card"
+                            >
+                                <div className={styles.avatar}>🎓</div>
+                                <div className={styles.bubbleContent}>
+                                    <WhatIfUploadCard
+                                        hypotheticalProgram={msg.whatifUpload.hypotheticalProgram}
+                                        onUpload={(file) => void handleWhatIfAuditUpload(file, msg.id)}
+                                        uploading={whatifUploadBusy[msg.id]}
+                                        error={whatifUploadError[msg.id]}
+                                    />
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    // H4.2a — schedule_card: render a ScheduleCard artifact
+                    // in the chat thread so the student can Open or Compare
+                    // the new scenario from the conversation.
+                    if (msg.kind === "schedule_card" && msg.scheduleCard) {
+                        const sc = msg.scheduleCard;
+                        return (
+                            <div
+                                key={msg.id}
+                                className={`${styles.messageBubble} ${styles.assistant}`}
+                                style={{ animationDelay: `${Math.min(i * 0.05, 0.3)}s` }}
+                                data-kind="schedule_card"
+                            >
+                                <div className={styles.avatar}>🎓</div>
+                                <div className={styles.bubbleContent}>
+                                    <ScheduleCard
+                                        scenarioId={sc.scenarioId}
+                                        kind={sc.kind}
+                                        label={sc.label}
+                                        summary={sc.summary}
+                                        verdict={sc.verdict}
+                                        onOpen={(id) => planStore.setActive(id)}
+                                        onCompare={(id) => {
+                                            // Guard: committed must be non-null and
+                                            // the scenario must not equal "committed"
+                                            // (openCompare throws on equal ids).
+                                            const state = planStore.getScenarioState();
+                                            if (state.committed === null) return;
+                                            if (id === "committed") return;
+                                            try {
+                                                planStore.openCompare("committed", id);
+                                            } catch {
+                                                // Safety: if openCompare rejects (e.g.
+                                                // scenario was already discarded), do
+                                                // nothing — the workspace handles it.
+                                            }
+                                        }}
+                                    />
                                 </div>
                             </div>
                         );
@@ -1965,31 +2280,46 @@ export default function ChatPage() {
                     }}
                 />
             </div>
-            <ScheduleSidebar
-                schedule={forwardSchedule}
-                pendingPreview={pendingPreview}
-                invalidProposal={invalidProposal}
-                student={sidebarStudent}
-                dpr={sidebarDpr}
-                materialization={forwardMaterialization}
-                schedulePreferences={schedulePreferences}
-                open={sidebarOpen}
-                onClose={() => setSidebarOpen(false)}
-                onProposeLoadStyle={handleProposeLoadStyle}
-                onProposeSlotChange={handleProposeSlotChange}
-                onExplainSlot={handleExplainSlot}
-                onExplainTerm={handleExplainTerm}
-                onPlanActionResult={handlePlanActionResult}
-                onWhatIfResult={handleWhatIfResult}
-                onReviewConfirm={handleReviewConfirm}
-                onReviewCancel={handleReviewCancel}
-                onReviewAskWhy={handleReviewAskWhy}
-                onDismissInvalid={handleDismissInvalid}
-                onConfirmCombination={handleConfirmSectionCombination}
-                onRefreshDpr={handleRefreshDpr}
-                onClearAll={handleClearAll}
-                onDeleteAccount={handleDeleteAccount}
-                deletingAccount={deletingAccount}
+                    </>
+                }
+                right={
+                    /* H5.1 (plan 36) — the RIGHT zone is the profile-only
+                       ProfileRail: SummaryCard DPR-derived read-only fields +
+                       the ↻ Update DPR control + the scenarios list (reading
+                       the SAME `planStore`) + the privacy note + account
+                       actions. The schedule grid + slot popovers + the
+                       review/preview card moved to the CENTER-zone
+                       ScheduleWorkspace; what-if creation is chat-only (no
+                       spawn control here). onSelectScenario/onCompareScenario
+                       reuse the chat ScheduleCard pattern: setActive + a
+                       committed-vs-row openCompare guarded against
+                       null-committed / equal ids (openCompare throws). */
+                    <ProfileRail
+                        student={sidebarStudent}
+                        dpr={sidebarDpr}
+                        planStore={planStore}
+                        onRefreshDpr={handleRefreshDpr}
+                        refreshing={refreshingDpr}
+                        onClearAll={handleClearAll}
+                        onDeleteAccount={handleDeleteAccount}
+                        deletingAccount={deletingAccount}
+                        onSelectScenario={(id) => planStore.setActive(id)}
+                        onCompareScenario={(id) => {
+                            // Guard: committed must be non-null and the
+                            // scenario id must not be "committed" (openCompare
+                            // throws on equal/unresolvable ids).
+                            const state = planStore.getScenarioState();
+                            if (state.committed === null) return;
+                            if (id === "committed") return;
+                            try {
+                                planStore.openCompare("committed", id);
+                            } catch {
+                                /* swallow — defensive; the guards above already
+                                   cover the throwing cases. */
+                            }
+                        }}
+                    />
+                }
             />
         </div>
     );

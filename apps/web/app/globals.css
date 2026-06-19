@@ -27,6 +27,71 @@
     --accent-red: #EF4444;
     --accent-blue: #3B82F6;
 
+    /* ----------------------------------------------------------------
+       Plan 36 §9 — professional design system (H6.1)
+       ----------------------------------------------------------------
+       Status colours for the scenario model. Used ONLY on badges +
+       diff highlights + thin tab/row accents — NEVER as large fills,
+       so the surfaces stay neutral (the §9 "precise accent" rule).
+       Each status gets a saturated `text` colour + a very-light tinted
+       `bg` for the pill, all WCAG-AA on white. */
+    --status-committed:    #0A7D3C;
+    --status-committed-bg: #E7F6EC;
+    --status-proposed:     #9A5400;
+    --status-proposed-bg:  #FDF1DF;
+    --status-whatif:       #1F6FB2;
+    --status-whatif-bg:    #E7F1FA;
+
+    /* Compare/diff highlight colours (committed=green, removed=red,
+       retake=violet, moved=amber). Used on diff row tints + the
+       legend swatches only. */
+    --diff-added:      #0A7D3C;
+    --diff-added-bg:   #E7F6EC;
+    --diff-removed:    #B00020;
+    --diff-removed-bg: #FDEAEC;
+    --diff-retake:     #7A4AD1;
+    --diff-retake-bg:  #F1EBFB;
+    --diff-moved:      #9A5400;
+    --diff-moved-bg:   #FBF0DE;
+
+    /* Surfaces — a faint warm-white + a very-light violet tint used by
+       the workspace hero zone (so the centre reads as a calm canvas,
+       not stark white). */
+    --surface-canvas:  #FAF8FC;  /* workspace backdrop */
+    --surface-raised:  #FFFFFF;  /* term cards / panels */
+    --surface-violet:  #FAF7FD;  /* term-header tint */
+
+    /* ----------------------------------------------------------------
+       Type scale — 12 / 13 / 14 / 16 / 20 / 24 (§9). The body default
+       is 14px; the scale is consumed via var() so the workspace and
+       chat share one rhythm. */
+    --fs-12: 0.75rem;    /* 12px — captions, badges, legends */
+    --fs-13: 0.8125rem;  /* 13px — secondary / dense rows */
+    --fs-14: 0.875rem;   /* 14px — body */
+    --fs-16: 1rem;       /* 16px — sub-headings */
+    --fs-20: 1.25rem;    /* 20px — scenario title */
+    --fs-24: 1.5rem;     /* 24px — page-level */
+
+    /* Weight hierarchy */
+    --fw-regular: 400;
+    --fw-medium:  500;
+    --fw-semibold: 600;
+    --fw-bold:    700;
+
+    /* ----------------------------------------------------------------
+       Spacing rhythm — an 8 / 12 / 16 scale (§9). Smaller 4/6 steps are
+       kept for dense grid interiors (real registrar planners are dense). */
+    --sp-4:  4px;
+    --sp-6:  6px;
+    --sp-8:  8px;
+    --sp-12: 12px;
+    --sp-16: 16px;
+    --sp-24: 24px;
+
+    /* Hairline border + a soft low-opacity panel shadow (§9). */
+    --hairline: 1px solid var(--border-light);
+    --shadow-panel: 0 1px 3px rgba(26, 29, 35, 0.05), 0 1px 2px rgba(26, 29, 35, 0.04);
+
     /* Phase 4 Task E2.3 — plan-badge state tokens (LIGHT).
        Semantic colours for the workspace plan-badge row + slot-state
        glyph, consumed by chat.module.css `.planBadge*` / `.slotLockIcon`
@@ -145,6 +210,27 @@
     --badge-grounded-text: #D8BFEC;
     /* Slot glyph reads as the lighter violet on dark. */
     --slot-glyph-color: var(--nyu-violet-light);
+
+    /* Plan 36 §9 — status + diff + surface tokens (DARK). Muted,
+       translucent tints so the status colour reads without glaring. */
+    --status-committed:    #6EE7B7;
+    --status-committed-bg: rgba(16, 185, 129, 0.16);
+    --status-proposed:     #FCD34D;
+    --status-proposed-bg:  rgba(245, 158, 11, 0.16);
+    --status-whatif:       #93C5FD;
+    --status-whatif-bg:    rgba(59, 130, 246, 0.16);
+    --diff-added:      #6EE7B7;
+    --diff-added-bg:   rgba(16, 185, 129, 0.16);
+    --diff-removed:    #FCA5A5;
+    --diff-removed-bg: rgba(239, 68, 68, 0.16);
+    --diff-retake:     #C4A5F0;
+    --diff-retake-bg:  rgba(123, 47, 191, 0.20);
+    --diff-moved:      #FCD34D;
+    --diff-moved-bg:   rgba(245, 158, 11, 0.16);
+    --surface-canvas:  var(--bg-secondary);
+    --surface-raised:  var(--bg-primary);
+    --surface-violet:  var(--nyu-violet-faint);
+    --shadow-panel: 0 1px 3px rgba(0, 0, 0, 0.30), 0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
 /* OS-level dark preference → same overrides, unless the user (or
@@ -178,6 +264,26 @@
         --badge-grounded-border: rgba(168, 130, 224, 0.55);
         --badge-grounded-text: #D8BFEC;
         --slot-glyph-color: var(--nyu-violet-light);
+
+        /* Plan 36 §9 — status + diff + surface (OS dark). */
+        --status-committed:    #6EE7B7;
+        --status-committed-bg: rgba(16, 185, 129, 0.16);
+        --status-proposed:     #FCD34D;
+        --status-proposed-bg:  rgba(245, 158, 11, 0.16);
+        --status-whatif:       #93C5FD;
+        --status-whatif-bg:    rgba(59, 130, 246, 0.16);
+        --diff-added:      #6EE7B7;
+        --diff-added-bg:   rgba(16, 185, 129, 0.16);
+        --diff-removed:    #FCA5A5;
+        --diff-removed-bg: rgba(239, 68, 68, 0.16);
+        --diff-retake:     #C4A5F0;
+        --diff-retake-bg:  rgba(123, 47, 191, 0.20);
+        --diff-moved:      #FCD34D;
+        --diff-moved-bg:   rgba(245, 158, 11, 0.16);
+        --surface-canvas:  var(--bg-secondary);
+        --surface-raised:  var(--bg-primary);
+        --surface-violet:  var(--nyu-violet-faint);
+        --shadow-panel: 0 1px 3px rgba(0, 0, 0, 0.30), 0 1px 2px rgba(0, 0, 0, 0.24);
     }
 }
 
@@ -265,4 +371,285 @@ html, body {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 24px;
+}
+
+/* ============================================================
+   Plan 36 §9 — Scenarios workspace (GLOBAL classes)
+   ------------------------------------------------------------
+   The center "workspace" zone is the HERO. These classes are
+   referenced as PLAIN global strings from ScheduleWorkspace /
+   ScheduleCard / CompareView / scenarioBadges (the kindBadgeClass
+   helper returns "badge badge-*", verdictDisplay returns
+   "verdict verdict-*", the tab bar uses "tab"/"compare-btn",
+   action bars use "btn btn-*"), so they MUST live in the global
+   stylesheet — not a CSS Module. Surfaces stay neutral; status
+   colour appears only on badges + thin accents + diff tints.
+   ============================================================ */
+
+/* ---- Shared scenario badges (committed / proposed / what-if) ---- */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--fs-12);
+    font-weight: var(--fw-bold);
+    line-height: 1.4;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+.badge-committed { color: var(--status-committed); background: var(--status-committed-bg); }
+.badge-proposed  { color: var(--status-proposed);  background: var(--status-proposed-bg); }
+.badge-whatif    { color: var(--status-whatif);    background: var(--status-whatif-bg); }
+
+/* ---- Verdict pills (valid / trade-offs / invalid) ---- */
+.verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--fs-12);
+    font-weight: var(--fw-bold);
+    line-height: 1.4;
+    padding: 3px 9px;
+    border-radius: var(--radius-full);
+    white-space: nowrap;
+}
+.verdict-ok      { color: var(--status-committed); background: var(--status-committed-bg); }
+.verdict-warn    { color: var(--status-proposed);  background: var(--status-proposed-bg); }
+.verdict-invalid { color: var(--badge-invalid-text); background: var(--badge-invalid-bg); }
+
+/* ============================================================
+   Workspace shell — the HERO center zone
+   ============================================================ */
+.schedule-workspace {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    background: var(--surface-canvas);
+}
+
+/* Tab bar — sticky header over the canvas. */
+.ws-head {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--surface-canvas);
+    padding: var(--sp-12) var(--sp-16) 0;
+    flex-shrink: 0;
+}
+/* Toolbar row: tablist + Compare button as siblings.
+   The Compare <button> must NOT be inside role="tablist"
+   (a tablist must contain only role="tab" children — ARIA fix). */
+.ws-head .tabs-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--sp-6);
+}
+.ws-head .tabs {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--sp-6);
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+}
+
+/* A tab is a flex container (select-button + optional close-button as
+   SIBLINGS — never nested, per the M3 restructure). */
+.tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-6);
+    border: var(--hairline);
+    border-bottom-color: var(--border-light);
+    background: var(--surface-raised);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    padding: 7px 10px;
+    font-size: var(--fs-13);
+    font-weight: var(--fw-semibold);
+    color: var(--text-secondary);
+    cursor: pointer;
+    position: relative;
+    top: 1px;
+    transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.tab:hover { color: var(--text-primary); }
+.tab.active {
+    color: var(--text-primary);
+    background: var(--surface-raised);
+    border-bottom-color: var(--surface-raised);
+}
+/* Active-tab top accent — the status colour as a 2px inset strip (never a fill). */
+.tab.tab-committed.active { box-shadow: inset 0 2px 0 var(--status-committed); }
+.tab.tab-proposed.active  { box-shadow: inset 0 2px 0 var(--status-proposed); }
+.tab.tab-whatif.active    { box-shadow: inset 0 2px 0 var(--status-whatif); }
+.tab:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+    z-index: 1;
+}
+.tab .tab-pin { font-size: var(--fs-12); opacity: 0.85; }
+.tab .tab-label {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Close control — a SIBLING button inside the tab container (M3). */
+.tab-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-12);
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+.tab-close:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.tab-close:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--nyu-violet-glow);
+}
+
+/* Compare toggle — right-aligned, quiet violet outline. */
+.compare-btn {
+    margin-left: auto;
+    align-self: center;
+    border: 1px solid var(--nyu-violet);
+    background: var(--nyu-violet-faint);
+    color: var(--nyu-violet);
+    font-weight: var(--fw-bold);
+    font-size: var(--fs-12);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+.compare-btn:hover { background: var(--nyu-violet); color: #fff; }
+.compare-btn-on { background: var(--nyu-violet); color: #fff; }
+.compare-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+}
+
+/* ---- Body panel — the schedule canvas ---- */
+.ws-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin: 0 var(--sp-16) var(--sp-16);
+    background: var(--surface-raised);
+    border: var(--hairline);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    padding: var(--sp-16);
+    box-shadow: var(--shadow-panel);
+}
+.ws-empty {
+    padding: var(--sp-24) var(--sp-16);
+    color: var(--text-secondary);
+    font-size: var(--fs-14);
+}
+
+/* ---- Scenario body — header + hedge + actions + grid ---- */
+.scenario-body { display: flex; flex-direction: column; }
+.scenario-ctx {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-8);
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-6);
+}
+.scenario-label {
+    font-size: var(--fs-20);
+    font-weight: var(--fw-bold);
+    letter-spacing: -0.01em;
+    margin: 0;
+    color: var(--text-primary);
+}
+
+/* Assumption / hedge note — quiet tinted strip (status-coloured edge). */
+.hedge-block {
+    font-size: var(--fs-13);
+    line-height: 1.5;
+    border-radius: var(--radius-sm);
+    padding: var(--sp-8) 11px;
+    margin: var(--sp-8) 0 var(--sp-4);
+    border: 1px solid transparent;
+}
+.hedge-block strong { font-weight: var(--fw-bold); }
+.hedge-proposed {
+    color: var(--status-proposed);
+    background: var(--status-proposed-bg);
+    border-color: var(--status-proposed-bg);
+}
+.hedge-whatif {
+    color: var(--status-whatif);
+    background: var(--status-whatif-bg);
+    border-color: var(--status-whatif-bg);
+}
+
+/* ---- Action bar + buttons ---- */
+.actionbar {
+    display: flex;
+    gap: var(--sp-8);
+    flex-wrap: wrap;
+    margin: var(--sp-12) 0 var(--sp-4);
+}
+.btn {
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
+    font-weight: var(--fw-semibold);
+    font-size: var(--fs-13);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s, opacity 0.12s;
+}
+.btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nyu-violet-glow);
+}
+.btn-primary {
+    background: var(--nyu-violet);
+    color: #fff;
+    border-color: var(--nyu-violet);
+}
+.btn-primary:hover { background: var(--nyu-violet-light); border-color: var(--nyu-violet-light); }
+.btn-ghost {
+    background: var(--surface-raised);
+    border-color: var(--border-medium);
+    color: var(--text-primary);
+}
+.btn-ghost:hover { border-color: var(--nyu-violet); color: var(--nyu-violet); }
+.btn-subtle {
+    background: var(--nyu-violet-faint);
+    border-color: var(--nyu-violet-faint);
+    color: var(--nyu-violet);
+}
+.btn-subtle:hover { background: var(--nyu-violet); color: #fff; }
+
+.whatif-readonly-note {
+    margin-top: var(--sp-8);
+    font-size: var(--fs-12);
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.scenario-schedule { margin-top: var(--sp-12); }
+
+/* ---- Compare view (H3) ---- */
+.compare-placeholder { display: block; }
+.compare-empty {
+    padding: var(--sp-24) var(--sp-16);
+    color: var(--text-secondary);
+    font-size: var(--fs-14);
 }
