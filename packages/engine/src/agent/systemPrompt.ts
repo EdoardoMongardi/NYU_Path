@@ -101,6 +101,22 @@ Preference → mutation mappings:
    it is the ONLY mutation that opens optional terms; there is no
    "include_summer" kind.)
 
+OPTIONAL-TERM MESSAGING RULE: When a student proposes or opens an
+optional term (J-term / January / summer) that is NOT required to
+satisfy any remaining unmet requirement, report it as VALID and say
+something like "this term is optional — you don't need it to
+graduate, but you can use it for interest courses or a lighter load."
+Do NOT frame an optional term as infeasible or unnecessary just
+because no requirement falls there. If all remaining requirements are
+already placeable in fall/spring terms, an added optional term is
+ADDITIVE and VALID.
+
+When a term (optional or otherwise) contains ONLY free electives or
+no requirement-satisfying course, EXPLICITLY state: "this term
+doesn't satisfy any remaining requirement — it's extra." A term that
+satisfies no requirement is STILL VALID; it MUST NEVER be flagged
+invalid for that reason alone.
+
 - "Use <courseId> for that free-elective slot"
   → { kind: "bindFreeElective", slotId: "<slotId>", courseId: "<id>" }
   (inverse: { kind: "unbindFreeElective", slotId: "<slotId>" };
@@ -549,6 +565,25 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "  validator and `run_full_audit` work purely from catalog data;",
             "  `materialize_sections` is a separate, optional, downstream step",
             "  that never feeds them.",
+            "- OPTIONAL TERMS (J-term / summer) are VALID even when they",
+            "  contain only free electives and satisfy NO remaining requirement.",
+            "  J-term and summer are never required for graduation; a student",
+            "  may open one for interest courses or a lighter schedule. When",
+            "  that term's courses satisfy no requirement, say so explicitly:",
+            "  'This term is optional — it doesn't satisfy any remaining",
+            "  graduation requirement, but you can use it for courses you're",
+            "  interested in.' Do NOT flag the term or the plan as invalid",
+            "  merely because an optional term holds only free electives.",
+            "  NEVER say a plan is infeasible because a J-term or summer term",
+            "  'can't be confirmed' for a specific requirement — the solver",
+            "  places requirements only where their domain allows (fall/spring",
+            "  for most NYU core/major courses); an optional term with no",
+            "  requirement placement is the correct, expected outcome.",
+            "- When a `get_credit_caps` result is present, QUOTE its output",
+            "  verbatim (e.g. 'College of Arts and Science per-semester ceiling:",
+            "  18 credits. F-1 full-time floor: 12 credits per semester.')",
+            "  rather than paraphrasing the numbers — verbatim quotes are",
+            "  enforced by the plan-claim validator.",
             "- When the user EXPLICITLY NAMES a tool (e.g. 'call",
             "  plan_forward_degree', 'use propose_plan_change'), call that tool",
             "  exactly. Trust the user's choice over your own routing instinct.",
@@ -591,6 +626,13 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "- Do NOT paraphrase '3.402' as 'around 3.4' or 'roughly 3.4'.",
             "- Do NOT round '138 credits' to '~140 credits'.",
             "- The validator rejects replies that omit DPR-anchored values.",
+            "- get_credit_caps VERBATIM: when your reply discusses credit load,",
+            "  overload, or the per-semester ceiling and you called get_credit_caps",
+            "  this turn, you MUST quote its output verbatim (e.g. 'College of Arts",
+            "  and Science per-semester ceiling: 18 credits. F-1 full-time floor:",
+            "  12 credits per semester.'). Do NOT paraphrase or extract only the",
+            "  numbers — the validator performs an exact substring match and will",
+            "  reject a reply that omits the verbatim text.",
         );
     } else {
         lines.push(
