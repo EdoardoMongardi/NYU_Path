@@ -1,17 +1,17 @@
 # `@nyupath/engine` Package Index
 
-> Last verified against code: 2026-06-15 (cohort gate subsystem removed).
+> Last verified against code: 2026-06-19 (plans 35/36/37: 22 live tools; `propose_whatif_assumption` added (Plan 35); `slotActionMatrix.ts`, `passFailLimitAxis.ts`, `data/passFailDefaults.ts`, expanded `client.ts` added (Plan 37); `planChangeHelpers.ts` gained `resolveBindMutations`/`findPlaceholderSlot` (Plan 37 J2). Prior: 2026-06-15 — cohort gate subsystem removed).
 
 ## Purpose
 
-Everything the rest of the app needs from the engine flows through one front door. This document is the map of that door. `@nyupath/engine` is a TypeScript library (no website, no server, just code) that bundles the business logic: academic-standing/GPA calculators, the DPR parser, the agent loop and its 21 tools, the forward-schedule planner, the RAG policy-search stack, the LLM client adapters, and the persistence interfaces. The web app and CLI import only the names listed in this barrel, not the deep internals — so the engine can reorganize inside without breaking consumers, as long as the exported names keep working.
+Everything the rest of the app needs from the engine flows through one front door. This document is the map of that door. `@nyupath/engine` is a TypeScript library (no website, no server, just code) that bundles the business logic: academic-standing/GPA calculators, the DPR parser, the agent loop and its 22 tools, the forward-schedule planner, the RAG policy-search stack, the LLM client adapters, and the persistence interfaces. The web app and CLI import only the names listed in this barrel, not the deep internals — so the engine can reorganize inside without breaking consumers, as long as the exported names keep working.
 
 ```mermaid
 flowchart LR
     Web[Web App] --> Barrel[Engine barrel]
     CLI[CLI Tool] --> Barrel
     Barrel --> Standing[Standing + GPA]
-    Barrel --> Agent[Agent loop + 21 tools]
+    Barrel --> Agent[Agent loop + 22 tools]
     Barrel --> Planner[Forward schedule]
     Barrel --> RAG[RAG policy search]
     Barrel --> DPR[DPR parser]
@@ -37,6 +37,7 @@ All paths relative to `packages/engine/src/`.
 
 ```
 index.ts                      ← top-level barrel
+client.ts                     ← client-safe barrel (`@nyupath/engine/client`): canonicalizeCourseId, SCHOOL_DISPLAY_NAMES, slotActionMatrix, classifyIpChangeability, deriveTemporalContext, NYU_ACADEMIC_CALENDAR, campusForHomeSchool, passFailForSchool (Plan 36/37)
 dataLoader.ts                 ← loadCourses/loadPrereqs/loadOfferings/loadOffCatalogCredits + schoolConfig re-export
 courseId.ts                   ← canonicalizeCourseId(Set)
 
@@ -48,6 +49,7 @@ data/
   schoolDefaults.ts           ← shared registration defaults + school display names
   foseTerm.ts                 ← NYU class-search term codec
   courseSuffixMap.ts          ← course-accessibility classifier
+  passFailDefaults.ts         ← passFailForSchool(homeSchool) — client-safe per-school P/F config map; drift-guarded vs data/schools/*.json (Plan 37)
 provenance/
   schema.ts                   ← metaSchema, validateMeta, isStale
   configSchema.ts             ← Zod body validators for school configs
@@ -70,8 +72,11 @@ agent/
   llmClient.ts recordingClient.ts registry.ts
   clients/        openaiClient.ts anthropicClient.ts index.ts
   verifiers/      multiIntentDetector.ts blockquoteAttribution.ts
-  tools/          21 tool modules (see §4)
+  tools/          22 tool modules (see §4)
   forwardSchedule/    solver, search, validator, materialize, alternatives, ...
+                      slotActionMatrix.ts        ← Plan 37 D1 — 3-state × F3-window × P/F-policy action gate; also re-exported via client.ts
+                      passFailLimitAxis.ts       ← Plan 37 C1 — 8th validator axis checkPassFailLimits(dpr, passFailConfig)
+                      planChangeHelpers.ts       ← +resolveBindMutations, +findPlaceholderSlot (Plan 37 J2)
   sectionMaterialization/  materialize, conflictDetection, foseAvailabilityGate, ...
 ```
 
@@ -104,19 +109,22 @@ The agent group (`index.ts:48-125`) re-exports: the loop (`runAgentTurn`, `runAg
 
 ---
 
-## 4. The agent barrel (`agent/index.ts`) and the 21 live tools
+## 4. The agent barrel (`agent/index.ts`) and the 22 live tools
 
-The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types, and the tool registry. The registry (`registry.ts`) wires **exactly 21 live tools** into `ALL_NYUPATH_TOOLS`:
+The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types, and the tool registry. The registry (`registry.ts`) wires **exactly 22 live tools** into `ALL_NYUPATH_TOOLS`:
 
 ```
 run_full_audit              what_if_audit              search_policy
 get_program_requirements    update_profile             confirm_profile_update
 get_credit_caps             search_availability        get_academic_standing
 search_courses              plan_forward_degree        view_forward_plan
-propose_plan_change         probe_counterfactual       confirm_plan_change
-simulate_alternatives       compare_plan_alternatives  bind_free_elective
-bind_pool_slot              materialize_sections       confirm_section_combination
+propose_plan_change         probe_counterfactual       propose_whatif_assumption
+confirm_plan_change         simulate_alternatives      compare_plan_alternatives
+bind_free_elective          bind_pool_slot             materialize_sections
+confirm_section_combination
 ```
+
+`propose_whatif_assumption` was added in Plan 35 (the W / pass-fail what-if flow — Branch B of the 3-branch what-if architecture). It produces a confirmable proposed scenario whose confirm persists only the `forward_schedule` (not the synthetic DPR — R1 guardrail).
 
 > **Removed tools.** `check_overlap`, `check_transfer_eligibility`, and `plan_semester` are gone — their tool modules no longer exist in `agent/tools/`. Older docs and the agent-barrel comment that list `checkOverlapTool` / `checkTransferEligibilityTool` / `planSemesterTool` are stale.
 

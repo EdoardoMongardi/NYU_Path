@@ -1,6 +1,6 @@
 # `packages/shared` — The Type Contract
 
-> Last verified against code: 2026-06-13 (doc-sync pass: removed deleted `PlanChangeProposal`; added D6.2 `GenericSoftConstraint` + `softObjectives` + the two soft-objective `PlanMutation` kinds; refreshed §3.10 line anchors + `types.ts` line count).
+> Last verified against code: 2026-06-19 (plan 37: `PassFailConfig` gained `careerLimitValue`/`careerLimitSourceRef` (Plan 37 A1/A2 — bulletin-sourced per-school cap value + provenance ref); corrected stale "Step 8e removed careerLimit" note — the field was re-added as `careerLimitValue` in Plan 37. `DPRCourseRow.passFailElected` lives in engine `dpr/schema.ts` (not shared). `ValidatorAxis` is not a named shared type — validator results flow as `ValidationResult`. Prior: 2026-06-13 doc-sync pass).
 
 ## Purpose
 
@@ -104,7 +104,13 @@ The types in `types.ts` divide into roughly the cohorts below. Each interface is
 
 **`PerTermUnit`** — `types.ts:251`. `"semester" | "academic_year"`.
 
-**`PassFailConfig`** — `types.ts:253-288`. School-wide P/F policy: `careerLimitType`, `careerLimitScope?`, `perTermLimit?`, `perTermUnit?`, `countsForMajor/Minor/GenEd?`, `creditType?`, `canElect?`, `autoExcludedFromLimit[]`, `excludedCourseTypes[]`, `gradePassEquivalent?`, `failCountsInGpa?`, `exceptions[]`, `warnings[]`, `note`. **Step 8e removed the career-limit *value*** (`careerLimit`); the number now comes from the DPR (`dpr.cumulative.passFailCapUnits`). Only the unit (`careerLimitType`) remains policy data here.
+**`PassFailConfig`** — `types.ts:253-288`. School-wide P/F policy. Key fields:
+- `careerLimitType` (`CareerLimitType` = `"credits" | "courses" | "percent_of_program"`) — the unit the cap is denominated in.
+- **`careerLimitValue?: number | null`** (Plan 37 A1/A2 — NEW) — the numeric career cap, in the unit named by `careerLimitType`. Bulletin-sourced for all 11 schools. `null` = no cap on file → the engine hedges ("may have a limit — confirm with your adviser") and never blocks. This is distinct from `dpr.cumulative.passFailCapUnits` (the registrar's per-student credits total): `careerLimitValue` is the POLICY cap from the bulletin (`data/schools/*.json`), and it is the value the 8th validator axis checks against.
+- **`careerLimitSourceRef?: string`** (Plan 37 A1/A2 — NEW) — bulletin `path:line` or quoted text backing `careerLimitValue` (provenance; `""` when null).
+- `careerLimitScope?`, `perTermLimit?`, `perTermUnit?` (`PerTermUnit` = `"semester" | "academic_year"`), `countsForMajor?`, `countsForMinor?`, `countsForGenEd?`, `creditType?`, `canElect?` (Tandon: `false`), `autoExcludedFromLimit[]`, `excludedCourseTypes[]`, `gradePassEquivalent?`, `failCountsInGpa?`, `exceptions[]`, `warnings[]`, `note`.
+
+> **Step 8e history + Plan 37 correction.** Step 8e removed the ORIGINAL `careerLimit` field (which duplicated per-student DPR data). Plan 37 A1/A2 added `careerLimitValue` + `careerLimitSourceRef` — NOT a restore of the old field, but a bulletin-sourced cap value with explicit provenance, read by the new 8th validator axis. An older version of this doc's note "Step 8e removed the career-limit value" is therefore STALE: the field now exists under the new name. Per `Docs/memory/data-schools-history.md`, `careerLimitValue` records a bulletin-confirmed fact and is NOT orphaned — it is consumed by `passFailLimitAxis.ts` (the 8th axis) and `passFailDefaults.ts` (the client-safe map).
 
 **`SpsPolicy`** — `types.ts:290-303`. `allowed` (master switch), `allowedPrefixes?`, `creditType?`, `countsTowardResidency?`, `countsAgainstNonHomeSchoolCap?`, `excludedCourseTypes?`.
 
