@@ -25,6 +25,7 @@
 import { describe, it, expect } from "vitest";
 import { confirmPlanChangeTool } from "../../src/agent/tools/confirmPlanChange.js";
 import { proposePlanChangeTool } from "../../src/agent/tools/proposePlanChange.js";
+import { applyMutationsToPreferences } from "../../src/agent/forwardSchedule/planChangeHelpers.js";
 import type { ToolSession, ToolUseContext } from "../../src/agent/tool.js";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
 import type {
@@ -389,5 +390,213 @@ describe("J2 — bindFreeElective survives confirm_plan_change (binding sticks)"
         expect(session.schedulePreferences?.pins ?? []).toEqual(
             expect.arrayContaining([{ courseId: "CSCI-UA 490", term: "2026-fall" }]),
         );
+    });
+});
+
+// ---------------------------------------------------------------------------
+// J2 follow-up — DROPPING a bound course RELEASES it (no lingering pin)
+// ---------------------------------------------------------------------------
+//
+// J2 made a bind translate to a pin(courseId, slotTerm, freeze:true) so the
+// binding survives confirm. The INVERSE must work too: dropping a bound course
+// (the slot-editor emits `exclude(courseId, term)`) must GENUINELY remove it.
+//
+// The bug this guards against: the solver's pin pass places every pin into the
+// FIXED set UNCONDITIONALLY — it never consults the exclusion set. So a course
+// that was bound (→ pin) and then dropped (→ exclude) would be re-placed by its
+// lingering pin (the pin wins over the exclude), making the drop a silent
+// no-op. The fix: an `exclude` releases any matching pin in
+// applyMutationsToPreferences, so the dropped course is actually gone AND no
+// dead/conflicting pin remains.
+
+/**
+ * A DPR whose degree credits are ALREADY met (128/128) with NO unmet leaf, so a
+ * bound FREE elective is purely additive — dropping it keeps the plan feasible
+ * (the bound course covers no required leaf). This isolates the "release"
+ * behavior from any requirement-coverage side effect.
+ */
+function makeFeasibleDpr(): DegreeProgressReport {
+    return {
+        _meta: makeMeta(),
+        header: { studentName: "Test Student", preparedDate: "01/01/2026" },
+        programs: [],
+        advisorNotations: [],
+        cumulative: {
+            creditsRequired: 128,
+            creditsUsed: 128,
+            cumulativeGpa: 3.4,
+            cumulativeGpaRequired: 2.0,
+            residencyRequired: 64,
+            residencyUsed: 64,
+            passFailUsedUnits: 0,
+            passFailCapUnits: 32,
+            outsideHomeUsedUnits: 0,
+            outsideHomeCapUnits: 16,
+            timeLimitYears: 8,
+        },
+        requirementGroups: [],   // no unmet leaves — degree already complete
+        courseHistory: [],
+    };
+}
+
+/** A FEASIBLE base plan with one free-elective placeholder to bind into. */
+function makeFeasiblePlan(slot: ScheduleSlotPlaceholder): ForwardSchedule {
+    return {
+        studentId: "test-student",
+        homeSchoolId: "cas",
+        graduationTerm: "2026-fall",
+        creditTargetPerSemester: 16,
+        f1Floor: 12,
+        domesticPartTimeFloor: 8,
+        graduationCreditMinimum: 128,
+        degreeCreditsMet: true,
+        semesters: [
+            {
+                term: "2026-fall",
+                locked: false,
+                slots: [slot],
+                plannedCredits: 4,
+                notes: [],
+                loadRationale: {
+                    loadStyle: "balanced",
+                    hardCount: 0,
+                    easyCount: 1,
+                    weightedCredits: 0.3,
+                    note: "",
+                },
+            },
+        ],
+        dprCourseHistoryHash: "test-hash",
+        computedAt: Date.now(),
+        feasibility: { feasible: true, constraintViolations: [], placementRationale: {} },
+        state: "valid-clean",
+        balanceScore: 0,
+        assumptions: [],
+    };
+}
+
+function makeFeasibleSession(slot: ScheduleSlotPlaceholder): ToolSession {
+    return {
+        student: {
+            id: "test-student",
+            catalogYear: "2024",
+            homeSchool: "cas",
+            declaredPrograms: [{ programId: "computer_science", programType: "major" }],
+            coursesTaken: [],
+            visaStatus: "domestic",
+        },
+        schoolConfig: {
+            schoolId: "cas",
+            name: "College of Arts and Science",
+            degreeType: "BA",
+            courseSuffix: ["-UA"],
+            totalCreditsRequired: 128,
+            overallGpaMin: 2.0,
+            acceptsTransferCredit: true,
+            maxCreditsPerSemester: 18,
+            f1FullTimeMinCredits: 12,
+            residency: { minCredits: 64, note: null },
+        },
+        degreeProgressReport: makeFeasibleDpr(),
+        // Already-feasible committed plan (the editor mounts on the committed plan).
+        forwardSchedule: makeFeasiblePlan(slot),
+        courses: [cs480, cs490],
+        prereqs: [],
+    };
+}
+
+function allPlacedCourseIds(schedule: ForwardSchedule): string[] {
+    const out: string[] = [];
+    for (const sem of schedule.semesters) {
+        for (const s of sem.slots) {
+            if (s.kind === "specific_planned") out.push(s.courseId);
+        }
+    }
+    return out;
+}
+
+describe("J2 follow-up — dropping a bound course releases it (no lingering pin)", () => {
+    it("bind → confirm (pin + placed), then DROP → confirm: course is gone AND the pin is released", async () => {
+        const session = makeFeasibleSession(makeFreeCreditSlot("free-slot-1"));
+        const ctx = makeCtx(session);
+
+        // --- Bind CSCI-UA 490 into the free slot, confirm. ---
+        const bindOut = await confirmPlanChangeTool.call(
+            { mutations: [{ kind: "bindFreeElective", slotId: "free-slot-1", courseId: "CSCI-UA 490" }] },
+            ctx,
+        );
+        expect(bindOut.feasible).toBe(true);
+        expect(bindOut.storedIn).toBe("forwardSchedule");
+
+        // The binding stuck: course placed + the pin persisted (J2 behavior).
+        expect(allPlacedCourseIds(session.forwardSchedule!)).toContain("CSCI-UA 490");
+        expect(session.schedulePreferences?.pins ?? []).toEqual(
+            expect.arrayContaining([{ courseId: "CSCI-UA 490", term: "2026-fall" }]),
+        );
+
+        // --- DROP CSCI-UA 490 (the slot-editor's drop on a bound slot emits
+        // exclude(courseId, term)), confirm. ---
+        const dropOut = await confirmPlanChangeTool.call(
+            { mutations: [{ kind: "exclude", courseId: "CSCI-UA 490", term: "2026-fall" }] },
+            ctx,
+        );
+
+        // The drop keeps the plan feasible (the course covered no required leaf)
+        // and commits to forwardSchedule.
+        expect(dropOut.feasible).toBe(true);
+        expect(dropOut.storedIn).toBe("forwardSchedule");
+
+        // CORE ASSERTIONS — the course is GENUINELY released:
+        //  (1) the committed plan no longer contains CSCI-UA 490, and
+        //  (2) no dead pin lingers for it (without the fix the lingering pin
+        //      would have re-placed the course, defeating the drop).
+        expect(allPlacedCourseIds(session.forwardSchedule!)).not.toContain("CSCI-UA 490");
+        const pinsAfter = session.schedulePreferences?.pins ?? [];
+        expect(pinsAfter.find(p => p.courseId === "CSCI-UA 490")).toBeUndefined();
+
+        // The exclusion DID land (the drop is recorded).
+        const exclusionsAfter = session.schedulePreferences?.exclusions ?? [];
+        expect(exclusionsAfter.find(e => e.courseId === "CSCI-UA 490")).toBeDefined();
+    });
+
+    it("a single-pass [pin, exclude] for the same course leaves no pin (exclude beats the pin)", () => {
+        // Helper-level unit: the exclude case must STRIP a matching pin so the
+        // pin can never out-vote the exclude in the solver's fixed set.
+        const { prefs } = applyMutationsToPreferences(
+            {},
+            [
+                { kind: "pin", courseId: "CSCI-UA 490", term: "2026-fall", freeze: true },
+                { kind: "exclude", courseId: "CSCI-UA 490", term: "2026-fall" },
+            ],
+        );
+        expect((prefs.pins ?? []).find(p => p.courseId === "CSCI-UA 490")).toBeUndefined();
+        expect((prefs.exclusions ?? []).find(e => e.courseId === "CSCI-UA 490")).toBeDefined();
+    });
+
+    it("a GLOBAL exclude (no term) releases ALL pins for the course", () => {
+        const { prefs } = applyMutationsToPreferences(
+            { pins: [
+                { courseId: "CSCI-UA 490", term: "2026-fall" },
+                { courseId: "CSCI-UA 490", term: "2027-spring" },
+                { courseId: "CSCI-UA 480", term: "2026-fall" },
+            ] },
+            [{ kind: "exclude", courseId: "CSCI-UA 490" }],
+        );
+        // Both 490 pins gone; the unrelated 480 pin survives.
+        expect((prefs.pins ?? []).filter(p => p.courseId === "CSCI-UA 490")).toHaveLength(0);
+        expect((prefs.pins ?? []).find(p => p.courseId === "CSCI-UA 480")).toBeDefined();
+    });
+
+    it("a TERM-SCOPED exclude releases ONLY the matching-term pin", () => {
+        const { prefs } = applyMutationsToPreferences(
+            { pins: [
+                { courseId: "CSCI-UA 490", term: "2026-fall" },
+                { courseId: "CSCI-UA 490", term: "2027-spring" },
+            ] },
+            [{ kind: "exclude", courseId: "CSCI-UA 490", term: "2026-fall" }],
+        );
+        const pins490 = (prefs.pins ?? []).filter(p => p.courseId === "CSCI-UA 490");
+        expect(pins490).toHaveLength(1);
+        expect(pins490[0]!.term).toBe("2027-spring");
     });
 });

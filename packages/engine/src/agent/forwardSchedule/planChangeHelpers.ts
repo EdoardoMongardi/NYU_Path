@@ -170,8 +170,10 @@ export const PlanChangeInputSchema = z.object({
  * whose `slotId` cannot be resolved to a placeholder in the plan is passed
  * THROUGH unchanged — `applyMutationsToPreferences` will then surface its
  * existing no-op consequence (preserving today's behavior for bad input).
- * `unbindFreeElective` is also passed through (handled as a no-op downstream;
- * a future J-task can map it to `unpin` once the bound courseId is tracked).
+ * `unbindFreeElective` is also passed through (a graceful no-op downstream — it
+ * carries only a slotId that no longer resolves once the slot is bound; the
+ * "release a bound course" gesture is a DROP, whose `exclude` releases the
+ * bind's pin in applyMutationsToPreferences — see that case).
  *
  * @param plan the active plan used to resolve a bind's `slotId → term`
  * @param mutations the raw mutation array from the tool input
@@ -290,6 +292,29 @@ export function applyMutationsToPreferences(
                     e => !(e.courseId === m.courseId && e.term === m.term),
                 );
                 prefs.exclusions.push({ courseId: m.courseId, term: m.term });
+
+                // J2 follow-up — RELEASE any matching pin so an excluded
+                // (dropped) course is genuinely removed. WHY this is required:
+                // the solver's pin pass (solver.ts) places every pin into the
+                // FIXED set UNCONDITIONALLY — it never consults the exclusion
+                // set (which only filters the SEARCH candidate variables in
+                // constraintModel.ts / materializePlan.ts). So a course that
+                // was bound (→ pin, via resolveBindMutations) and then dropped
+                // (→ exclude) would be re-placed by its lingering pin: the pin
+                // wins over the exclude, and the drop is silently a no-op. The
+                // fix is local and minimal — an exclude is the user saying
+                // "remove this course," which must beat any prior pin.
+                //
+                // A term-scoped exclude releases only the pin for that
+                // (courseId, term); a global exclude (term undefined) releases
+                // ALL pins for that courseId. This matches the drop route's two
+                // shapes (`/api/plan/drop` sends term-scoped or global). It is
+                // a no-op when no matching pin exists.
+                if (prefs.pins && prefs.pins.length > 0) {
+                    prefs.pins = prefs.pins.filter(
+                        p => !(p.courseId === m.courseId && (m.term === undefined || p.term === m.term)),
+                    );
+                }
                 break;
             }
             case "swap": {
@@ -394,9 +419,22 @@ export function applyMutationsToPreferences(
                 break;
             }
             case "unbindFreeElective": {
+                // J2 follow-up — stays a GRACEFUL no-op by design. The realistic
+                // "release a bound course" gesture is a DROP, which the
+                // slot-editor emits as `exclude(courseId, term)` (it reads the
+                // courseId straight off the bound `specific_planned` slot) — and
+                // the `exclude` case above now releases the lingering pin, so
+                // the drop genuinely removes the course. `unbindFreeElective`
+                // carries ONLY a slotId, and after a bind the slot is
+                // `specific_planned` with NO `placeholderId` / origin marker, so
+                // the slotId can no longer resolve to the bound courseId — there
+                // is nothing to translate to an `unpin`. (No UI path emits this
+                // kind; wiring it to `unpin` would need a schema change to carry
+                // the courseId, which is not worth the ripple given the drop
+                // path already covers the use case.)
                 noOpConsequences.push(
-                    `unbindFreeElective(slotId=${m.slotId}) is a no-op in the solver — ` +
-                    "Phase 14 Task 6 wires the real slot-level binding logic.",
+                    `unbindFreeElective(slotId=${m.slotId}) is a no-op — release a bound course by ` +
+                    "dropping it (the drop's exclusion now also clears the bind's pin).",
                 );
                 break;
             }
@@ -443,11 +481,13 @@ export function applyMutationsToPreferences(
     // NOTE: a resolvable bindFreeElective/bindPoolSlot is rewritten to a real
     // `pin` by resolveBindMutations() BEFORE this walk (it needs the active
     // plan to resolve slotId→term), so it persists and is NOT a no-op here.
-    // Only the unbind path (unbindFreeElective) remains a no-op at this level
-    // — a bind/unbind pair for the same slotId therefore does NOT cancel out;
-    // wiring unbind→unpin is a tracked follow-up (Phase F's "drop a bound
-    // course" needs the inverse). An unresolvable bind (missing plan / unknown
-    // slotId) falls through to its no-op branch above unchanged.
+    // The INVERSE — "release a bound course" — is now correct: the slot-editor
+    // drop emits `exclude(courseId, term)`, and the `exclude` case above
+    // releases any matching pin (so the bind's pin no longer re-places the
+    // dropped course; J2 follow-up). `unbindFreeElective` itself stays a
+    // graceful no-op (its slotId can't resolve post-bind; no UI emits it). An
+    // unresolvable bind (missing plan / unknown slotId) falls through to its
+    // no-op branch above unchanged.
 
     return { prefs, noOpConsequences };
 }
