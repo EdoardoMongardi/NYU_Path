@@ -1,6 +1,6 @@
 # Plan Action Routes — Deterministic Plan Mutation API
 
-> Last verified against code: 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-19 (Plans 35/36/37 — `/api/plan/whatif` now validates input (D-7/D-4); `/api/plan/add` returns 422 on unknown course; `/api/plan/confirm` returns 422 on infeasible regardless of `force`; `/api/plan/drop` releases matching pin; what-if route added; error-mapping updated). Prior: 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 > **Phase 4 E3 — the routes are UNCHANGED; the edit GESTURE and the edit SURFACE changed (both client-side).** The `/api/plan/*` routes stayed propose-only through the E3 group — propose stages a `pendingMutationId` + a non-persisted validated schedule, confirm applies. Two things changed in the browser only: (1) **drag-to-move/exchange was removed ENTIRELY** — the per-course ⋯ menu (Swap / Drop / Lock / Move) + the `+ Add course` input are now the sole edit inputs, which **supersedes the Phase-17 instant-move / drag-grid** description in this doc (the §7 "drag should feel instant" framing below is historical); and (2) every ⋯ verb now PROPOSES and the staged proposal is reconciled into a canvas **preview + review card** (or a RED invalid card on `feasible:false`) — applying only on Confirm. That reconciliation is entirely client-side; see [ui-components.md](./ui-components.md) and [chat-ui-client.md](./chat-ui-client.md). The route contracts, schemas, two-stage handshake, and error mapping in the sections below are unaffected.
 
@@ -27,8 +27,8 @@ The plan-action routes form a deterministic, non-LLM HTTP layer under `/api/plan
 
 The architecture splits each mutation into a strict two-stage handshake:
 
-- **Stage 1 — Propose.** Five "verb" routes (`add`, `move`, `swap`, `drop`, `lock`) construct a canonical `PlanMutation[]` from the request body, run it through the engine's structural validator without persisting anything, and return a freshly minted `pendingMutationId`. The orchestrator stashes the staged mutations in an in-memory map keyed by that id.
-- **Stage 2 — Confirm.** `/api/plan/confirm` looks up the staged mutations by `pendingMutationId` and applies them atomically via `confirmPlanChangeTool`.
+- **Stage 1 — Propose.** Five "verb" routes (`add`, `move`, `swap`, `drop`, `lock`) construct a canonical `PlanMutation[]` from the request body, run it through the engine's structural validator without persisting anything, and return a freshly minted `pendingMutationId`. A sixth route `/api/plan/whatif` proposes a current-term IP-course what-if assumption (Plan 35 G3.1 — see §2.10). The orchestrator stashes the staged mutations (or assumption) in the durable pending-mutation store.
+- **Stage 2 — Confirm.** `/api/plan/confirm` looks up the staged entry by `pendingMutationId` and applies it atomically. **M1 (Plan 37): an infeasible re-solve is refused with HTTP 422 — nothing is persisted and the prior valid plan survives.** The `force` parameter is accepted but inert.
 
 Two auxiliary routes wrap the bubble UX: `/api/plan/explain-polish` streams an LLM rewrite of the deterministic explanation text, and `/api/plan/stage2` streams per-term FOSE section enrichments.
 
@@ -61,18 +61,21 @@ All routes run on the Node.js runtime (each file declares `runtime = "nodejs"`).
 
 ### 2.1 `/api/plan/add` — Pin a course to a term
 
-**Source:** `apps/web/app/api/plan/add/route.ts:26-36`
+**Source:** `apps/web/app/api/plan/add/route.ts`
 
 **Request body:**
 - `courseId` — string (required, min length 1)
 - `term` — string (required, min length 1)
 
-**What it does:** Constructs a single-element mutation array containing one `pin` mutation with `freeze: true`. This semantic encodes that the student is expressing an explicit preference: the placement stays sticky until they explicitly unlock it through `/api/plan/lock` with `locked: false`. Delegates to `handleProposeRoute` (`apps/web/lib/planActionRouteHelpers.ts:141`).
+**What it does:** Constructs a single-element mutation array containing one `pin` mutation with `freeze: true`. This semantic encodes that the student is expressing an explicit preference: the placement stays sticky until they explicitly unlock it through `/api/plan/lock` with `locked: false`. Delegates to `handleProposeRoute` (`apps/web/lib/planActionRouteHelpers.ts`).
+
+**E3 (Plan 37) — course-existence check:** Before delegating to `handleProposeRoute`, the route clones the request and peeks at `body.courseId`. If the course is NOT found in the NYU undergraduate planning catalog (`courseExists(body.courseId)` returns false), the route immediately returns HTTP **422** with `{ message: "I couldn't find <courseId> in the NYU course catalog — check the course number, or ask me to search by name." }`. This check runs on a clone so the original request body stream is intact for the downstream `handleProposeRoute` auth + rate-limit + parse pipeline. A malformed / unreadable body at this peek step falls through silently (the downstream pipeline surfaces the 400 as normal).
 
 **Response shape (200):** `PlanActionResponse` — see Section 4.
 
 **Error cases:**
 - 401 — no session cookie
+- 422 — courseId not found in the NYU undergraduate catalog (E3)
 - 429 — daily plan-action quota exhausted (60/day per student)
 - 400 — malformed JSON body or schema validation failure
 - 409 — student has no persisted profile, no parsed DPR, or no plan to mutate
@@ -132,7 +135,7 @@ Delegates to `handleProposeRoute`.
 
 ### 2.4 `/api/plan/drop` — Exclude a course
 
-**Source:** `apps/web/app/api/plan/drop/route.ts:25-32`
+**Source:** `apps/web/app/api/plan/drop/route.ts`
 
 **Request body:**
 - `courseId` — string (required)
@@ -140,9 +143,11 @@ Delegates to `handleProposeRoute`.
 
 **What it does:** Emits a single `exclude` mutation. When `term` is provided, the exclusion is scoped to that term only; when absent, the exclusion is global (the engine's `SchedulePreferences.exclusions[]` entry has `term: undefined`). Delegates to `handleProposeRoute`.
 
+**Pin-release (Plan 37):** Inside `applyMutationsToPreferences` (`packages/engine/src/agent/forwardSchedule/planChangeHelpers.ts`), an `exclude` mutation now also **removes any matching pin** from `prefs.pins[]` before adding to `exclusions[]`. A term-scoped exclude removes only the pin for that `(courseId, term)` pair; a global exclude removes ALL pins for that `courseId`. Without this, a course that was bound (added via a `pin` mutation) and then dropped would silently re-appear because the lingering pin would win over the exclusion. This fix is in the engine's helpers layer — the route itself is unchanged.
+
 **Response shape (200):** `PlanActionResponse`.
 
-**Error cases:** Same shared set as `/api/plan/add`.
+**Error cases:** Same shared set as `/api/plan/add` (but no 422 course-existence check — the existence check lives only on `/api/plan/add`).
 
 ---
 
@@ -169,20 +174,22 @@ Delegates to `handleProposeRoute`.
 
 ### 2.6 `/api/plan/confirm` — Apply a staged mutation
 
-**Source:** `apps/web/app/api/plan/confirm/route.ts:43-45`
+**Source:** `apps/web/app/api/plan/confirm/route.ts`
 
 **Request body:**
 - `pendingMutationId` — UUID string (required)
-- `force` — boolean (optional)
+- `force` — boolean (optional, **DEPRECATED / INERT** since M1/M2, Plan 37)
 
-**What it does:** Delegates to `handleConfirmRoute` (`apps/web/lib/planActionRouteHelpers.ts:176`), which:
+**What it does:** Delegates to `handleConfirmRoute` (`apps/web/lib/planActionRouteHelpers.ts`), which:
 
 1. Runs preflight (auth + rate-limit + JSON parse).
-2. Looks up the staged mutation via `runConfirmStage`.
-3. Applies the mutation through `confirmPlanChangeTool` — which routes the post-mutation schedule through the engine's 7-axis `runGraduationPathValidator` via `finalizeForwardSchedule`, the same authoritative gate the build/propose/simulate paths use.
-4. If `force === true` and the engine returns `feasible: false`, reclassifies the persisted schedule's `state` from `infeasible-draft` to `student-preferred-invalid-draft` and re-persists it.
+2. Looks up and consumes the staged mutation via `runConfirmStage` (I3 — consume-once via `pendingMutationStore.take`).
+3. For a **plan-change** entry: applies via `confirmPlanChangeTool` — routes through the engine's `runGraduationPathValidator` via `finalizeForwardSchedule` (the frozen 7-axis + 8th P/F-limit axis gate). If `feasible: false`, **returns HTTP 422** with the failing-axis explanation; nothing is persisted.
+4. For a **what-if assumption** entry (Plan 35 G3.1): re-applies the DPR transform + re-solves via `solveWhatIfAssumption`. If `feasible: false`, **returns HTTP 422** (C1 fix). On success, persists ONLY the resulting `forward_schedule` — **never** `students.parsed_dpr` (R1 guardrail).
 
-A successful confirm removes the staging entry — confirming the same id twice returns 404.
+**M1 (Plan 37) — `force` is INERT.** The schema still accepts `force: boolean` for back-compat, but the confirm path ignores it entirely. An infeasible re-solve returns HTTP 422 regardless of `force`. The Phase-17 "force → `student-preferred-invalid-draft`" reclassification has been removed. No UI path sends `force: true` after M2.
+
+**I3 (Plan 37) — consume-once.** A successful confirm removes the staging entry. A second confirm of the same `pendingMutationId` returns 404 "expired or already confirmed" (benign no-op).
 
 **Response shape (200):** `PlanConfirmResponse` — see Section 4. Note the response carries the resulting `forwardSchedule` but **no updated preferences** — see the Known limitations note in Section 4.
 
@@ -190,9 +197,10 @@ A successful confirm removes the staging entry — confirming the same id twice 
 - 401 — no session
 - 429 — quota exhausted
 - 400 — malformed body / not a valid UUID
-- 404 — `unknown_mutation_id` (staging entry expired after 10 minutes or already consumed)
+- 404 — `unknown_mutation_id` (staging entry expired after 10 minutes or already consumed / double-clicked)
 - 403 — `studentId_mismatch` (the staging entry was minted for a different student)
 - 409 — `no_profile` / `no_dpr` / `no_schedule`
+- **422** — `infeasible` (M1): the re-solved plan is infeasible; the prior committed plan is untouched
 - 500 — `engine_error`
 
 ---
@@ -200,6 +208,37 @@ A successful confirm removes the staging entry — confirming the same id twice 
 ### 2.7 `/api/plan/lock` (variant — see 2.5 above)
 
 (No additional route; `lock` is documented in 2.5.)
+
+---
+
+### 2.10 `/api/plan/whatif` — Propose a current-term what-if assumption (Plan 35 G3.1)
+
+**Source:** `apps/web/app/api/plan/whatif/route.ts`
+
+**Request body:**
+- `courseId` — string (required)
+- `outcome` — `"withdraw" | "pass" | "fail"` (required)
+
+**What it does:** Proposes a Branch-B what-if assumption on a course the student's current DPR already shows in-progress (IP). Delegates to `handleProposeWhatIfRoute` → `runProposeWhatIfStage` in the orchestrator. The orchestrator:
+
+1. Loads the session state (profile + authoritative DPR + latest schedule).
+2. **Runs `proposeWhatIfAssumptionTool.validateInput` BEFORE `.call`** (guard-bypass fix, Plan 37). This enforces:
+   - **D-7 IP-membership guard:** the `courseId` must appear as an in-progress enrollment in the authoritative DPR. Non-IP or absent courses are rejected with 400 `bad_input`.
+   - **D-4 P/F-eligibility gate:** `"pass"` and `"fail"` outcomes are rejected when the student's school has `canElect: false` (e.g. Tandon). `"withdraw"` is always allowed. Rejection → 400 `bad_input` with the user-facing message.
+   - **DPR-presence guard:** requires `session.degreeProgressReport` to be loaded.
+3. Calls `proposeWhatIfAssumptionTool.call` — builds a synthetic in-memory DPR via the matching transform (`applyWithdrawalToDpr` / `applyPassFailToDpr`), re-solves through the frozen pipeline, returns the proposed (un-persisted) plan + a `whatIfAssumption` marker.
+4. Mints a `pendingMutationId` and stages the assumption in the shared `pending_mutations` store. The follow-up `/api/plan/confirm` re-applies the transform at confirm time and persists ONLY the resulting `forward_schedule` — **never** `students.parsed_dpr` (R1 guardrail).
+
+**Response shape (200):** `WhatIfAssumptionResponse` — a superset of `PlanActionResponse` that adds `whatIfAssumption: WhatIfAssumptionMarker` (the label + hedges + optional `windowCaveat` the review card / canvas badge uses).
+
+**This route is CONFIRMABLE** (Branch-B — owner decision, Plan 37): the `pendingMutationId` can be passed to `/api/plan/confirm`. Contrast with Branch-A (program-change What-If audit upload via `/api/whatif-audit`) which is read-only / never confirmable.
+
+**Error cases:**
+- 401 — no session
+- 429 — daily plan-action quota exhausted (shared `plan-action:<studentId>` bucket)
+- 400 — malformed body / invalid outcome enum / `bad_input` from `validateInput` (D-7 IP-membership or D-4 P/F-eligibility rejection, with the student-facing message in the body)
+- 409 — `no_profile` / `no_dpr` / `no_schedule`
+- 500 — `engine_error`
 
 ---
 
@@ -316,11 +355,13 @@ Used only by `/api/plan/confirm`. Same preflight as propose, then:
 | `no_profile` | 409 | Student has no persisted profile row |
 | `no_dpr` | 409 | No parsed DPR available |
 | `no_schedule` | 409 | No forward plan exists yet |
+| `bad_input` | 400 | Validation rejected the input (D-7 IP-membership / D-4 P/F-eligibility on `/whatif`; used by `validateInput` guard) |
 | `engine_error` | 500 | The engine tool threw |
-| `unknown_mutation_id` | 404 | Confirm-only: staging entry expired or missing |
+| `unknown_mutation_id` | 404 | Confirm-only: staging entry expired or missing (incl. already consumed — I3) |
 | `studentId_mismatch` | 403 | Confirm-only: cross-tenant id attempt |
+| `infeasible` | **422** | Confirm-only (M1, Plan 37): re-solved plan is infeasible; nothing persisted; prior valid plan survives |
 
-Source: `apps/web/lib/planActionRouteHelpers.ts:101-125`.
+Source: `apps/web/lib/planActionRouteHelpers.ts` (`mapProposeError` + `mapConfirmError`).
 
 ### 3.5 Test-only exports
 
@@ -372,14 +413,15 @@ Returned by every propose route (source: `apps/web/lib/planActionOrchestrator.ts
 
 ### 4.2 The `PlanConfirmResponse` shape
 
-Returned by `/api/plan/confirm` (source: `apps/web/lib/planActionOrchestrator.ts:89-98`):
+Returned by `/api/plan/confirm` **only on HTTP 200** (an infeasible result returns HTTP 422, not a 200 with `feasible: false`). Source: `apps/web/lib/planActionOrchestrator.ts`.
 
-- `feasible`, `diff`, `consequences`, `conflicts`, `planDiff` — same as above.
-- `storedIn` — discriminated string: `"forwardSchedule"` or `"studentDraftPlan"`. Indicates which slot the engine wrote the resulting schedule into.
+- `feasible`, `diff`, `consequences`, `conflicts`, `planDiff` — same as above. `feasible` is always `true` on a 200 response (M1 guarantee).
+- `storedIn` — discriminated string: `"forwardSchedule"` or `"studentDraftPlan"`. For a plan-change confirm this reflects the engine's Decision #32 slot; for a what-if assumption confirm it is always `"forwardSchedule"` (a feasible what-if always commits to the forward slot).
 - `forwardSchedule` — the persisted schedule (in either slot).
 - `consumedMutationId` — the UUID just consumed; no longer resolvable in the staging map.
+- `whatIfAssumption?` — present only when this confirm applied a what-if assumption (Plan 35 G3.1), so the UI can label the now-committed plan "assumes you withdrew / P-F'd X".
 
-> **Known limitation — stale Lock/Unlock labels.** `PlanConfirmResponse` does **not** carry an updated `SchedulePreferences`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the client's confirm handler (`apps/web/app/chat/page.tsx:944`, and the E3 review-card path's `applyReviewConfirm`) only calls `setForwardSchedule(...)` — it never refreshes the `schedulePreferences` state that drives the sidebar's Lock/Unlock popover label. The label only re-syncs on a full reload, which re-hydrates prefs from `/api/session/restore`. This is a known UI bug, not intended behavior.
+> **Known limitation — stale Lock/Unlock labels.** `PlanConfirmResponse` does **not** carry an updated `SchedulePreferences`. After a `lock`/`unlock` confirm mutates `pins[]` server-side, the client's confirm handler only calls `setForwardSchedule(...)` — it never refreshes the `schedulePreferences` state that drives the Lock/Unlock popover label. The label only re-syncs on a full reload via `/api/session/restore`. This is a known UI bug, not intended behavior.
 
 ### 4.3 Per-route concerns shared by the verbs
 

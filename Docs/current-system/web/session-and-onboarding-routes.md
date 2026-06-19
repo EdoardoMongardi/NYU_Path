@@ -1,6 +1,6 @@
 # Session and Onboarding Routes
 
-> Last verified against code: 2026-06-16 (Phase 4 follow-ups F1-F3 — DPR-field authority, IP-window model, wizard mounted). [§6](#6-onboarding--preference-wizard-live-the-awaiting_dpr-onboarding-surface) is now revised: the `OnboardingWizard` is **MOUNTED + LIVE** as the `awaiting_dpr` onboarding surface (`page.tsx:1863-1867`, F1) — it replaces the legacy welcome/upload ask-and-reply UI for that state. New [§6.6](#66-dpr-derived-field-enforcement-read-only--re-upload-redirect-f2) documents F2: DPR-derived fields (home school, declared major/minor, catalog year, courses, grades) are READ-ONLY (the v2 route ignores a `body.homeSchool` override when `deriveHomeSchool` is CONFIDENT; the Confirm-profile step renders a confidently-derived school read-only via `computeHomeSchoolProposal.derivedFromDpr`; the agent redirects change requests to "upload a new DPR" — CORE RULE 14; `update_profile` refuses a DPR-mismatched `catalogYear`/`declaredPrograms`). New [§6.7](#67-the-wizard--chat-handoff-handlewizardreachplan-f1) documents the button-triggered handoff. Prior pass: 2026-06-16 (Phase 4 E5 — the wizard built + tested, mount then deferred). [§5](#5-legacy-apichat--onboarding-state-machine)'s `correcting_data` known-limitation notes the v2 path DOES persist a `visaStatus`/`homeSchool` correction (the legacy `/api/chat` step is still a no-op).
+> Last verified against code: 2026-06-19 (Plan 37 H1 — visa is now a MANDATORY explicit choice; `canBuildPlan` gates "Build my plan" on `parsedDpr && visaChosen`; `/api/session/restore` state-routing: `infeasible-draft` / `student-preferred-invalid-draft` → `studentDraftPlan`, all other states → `forwardSchedule`). Prior: 2026-06-16 (Phase 4 follow-ups F1-F3 — DPR-field authority, IP-window model, wizard mounted). [§6](#6-onboarding--preference-wizard-live-the-awaiting_dpr-onboarding-surface) is now revised: the `OnboardingWizard` is **MOUNTED + LIVE** as the `awaiting_dpr` onboarding surface (`page.tsx:1863-1867`, F1) — it replaces the legacy welcome/upload ask-and-reply UI for that state. New [§6.6](#66-dpr-derived-field-enforcement-read-only--re-upload-redirect-f2) documents F2: DPR-derived fields (home school, declared major/minor, catalog year, courses, grades) are READ-ONLY (the v2 route ignores a `body.homeSchool` override when `deriveHomeSchool` is CONFIDENT; the Confirm-profile step renders a confidently-derived school read-only via `computeHomeSchoolProposal.derivedFromDpr`; the agent redirects change requests to "upload a new DPR" — CORE RULE 14; `update_profile` refuses a DPR-mismatched `catalogYear`/`declaredPrograms`). New [§6.7](#67-the-wizard--chat-handoff-handlewizardreachplan-f1) documents the button-triggered handoff. Prior pass: 2026-06-16 (Phase 4 E5 — the wizard built + tested, mount then deferred). [§5](#5-legacy-apichat--onboarding-state-machine)'s `correcting_data` known-limitation notes the v2 path DOES persist a `visaStatus`/`homeSchool` correction (the legacy `/api/chat` step is still a no-op).
 > Prior: 2026-06-15 (Phase 4 E1.2: Purpose notes the v2 chat route reads the four confirmed `confirm_profile_update` fields back into the per-turn `session.student`, cross-ref [chat-route-sse.md §5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12). Same-day prior pass: cohort gate subsystem removed: §1 no longer lists the dropped `cohort_assignments` table in the wipe order).
 
 ## Purpose
@@ -107,13 +107,15 @@ The route calls `getStores(process.env)` and reads five separate slices, each in
 
 ### Schedule slot routing (Decision #32)
 
-The latest schedule row is routed into either `forwardSchedule` or `studentDraftPlan` based on its `state` (`apps/web/app/api/session/restore/route.ts:64-78`):
+The latest schedule row is routed into either `forwardSchedule` or `studentDraftPlan` based on its `state` (`apps/web/app/api/session/restore/route.ts`):
 
 - `state === "infeasible-draft"` → goes into `studentDraftPlan`.
 - `state === "student-preferred-invalid-draft"` → goes into `studentDraftPlan`.
-- Anything else → goes into `forwardSchedule`.
+- Anything else (including `"valid-clean"`, `"valid-with-trade-offs"`) → goes into `forwardSchedule`.
 
 This is the engine's discipline that the agent never endorses an illegal plan as the official forward schedule; an infeasible draft lives in a quarantine slot the UI can render differently.
+
+> **Plan 37 M1 — `student-preferred-invalid-draft` is no longer written by the confirm path.** The "Override anyway / force → student-preferred-invalid-draft" reclassification has been removed. However, the restore route continues to route `state === "student-preferred-invalid-draft"` to `studentDraftPlan` for any rows that pre-date this change or were written by the initial plan-build path (which still writes an `infeasible-draft` as a draft on infeasibility — Decision #32 — and is the only remaining source of draft-state schedules). The state-routing logic in `/api/session/restore` is unchanged.
 
 ### Chat-history limit
 
@@ -333,25 +335,32 @@ When the student replies "no" at `confirming_data`, the **legacy** `/api/chat` r
 
 ### 6.1 The 5-step state machine (`wizardMachine.ts`)
 
-`apps/web/lib/wizard/wizardMachine.ts`. A PURE, framework-agnostic stepper — the established `planState.ts` idiom (logic pure + unit-tested in `apps/web/tests/wizardShell.test.ts`; the component is a thin renderer). The ordered five steps (`WIZARD_STEPS`, `wizardMachine.ts:55-61`):
+`apps/web/lib/wizard/wizardMachine.ts`. A PURE, framework-agnostic stepper — the established `planState.ts` idiom (logic pure + unit-tested in `apps/web/tests/wizardShell.test.ts`; the component is a thin renderer). The ordered five steps (`WIZARD_STEPS`):
 
 ```
 upload → confirm_profile → goals → preferences → plan
 ```
 
 - `upload` — the DPR data source; REUSES the existing `/api/onboard` parse endpoint (same multipart `dpr` field the chat page's upload uses).
-- `confirm_profile` / `goals` / `preferences` — the OPTIONAL, skippable steps (`OPTIONAL_STEPS`, `wizardMachine.ts:64-68`; `isOptionalStep`).
+- `confirm_profile` / `goals` / `preferences` — the OPTIONAL, skippable steps (`OPTIONAL_STEPS`; `isOptionalStep`).
 - `plan` — terminal; hands off to the existing planning surface (the deterministic-on-validity engine — the wizard invents no fact and ships no plan).
 
-**Defaulted + skippable + no-dead-end (the binding contract):** every optional field is defined and defaulted in `DEFAULT_WIZARD_VALUES` (`wizardMachine.ts:149-162`, frozen) so nothing is ever `undefined` at rest, and every optional step has a Skip. The API:
+**Defaulted + skippable + no-dead-end (the binding contract):** every optional field is defined and defaulted in `DEFAULT_WIZARD_VALUES` (frozen) so nothing is ever `undefined` at rest, and every optional step has a Skip. The API:
 
 - `initialWizardState()` — `{ step: "upload", values: <fresh defaults> }`.
 - `nextStep(state, patch?)` — advance one step, merging `patch`; a no-op `step` at terminal `plan`; returns a fresh state.
 - `skipStep(state)` — advance WITHOUT changing a value (the skipped field keeps its default).
 - `prevStep(state)` — go back one; no-op at `upload`.
-- `skipAll(state)` — **THE NO-DEAD-END GUARANTEE**: jump straight to `plan` from ANY step, applying defaults for anything the student didn't set (their explicit values are preserved on top). So a student can always reach a Plan having configured nothing.
+- `skipAll(state)` — **THE NO-DEAD-END GUARANTEE**: jump straight to `plan` from ANY step, applying defaults for anything the student didn't set (their explicit values are preserved on top). So a student can always reach a Plan having configured nothing — **except for visa status, which must be chosen** (see H1 below).
 
 **NEVER SILENT CAS (core_philosophy.md #1, ALL-NYU):** `DEFAULT_WIZARD_VALUES.homeSchool` is the **empty string**, NOT `"cas"` — "not confirmed yet" — so the engine never silently treats an unknown-school student as CAS. The workload field is the plan-level load-DISTRIBUTION axis (`balanced` / `frontload` / `backload`) — the exact domain the engine's `loadStyleOverride` accepts at the plan level (NOT per-term `light`/`heavy`, which the apply walk rejects as a no-op).
+
+**H1 (Plan 37) — visa is a MANDATORY explicit choice.** `canBuildPlan(state, parsedDpr)` (`wizardMachine.ts`) gates the "Build my plan" button: it returns `true` ONLY when `!!parsedDpr && state.values.visaChosen`. Both conditions must hold:
+
+- **`parsedDpr`** — a DPR must be uploaded and parsed (the engine requires it for any personalized plan — CORE RULE: no DPR, no personalized plan).
+- **`visaChosen`** — the student must have made an explicit `"f1"` or `"domestic"` visa-status selection. The default `visaChosen: false` ensures the wizard never silently assumes "domestic" and thereby skips the F-1 full-time 12-credit floor advisory. A student who skips ALL steps (including Goals where visa is chosen) cannot reach a valid plan — `skipAll` keeps `visaChosen: false`, so the "Build my plan" button stays disabled until the student explicitly picks a visa status (typically in the Goals step).
+
+The `visaChosen` flag lives on `WizardValues` alongside `visaStatus`. Setting `visaStatus` (e.g. via `nextStep` with a patch containing `visaStatus: "f1"`) does NOT automatically set `visaChosen: true` — the wizard must explicitly patch `visaChosen: true` at the same time.
 
 ### 6.2 Upload step
 
