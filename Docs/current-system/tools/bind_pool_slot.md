@@ -1,6 +1,6 @@
 # bind_pool_slot — Technical Audit
 
-> Last verified against code: 2026-06-13 (post planning-engine rebuild, PRs #35-#41; doc-sync pass: corrected the double-count-advisory tool list to the 4 actual `buildDoubleCountAdvisory` callers).
+> Last verified against code: 2026-06-19 (plan 37 — J1: `validateInput` now accepts `session.studentDraftPlan` in addition to `session.forwardSchedule` as a valid baseline; J2: a binding committed via `confirm_plan_change` survives re-plans because `resolveBindMutations` translates the `bindPoolSlot` mutation into a `pin(courseId, term, freeze:true)` before the prefs walk; 8-axis validator reference updated).
 
 ## Purpose
 
@@ -73,14 +73,14 @@ Both required. The Zod schema enforces non-empty strings; the candidate-membersh
 
 ## 3. Session Prerequisites
 
-`validateInput` (lines 244-261) hard-rejects if either of these is missing:
+`validateInput` hard-rejects if either of these is missing:
 
 | Requirement | Rejection message |
 |---|---|
-| `session.forwardSchedule` is set | "No forward plan exists in this session. Call plan_forward_degree first, then bind pool slots." |
+| `session.forwardSchedule` OR `session.studentDraftPlan` is set | "No forward plan exists in this session. Call plan_forward_degree first, then bind pool slots." |
 | `session.degreeProgressReport` is set | "No Degree Progress Report loaded. Cannot validate pool-slot binding without DPR data." |
 
-Same two preconditions as `bind_free_elective`. The DPR gate is one half of the DPR-first doctrine — this personalized tool hard-refuses without DPR data.
+**Plan 37 (J1):** `validateInput` now accepts `session.studentDraftPlan` as a valid baseline in addition to `session.forwardSchedule`. Inside `call()`, the tool reads `session.forwardSchedule ?? session.studentDraftPlan` as the working schedule. The DPR gate is one half of the DPR-first doctrine — this personalized tool hard-refuses without DPR data.
 
 ---
 
@@ -205,7 +205,7 @@ This is a *necessary but not sufficient* check — the greedy "take the first av
 
 ### Step 11 — Hypothetical plan + validator
 
-`buildHypotheticalSchedule(...)` (lines 204-224) is the same replace-by-id pass. The result is fed to `runGraduationPathValidator(...)` (lines 477-491) — the **authoritative 7-axis validator** — with this narrow `programRules` shape:
+`buildHypotheticalSchedule(...)` is the same replace-by-id pass. The result is fed to `runGraduationPathValidator(...)` — the **authoritative 8-axis validator** (7 graduation-path axes + the plan-37 `passFailLimitsRespected` axis) — with this narrow `programRules` shape:
 
 - `degreeCreditMinimum`: `schedule.graduationCreditMinimum`
 - `residencyMinCredits`: **`session.degreeProgressReport?.cumulative.residencyRequired ?? null`** (line 484). (The pre-rebuild docs cited `session.schoolConfig?.residency?.minCredits`; the current code reads the residency floor off the DPR cumulative counters.)
@@ -332,7 +332,7 @@ flowchart LR
 | Tool | Relationship to `bind_pool_slot` |
 |---|---|
 | `plan_forward_degree` | Hard prerequisite. Without `session.forwardSchedule`, validateInput rejects (lines 245-252). The planner creates the pool placeholders this tool binds into and populates each pool slot's `poolBinding.candidates`. |
-| `confirm_plan_change` | The commit step. `bind_pool_slot` produces the diff; [`confirm_plan_change`](./confirm_plan_change.md) is the only path that splices the concrete slot into `session.forwardSchedule`. Tool description (lines 230-240) tells the LLM: "Use this BEFORE calling confirm_plan_change with a bindPoolSlot mutation." |
+| `confirm_plan_change` | The commit step. `bind_pool_slot` produces the diff; [`confirm_plan_change`](./confirm_plan_change.md) is the only path that splices the concrete slot into `session.forwardSchedule`. **Plan 37 (J2):** `confirm_plan_change` calls `resolveBindMutations(currentPlan, mutations)` before the prefs walk. This translates the `bindPoolSlot(slotId, courseId)` mutation into a `pin(courseId, term, freeze:true)` by looking up the slot's term in the current plan. The resulting pin lands in `schedulePreferences.pins[]` and therefore survives a future re-solve, so the binding is durable rather than lost on the next re-plan. |
 | `bind_free_elective` | Sibling tool. The `wrong_slot_kind` rejection at line 294 redirects the LLM if it passes a free-credit slot id here. Shared validation skeleton; `bind_pool_slot` adds the candidate-membership check (Step 3) and the choose-n constraint (Step 8), and reads `parentSlot.optional` for the workload tier (Step 9). |
 | `runGraduationPathValidator` (internal, line 477) | Owns the `feasible` verdict — the same authoritative 7-axis gate used by the build, propose, confirm, and simulate paths. |
 | `computeBalanceScore` / `classifyBalanceDelta` (internal, lines 495-497) | Supply the balance side of the warning level. |

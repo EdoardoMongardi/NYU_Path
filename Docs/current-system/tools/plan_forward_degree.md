@@ -1,6 +1,6 @@
 # plan_forward_degree — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-19 (plan 37 — 8-axis validator: `finalizeForwardSchedule` now receives `passFailConfig` from `session.schoolConfig?.passFail` so the 8th `passFailLimitsRespected` axis fires on the build path; plan states and descriptions below still accurate).
 
 ## Purpose
 
@@ -95,7 +95,7 @@ Everything the search/validator reads downstream — `schoolConfig` caps, `cours
 The tool calls `buildForwardSchedule({ session, dpr, graduationTermOverride })` (`build.ts:145`). That function is where the actual rebuild lives, and it differs fundamentally from the pre-rebuild greedy solver this doc used to describe:
 
 - **The greedy solver is gone.** `solveForwardSchedule` is now a thin orchestration over `buildConstraintContext` → `findFirstValidPlan` (a **feasibility-first backtracking search** that returns the first valid leaf, not a single greedy pass) → `localImprove` → `materializePlan` (`solver.ts:1-60`). Diverse alternatives come from `findDiverseValidPlans`.
-- **One search → one validator for every path.** `buildForwardSchedule` calls the search once, then `finalizeForwardSchedule` (`build.ts:64`) assembles the `ForwardSchedule` and runs the authoritative `runGraduationPathValidator`. The validator-derived `state` (via `derivePlanStateFromValidator`) **overrides** the solver's coarse state. This same finalize step is shared by `propose_plan_change` and `confirm_plan_change` (PLAN-3), so all build/edit paths gate on the identical 7-axis validator.
+- **One search → one validator for every path.** `buildForwardSchedule` calls the search once, then `finalizeForwardSchedule` (`build.ts:64`) assembles the `ForwardSchedule` and runs the authoritative `runGraduationPathValidator` (now **8 axes** — 7 graduation-path axes + the plan-37 `passFailLimitsRespected` axis, fed by `passFailConfig` from `session.schoolConfig?.passFail`). The validator-derived `state` (via `derivePlanStateFromValidator`) **overrides** the solver's coarse state. This same finalize step is shared by `propose_plan_change` and `confirm_plan_change` (PLAN-3), so all build/edit paths gate on the identical 8-axis validator.
 - **Add-a-term relax loop.** When the graduation term was *derived* (no student-stated target, no override) and the validator reports infeasible, `buildForwardSchedule` extends the horizon up to `MAX_HORIZON_RELAX_TERMS = 2` extra main terms, rebuilding both `solverInput` and `validatorRules` each time (`build.ts:211`). The extension is adopted only if it *achieves* validator-feasibility; otherwise the original derived-horizon result is returned with its honest binding constraints. A hard target is never silently extended.
 
 ```mermaid
@@ -129,8 +129,8 @@ For the 7 validator axes, plan-state derivation, balance score, workload tiers, 
 
 | State | Meaning |
 | --- | --- |
-| `valid-clean` | All 7 axes pass; no IP assumptions, petitions, low-confidence slots, or placeholders. Safe to endorse. |
-| `valid-with-trade-offs` | All 7 axes pass but there is at least one caveat (assumed-pass / requires-approval axis, IP assumption, petition, low-confidence slot, or placeholder). Endorsable with disclaimers. |
+| `valid-clean` | All 8 axes pass (plan 37: incl. `passFailLimitsRespected`); no IP assumptions, petitions, low-confidence slots, or placeholders. Safe to endorse. |
+| `valid-with-trade-offs` | All 8 axes pass but there is at least one caveat (assumed-pass / requires-approval axis, IP assumption, petition, low-confidence slot, or placeholder). Endorsable with disclaimers. |
 | `infeasible-draft` | At least one axis failed. Plan does not reach graduation. Stored separately so the agent never endorses it. |
 
 The fourth state, `student-preferred-invalid-draft`, is **never** emitted by `derivePlanStateFromValidator`. It is reserved for an explicit student-override path elsewhere. `plan_forward_degree` routes it identically to `infeasible-draft` (both go to `studentDraftPlan`).

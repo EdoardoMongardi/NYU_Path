@@ -1,6 +1,6 @@
 # probe_counterfactual — Technical Audit
 
-> Last verified against code: 2026-06-13 (Phase 3 advisor — D2.1 + D3.1 + D2.2; doc-sync pass: §2 mutation vocabulary corrected to 14 kinds + 3 slot-binding no-ops + planChangeHelpers.ts:74).
+> Last verified against code: 2026-06-19 (plan 37 — **confirmed**: `probe_counterfactual` is **PROSE-ONLY** and produces no committable scenario; it remains a pure exploration with no `confirm_counterfactual` partner and no workspace scenario tab. The Branch-B what-if confirm path (`propose_whatif_assumption` → `/api/plan/whatif` → confirmable proposed scenario) is a SEPARATE tool. Plan 36's scenario model does not include a `probe_counterfactual` scenario type because the engine is frozen — a prose-only result cannot emit a schedule the workspace can display without a new engine call. See `propose_whatif_assumption.md` for the confirmable arm.).
 
 ## Purpose
 

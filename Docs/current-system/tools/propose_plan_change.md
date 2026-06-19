@@ -1,6 +1,6 @@
 # propose_plan_change — Technical Audit
 
-> Last verified against code: 2026-06-13 (doc-sync pass: PlanMutation now 14 kinds — added D6.2 addSoftObjective/clearSoftObjectives — and refreshed planChangeHelpers.ts / proposePlanChange.ts line citations).
+> Last verified against code: 2026-06-19 (plan 37 — I1: after this tool returns in a chat turn, the v2 route emits a `plan_proposal` SSE event carrying the proposed mutation list and pendingMutationId so the workspace Confirm rail appears; the agent narrates the Confirm button to the student and does NOT auto-call `confirm_plan_change` itself (I3, confirmed in the system-prompt preference-extraction rules)).
 
 ## Purpose
 
@@ -238,6 +238,7 @@ The rich `planDiff.creditsByTermDelta`, `weightedCreditsByTermDelta`, `workloadT
 
 ## 10. Interactions
 
+- **v2 route `plan_proposal` SSE event (I1, plan 37):** when `propose_plan_change` returns in a chat turn, `apps/web/app/api/chat/v2/route.ts` emits a `plan_proposal` SSE event (`kind: "plan_proposal"`) carrying the proposed mutation list and a staged `pendingMutationId`. The workspace Confirm rail then appears for the student. The agent narrates this to the student ("the proposal is now visible on the canvas — click Confirm or type 'confirm' in chat") but does **NOT** call `confirm_plan_change` itself. A bare confirm phrase ("confirm", "yes", "apply it") typed in chat while a proposal is pending is intercepted by the UI and routed to the staged `pendingMutationId`; the agent sees that as a new turn only if the message is longer.
 - **`confirm_plan_change`** — direct partner. Same `inputSchema`, same `PlanMutationSchema`, same five helpers. See [confirm_plan_change](confirm_plan_change.md).
 - **`plan_forward_degree`** — strict ordering: `validateInput` rejects when both schedule slots are absent, and only `plan_forward_degree` creates them. See [plan_forward_degree](plan_forward_degree.md).
 - **`simulate_alternatives`** — independent. It probes three predefined relaxations (summer, J-term, extend graduation) and returns summaries; `propose_plan_change` takes an explicit mutation list and returns the full `planDiff`.

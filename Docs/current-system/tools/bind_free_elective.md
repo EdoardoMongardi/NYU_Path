@@ -1,6 +1,6 @@
 # bind_free_elective — Technical Audit
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-19 (plan 37 — J1: `validateInput` now accepts `session.studentDraftPlan` in addition to `session.forwardSchedule` as a valid baseline; J2: a binding committed via `confirm_plan_change` survives re-plans because `resolveBindMutations` translates the `bindFreeElective` mutation into a `pin(courseId, term, freeze:true)` before the prefs walk; 8-axis validator reference updated).
 
 ## Purpose
 
@@ -64,14 +64,14 @@ Both fields are required. The Zod schema enforces non-empty strings; everything 
 
 ## 3. Session Prerequisites
 
-The `validateInput` hook (lines 174-191) hard-rejects the call unless both of the following hold:
+The `validateInput` hook hard-rejects the call unless both of the following hold:
 
 | Requirement | Rejection message |
 |---|---|
-| `session.forwardSchedule` is set | "No forward plan exists in this session. Call plan_forward_degree first, then bind free-elective slots." |
+| `session.forwardSchedule` OR `session.studentDraftPlan` is set | "I don't have a plan to bind into yet — let me build your forward plan first." |
 | `session.degreeProgressReport` is set | "No Degree Progress Report loaded. Cannot validate free-elective binding without DPR data." |
 
-Both must be present at validation time. If either is missing, the call never reaches `call()`. The DPR gate is one half of the DPR-first doctrine — without authoritative DPR data this personalized tool hard-refuses.
+**Plan 37 (J1):** `validateInput` now accepts `session.studentDraftPlan` as a valid baseline in addition to `session.forwardSchedule`. This allows the student to bind courses into a draft (infeasible) plan without first requiring a valid main schedule. Inside `call()`, the tool reads `session.forwardSchedule ?? session.studentDraftPlan` as the working schedule. If either is missing, the call never reaches `call()`. The DPR gate is one half of the DPR-first doctrine — without authoritative DPR data this personalized tool hard-refuses.
 
 ---
 
@@ -189,9 +189,9 @@ A `ScheduleSlotSpecificPlanned` is constructed (lines 377-392). It inherits cred
 
 `buildHypotheticalSchedule(original, slotId, concreteSlot)` (lines 134-154) is a pure replace-by-id pass: it spreads every semester and every slot, swapping the matching placeholder for `concreteSlot`. No mutation; the original schedule is untouched.
 
-### Step 9 — Re-validation (the 7-axis graduation validator)
+### Step 9 — Re-validation (the 8-axis graduation validator)
 
-The hypothetical schedule is fed to `runGraduationPathValidator(...)` (lines 402-416) — the **same authoritative 7-axis validator** that gates `plan_forward_degree`, the propose/confirm paths, and `simulate_alternatives`. The `programRules` bundle passed in is intentionally narrow:
+The hypothetical schedule is fed to `runGraduationPathValidator(...)` — the **same authoritative 8-axis validator** (7 graduation-path axes + the plan-37 `passFailLimitsRespected` axis) that gates `plan_forward_degree`, the propose/confirm paths, and `simulate_alternatives`. The `programRules` bundle passed in is intentionally narrow:
 
 - `degreeCreditMinimum`: taken from `schedule.graduationCreditMinimum` (not the raw school config), because the schedule's value already accounts for total planned credits — see lines 406-408.
 - `residencyMinCredits`: **`session.degreeProgressReport?.cumulative.residencyRequired ?? null`** (line 409). (The pre-rebuild docs cited `session.schoolConfig?.residency?.minCredits`; the current code reads the residency floor off the DPR's cumulative counters, not the school config.)
@@ -337,7 +337,7 @@ flowchart LR
 | Tool | Relationship to `bind_free_elective` |
 |---|---|
 | `plan_forward_degree` | Hard prerequisite. Without `session.forwardSchedule`, validateInput rejects (lines 175-182). The planner creates the free-credit placeholders this tool binds into. |
-| `confirm_plan_change` | The downstream commit step. `bind_free_elective` produces the diff; [`confirm_plan_change`](./confirm_plan_change.md) is the only path that splices the new `specific_planned` slot into `session.forwardSchedule`. The tool description (lines 162-170) tells the LLM: "Use this BEFORE calling confirm_plan_change with a bindFreeElective mutation." |
+| `confirm_plan_change` | The downstream commit step. `bind_free_elective` produces the diff; [`confirm_plan_change`](./confirm_plan_change.md) is the only path that splices the new `specific_planned` slot into `session.forwardSchedule`. **Plan 37 (J2):** `confirm_plan_change` calls `resolveBindMutations(currentPlan, mutations)` before the prefs walk. This translates the `bindFreeElective(slotId, courseId)` mutation into a `pin(courseId, term, freeze:true)` by looking up the slot's term in the current plan. The resulting pin lands in `schedulePreferences.pins[]` and therefore survives a future re-solve, so the binding is durable rather than lost on the next re-plan. An `exclude` mutation that drops a bound course strips the matching pin. |
 | `search_courses` | Typical upstream source of candidate `courseId`s. |
 | `bind_pool_slot` | Sibling tool. Passing a *pool* slot's id here triggers the `wrong_slot_kind` rejection redirecting to [`bind_pool_slot`](./bind_pool_slot.md). They share the same validation skeleton; the only differences are the absence/presence of `poolBinding` and the choose-n constraint that `bind_pool_slot` adds. |
 | `runGraduationPathValidator` (internal) | Called inline at line 402 as the re-validation step. Owns the `feasible` verdict — the same authoritative 7-axis gate used everywhere else. |
