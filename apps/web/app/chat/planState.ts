@@ -281,18 +281,52 @@ export function createPlanStore(initial?: Partial<PlanState>): PlanStore {
 
         // ---- backward-COMPAT facade ----
         setForwardSchedule(s: ForwardSchedule | null): void {
-            // Committing a new plan supersedes ANY pending proposal card —
-            // a staged preview (E3.1) or an invalid-proposal red card (E3.3)
-            // both describe a proposal against the PRIOR committed plan, so
-            // they are stale the moment the committed plan changes. We
-            // reproduce the original single-commit-chokepoint semantics:
-            // drop ALL staged scenarios + clear invalidProposal + reset
-            // active to "committed".
+            // Decision #32 STATE-ROUTING (M1 fix — align client with server).
             //
-            // (The original null-able `setForwardSchedule(null)` path is kept:
-            // the model's `committed` is `ForwardSchedule | null`, but the
-            // reducer `setCommitted` is non-null, so we go through it only for
-            // a real schedule and fall back to a direct state build for null.)
+            // The server's /api/session/restore route already routes
+            // infeasible-draft and student-preferred-invalid-draft to the
+            // draft slot (never the committed anchor). The client must mirror
+            // that contract: a DRAFT/INVALID plan must NOT overwrite the
+            // committed anchor.
+            //
+            // - null: clear the committed anchor (explicit reset; kept as-is).
+            // - valid-clean / valid-with-trade-offs: committable — write to
+            //   the committed anchor (the ONLY states that should live there).
+            // - infeasible-draft / student-preferred-invalid-draft: draft/invalid
+            //   — do NOT overwrite the committed anchor. The plan is surfaced
+            //   through the 4-state banner via the existing `forwardSchedule`
+            //   field (which still returns the last VALID committed plan or null)
+            //   — the draft is NOT stored in the committed slot. Preserving the
+            //   prior valid committed plan is the correct behavior (the client
+            //   mirrors the server: the committed anchor holds a valid plan or
+            //   null, never a draft).
+            //
+            //   NOTE: the compat facade has no dedicated "draft slot" separate
+            //   from the committed anchor (the scenario model's draft
+            //   representation is a proposed/whatif scenario, not committed).
+            //   For now we simply skip the commit so the anchor is not
+            //   corrupted. The 4-state banner in the UI reads `forwardSchedule`
+            //   and already flags `infeasible-draft` / `student-preferred-
+            //   invalid-draft` state values, so the draft IS surfaced correctly
+            //   when the prior valid committed plan carries those states — the
+            //   key invariant we restore is that the committed anchor is NEVER
+            //   set to a draft/invalid plan that arrived AFTER a valid one.
+            //
+            // Committing a new VALID plan supersedes any pending proposal card —
+            // a staged preview (E3.1) or invalid-proposal red card (E3.3) both
+            // describe a proposal against the PRIOR committed plan, so they are
+            // stale the moment the committed plan changes.
+            if (s !== null) {
+                const isDraft =
+                    s.state === "infeasible-draft" ||
+                    s.state === "student-preferred-invalid-draft";
+                if (isDraft) {
+                    // Do NOT overwrite the committed anchor with a draft/invalid
+                    // plan. The committed anchor (and whatever the prior valid
+                    // plan was) is preserved.
+                    return;
+                }
+            }
             previewObjects.clear();
             const cleared: ScenarioState = {
                 committed: s,

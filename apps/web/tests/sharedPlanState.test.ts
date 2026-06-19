@@ -256,6 +256,121 @@ describe("useSyncExternalStore contract", () => {
     });
 });
 
+// ===========================================================================
+// (M1) Decision #32 state-routing — setForwardSchedule must never commit a
+//      draft/invalid plan to the committed anchor (mirrors the server's
+//      /api/session/restore state-routing logic).
+// ===========================================================================
+
+function makeDraftSchedule(
+    state: "infeasible-draft" | "student-preferred-invalid-draft",
+): ForwardSchedule {
+    return {
+        graduationTerm: "2028-spring",
+        terms: [],
+        state,
+    } as unknown as ForwardSchedule;
+}
+
+function makeValidSchedule(
+    state: "valid-clean" | "valid-with-trade-offs" = "valid-clean",
+): ForwardSchedule {
+    return {
+        graduationTerm: "2028-spring",
+        terms: [],
+        state,
+    } as unknown as ForwardSchedule;
+}
+
+describe("setForwardSchedule state-routing (Decision #32 / M1)", () => {
+    it("a valid-clean schedule is committed to the anchor", () => {
+        const store = createPlanStore();
+        const valid = makeValidSchedule("valid-clean");
+        store.setForwardSchedule(valid);
+        expect(store.getSnapshot().forwardSchedule).toBe(valid);
+        expect(store.getCommitted()).toBe(valid);
+    });
+
+    it("a valid-with-trade-offs schedule is committed to the anchor", () => {
+        const store = createPlanStore();
+        const valid = makeValidSchedule("valid-with-trade-offs");
+        store.setForwardSchedule(valid);
+        expect(store.getSnapshot().forwardSchedule).toBe(valid);
+        expect(store.getCommitted()).toBe(valid);
+    });
+
+    it("an infeasible-draft schedule does NOT overwrite the committed anchor", () => {
+        const store = createPlanStore();
+        // Seed a valid committed plan first.
+        const prior = makeValidSchedule("valid-clean");
+        store.setForwardSchedule(prior);
+
+        // Now receive an infeasible-draft — must NOT clobber the prior valid plan.
+        const draft = makeDraftSchedule("infeasible-draft");
+        store.setForwardSchedule(draft);
+
+        expect(store.getSnapshot().forwardSchedule).toBe(prior);
+        expect(store.getCommitted()).toBe(prior);
+        // The draft itself must not appear in the committed slot.
+        expect(store.getSnapshot().forwardSchedule).not.toBe(draft);
+        expect(store.getCommitted()).not.toBe(draft);
+    });
+
+    it("a student-preferred-invalid-draft schedule does NOT overwrite the committed anchor", () => {
+        const store = createPlanStore();
+        const prior = makeValidSchedule("valid-clean");
+        store.setForwardSchedule(prior);
+
+        const draft = makeDraftSchedule("student-preferred-invalid-draft");
+        store.setForwardSchedule(draft);
+
+        expect(store.getSnapshot().forwardSchedule).toBe(prior);
+        expect(store.getCommitted()).toBe(prior);
+        expect(store.getSnapshot().forwardSchedule).not.toBe(draft);
+    });
+
+    it("a draft arriving with no prior committed plan leaves the anchor null (not null → draft)", () => {
+        const store = createPlanStore();
+        // No prior valid plan — anchor is null.
+        const draft = makeDraftSchedule("infeasible-draft");
+        store.setForwardSchedule(draft);
+
+        // Anchor must remain null — the draft is not promoted.
+        expect(store.getSnapshot().forwardSchedule).toBeNull();
+        expect(store.getCommitted()).toBeNull();
+    });
+
+    it("setForwardSchedule(null) still clears the committed anchor (explicit reset kept)", () => {
+        const store = createPlanStore();
+        const prior = makeValidSchedule("valid-clean");
+        store.setForwardSchedule(prior);
+        store.setForwardSchedule(null);
+        expect(store.getSnapshot().forwardSchedule).toBeNull();
+        expect(store.getCommitted()).toBeNull();
+    });
+
+    it("a draft does NOT fire subscribers (no spurious re-render)", () => {
+        const store = createPlanStore();
+        const prior = makeValidSchedule("valid-clean");
+        store.setForwardSchedule(prior);
+        const listener = vi.fn();
+        store.subscribe(listener);
+        store.setForwardSchedule(makeDraftSchedule("infeasible-draft"));
+        // No mutation happened, so no listener should fire.
+        expect(listener).not.toHaveBeenCalled();
+    });
+
+    it("a valid plan arriving after a draft IS committed (draft does not block future valid plans)", () => {
+        const store = createPlanStore();
+        // First a draft arrives, then a valid plan.
+        store.setForwardSchedule(makeDraftSchedule("infeasible-draft"));
+        const valid = makeValidSchedule("valid-with-trade-offs");
+        store.setForwardSchedule(valid);
+        expect(store.getSnapshot().forwardSchedule).toBe(valid);
+        expect(store.getCommitted()).toBe(valid);
+    });
+});
+
 // Type-level assertion: the store is typed with the REAL types, not
 // redefined locals. If these drift, tsc fails the build.
 const _typecheck: PlanState = {
