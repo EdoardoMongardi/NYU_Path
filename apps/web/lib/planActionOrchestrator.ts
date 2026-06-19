@@ -581,6 +581,39 @@ export async function runProposeWhatIfStage(
     const session = buildSession(loaded.state, env);
     const ctx = { signal: new AbortController().signal, session };
 
+    // ── Guard-bypass fix ────────────────────────────────────────────────────
+    // The AGENT path runs validateInput via the tool framework automatically.
+    // The ROUTE path (editor + direct /api/plan/whatif callers) calls .call()
+    // directly and previously BYPASSED validateInput entirely, skipping:
+    //   • D-7 IP-membership guard (E1) — reject non-IP / absent courses
+    //   • D-4 P/F-eligibility guard  — reject canElect:false schools (Tandon …)
+    //   • DPR-presence guard          — reject when session has no DPR
+    // We run validateInput here (once) before .call so the route enforces ALL
+    // guards. The agent path runs it again via the framework — harmless double-
+    // call; both are read-only guard checks.
+    if (proposeWhatIfAssumptionTool.validateInput) {
+        const toolInput = {
+            courseId: assumption.courseId,
+            outcome: assumption.outcome,
+            ...(opts.now ? { now: opts.now.toISOString() } : {}),
+        } as Parameters<typeof proposeWhatIfAssumptionTool.call>[0];
+        const validation = await proposeWhatIfAssumptionTool.validateInput(toolInput, ctx);
+        if (!validation.ok) {
+            return {
+                ok: false,
+                error: {
+                    // bad_input → HTTP 400: the student-facing message (D-7 /
+                    // D-4 text) is surfaced verbatim so the editor + review card
+                    // can show WHY the what-if was rejected (e.g. "CSCI-UA 102
+                    // isn't in progress" / "Your school doesn't allow P/F").
+                    kind: "bad_input",
+                    message: validation.userMessage,
+                },
+            };
+        }
+    }
+    // ── end guard-bypass fix ────────────────────────────────────────────────
+
     let outcome: Awaited<ReturnType<typeof proposeWhatIfAssumptionTool.call>>;
     try {
         outcome = await proposeWhatIfAssumptionTool.call(
