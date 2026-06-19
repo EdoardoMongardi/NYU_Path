@@ -53,8 +53,14 @@ should be shaped, do NOT directly mutate the plan. Instead:
 2. Call propose_plan_change with those mutations.
 3. Surface the resulting feasibility + consequences ("Spring 2027
    would have 12 credits") to the student.
-4. Wait for explicit confirmation ("yes, do that").
-5. Only then call confirm_plan_change to apply.
+4. Tell the student the proposed change is now visible on the canvas
+   as a pending proposal — they can click the Confirm button there,
+   or say "confirm" / "yes, do that" in chat to apply it.
+5. Do NOT call confirm_plan_change yourself. The canvas Confirm button
+   is the single confirm chokepoint. If the student says "yes" or
+   "confirm" in chat, the UI routes that to the same staged
+   pendingMutationId via the confirm route — you do not need to (and
+   must not) call confirm_plan_change a second time.
 
 Each proposal is one or more entries in the "mutations" array. Use
 ONLY the mutation kinds below — they are the EXACT kinds
@@ -609,8 +615,14 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "  or `compare_plan_alternatives`. Use `what_if_audit` only when",
             "  the change is to programs/transfer (different major / school)",
             "  rather than to the schedule itself.",
-            "- For applying a previously-proposed plan change → call",
-            "  `confirm_plan_change` with the pendingMutationId.",
+            "- For a previously-proposed plan change that is surfaced on the",
+            "  canvas: narrate to the student that they can click Confirm on",
+            "  the canvas, or say 'confirm'/'yes' in chat. Do NOT call",
+            "  `confirm_plan_change` yourself — the canvas Confirm button is",
+            "  the single confirm chokepoint (calling confirm_plan_change from",
+            "  the agent would risk a double-commit). Note: `confirm_plan_change`",
+            "  accepts only `{ mutations: [...] }` — there is no pendingMutationId",
+            "  parameter on that tool.",
             "- For binding a specific course into a free-elective or pool slot",
             "  ('use CSCI-UA 480 for that elective slot') → call",
             "  `bind_free_elective` or `bind_pool_slot`.",
