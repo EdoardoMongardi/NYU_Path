@@ -37,6 +37,8 @@ The Phase-15 section-materialization foundation is complete and tested. Start he
 
 **The one stub that blocks the owner's scenario:** `materialize.ts` step 7 calls `swapHook(courseId, reason)` (`:347`); the hook is `async () => null` (`materializeSections.ts:198-201`), so a course with no conflict-free / open section is **dropped** (`dropped[]`, `:349`) rather than swapped or moved. And a HARD time-conflict surfaces only as the message *"Found courses but no conflict-free combinations exist"* (`materialize.ts:430`) with **no re-plan trigger**.
 
+**Two more known coarsenesses to fix (Phases F + G):** (1) **Recitation** — FOSE rows carry the component type `schd` (`LEC`/`RCT`/`LAB`, `nyuClassSearch.ts:37`), but `conflictDetection` enumerates ONE section per course, so a course needing a lecture **and** a required recitation (two time-blocks, both must be conflict-free) is not modeled. (2) **Waitlist** — `isOpenStatus` (`materialize.ts:222`) returns true for BOTH `"O"` and `"W"`, so waitlist sections are silently treated as open; and `FoseSearchResult` has **no waitlist-count field** (search returns only O/W/C, never the queue length).
+
 ---
 
 ## §1. The gap = the owner's scenario
@@ -140,12 +142,32 @@ Every rung 1–3 ends in `finalizeForwardSchedule` → only a `valid-clean`/`val
 - [ ] **E2 — section-picker panel:** read-only list of conflict-free combos per term with status (open/waitlist/closed), instructor, meeting times; "use this combo" drives the existing `confirm_section_combination` (metadata attach only). Test: render + select.
 - [ ] **E3 — forced re-plan as proposal:** when the bridge (Phase A) produces a valid re-plan, emit it through the EXISTING `plan_proposal` SSE → a `kind:"proposed"` scenario → Confirm chokepoint. Invalid → red explanation card (plan 37 M-path). Test: the proposed scenario carries the moved course + the consequence string; confirm persists only `forward_schedule`.
 
-## Phase F — Recitation (LEC+RCT) pairing  *(sub-phase; gated on a FOSE field audit)*
+## Phase F — Recitation (LEC + RCT) co-scheduling  *(first-class; gated only on the F0 pairing-data audit)*
 
-**Goal:** a valid section combo must pair a lecture with a compatible recitation; recitation timing participates in conflict detection.
+**Why first-class (owner clarification 2026-06-19):** many courses are a lecture PLUS a **required recitation** — e.g. the lecture meets Mon/Wed 2–3pm *and* you must also pick one RCT slot during the week. **That recitation's meeting time must join the same conflict graph as every other course (and every other course's recitation).** So one valid combo for such a course = a **(LEC time + RCT time) pair, BOTH conflict-free with the whole term's selections**. This changes what `conflictDetection` enumerates, so — if F0 confirms the data — F1 is **foundational** and should land before/with Phase A's combo logic (every "conflict-free combo" in A/C/D depends on it once recitations exist).
 
-- [ ] **F0 — FOSE field audit (FIRST):** record fixtures and confirm whether the corpus exposes the LEC↔RCT link (component type + the pairing key). If absent → STOP, keep the D5 hedge, document the gap. (No recitation field exists in the engine today — verified: zero `recitation` hits in `packages/engine/src/*.ts`.)
-- [ ] **F1 — model** recitation as a co-req section in `conflictDetection` only if F0 confirms the data; otherwise this phase is deferred and the agent hedges recitation timing.
+**What we already have vs. what's missing:** FOSE search rows DO carry `schd` (`"LEC"` / `"RCT"` / `"LAB"` / `"SEM"` …, `nyuClassSearch.ts:37`) + `crn` + `no`, so recitation rows ARE identifiable. **Missing:** today `enumerateConflictFreeCombinations` picks exactly ONE section (one time-block) per course (`conflictDetection.ts`) — it cannot require a LEC *and* a compatible RCT for the same course.
+
+**Files:** `sectionMaterialization/conflictDetection.ts`, `materialize.ts` (re-bucketing), `parseMeetingTimes.ts`; possibly `nyuClassSearch.ts:getCourseDetails` for the pairing key.
+
+- [ ] **F0 — pairing-data audit (FIRST, gating):** from recorded fixtures, determine HOW a RCT links to its parent LEC — derivable from the search rows (`schd`/`no`/`crn` grouping) or only from the detail endpoint? Decide free-pairing (any RCT with the chosen LEC) vs. bound-pairing (a specific LEC↔RCT set). If the link is NOT reliably derivable → STOP: keep the agent's recitation hedge ("this course has a required recitation — confirm a recitation time that fits, in Albert / with your adviser") and document the gap.
+- [ ] **F1 — model** a LEC+RCT course as a unit contributing TWO meeting-time blocks to a combo: extend combo enumeration so a valid combo includes a compatible `(LEC, RCT)` pair and BOTH blocks pass `patternsOverlap` against all other selected blocks. Test: a fixed LEC + 3 RCT options where only the non-clashing RCT survives.
+- [ ] **F2 — recitation as a re-plan trigger:** a course whose every recitation clashes (or whose only non-clashing recitation is closed/waitlist-rejected) is a HARD-conflict / course-wipe trigger into the Phase-A bridge, exactly like a lecture clash.
+
+## Phase G — Waitlist strategy (advisory; the engine never registers)
+
+**Owner requirement:** lectures AND recitations are often waitlist. The agent should (a) distinguish waitlist from open, (b) factor the student's willingness to waitlist (and the queue number when available), and (c) when the student waitlists, recommend an OPEN fallback + Albert's auto-swap binding. Matches `core_philosophy.md:11`.
+
+**Two hard truths from the code (don't overpromise):**
+1. **The engine is READ-ONLY (CORE RULE 8)** — it NEVER registers, waitlists, or binds in Albert. Phase G is purely **advisory**: it surfaces status + recommends a strategy the student executes in Albert.
+2. **FOSE search returns only `stat` = O/W/C — NOT the waitlist NUMBER** (`FoseSearchResult` has no count/position field — verified). So "identify the waitlist number if available" (philosophy) is currently **not satisfiable from the search endpoint** → either probe `getCourseDetails` (G0) or **HEDGE** ("I can't see the waitlist length — check it in Albert"). Never fabricate a number.
+
+**Files:** `materialize.ts` (`isOpenStatus` at `:222` currently returns true for BOTH `"O"` and `"W"` — split it), `sectionMaterialization/types.ts` (`status`), `searchAvailability.ts` (already labels O/W/C), the Phase-E section-picker, the agent prompt.
+
+- [ ] **G0 — waitlist-number audit:** check whether `getCourseDetails` / the raw FOSE detail response exposes a waitlist count or position. Yes → surface it; No → the agent hedges the number (cite-or-hedge). Document the finding.
+- [ ] **G1 — distinguish O vs W in materialization:** stop treating `"W"` as plainly open. Keep waitlist sections in the combos but **tag** them `waitlist`, and rank an all-open combo above a waitlist-containing one when both exist. Test: an open combo ranks above a waitlist combo; the waitlist combo is labeled.
+- [ ] **G2 — waitlist decision per preference:** a `willingToWaitlist` preference (+ an optional queue-length threshold when G0 yields a number) decides whether a waitlist-only course is acceptable or should trigger the Phase-A bridge (move to a later term / swap to an open alternative). Test: `willingToWaitlist:false` + a waitlist-only course → bridge re-plan; `true` → accept-with-caveat.
+- [ ] **G3 — open fallback + auto-swap advice:** when the student waitlists, the agent RECOMMENDS (never performs) an OPEN fallback for the same requirement leaf + explains Albert auto-swap ("register the open course, add the waitlisted one and bind it via Albert's auto-swap; if it clears, Albert swaps the fallback out"). Deterministic copy, cite `core_philosophy.md:11`. Test: a waitlisted course with an open same-leaf alternative produces the fallback + auto-swap recommendation string.
 
 ## §4. Prerequisites & known hedged gaps (NOT blockers — fold in)
 
@@ -165,6 +187,8 @@ Every rung 1–3 ends in `finalizeForwardSchedule` → only a `valid-clean`/`val
 ## Open questions for the owner
 
 1. **Auto vs. ask** for the HARD-conflict trigger (D1) — emit a proposal automatically on near-term materialization, or only when the student asks "can I take these next term?"
-2. **Recitation data** (D5/F0) — is the FOSE corpus's LEC↔RCT link reliable enough to model, or hedge for now?
+2. **Recitation pairing data** (F0) — owner-confirmed recitation conflict-checking is in scope (lecture + a required RCT, both must fit the whole term). The remaining unknown is purely a DATA question: is the LEC↔RCT link derivable from the search rows, or does it need the detail endpoint? (Drives whether Phase F is built now or hedged.)
 3. **Disruption metric** (D4) — rank multi-course re-plans by fewest-moved-courses, or by latest-unchanged-grad-term, or a blend?
 4. **Summer/J-term** (D3) — may a forced re-plan *suggest* opening a summer term (opt-in) when no regular-term move is valid, or never?
+5. **Waitlist number** (G0) — FOSE *search* returns only O/W/C, no queue length. Worth probing the detail endpoint for a count, or hedge the number and decide on status + student willingness alone?
+6. **Waitlist acceptance default** (G2) — absent an explicit `willingToWaitlist`, is a waitlist-only course (a) accepted with a caveat, or (b) treated as a re-plan trigger (prefer an open alternative)?
