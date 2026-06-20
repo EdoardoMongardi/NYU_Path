@@ -1159,6 +1159,21 @@ export interface SchedulingPreferences {
     preferTimeWindows?: Array<{ days: Day[]; startMin: number; endMin: number; weight: number }>;
     desiredFreeDay?: { day: "any" | Day; strict: boolean };
     avoidConsecutiveLongBlocks?: boolean;
+    /**
+     * Phase 38 (D2) — SOFT-rejection vocabulary. Instructor names the student
+     * rejects: every section whose `instructor` contains one of these (case-
+     * insensitive substring) is STRICT-dropped from the section pool. When a
+     * rejection wipes all of a course's sections, that course-wipe feeds the
+     * escalation bridge (move to a later term / swap to an open alternative).
+     * "Reject" is strict by nature; a soft "deprioritize a professor" is a
+     * future refinement (it would ride the rerank path, not this drop path).
+     */
+    rejectInstructor?: string[];
+    /**
+     * Phase 38 (D2) — specific section CRNs the student rejects (STRICT drop).
+     * Same wipe→bridge behavior as `rejectInstructor`.
+     */
+    rejectSection?: string[];
 }
 
 // ---- 1b. GenericSoftConstraint (D6.2 — rung-2 generic SOFT-objective primitive) ----
