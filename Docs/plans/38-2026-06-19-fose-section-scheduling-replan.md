@@ -14,6 +14,7 @@
 4. **R1 guardrail.** No synthetic/section-driven artifact is ever written to `students.parsed_dpr`; a confirmed re-plan persists only `forward_schedule` (the plan-35/37 pattern via the existing confirm chokepoint).
 5. **Surface as a confirmable proposal.** Re-plans reuse the plan-36/37 propose→preview→confirm + scenarios infrastructure (`plan_proposal` SSE → a `kind:"proposed"` scenario → the single Confirm chokepoint). The section layer never auto-commits.
 6. **Cite-or-hedge.** FOSE data is live but incomplete (no recitation model yet; some calendar windows unsourced). Where the engine can't compute with confidence, it hedges + "verify with your adviser/registrar" — never fabricates a section, professor, or deadline.
+7. **Agent ⇄ deterministic boundary (HYBRID — see §2.5).** The agent **NEVER enumerates schedules or judges validity**; it only **ranks, selects, and explains tool-verified candidates**. Enumeration + every hard constraint + graduation validity stay deterministic tools; the agent's selection is **schema-forced** (structured output) and **re-validated** before any confirm. An invalid or hallucinated schedule is structurally impossible because the agent can only choose among candidates a deterministic tool already returned.
 
 ---
 
@@ -65,7 +66,7 @@ Once a term's courses are materialized, the PRIMARY flow is **not** "find a conf
 
 **① Enumerate all feasible single-term schedules.** Per planned course, pull live sections and group by component (`schd`: LEC / RCT / LAB / TUT…). A *course selection* picks one section of EACH required component (lecture-only like CSCI-UA 101, or lecture + recitation + lab like CHEM-UA 125). A *schedule* picks one selection per course. Feasible iff: **(a) no time conflict** among ALL chosen blocks — every component of every course (a recitation/lab clashes exactly like a lecture), via the existing `conflictDetection`; **(b) not closed/cancelled** — each section is open (`O`) or waitlist (`W`); **(c) strict student prefs honored** (e.g. "no Friday", a rejected instructor); **(d) graduation-safe even on waitlist** — a `W` section is allowed ONLY with a valid OPEN fallback: preferentially an open section of the SAME course (Albert auto-swap ⇒ trivially grad-safe — usually just a different section of the same class), else an open course satisfying the same requirement leaf, validated grad-safe.
 
-**② Score + rank.** Each feasible schedule scores by preference: **open ≻ waitlist** (penalty per waitlisted section), **fewer waitlisted sections is better**, then the student's time/day/instructor soft prefs (reuses the Decision-#43 rerank weights + a waitlist term).
+**② Score + rank.** A cheap **deterministic pre-rank** scores each verified candidate: **open ≻ waitlist** (penalty per waitlisted section), **fewer waitlisted sections is better**, then the student's time/day/instructor soft prefs (Decision-#43 rerank weights + a waitlist term). The **agent** then curates the final top-5 over this *verified* set — the fuzzy / compound-preference + explanation layer (see the agent ⇄ deterministic boundary, §2.5). The deterministic pre-rank is the fallback order.
 
 **③ Top-5 picker (+ see-more).** Show the top 5 schedules; if >5 are feasible, "see more" reveals the next 5 by score (the strict filters usually leave few; `MAX_COMBINATIONS=50` already caps enumeration). Student picks → `confirm_section_combination` (attach CRN/meeting/instructor); each waitlisted section in the pick gets the open-fallback + Albert auto-swap recommendation.
 
@@ -93,6 +94,30 @@ Every rung 1–3 ends in `finalizeForwardSchedule` → only a `valid-clean`/`val
 
 ---
 
+## §2.5 — Agent ⇄ deterministic boundary (HYBRID; the quality contract)
+
+Studying Claude Code's own harness (recovered source) settled the "strict algorithm vs. agent" question: that harness is itself a **hybrid** — the model *reasons + orchestrates*, **deterministic tools own truth**, and structured-output + permission guardrails make a malformed or fabricated result structurally impossible. We adopt the same split.
+
+**The bright line:** the agent **NEVER enumerates schedules or judges validity** — it only **ranks, selects, and explains tool-verified candidates**, and drives the conversation. §2 ① (enumeration + every HARD constraint + graduation validity) stays a **deterministic tool**; §2 ②③ (rank / select / explain / escalate) is where the agent earns its keep.
+
+**Why split exactly here:** LLMs are unreliable at exact combinatorial + temporal enumeration and requirement-coverage (they miss time conflicts and invent CRNs) — precisely what `conflictDetection` + the frozen 8-axis validator already do perfectly. LLMs excel at fuzzy / compound preferences ("a chill Tu/Th schedule, but I want Prof Chen for algorithms even at 9am") and tailored explanations. So the deterministic core guarantees *never ship invalid / never fabricate*; the agent adds ranking nuance + UX. This is `core_philosophy`'s "deterministic on validity, **then** preferred", made literal.
+
+**Roles.**
+- **Deterministic tool — `materialize_feasible` (read-only, structured output):** enumerate the conflict-free, open/waitlist-with-fallback, graduation-valid candidate schedules (≤ `MAX_COMBINATIONS`) and return them as a **schema-validated** set (each candidate = course→section CRNs, component blocks, status, waitlist fallback, + a cheap deterministic pre-score). This is the agent's ONLY source of candidates.
+- **Agent — rank / curate / explain:** over that verified set, pick the top-5 by the student's soft + fuzzy + compound preferences, write tailored explanations, and run the reject-all → escalation conversation. Its selection is **forced into a structured-output schema** (the chosen candidate ids + reasons) — it cannot name a schedule the tool didn't return.
+- **Guardrail by construction:** the agent's output is a *selection of tool-verified candidate ids*, schema-checked; a post-pick re-validation (the frozen validator) confirms the chosen plan before any confirm. The agent never touches hard validity ⇒ an invalid/hallucinated plan is structurally impossible.
+
+**Robust refinement (bounds the agent's job):** deterministic cheap **pre-rank** the verified candidates → hand the agent only the top ~10–15 to curate into the final 5 + explain. Small, reliable, cheap — and the deterministic pre-rank is the **fallback** order if the LLM is slow/unavailable.
+
+**Harness patterns applied (recovered Claude Code source — implementation references):**
+- **Forced structured output** — the `StructuredOutput` synthetic tool + ≤5-retry schema validation (`SyntheticOutputTool.ts:20`, `QueryEngine.ts:1004`): force the top-5 selection into a schema; auto-retry on malformed.
+- **Tool contract** — `outputSchema` / `validateInput` / `isReadOnly` / `isConcurrencySafe` (`Tool.ts:400/489/404/402`): `materialize_feasible` is read-only, concurrency-safe, schema-typed.
+- **Tool-result-as-verified-attachment** ("zero fabrication") — `mapToolResultToToolResultBlockParam` (`Tool.ts:290`): the agent sees verified candidates as structured facts, not its own guesses.
+- **Subagent with a narrowed tool pool** — `agentToolUtils.ts:125,132-143` + `runAgent.ts`: a ranking subagent can be given ONLY the read-only candidate tool (enumeration/validity tools DENIED), so it ranks and never recomputes; the parent re-validates its pick (subagent results are not trusted directly).
+- **Concurrency-safe parallel reads** — `toolOrchestration.ts:91` partitioning: fetch all courses' live sections in parallel, latency hidden behind the agent's reasoning.
+
+---
+
 ## §3. Decisions to confirm with the owner (each has a chosen default)
 
 - **D1 — Trigger surface.** The section→replan check runs (a) automatically when the agent materializes the near term and finds a HARD conflict, AND (b) on an explicit student rejection (SOFT). *Default: both; the auto path emits a proposal the student can ignore, never an auto-commit.*
@@ -107,18 +132,19 @@ Every rung 1–3 ends in `finalizeForwardSchedule` → only a `valid-clean`/`val
 
 ---
 
-> **Phase ↔ §2 map.** The PRIMARY flow (§2 ①②③ — enumerate, score, top-5 picker) is **Phase 0** below. The structural **escalation** (§2 ④) is **Phases A–D** (bridge / swapHook / cross-term / SOFT-reject). **Phase F** (multi-component) + **Phase G** (waitlist) supply the feasibility rules ① depends on, so they land WITH Phase 0. **Phase E** is the picker UI. Suggested build order: **F0** (pairing audit) → **F1 + G1** (component + O/W feasibility) → **Phase 0** (enumerate + score + top-5) → **E** (picker) → **A–D** (escalation) → **G3** (auto-swap advice).
+> **Phase ↔ §2 map.** The PRIMARY flow (§2 ①②③ — deterministic `materialize_feasible` + agent curation, per the §2.5 hybrid boundary) is **Phase 0** below. The structural **escalation** (§2 ④) is **Phases A–D** (bridge / swapHook / cross-term / SOFT-reject). **Phase F** (multi-component) + **Phase G** (waitlist) supply the feasibility rules ① depends on, so they land WITH Phase 0. **Phase E** is the picker UI. Suggested build order: **F0** (pairing audit) → **F1 + G1** (component + O/W feasibility) → **Phase 0** (enumerate + score + top-5) → **E** (picker) → **A–D** (escalation) → **G3** (auto-swap advice).
 
-## Phase 0 — Feasible-schedule enumeration + scoring + top-5 picker (PRIMARY; §2 ①②③)
+## Phase 0 — `materialize_feasible` (deterministic, §2 ①) + agent curation (§2 ②③)
 
-**Goal:** from a term's planned courses + live FOSE sections, produce the ranked top-N feasible single-term schedules.
+**Goal:** a deterministic structured-output tool returns the VERIFIED feasible candidate set; the agent ranks/curates the top-5 over it. The agent never enumerates or judges validity (invariant 7, §2.5).
 
-**Files:** extend `sectionMaterialization/materialize.ts` (group by `schd`, enumerate per-component, score) + `conflictDetection.ts` (multi-block selections) + `applySchedulingPreferences.ts` (soft scoring); reuse `MAX_COMBINATIONS=50`.
+**Files:** extend `sectionMaterialization/materialize.ts` (group by `schd`, multi-component enumerate, pre-score) + `conflictDetection.ts` (multi-block selections) + a NEW read-only tool `agent/tools/materializeFeasible.ts` with an `outputSchema`; the agent ranking is a route/system-prompt step (+ optional ranking subagent).
 
-- [ ] **0.1 — component grouping:** group a course's sections by `schd`; a *course selection* = one section of each required component type present (LEC + any RCT / LAB / TUT). Test: CSCI-UA 101 → lecture-only selections; CHEM-UA 125 → LEC × LAB × (RCT/TUT) selections.
-- [ ] **0.2 — feasible enumeration:** enumerate schedules (one selection per course); keep only those with **no time-conflict across ALL component blocks** (extend `enumerateConflictFreeCombinations` to multi-block selections), **all open-or-waitlist**, **strict-prefs-ok**, and **waitlist ⇒ an open fallback exists** (Phase G). Test: a fixture where the only conflict-free schedule needs one specific recitation.
-- [ ] **0.3 — score + rank:** score = open ≻ waitlist penalty + fewer-waitlists-better + soft-pref rerank (Decision #43 weights); return top-N sorted. Test: an all-open schedule outranks an equivalent waitlist one; a soft-pref match outranks a non-match.
-- [ ] **0.4 — top-5 + see-more contract:** the result exposes the top 5 + a cursor for the next 5 by score. Test: >5 feasible → page 1 = 5, page 2 = next 5.
+- [ ] **0.1 — component grouping (deterministic):** group a course's sections by `schd`; a *course selection* = one section of each required component type present (LEC + any RCT / LAB / TUT). Test: CSCI-UA 101 → lecture-only; CHEM-UA 125 → LEC × LAB × (RCT/TUT).
+- [ ] **0.2 — feasible enumeration (deterministic):** enumerate schedules (one selection per course); keep only **no time-conflict across ALL component blocks** (extend `enumerateConflictFreeCombinations` to multi-block selections), **all open-or-waitlist**, **strict-prefs-ok**, **waitlist ⇒ an open fallback exists** (Phase G). Test: a fixture where the only conflict-free schedule needs one specific recitation.
+- [ ] **0.3 — `materialize_feasible` tool (deterministic, READ-ONLY, structured output):** wrap 0.1+0.2 as a tool whose `outputSchema` returns the verified candidate set — each candidate = `{candidateId, courses:[{code, components:[{schd, crn, meets, instr, status}]}], waitlistCount, fallbacks, preScore}` + a cheap deterministic **pre-rank**. This is the agent's ONLY candidate source. Test: schema-valid output; every returned candidate passes conflict + validity checks (no invalid candidate can be emitted).
+- [ ] **0.4 — agent curation (§2 ②③):** the agent (or a narrowed-tool ranking subagent — `agentToolUtils.ts:125` pattern) receives the verified candidates + the student's soft/fuzzy prefs and emits a **schema-forced** top-5 selection (`{picked:[{candidateId, why}], more:[candidateId…]}`) — choosing only from returned `candidateId`s. Deterministic pre-rank (0.3) is the fallback order if the model is unavailable. Test: the selection references only real candidateIds; an all-open candidate is preferred over an equal waitlist one; a fuzzy pref ("morning, but Prof X for algorithms") is honored in the `why`.
+- [ ] **0.5 — re-validate the pick + top-5/see-more contract:** before surfacing, re-run the frozen validator on the chosen candidates (guardrail); expose top-5 + a cursor for the next 5. Test: a (hypothetically) invalid pick is rejected by the post-check; >5 feasible → page 1 = 5, page 2 = next 5.
 
 ## Phase A — The escalation bridge (§2 ④; engine, pure)
 
