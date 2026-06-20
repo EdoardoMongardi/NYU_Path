@@ -39,7 +39,7 @@ import {
     type OpenFallback,
 } from "./feasibleSchedules.js";
 import { preRankCandidates } from "./candidatePreRank.js";
-import { isAvailableStatus } from "./statusHelpers.js";
+import { isAvailableStatus, isOpenStatus } from "./statusHelpers.js";
 import { MAX_COMBINATIONS } from "./conflictDetection.js";
 import type { AvailabilityState, MeetingPattern, SectionView } from "./types.js";
 import type { SchedulingPreferences } from "@nyupath/shared";
@@ -266,10 +266,15 @@ export async function materializeFeasible(
         };
     }
 
-    // ---- 3. filter each course to open/waitlist (drop closed) ----
+    // ---- 3. filter each course to usable sections (drop closed) ----
+    // G2: when the student is NOT willing to waitlist, exclude waitlist
+    // sections entirely — a waitlist-ONLY course then has zero usable
+    // sections and surfaces as `unavailableCourses` (→ the bridge), rather
+    // than being offered as a lower-ranked waitlist candidate.
+    const usable = schedulingPreferences?.willingToWaitlist === false ? isOpenStatus : isAvailableStatus;
     const available = fetched.map(c => ({
         ...c,
-        sections: c.sections.filter(s => isAvailableStatus(s.status)),
+        sections: c.sections.filter(s => usable(s.status)),
     }));
 
     // ---- 4. apply strict scheduling preferences (strict-drop + soft rerank) ----

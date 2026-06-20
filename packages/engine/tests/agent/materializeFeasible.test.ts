@@ -158,6 +158,40 @@ describe("materializeFeasible — 0.3 orchestrator", () => {
         expect(materializeFeasibleResultSchema.safeParse(result).success).toBe(true);
     });
 
+    it("willingToWaitlist:false excludes waitlist sections; a waitlist-only course is flagged unavailable", async () => {
+        const map: Record<string, RawRow[]> = {
+            A: [row("A", "a-wl", MON_9_10, { stat: "W" })], // only a waitlist section
+            B: [row("B", "b1", TUE_9_10, { stat: "O" })],
+        };
+        const result = await materializeFeasible({
+            termCode: "1268",
+            courseIds: ["A", "B"],
+            schedulingPreferences: { willingToWaitlist: false },
+            searchFn: searchFromMap(map),
+            cache: new FoseCache<unknown[]>(),
+        });
+        expect(result.unavailableCourses).toContain("A");
+        for (const c of result.candidates) expect(c.hasWaitlist).toBe(false);
+    });
+
+    it("willingToWaitlist:true (default) keeps a waitlist section that has an open backup", async () => {
+        const map: Record<string, RawRow[]> = {
+            A: [
+                row("A", "a-wl", MON_9_10, { stat: "W" }),
+                row("A", "a-bk", TUE_9_10, { stat: "O" }), // backup for the waitlist
+            ],
+        };
+        const result = await materializeFeasible({
+            termCode: "1268",
+            courseIds: ["A"],
+            schedulingPreferences: { willingToWaitlist: true },
+            searchFn: searchFromMap(map),
+            cache: new FoseCache<unknown[]>(),
+        });
+        expect(result.unavailableCourses).toEqual([]);
+        expect(result.candidates.some(c => c.hasWaitlist)).toBe(true);
+    });
+
     it("unavailable state: searchFn returns nothing → no candidates", async () => {
         const result = await materializeFeasible({
             termCode: "1268",

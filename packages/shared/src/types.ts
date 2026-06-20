@@ -1174,6 +1174,16 @@ export interface SchedulingPreferences {
      * Same wipe→bridge behavior as `rejectInstructor`.
      */
     rejectSection?: string[];
+    /**
+     * Phase 38 (G2) — whether the student will accept a waitlisted section
+     * (with an open auto-swap backup). Default (omitted/true): waitlist sections
+     * are feasible, just lower-ranked (open ≻ waitlist). `false`: waitlist
+     * sections are excluded entirely, so a waitlist-ONLY course becomes
+     * unavailable this term and feeds the escalation bridge (move it / swap to
+     * an open alternative). NYU exposes no waitlist queue length, so there is no
+     * numeric threshold — this is the binary willingness signal.
+     */
+    willingToWaitlist?: boolean;
 }
 
 // ---- 1b. GenericSoftConstraint (D6.2 — rung-2 generic SOFT-objective primitive) ----
