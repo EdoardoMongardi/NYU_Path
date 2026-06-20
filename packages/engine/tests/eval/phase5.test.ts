@@ -112,6 +112,7 @@ describe("buildTool + ToolRegistry", () => {
             "get_academic_standing",
             "get_credit_caps",
             "get_program_requirements",
+            "materialize_feasible",
             "materialize_sections",
             "plan_forward_degree",
             "probe_counterfactual",

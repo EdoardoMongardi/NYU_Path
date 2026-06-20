@@ -1,6 +1,6 @@
 # Section Materialization Subsystem
 
-> Last verified against code: 2026-06-19 (re-verified during the FOSE-prep audit — no drift; `MAX_COMBINATIONS=50`, the `swapHook` stub, and the 11-step orchestrator all confirmed against the live `sectionMaterialization/` layer). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-20 (Phase 38 FOSE Phase-0 slice landed — added the multi-component free-pairing model, the two-state waitlist-backup feasibility rule, the `materialize_feasible` read-only tool, and the agent-curation guardrails; see §8c. The legacy `materialize_sections` 11-step path below is UNCHANGED except the internal `isOpenStatus` helper was renamed to `isAvailableStatus`/moved to `statusHelpers.ts` — behavior identical). Prior: 2026-06-19 (FOSE-prep audit); 2026-06-10 (planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
@@ -275,7 +275,7 @@ Flatten the raw rows across all courses into one array and feed it to `classifyA
 - Otherwise: proceed.
 
 **Step 4 — Open-section filter** (`materialize.ts:295-314`).
-For each course, keep only sections with `status === "O"` or `status === "W"` (open or waitlist; the `isOpenStatus` helper at `materialize.ts:222-224`). Track `openCountBeforePrefs` per course so the swap step can later distinguish "no open sections at all" from "strict prefs wiped the open sections".
+For each course, keep only sections with `status === "O"` or `status === "W"` (open or waitlist; the shared `isAvailableStatus` helper in `statusHelpers.ts` — Phase 38 renamed it from the old in-file `isOpenStatus`, which conflated the two; behavior is identical: both O and W stay in the pool). Track `openCountBeforePrefs` per course so the swap step can later distinguish "no open sections at all" from "strict prefs wiped the open sections".
 
 **Step 5 — Apply scheduling preferences** (`materialize.ts:316-318`).
 Flatten all open sections across all courses into one union pool. Call `applySchedulingPreferences(unionOpen, prefs)` once on the union — this returns `{ surviving, rerankWeights, eliminatedByStrict }`.
@@ -319,6 +319,38 @@ The orchestrator above is driven by a `materialize_sections` / `confirm_section_
 - **`confirm_section_combination`** (the write) looks up a `proposalId`, walks the target semester's `specific_planned` slots, and adds the concrete-section fields (`crn`, `meetingPatterns`, `instructor`, `schd`, `sectionNumber`) in-place. The pending entry is consumed on success, so confirming the same id twice is rejected.
 
 > **Known limitation — swap cascade is stubbed at the tool layer.** The orchestrator's Step-7 swap cascade is fully implemented, but the `swapHook` the `materialize_sections` tool passes in always returns `null` (`materializeSections.ts:198-201`). Wiring it into the structural solver's swap path is deferred (marked Phase 16 in-code). In practice this means a wiped course surfaces cleanly in the result's `dropped` list with no alternative offered.
+
+---
+
+## 8c. The feasible-candidate path — `materialize_feasible` (Phase 38)
+
+A second, parallel entry point added in Phase 38 (plan `38-2026-06-19-fose-section-scheduling-replan.md`, §2 ①–③ + §2.5). Where `materialize_sections` (§8/§8b) picks ONE section per course and stages combinations for the legacy sidebar, `materialize_feasible` models **multi-component courses** (lecture + recitation/lab), enforces a **graduation-safe waitlist rule**, and returns a **schema-validated, pre-ranked candidate set** that an agent ranks/curates over — the agent never enumerates or judges validity itself (the §2.5 hybrid boundary). The legacy path is untouched.
+
+### Free-pairing multi-component model (`componentGrouping.ts`)
+`groupByComponent(courseId, title, sections)` buckets a course's live sections by normalized `schd` (LEC / RCT / LAB / TUT …; a missing `schd` defaults to `LEC`). `enumerateCourseSelections` then produces one *course selection* per cartesian combination of one section from each component group, dropping internally-clashing pairs (a LEC overlapping its own chosen RCT).
+
+> **Why free-pairing (not bound-pairing).** A 2026-06-20 live probe of the FOSE detail endpoint disproved the earlier "`all_sections` gives the LEC→recitation registration group" finding — `all_sections` returns the SAME flat section list for every section queried and encodes no LEC↔RCT linkage. The FOSE API exposes no pairing anywhere. So the model is "any RCT may pair with any LEC, all blocks conflict-checked" + a HEDGE that Albert may restrict pairings (verify in Albert). This is conservative, never graduation-invalid.
+
+### Feasible enumeration + the two-state waitlist backup (`feasibleSchedules.ts`)
+`enumerateFeasibleSchedules(courses, opts)` enumerates schedules (one selection per course) keeping only those where **every component block of every course is mutually conflict-free** (reuses `conflicts`). A `"W"` (waitlist) section keeps a candidate feasible ONLY under the **§2①(d) two-state rule**: there must be a SPECIFIC OPEN backup section `B` that is (i) the same course + same component (Albert auto-swap, graduation-trivial), (ii) conflict-free with the REST of the schedule (the candidate minus that one `W`'s own blocks) **and** with every other chosen backup (the all-backups-registered state must itself be schedulable), and (iii) graduation-valid — for a different-course backup this is delegated to an injected `backupResolver` (the deferred Phase A/B/C escalation; default = same-course only). No valid backup ⇒ the `W` candidate is dropped.
+
+Enumeration runs in **two passes** so the `MAX_COMBINATIONS` cap never drops an all-open candidate in favor of a waitlist one (the binding *open ≻ waitlist* invariant must survive truncation): pass 1 enumerates all-open candidates over open-only groups; pass 2 fills the remaining cap with waitlist-containing candidates.
+
+### Pre-rank (`candidatePreRank.ts`)
+`preRankCandidates(candidates, rerankWeights?)` orders best-first with `preScore = -waitlistCount + softTerm`, where `softTerm = softProduct/(softProduct+1) ∈ [0,1)` is the Decision-#43 soft-preference product (clamped to 0 for any non-positive/non-finite product, so the integer waitlist penalty always dominates — open ≻ waitlist holds regardless of soft weights). Stable on ties.
+
+### Status helpers (`statusHelpers.ts`)
+`isAvailableStatus` (O|W — the keep-in-pool filter, used by both paths), `isOpenStatus` (O only), `isWaitlistStatus` (W only).
+
+### Orchestrator + tool (`materializeFeasible.ts`, `tools/materializeFeasible.ts`)
+`materializeFeasible(args)` runs: fetch+map (reuses `fetchAndMapCourse`) → `classifyAvailability` (early-return on unavailable/partial) → filter to O|W → `applySchedulingPreferences` → group by component → enumerate → pre-rank → build the **UI-complete candidate views** (`candidateId`, `courses[{code,title,components[{schd,crn,no,meets,meetingBlocks,instr,status,capacity}]}]`, `hasWaitlist`, `waitlistCrns`, `openFallbacks[{forCrn,fallbackCrn}]`, `weeklyHours`, `preScore`, `preRankReason`). The result also carries **`unavailableCourses`** — any requested course with no open/waitlist section (all closed, or strict-pref-wiped); these are omitted from candidates and surfaced with a hedge so the term is never presented as complete when it isn't. Cite-or-hedge notes (free-pairing, waitlist-queue-length-unknown) ride in `hedges`.
+
+The `materialize_feasible` tool is **read-only** (stages nothing, mutates no session state), exposes the result Zod schema as its `outputSchema` (a new optional `Tool` field), and re-validates its own output against that schema before returning. `FoseSearchResult.total` (capacity) and `SectionView.capacity` were added to feed the candidate views — capacity only, NOT an enrolled/waitlist count (FOSE exposes none).
+
+### Agent-curation guardrails (`agentCuration.ts`)
+`agentSelectionSchema` forces the agent's top-5 selection into `{picked:[{candidateId,why}](≤5), more:[candidateId]}`. `validateAgentSelection` rejects any candidateId the tool never returned (no fabrication) and any duplicate across picked+more (no double-surfacing). `deterministicTop5` is the fallback order when no model curation runs. `revalidatePick` re-asserts section feasibility on the chosen candidates (conflict-free, O|W, waitlist-tag consistent, every waitlist section has a recorded backup) before any confirm. `paginate` is the top-5 / see-more cursor.
+
+> **Deferred (this slice is deterministic-core only):** the structural escalation ladder (Phases A–D — the `sectionReplanBridge`, within-term swap, cross-term move, SOFT-rejection re-plan), the `/api/v2/materialize` route + visual picker (Phase E), and the live agent-curation route wiring. The injected `backupResolver` for different-course backups is the seam those phases fill.
 
 ---
 
