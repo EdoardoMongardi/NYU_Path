@@ -1,6 +1,6 @@
 # Class Search and Availability
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-19 (re-verified during the FOSE-prep audit — no drift; `search_availability` is still a pure pass-through of the live FOSE client `api/nyuClassSearch.ts`, no prediction module). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## Purpose
 

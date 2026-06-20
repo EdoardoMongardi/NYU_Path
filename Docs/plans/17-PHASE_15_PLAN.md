@@ -1,5 +1,7 @@
 # Phase 15 — Live Section Materialization (FOSE) + Time-Conflict Detection
 
+> ✅ **IMPLEMENTED & COMPLETE (verified against code 2026-06-19).** Tasks 0–7 shipped: the live FOSE client + `search_availability` + meeting-time parsing + availability gate + TTL cache + `conflictDetection` + scheduling-preference filter + the `materialize.ts` orchestrator + `materialize_sections`/`confirm_section_combination`. **Stale-but-harmless:** Task 1's `rawHours` schema was superseded during implementation — real FOSE uses `meets` + `meetingTimes` (the code adapted; see `sectionMaterialization/types.ts` header). **NOT done (deferred, by design):** the Decision-#19 `swapHook` is stubbed → no cross-term re-plan/swap cascade; that + the section-picker UI are the next **FOSE re-plan phase** (see the post-37 FOSE plan).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 ## Architectural principle (read first)
