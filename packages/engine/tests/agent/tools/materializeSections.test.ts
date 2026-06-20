@@ -283,6 +283,27 @@ describe("materialize_sections — (a) happy path", () => {
     });
 });
 
+describe("materialize_sections — (a2) seat-status hedge for live A-status sections", () => {
+    it("appends a seat-status hedge when a staged combination contains an 'A' (seat-unknown) section", async () => {
+        const semester = makeSemester("2026-fall", [makeSpecificPlannedSlot("CSCI-UA 101")]);
+        const session = makeSession(makeSchedule([semester]));
+        const aSection = makeSection("CSCI-UA 101", "1001", { status: "A" });
+        mockedOrchestrator.mockResolvedValueOnce({
+            state: "full",
+            semester: {
+                term: "2026-fall",
+                courses: [{ courseId: "CSCI-UA 101", title: "CSCI-UA 101", sections: [aSection] }],
+                combinations: [{ sections: [aSection], weeklyHours: 1.25 }],
+                combinationsTruncated: false,
+            },
+            message: "Found 1 conflict-free section combination.",
+            schedulingPreferenceCheck: { kind: "absent" },
+        });
+        const out = await materializeSectionsTool.call({ targetTerm: "2026-fall" }, makeCtx(session));
+        expect(out.message.toLowerCase()).toMatch(/seat availability|verify each section is actually open in albert/);
+    });
+});
+
 // ============================================================
 // materialize_sections — (b) locked term rejection
 // ============================================================

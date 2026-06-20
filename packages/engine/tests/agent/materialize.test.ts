@@ -35,6 +35,7 @@ interface RawRow {
     instr: string;
     meets: string;
     meetingTimes: string;
+    total?: string;
 }
 
 function row(
@@ -126,6 +127,12 @@ describe("mapFoseToSectionView", () => {
         const r: Partial<RawRow> = { code: "X", crn: "x1", meets: "", meetingTimes: "[]" };
         const sv = mapFoseToSectionView("X", r as RawRow);
         expect(sv.title).toBe("X");
+    });
+
+    it("maps the FOSE `total` field to SectionView.capacity (Phase 38)", () => {
+        const r = row("CSCI-UA 101", "8918", "TR 8-9:15a", TR_8_915_JSON, { total: "35" });
+        const sv = mapFoseToSectionView("CSCI-UA 101", r);
+        expect(sv.capacity).toBe("35");
     });
 });
 

@@ -50,6 +50,7 @@ import { enumerateConflictFreeCombinations, type CourseBundle } from "./conflict
 import { classifyAvailability, type FoseSection } from "./foseAvailabilityGate.js";
 import { FoseCache } from "./foseCache.js";
 import { applySchedulingPreferences, isPrefsEmpty } from "./applySchedulingPreferences.js";
+import { isAvailableStatus } from "./statusHelpers.js";
 import type {
     SectionView,
     MaterializationResult,
@@ -119,6 +120,7 @@ export function mapFoseToSectionView(
         meetingTimes: raw.meetingTimes,
         schd: raw.schd,
         section: raw.no,
+        capacity: raw.total,
     };
 }
 
@@ -195,7 +197,7 @@ interface CourseFetchResult {
     sections: SectionView[];
 }
 
-async function fetchAndMapCourse(
+export async function fetchAndMapCourse(
     termCode: string,
     courseId: string,
     searchFn: (termCode: string, keyword: string) => Promise<unknown[]>,
@@ -218,10 +220,11 @@ async function fetchAndMapCourse(
     return { raw: exactMatches, sections };
 }
 
-/** "O" = open, "W" = waitlist — these are the truly available statuses. */
-function isOpenStatus(status: string): boolean {
-    return status === "O" || status === "W";
-}
+// Phase 38 G1: the O-vs-W distinction now lives in `statusHelpers`.
+// This legacy path keeps BOTH open and waitlist sections in the pool
+// (a `W` is still usable via the auto-swap backup), so it filters on
+// `isAvailableStatus` (O || W). The new `materialize_feasible` path
+// distinguishes O from W for tagging + pre-ranking.
 
 // ---- Orchestrator ----
 
@@ -304,7 +307,7 @@ export async function materializeSections(args: MaterializeArgs): Promise<Materi
     };
 
     const courseInputs: CoursePool[] = courseStates.map(c => {
-        const open = c.allSections.filter(s => isOpenStatus(s.status));
+        const open = c.allSections.filter(s => isAvailableStatus(s.status));
         return {
             courseId: c.courseId,
             title: c.title,
@@ -376,7 +379,7 @@ export async function materializeSections(args: MaterializeArgs): Promise<Materi
         // `MaterializedSemester.combinations[i]` (currently optional in the
         // type — see file header). Until then this is a documented no-op.
         const altFetch = await fetchAndMapCourse(termCode, altId, searchFn, cache);
-        const altOpen = altFetch.sections.filter(s => isOpenStatus(s.status));
+        const altOpen = altFetch.sections.filter(s => isAvailableStatus(s.status));
         const altApply = applySchedulingPreferences(altOpen, schedulingPreferences);
 
         if (altApply.surviving.length === 0) {

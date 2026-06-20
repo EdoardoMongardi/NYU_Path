@@ -71,6 +71,12 @@ export interface SectionView {
      * Renamed from `section` for clarity.
      */
     section?: string;
+    /**
+     * Section CAPACITY from FOSE `total` (e.g. "35"). Phase 38 — NOT an
+     * enrolled/waitlist count (FOSE exposes none). Display context only;
+     * the agent hedges the waitlist queue length.
+     */
+    capacity?: string;
 }
 
 export interface MaterializedSemester {

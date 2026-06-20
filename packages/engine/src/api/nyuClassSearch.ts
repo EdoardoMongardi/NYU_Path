@@ -60,6 +60,14 @@ export interface FoseSearchResult {
     instr?: string;
     /** Credits */
     credits?: string;
+    /**
+     * Section CAPACITY (FOSE `total`, e.g. "35"). NOT an enrolled-count
+     * or waitlist-count — FOSE exposes no such field anywhere (verified
+     * by the 2026-06-20 live probe of both search + detail endpoints).
+     * Consumed by the Phase-38 `materialize_feasible` candidate schema
+     * as display context; the agent HEDGES the waitlist queue length.
+     */
+    total?: string;
 }
 
 /** Search response from the FOSE API */

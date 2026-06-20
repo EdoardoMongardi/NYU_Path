@@ -68,6 +68,8 @@ import {
     materializeSectionsTool,
     confirmSectionCombinationTool,
 } from "./tools/materializeSections.js";
+import { materializeFeasibleTool } from "./tools/materializeFeasible.js";
+import { proposeSectionReplanTool } from "./tools/proposeSectionReplan.js";
 import type { ZodTypeAny } from "zod";
 
 export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
@@ -93,6 +95,8 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     comparePlanAlternativesTool as unknown as Tool<ZodTypeAny, unknown>,
     materializeSectionsTool as unknown as Tool<ZodTypeAny, unknown>,
     confirmSectionCombinationTool as unknown as Tool<ZodTypeAny, unknown>,
+    materializeFeasibleTool as unknown as Tool<ZodTypeAny, unknown>,
+    proposeSectionReplanTool as unknown as Tool<ZodTypeAny, unknown>,
 ];
 
 /**
@@ -126,4 +130,6 @@ export {
     comparePlanAlternativesTool,
     materializeSectionsTool,
     confirmSectionCombinationTool,
+    materializeFeasibleTool,
+    proposeSectionReplanTool,
 };

@@ -135,6 +135,49 @@ export type {
 // Phase 17 Task D follow-up — exposed for the /api/plan/stage2 route.
 export { materializeSections } from "./agent/index.js";
 
+// Phase 38 — FOSE section-feasibility + escalation bridge + agent curation,
+// re-exported for the web layer (the /api/v2/materialize route + the chat-v2
+// escalation wiring).
+export {
+    materializeFeasible,
+    materializeFeasibleResultSchema,
+    materializeFeasibleTool,
+    classifySectionFailure,
+    generateResolutionLadder,
+    validateResolutionCandidates,
+    makeFrozenSeamEvaluator,
+    runSectionReplanLoop,
+    buildSectionReplanLoopDeps,
+    proposeSectionReplanTool,
+    findWithinTermAlternatives,
+    makeLeafSiblingsResolver,
+    validateAgentSelection,
+    deterministicTop5,
+    revalidatePick,
+    paginate,
+    buildAutoSwapAdvice,
+    agentSelectionSchema,
+} from "./agent/index.js";
+export type {
+    MaterializeFeasibleResult,
+    MaterializeFeasibleArgs,
+    FeasibleCandidateView,
+    CandidateCourseView,
+    ComponentView,
+    SectionFailure,
+    SectionFailureKind,
+    SectionFailureInput,
+    ResolutionBatch,
+    ResolutionResult,
+    ValidatedResolution,
+    BatchEvaluation,
+    BatchEvaluator,
+    SectionReplanLoopDeps,
+    SectionReplanLoopOptions,
+    SectionReplanLoopResult,
+} from "./agent/index.js";
+export type { ProposeSectionReplanOutput } from "./agent/index.js";
+
 // Phase 7-E: Degree Progress Report (DPR) module — the canonical
 // audit ingestion path. The DPR is a structured rendering of NYU's
 // PeopleSoft Academic Advisement Report; ingesting it lets the

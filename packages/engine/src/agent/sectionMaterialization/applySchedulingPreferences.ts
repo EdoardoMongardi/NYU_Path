@@ -196,7 +196,9 @@ export function isPrefsEmpty(prefs: SchedulingPreferences): boolean {
         (prefs.avoidTimeWindows === undefined || prefs.avoidTimeWindows.length === 0) &&
         (prefs.preferTimeWindows === undefined || prefs.preferTimeWindows.length === 0) &&
         prefs.desiredFreeDay === undefined &&
-        !prefs.avoidConsecutiveLongBlocks
+        !prefs.avoidConsecutiveLongBlocks &&
+        (prefs.rejectInstructor === undefined || prefs.rejectInstructor.length === 0) &&
+        (prefs.rejectSection === undefined || prefs.rejectSection.length === 0)
     );
 }
 
@@ -239,6 +241,20 @@ function strictEliminationReason(
                 return `strict desiredFreeDay ${desiredFreeDay} matched ${formatPattern(p)}`;
             }
         }
+    }
+    // 4. Phase 38 (D2) — rejected instructor (case-insensitive substring of `instructor`).
+    if (prefs.rejectInstructor && prefs.rejectInstructor.length > 0) {
+        const instrLower = section.instructor.toLowerCase();
+        for (const rejected of prefs.rejectInstructor) {
+            const r = rejected.trim().toLowerCase();
+            if (r.length > 0 && instrLower.includes(r)) {
+                return `strict rejectInstructor "${rejected}" matched instructor "${section.instructor}"`;
+            }
+        }
+    }
+    // 5. Phase 38 (D2) — rejected section CRN (exact match).
+    if (prefs.rejectSection && prefs.rejectSection.includes(section.crn)) {
+        return `strict rejectSection matched CRN ${section.crn}`;
     }
     return undefined;
 }
