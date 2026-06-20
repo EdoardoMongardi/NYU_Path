@@ -187,6 +187,20 @@ export function _pendingMutationsSizeForTests(): number {
     return 0;
 }
 
+/**
+ * Test-only: is `id` currently staged? Lets a test cross-check that an
+ * EMITTED pendingMutationId (e.g. on the `plan_proposal` SSE event) is the
+ * SAME id that was actually staged — the store is keyed by id. Returns
+ * false on the Postgres path (no sync introspection).
+ */
+export function _pendingMutationHasIdForTests(id: string): boolean {
+    const store = getStores().pendingMutationStore;
+    if (store instanceof InMemoryPendingMutationStore) {
+        return store.hasForTests(id);
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Future-term computation (Stage 2 hint)
 // ---------------------------------------------------------------------------

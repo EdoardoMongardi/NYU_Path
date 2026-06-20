@@ -202,6 +202,12 @@ export class InMemoryPendingMutationStore implements PendingMutationStore {
         return this.entries.size;
     }
 
+    /** Test-only: is a given pendingMutationId currently staged? (the map is
+     *  keyed by id, so this proves an emitted id matches a staged one). */
+    hasForTests(id: string): boolean {
+        return this.entries.has(id);
+    }
+
     /** Test-only: force every entry past the TTL (rewinds createdAt). */
     expireAllForTests(): void {
         for (const entry of this.entries.values()) {

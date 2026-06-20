@@ -27,7 +27,7 @@ import { join } from "node:path";
 import { POST } from "../app/api/chat/v2/route";
 import { parseDpr, type ChatTurnResult, type ToolInvocation } from "@nyupath/engine";
 import { resetStoresForTests } from "../lib/db/store";
-import { _pendingMutationsSizeForTests } from "../lib/planActionOrchestrator";
+import { _pendingMutationsSizeForTests, _pendingMutationHasIdForTests } from "../lib/planActionOrchestrator";
 import {
     makeFeasibleScheduleWithSemesters,
     specificSlot,
@@ -205,6 +205,11 @@ describe("v2 route plan_proposal SSE emit (Task I1)", () => {
         // now in the in-memory store but NO schedule has been written to the
         // scheduleStore (confirming happens only via /api/plan/confirm).
         expect(_pendingMutationsSizeForTests()).toBeGreaterThanOrEqual(1);
+
+        // Emitted-id cross-check: the id on the SSE event is EXACTLY the id
+        // that was staged (not a different/random one) — a route bug that
+        // emitted one id while staging another would otherwise pass.
+        expect(_pendingMutationHasIdForTests(ev.pendingMutationId as string)).toBe(true);
     });
 
     it("emits AT MOST ONE plan_proposal even when invocations has multiple propose calls (at-most-once guard)", async () => {

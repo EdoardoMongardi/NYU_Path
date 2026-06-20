@@ -2044,7 +2044,7 @@ export default function ChatPage() {
             // (which itself injects a brief failure bubble for non-2xx).
             handlePlanActionResult("add", result);
         },
-        [handlePlanActionResult],
+        [handlePlanActionResult, addMessage],
     );
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
