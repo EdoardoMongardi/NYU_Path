@@ -92,6 +92,8 @@ materialize.ts result  ──▶  sectionReplanBridge (NEW)  ──▶  plan mut
 
 Every rung 1–3 ends in `finalizeForwardSchedule` → only a `valid-clean`/`valid-with-trade-offs` result becomes a proposal.
 
+**⑤ Re-enter the section loop on a successful re-plan (the outer loop).** A valid structural re-plan **changes the near-term course set** (e.g. CS421 moved out, another course pulled in) — so its new near term has NOT yet been section-checked. The flow therefore **loops back to ①**: re-materialize sections for the NEW near-term and present its top-5; the structural change is surfaced and confirmed *together with* the chosen sections (one confirm persists the new `forward_schedule`). This **outer loop is bounded** — cap the escalate→re-materialize cycles; if the new near-term is *also* section-infeasible after the cap, fall to the honest no-op. (Inner loop = section refinement §2.6; outer loop = structural escalation; both re-enter ①. Without ⑤ the system would change the plan but never verify the new near-term is schedulable.)
+
 ---
 
 ## §2.5 — Agent ⇄ deterministic boundary (HYBRID; the quality contract)
