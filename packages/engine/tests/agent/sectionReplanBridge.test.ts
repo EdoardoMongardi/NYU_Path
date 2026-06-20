@@ -12,7 +12,14 @@ import { describe, it, expect } from "vitest";
 import {
     classifySectionFailure,
     generateResolutionLadder,
+    validateResolutionCandidates,
+    makeFrozenSeamEvaluator,
+    type ResolutionBatch,
+    type BatchEvaluation,
 } from "../../src/agent/sectionMaterialization/sectionReplanBridge.js";
+import type { ForwardSchedule } from "@nyupath/shared";
+import type { ToolSession } from "../../src/agent/tool.js";
+import type { DegreeProgressReport } from "../../src/dpr/schema.js";
 
 describe("classifySectionFailure — A1", () => {
     it("zero feasible candidates (all combos clash) → hard-conflict", () => {
@@ -117,5 +124,93 @@ describe("generateResolutionLadder — A2", () => {
         });
         expect(batches.find(b => b.rung === 2)).toBeUndefined();
         expect(batches.find(b => b.rung === 3)).toBeUndefined();
+    });
+});
+
+describe("validateResolutionCandidates — A3/A4", () => {
+    const batch = (rung: 1 | 2 | 3, movedCourseIds: string[]): ResolutionBatch => ({
+        rung,
+        strategy: "s",
+        mutations: [],
+        movedCourseIds,
+    });
+    const sched = (gradTerm: string) => ({ graduationTerm: gradTerm } as unknown as ForwardSchedule);
+
+    it("keeps only feasible batches and ranks fewest-moves-first", () => {
+        const b1 = batch(2, ["X"]);             // 1 move, feasible, grad unchanged
+        const b2 = batch(3, ["X", "Y"]);        // 2 moves, feasible, grad changed
+        const b3 = batch(2, ["Z"]);             // infeasible → dropped
+        const evaluate = (b: ResolutionBatch): BatchEvaluation => {
+            if (b === b3) {
+                return { batch: b, feasible: false, infeasibility: { conflictSource: "credit", conflictDetail: "below floor" } };
+            }
+            const gradTerm = b === b2 ? "2028-spring" : "2027-spring";
+            return { batch: b, feasible: true, schedule: sched(gradTerm), gradTerm };
+        };
+        const res = validateResolutionCandidates([b1, b2, b3], "2027-spring", evaluate);
+        expect(res.resolutions.map(r => r.batch)).toEqual([b1, b2]);
+        expect(res.resolutions[0]!.gradTermChanged).toBe(false);
+        expect(res.resolutions[1]!.gradTermChanged).toBe(true);
+        expect(res.reason).toBeNull();
+    });
+
+    it("ranks an unchanged-grad-term resolution above a changed one at the SAME move count", () => {
+        const a = batch(2, ["X"]); // grad changed
+        const b = batch(2, ["Y"]); // grad unchanged
+        const evaluate = (bb: ResolutionBatch): BatchEvaluation => {
+            const gradTerm = bb === a ? "2028-spring" : "2027-spring";
+            return { batch: bb, feasible: true, schedule: sched(gradTerm), gradTerm };
+        };
+        const res = validateResolutionCandidates([a, b], "2027-spring", evaluate);
+        expect(res.resolutions[0]!.batch).toBe(b);
+    });
+
+    it("A4 — no feasible batch → empty resolutions + a reason from the infeasibility report", () => {
+        const b = batch(2, ["X"]);
+        const evaluate = (): BatchEvaluation => ({
+            batch: b,
+            feasible: false,
+            infeasibility: { conflictSource: "graduation-term", conflictDetail: "would push graduation past your target" },
+        });
+        const res = validateResolutionCandidates([b], "2027-spring", evaluate);
+        expect(res.resolutions).toEqual([]);
+        expect(res.reason).toContain("graduation");
+    });
+
+    it("makeFrozenSeamEvaluator wires the real propose-path chain end-to-end without throwing", () => {
+        // A minimal solvable session (empty-program DPR ⇒ a trivial solve);
+        // the point is that the real chain composes + returns a verdict.
+        const dpr = {
+            _meta: { parserVersion: "1", parsedAt: "2026-01-01T00:00:00Z", sourceFingerprint: "sha256:t", sourcePdfPageCount: 1, parseDurationMs: 0, warnings: [] },
+            header: { studentName: "T", preparedDate: "01/01/2026" },
+            programs: [],
+            advisorNotations: [],
+            cumulative: {
+                creditsRequired: 128, creditsUsed: 96, cumulativeGpa: 3.4, cumulativeGpaRequired: 2.0,
+                residencyRequired: 64, residencyUsed: 64, passFailUsedUnits: 0, passFailCapUnits: 32,
+                outsideHomeUsedUnits: 0, outsideHomeCapUnits: 16, timeLimitYears: 8,
+            },
+            requirementGroups: [],
+            courseHistory: [],
+        } as unknown as DegreeProgressReport;
+        const plan = { graduationTerm: "2027-spring", semesters: [] } as unknown as ForwardSchedule;
+        const session = {
+            student: {
+                id: "t", catalogYear: "2024", homeSchool: "cas",
+                declaredPrograms: [{ programId: "computer_science", programType: "major" }],
+                coursesTaken: [], visaStatus: "f1",
+            },
+            schoolConfig: {
+                schoolId: "cas", name: "CAS", degreeType: "BA", courseSuffix: ["-UA"],
+                totalCreditsRequired: 128, overallGpaMin: 2.0, acceptsTransferCredit: true,
+                maxCreditsPerSemester: 18, f1FullTimeMinCredits: 12, residency: { minCredits: 64, note: null },
+            },
+            degreeProgressReport: dpr,
+            forwardSchedule: plan,
+        } as unknown as ToolSession;
+
+        const evaluate = makeFrozenSeamEvaluator(session, dpr, plan);
+        const result = evaluate({ rung: 2, strategy: "noop", mutations: [], movedCourseIds: [] });
+        expect(typeof result.feasible).toBe("boolean");
     });
 });

@@ -20,7 +20,16 @@
 // infeasible re-plan is never shipped (CORE philosophy + plan-37 M1/M2).
 // ============================================================
 
-import type { PlanMutation } from "@nyupath/shared";
+import type { ForwardSchedule, PlanMutation } from "@nyupath/shared";
+import type { ToolSession } from "../tool.js";
+import type { DegreeProgressReport } from "../../dpr/schema.js";
+import {
+    resolveBindMutations,
+    applyMutationsToPreferences,
+    buildSolverInputWithRulesFromSession,
+} from "../forwardSchedule/planChangeHelpers.js";
+import { solveForwardSchedule } from "../forwardSchedule/solver.js";
+import { finalizeForwardSchedule } from "../forwardSchedule/build.js";
 
 /** Why the section layer couldn't land a schedule (A1 output). */
 export type SectionFailureKind = "hard-conflict" | "course-wipe" | "soft-rejection";
@@ -156,4 +165,137 @@ export function generateResolutionLadder(ctx: LadderContext): ResolutionBatch[] 
 
     // Cheapest-first (rung ascending); stable within a rung.
     return batches.sort((a, b) => a.rung - b.rung);
+}
+
+// ============================================================
+// A3 — validate each candidate through the FROZEN propose-path seam
+// ============================================================
+
+/** One batch's verdict from the re-solve (A3 input). */
+export interface BatchEvaluation {
+    batch: ResolutionBatch;
+    feasible: boolean;
+    /** The re-solved schedule (present iff feasible). */
+    schedule?: ForwardSchedule;
+    /** The re-solved graduation term (present iff feasible). */
+    gradTerm?: string;
+    /** The binding constraint when infeasible (from the validator's report). */
+    infeasibility?: { conflictSource: string; conflictDetail: string };
+}
+
+/** Evaluate one mutation batch → a verdict. Production = the frozen seam. */
+export type BatchEvaluator = (batch: ResolutionBatch) => BatchEvaluation;
+
+/** A feasible, re-solved, validated resolution (A3 output). */
+export interface ValidatedResolution {
+    batch: ResolutionBatch;
+    schedule: ForwardSchedule;
+    gradTerm: string;
+    /** True when this re-plan pushes the graduation term past the baseline. */
+    gradTermChanged: boolean;
+    /** How many courses this batch relocated/swapped (disruption metric). */
+    movedCount: number;
+}
+
+export interface ResolutionResult {
+    /** Feasible resolutions, ranked least-disruptive first ([] if none). */
+    resolutions: ValidatedResolution[];
+    /** A4 — the binding constraint when no resolution is feasible; null otherwise. */
+    reason: string | null;
+}
+
+/**
+ * A3 — run each candidate batch through the EXISTING propose-path chain
+ * (via the injected `evaluate`; production wires `makeFrozenSeamEvaluator`)
+ * and keep only the feasible results, ranked by disruption: fewest moved
+ * courses first, then an unchanged graduation term first, then the
+ * cheaper rung. A4 — when none is feasible, return `{ resolutions: [],
+ * reason }` carrying the binding constraint from the validator's
+ * infeasibility report. Pure (given a pure `evaluate`).
+ */
+export function validateResolutionCandidates(
+    batches: ResolutionBatch[],
+    baselineGradTerm: string,
+    evaluate: BatchEvaluator,
+): ResolutionResult {
+    const resolutions: ValidatedResolution[] = [];
+    const infeasibilities: Array<{ conflictSource: string; conflictDetail: string }> = [];
+
+    for (const batch of batches) {
+        const verdict = evaluate(batch);
+        if (verdict.feasible && verdict.schedule && verdict.gradTerm !== undefined) {
+            resolutions.push({
+                batch,
+                schedule: verdict.schedule,
+                gradTerm: verdict.gradTerm,
+                gradTermChanged: verdict.gradTerm !== baselineGradTerm,
+                movedCount: batch.movedCourseIds.length,
+            });
+        } else if (verdict.infeasibility) {
+            infeasibilities.push(verdict.infeasibility);
+        }
+    }
+
+    // Rank: fewest moves → unchanged grad term → cheaper rung → stable.
+    const decorated = resolutions.map((r, i) => ({ r, i }));
+    decorated.sort((a, b) => {
+        if (a.r.movedCount !== b.r.movedCount) return a.r.movedCount - b.r.movedCount;
+        if (a.r.gradTermChanged !== b.r.gradTermChanged) return a.r.gradTermChanged ? 1 : -1;
+        if (a.r.batch.rung !== b.r.batch.rung) return a.r.batch.rung - b.r.batch.rung;
+        return a.i - b.i;
+    });
+    const ranked = decorated.map(d => d.r);
+
+    if (ranked.length > 0) {
+        return { resolutions: ranked, reason: null };
+    }
+
+    // A4 — honest no-op: surface the first informative binding constraint.
+    const firstInfeasible = infeasibilities.find(x => x.conflictDetail.trim().length > 0);
+    const reason =
+        firstInfeasible !== undefined
+            ? firstInfeasible.conflictDetail
+            : "No valid re-plan keeps your graduation target with these courses next term.";
+    return { resolutions: [], reason };
+}
+
+/**
+ * Production `BatchEvaluator` — runs the EXACT propose-path chain
+ * (`proposePlanChange.ts:146-176`): resolveBindMutations →
+ * applyMutationsToPreferences → buildSolverInputWithRulesFromSession →
+ * solveForwardSchedule → finalizeForwardSchedule, threading the per-school
+ * P/F config into the 8th validator axis. The frozen functions are CALLED,
+ * never modified.
+ */
+export function makeFrozenSeamEvaluator(
+    session: ToolSession,
+    dpr: DegreeProgressReport,
+    currentPlan: ForwardSchedule,
+): BatchEvaluator {
+    return (batch: ResolutionBatch): BatchEvaluation => {
+        const resolved = resolveBindMutations(currentPlan, batch.mutations);
+        const { prefs } = applyMutationsToPreferences(session.schedulePreferences ?? {}, resolved);
+        const { solverInput, validatorRules } = buildSolverInputWithRulesFromSession(session, dpr, prefs);
+        const solverOutput = solveForwardSchedule(solverInput);
+        const { schedule, validatorResult } = finalizeForwardSchedule(
+            solverOutput,
+            solverInput,
+            dpr,
+            validatorRules,
+            session.schoolConfig?.passFail,
+        );
+        if (validatorResult.feasible) {
+            return { batch, feasible: true, schedule, gradTerm: schedule.graduationTerm };
+        }
+        return {
+            batch,
+            feasible: false,
+            infeasibility: validatorResult.infeasibilityReport
+                ? {
+                      conflictSource: validatorResult.infeasibilityReport.conflictSource,
+                      conflictDetail: validatorResult.infeasibilityReport.conflictDetail,
+                  }
+                : undefined,
+        };
+    };
 }
