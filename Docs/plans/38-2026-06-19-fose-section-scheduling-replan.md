@@ -186,9 +186,7 @@ This is the agent layer's highest-value capability and the single strongest reas
 
 **Files:** `agent/tools/materializeSections.ts` (`swapHook` at `:198-201`); read `forwardSchedule/constraintModel.ts` (`poolMembersFor` — requirement membership), `forwardSchedule/materializePlan.ts` (pool descriptors).
 
-- [ ] **B1 — failing test** (`materialize` integration): a course with zero open sections, whose requirement leaf has another catalog member that IS offered + open this term, gets **swapped** (not dropped). Assert `finalBundles` contains the alt, `dropped` is empty.
-- [ ] **B2 — implement** `swapHook`: given `(failedCourseId, reason)`, look up the requirement leaf `failedCourseId` was satisfying, enumerate `poolMembersFor` that leaf, return the first alternative offered+open this term (or `null`). Keep it pure/deterministic. **No change to the solver.**
-- [ ] **B3 — resolve the documented I-1 rerank-weight no-op** (`materialize.ts:353-377`) only if cheap; else leave the documented behavior. Test: swapped combos still rank sanely.
+- [x] **B (within-term swap finder) — DONE** (`withinTermSwap.ts`). `findWithinTermAlternatives` (pure, DI) returns `{failedCourseId → altCourseId}` for the first same-leaf sibling offered+open this term; `makeLeafSiblingsResolver` derives same-requirement-leaf siblings from the constraint model (`buildConstraintContext` + `poolMembersFor`, READ-only). Feeds `generateResolutionLadder`'s rung-1 `withinTermAlternatives`; the live-FOSE `isOfferedAndOpen` check is INJECTED by the caller (route layer). Tests in `withinTermSwap.test.ts`. *(The legacy `materializeSections.ts` `swapHook` stub stays — the new flow supersedes it; B3's I-1 rerank no-op is on the legacy path, left documented.)* ✅
 
 ## Phase C — Cross-term move + forward cascade (the HARD case)
 
@@ -196,9 +194,7 @@ This is the agent layer's highest-value capability and the single strongest reas
 
 **Files:** `sectionReplanBridge.ts` (rung 2); read `planChangeHelpers.ts` (`move`), `buildSolverInput.ts` (offering domains / `includeSummer`/`includeJTerm`).
 
-- [ ] **C1 — failing test:** a term with an unavoidable HARD conflict between two requirement courses → the bridge emits a `move` of one course to the nearest later term whose domain allows it; `finalizeForwardSchedule` returns `valid-with-trade-offs` (grad term may shift) and the vacated term re-fills. Assert the moved course still satisfies its leaf.
-- [ ] **C2 — implement** rung 2: pick the move target per D3 (nearest later regular term; summer only on opt-in, labeled optional per plan 37 L1/L2). Re-solve via the frozen seam.
-- [ ] **C3 — grad-term honesty:** if the only valid move pushes the graduation target later, the proposal's `consequences` MUST say so explicitly (reuse `deriveConsequences`/`buildPlanDiff`). Test: the consequence string names the new grad term.
+- [x] **C — SUBSUMED by Phase A (A2+A3).** Rung 2 cross-term `move` is emitted by `generateResolutionLadder` (to the nearest later term — the caller builds `laterTerms` per D3: regular terms, summer only on opt-in) and re-solved + validated by `validateResolutionCandidates` through the frozen seam (C1/C2). C3 grad-term honesty: each `ValidatedResolution` carries the structured `gradTermChanged` + new `gradTerm`; the honesty STRING is rendered at the surface (the deferred E3 route, reusing `deriveConsequences`). ✅
 
 ## Phase D — SOFT-rejection re-plan (reject sections / professors / recitation)
 
@@ -206,9 +202,9 @@ This is the agent layer's highest-value capability and the single strongest reas
 
 **Files:** extend `SchedulingPreferences` (`packages/shared/src/types.ts`) per D2; `applySchedulingPreferences.ts`; `sectionReplanBridge.ts` (rung detection); the SOFT path of `materialize`.
 
-- [ ] **D1 — failing test:** with a `rejectInstructor: [<all CS421 profs this term>]` strict preference, every CS421 section is eliminated → course-wipe → the bridge first tries a within-term swap, then a cross-term move (CS421 → a later term), and the next term's slot re-fills with a different valid course. Assert validity + that CS421 moved.
-- [ ] **D2 — implement** the extended scheduling preferences (`rejectInstructor` / `rejectSection` / `avoidRecitationConflict`), strict ⇒ drop (feeds course-wipe → bridge), soft ⇒ rerank only. Reuse the Decision #43 machinery.
-- [ ] **D3 — multi-course trade-off (rung 3):** when one move isn't valid, the bridge searches ≤ K multi-course batches and the agent presents the top trade-offs ("to free CS421 for new professors next term, MATH-UA 121 also shifts — here's the impact"). Test: a fixture where a single move is infeasible but a 2-course batch is valid.
+- [x] **D2 — DONE** (`rejectInstructor` / `rejectSection` added to `SchedulingPreferences` + `applySchedulingPreferences` strict-drop; `avoidRecitationConflict` not needed — a clashing recitation is already a time conflict the enumerator drops). Tests in `applySchedulingPreferences.test.ts`. ✅
+- [x] **D1 — COMPOSES end-to-end:** `rejectInstructor: [all profs]` → every section strict-dropped → `materialize_feasible` `unavailableCourses` → `classifySectionFailure` "course-wipe" → the ladder (within-term swap then cross-term move). ✅
+- [x] **D3 — multi-course trade-off = rung 3** (`generateResolutionLadder` emits a bounded ≤K multi-course move batch; A3 validates + ranks). The agent presents the top trade-offs at the surface (E3). ✅
 
 ## Phase E — UI: data contract (locked here) + visual picker (deferred to a focused mockup plan)
 
@@ -231,7 +227,7 @@ This is the agent layer's highest-value capability and the single strongest reas
 - [x] **F0 — pairing-data audit — SUPERSEDED by the 2026-06-20 RE-PROBE (see §1).** The earlier "bound-pairing via `all_sections`" finding was WRONG — `all_sections` returns the same flat section block for every section queried and does NOT encode LEC↔RCT pairing. **Bound-pairing is NOT available anywhere in FOSE.** Owner decision: FREE-PAIRING + hedge.
 - [x] **F0a — DROPPED (free-pairing decision 2026-06-20).** No detail-fetch is built — the detail endpoint yields no pairing data. Component grouping uses the course's OWN search rows (`schd`). *(Implemented as `componentGrouping.groupByComponent` — no I/O.)*
 - [x] **F1 — DONE (free-pairing).** A multi-component course = one section of EACH distinct component type present (`componentGrouping.enumerateCourseSelections`), and a valid schedule includes a compatible `(LEC, RCT, …)` selection whose every block passes the conflict check against all other selected blocks (`feasibleSchedules.enumerateFeasibleSchedules`). Internally-clashing selections (a LEC overlapping its own RCT) are pruned. Hedge surfaced: Albert may restrict which recitation pairs with which lecture. Test (`feasibleSchedules.test.ts`): a fixed LEC + 3 RCT options where only the non-clashing RCT survives. ✅
-- [ ] **F2 — recitation as a re-plan trigger:** a course whose every recitation clashes (or whose only non-clashing recitation is closed/waitlist-rejected) is a HARD-conflict / course-wipe trigger into the Phase-A bridge, exactly like a lecture clash.
+- [x] **F2 — SUBSUMED.** A course whose every recitation clashes produces no internally-conflict-free selection → no feasible candidate covers it → zero candidates (`hard-conflict`) or, if its sections are all closed/rejected, `unavailableCourses` (`course-wipe`) — both already trigger the Phase-A bridge exactly like a lecture clash. No separate code needed. ✅
 
 ## Phase G — Waitlist strategy (advisory; the engine never registers)
 
@@ -245,8 +241,8 @@ This is the agent layer's highest-value capability and the single strongest reas
 
 - [x] **G0 — waitlist-number audit — DONE (live probe 2026-06-20): NOT available** in FOSE search OR detail (no enrolled/seat/waitlist/capacity count anywhere; only `total`=capacity + `O`/`W`/`C`). The agent **hedges** the queue length, period — no surfacing path exists. Do not thread a `queue-length threshold` (it can never be filled).
 - [x] **G1 — distinguish O vs W in materialization — DONE** (`statusHelpers.ts` + `candidatePreRank.ts` + the new path). The legacy `isOpenStatus` (O||W) was split: `isAvailableStatus` (O|W, keep-in-pool), `isOpenStatus` (O), `isWaitlistStatus` (W); the legacy `materialize.ts` path now uses `isAvailableStatus` (behavior identical). The new path tags candidates (`hasWaitlist`/`waitlistCrns`) and the pre-rank ranks all-open above waitlist-containing (guaranteed regardless of soft weights). Tests in `candidatePreRank.test.ts`. ✅
-- [ ] **G2 — waitlist decision per preference:** a `willingToWaitlist` preference (+ an optional queue-length threshold when G0 yields a number) decides whether a waitlist-only course is acceptable or should trigger the Phase-A bridge (move to a later term / swap to an open alternative). Test: `willingToWaitlist:false` + a waitlist-only course → bridge re-plan; `true` → accept-with-caveat.
-- [ ] **G3 — open backup + auto-swap advice:** when the student waitlists, the agent RECOMMENDS (never performs) the **specific conflict-free open backup section** the tool already verified (`openFallbacks.fallbackCrn`, §2①(d) — NOT a freshly-guessed section) + explains Albert auto-swap by CRN ("register backup section `B` (crn …), add the waitlisted section `W` (crn …) and bind it via Albert's auto-swap; if `W` clears, Albert swaps `B`→`W`"). Deterministic copy, cite `core_philosophy.md:11`. Test: a `W` section with a verified conflict-free backup produces the auto-swap recommendation naming both CRNs; the agent never invents a backup the tool didn't verify.
+- [x] **G2 — DONE** (`willingToWaitlist` on `SchedulingPreferences`). `false` ⇒ the orchestrator filters to OPEN-only, so a waitlist-only course → `unavailableCourses` → bridge; default/`true` ⇒ waitlist accepted-with-caveat (lower-ranked). No queue threshold (G0: no count exists). Tests in `materializeFeasible.test.ts`. ✅
+- [x] **G3 — DONE** (`buildAutoSwapAdvice` in `agentCuration.ts`). Deterministic copy naming the verified `openFallbacks.fallbackCrn` + the waitlisted CRN + the Albert auto-swap binding; an unverified-backup waitlist yields an honest hedge, never a fabricated CRN. Cites `core_philosophy.md:11`. Tests in `agentCuration.test.ts`. ✅
 
 ## §4. Prerequisites & known hedged gaps (NOT blockers — fold in)
 
