@@ -48,6 +48,8 @@ After FOSE-API integration (done) the agent queries the next term's live section
 
 Both are *constraints that select among valid plans*. Neither may ever produce an invalid plan.
 
+**Trigger frequency (don't over-engineer the rare branch).** Empirically, real Albert/FOSE sections carry complete meeting times, so `classifyAvailability` (`foseAvailabilityGate.ts`) almost always returns `full`. The re-plan triggers worth engineering for are, in order of real-world frequency: **(1) `unavailable` — the course is simply not offered next term (0 sections)**, the most common and the clearest "move it to a later term" case; **(2) a genuine time-conflict** (zero conflict-free combos); **(3) student rejection** (instructor/timing/recitation). The `partial` state (meeting times present but un-parseable) is a **rare defensive safety-net** for malformed FOSE data — keep it at a hedge ("section data looks incomplete — verify with your adviser"); do NOT build re-plan logic on it. Two clarifications that prevent false triggers: a missing **instructor** does NOT lower availability (the gate reads meeting *times*, not professors — a `TBA`-instructor section is still `full`; instructor-rejection is the separate SOFT path), and a **by-arrangement / TBA / async** course (e.g. private-lesson piano) parses as `asynchronous` ⇒ counts as `full` and never conflicts in time-detection — it is handled gracefully, not as a data gap.
+
 ---
 
 ## §2. Architecture — the section→structure bridge
