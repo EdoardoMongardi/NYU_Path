@@ -118,6 +118,23 @@ Studying Claude Code's own harness (recovered source) settled the "strict algori
 
 ---
 
+## §2.6 — Conversational preference refinement (the Claude-Code-style loop)
+
+This is the agent layer's highest-value capability and the single strongest reason it beats a pure algorithm. After a schedule is shown, the student speaks naturally — *"I'd actually rather have Prof X for B, and A is too early"* — and the system refines toward the preference, **or explains honestly why no perfect match exists and offers the next-best options**. Exactly the propose → feedback → re-reason → re-propose loop of a coding agent. Implementation is mostly system-prompt + a re-query of the Phase-0 tool — **no new engine**.
+
+**Mechanics (each refinement is one turn — harness `needsFollowUp` / `maxTurns`):**
+1. **Interpret** the NL feedback → classify each preference as a HARD must ("only Prof X") vs a SOFT prefer ("A not before 10am"); clarify if ambiguous (*"is Prof X a must, or a strong preference?"* — CORE RULE 13 proactive elicitation).
+2. **Translate** to section-level constraints: a HARD must → a strict filter into `materialize_feasible` (B's section = Prof X); a SOFT prefer → a rerank weight / scheduling preference.
+3. **Re-query the deterministic tool** with the updated constraints → a fresh VERIFIED candidate set (never a hand-edited or imagined schedule).
+4. **Re-present + explain.** A candidate satisfies the asks → show it ("Prof X for B, A moved to 11am"). The asks CONFLICT (Prof X's only section clashes with C) → say so plainly, show the trade-off, and ask *which matters more* — offering the two best verified compromises ("Prof X but A stays 8am" vs "A at 11am but a different B prof"). Proactively suggest options the student may prefer but didn't ask for.
+5. **Escalate only if section-level can't satisfy a HARD must** — no arrangement of *these* courses gives Prof X without a clash → offer the §2-④ structural move ("take B next term, when Prof X also teaches a non-clashing section"). The owner's "CS421 → later term for new professors" case is this rung.
+
+**Guardrail (unchanged):** every schedule the agent shows in this loop still comes from `materialize_feasible` (verified). A "Prof X at 11am" that doesn't exist is answered with the truth + the closest real options — never fabricated. The loop is as flexible as a conversation but as trustworthy as the engine.
+
+**Two refinement levels — try (a) first, always:** **(a) section-level** — same courses, different section / professor / time → stays in the §2 ①②③ picker loop (re-query + re-rank); this is most feedback. **(b) structural** — only when (a) can't satisfy a must → the §2-④ ladder (move a course across terms).
+
+---
+
 ## §3. Decisions to confirm with the owner (each has a chosen default)
 
 - **D1 — Trigger surface.** The section→replan check runs (a) automatically when the agent materializes the near term and finds a HARD conflict, AND (b) on an explicit student rejection (SOFT). *Default: both; the auto path emits a proposal the student can ignore, never an auto-commit.*
