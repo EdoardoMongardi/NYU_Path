@@ -52,11 +52,24 @@ Both are *constraints that select among valid plans*. Neither may ever produce a
 
 **Trigger frequency (don't over-engineer the rare branch).** Empirically, real Albert/FOSE sections carry complete meeting times, so `classifyAvailability` (`foseAvailabilityGate.ts`) almost always returns `full`. The re-plan triggers worth engineering for are, in order of real-world frequency: **(1) `unavailable` — the course is simply not offered next term (0 sections)**, the most common and the clearest "move it to a later term" case; **(2) a genuine time-conflict** (zero conflict-free combos); **(3) student rejection** (instructor/timing/recitation). The `partial` state (meeting times present but un-parseable) is a **rare defensive safety-net** for malformed FOSE data — keep it at a hedge ("section data looks incomplete — verify with your adviser"); do NOT build re-plan logic on it. Two clarifications that prevent false triggers: a missing **instructor** does NOT lower availability (the gate reads meeting *times*, not professors — a `TBA`-instructor section is still `full`; instructor-rejection is the separate SOFT path), and a **by-arrangement / TBA / async** course (e.g. private-lesson piano) parses as `asynchronous` ⇒ counts as `full` and never conflicts in time-detection — it is handled gracefully, not as a data gap.
 
+**FOSE DATA AUDIT (done 2026-06-19 against the 27 recorded fixtures `packages/engine/tests/fixtures/fose/`) — answers the two data questions empirically:**
+- **Components (recitation / lab / tutorial): identifiable, common, but UNLINKED.** Every row carries `schd` = `LEC`/`RCT`/`LAB`/`TUT`/`SEM`…. Multi-component is normal — MATH-UA 121 = 18 LEC + 83 RCT + 21 LAB; CHEM-UA 125 = 6 LEC + 23 RCT + 36 LAB + 37 TUT — and single-component is also common — CSCI-UA 101 = 22 LEC, no recitation. **But there is NO field linking a RCT/LAB to its parent LEC**: no row references another row's `crn`/`key`; `no` is ambiguous (several distinct sections share `no="001"`); `mpkey` is a meeting-pattern id (same-time sections share it), not a group key. ⇒ Baseline model = a course needs **one section of each required component type, all time-conflict-free**; the *which-RCT-pairs-with-which-LEC* linkage is NOT in the search row → free-pairing approximation + hedge, OR a `getCourseDetails` probe (the Phase-F pairing refinement).
+- **Waitlist number: NOT available.** Search rows carry `total` (= section **capacity**, e.g. "35") + `stat` (`O`/`W`/`C`/`A`) — but **no enrolled-count, no waitlist-count, no queue-position**. ⇒ the agent **cannot** say "N people ahead of you" → **hedge the number** ("check the waitlist length in Albert"), never fabricate. (`total`/capacity IS available as context and isn't surfaced on `SectionView` today; the detail endpoint is unverified for a count → default to hedge.)
+- **Status caveat.** The fixtures are pre-registration snapshots (`stat` all `"A"`), so they don't exercise live `O`/`W`/`C` — but the field SET is fixed, so both findings hold for live data (the absence of a waitlist-count field is a schema fact, not a snapshot artifact).
+
 ---
 
-## §2. Architecture — the section→structure bridge
+## §2. Architecture — enumerate → score → pick; escalate only if all are rejected
 
-The new code is a thin layer between the (built) section materializer and the (frozen) solver:
+Once a term's courses are materialized, the PRIMARY flow is **not** "find a conflict → re-plan." It is: **enumerate every feasible single-term schedule, score them by preference, show the student the top few, and let them pick.** A structural re-plan is the LAST resort — only when the student rejects every feasible schedule (or none is feasible).
+
+**① Enumerate all feasible single-term schedules.** Per planned course, pull live sections and group by component (`schd`: LEC / RCT / LAB / TUT…). A *course selection* picks one section of EACH required component (lecture-only like CSCI-UA 101, or lecture + recitation + lab like CHEM-UA 125). A *schedule* picks one selection per course. Feasible iff: **(a) no time conflict** among ALL chosen blocks — every component of every course (a recitation/lab clashes exactly like a lecture), via the existing `conflictDetection`; **(b) not closed/cancelled** — each section is open (`O`) or waitlist (`W`); **(c) strict student prefs honored** (e.g. "no Friday", a rejected instructor); **(d) graduation-safe even on waitlist** — a `W` section is allowed ONLY with a valid OPEN fallback: preferentially an open section of the SAME course (Albert auto-swap ⇒ trivially grad-safe — usually just a different section of the same class), else an open course satisfying the same requirement leaf, validated grad-safe.
+
+**② Score + rank.** Each feasible schedule scores by preference: **open ≻ waitlist** (penalty per waitlisted section), **fewer waitlisted sections is better**, then the student's time/day/instructor soft prefs (reuses the Decision-#43 rerank weights + a waitlist term).
+
+**③ Top-5 picker (+ see-more).** Show the top 5 schedules; if >5 are feasible, "see more" reveals the next 5 by score (the strict filters usually leave few; `MAX_COMBINATIONS=50` already caps enumeration). Student picks → `confirm_section_combination` (attach CRN/meeting/instructor); each waitlisted section in the pick gets the open-fallback + Albert auto-swap recommendation.
+
+**④ Escalate ONLY if the student rejects every feasible schedule** (or none is feasible: a required course isn't offered / every combo clashes). Then the structural **resolution ladder** — the section→structure bridge below — re-solves through the FROZEN solver:
 
 ```
 materialize.ts result  ──▶  sectionReplanBridge (NEW)  ──▶  plan mutation(s)
@@ -86,14 +99,30 @@ Every rung 1–3 ends in `finalizeForwardSchedule` → only a `valid-clean`/`val
 - **D2 — SOFT-rejection vocabulary.** Student rejections map to **scheduling preferences** (`setSchedulingPreference`, Decision #43) extended with `rejectInstructor` / `rejectSection(crn)` / `avoidRecitationConflict`. *Default: extend the existing `SchedulingPreferences` schema (strict=hard-drop, soft=rerank) rather than a new mutation kind.*
 - **D3 — Cross-term move target.** Move to the **nearest later fall/spring term whose offering domain + prereqs allow the course**; only open a summer/J-term if the student opted in (`addTerm`) — and label it optional (plan 37 L1/L2 rule). *Default: nearest later regular term; summer only on opt-in.*
 - **D4 — Multi-course search bound.** Cap the multi-course search at K moved courses (start K=2) and N candidate plans, ranked by disruption. *Default: K=2, reuse the solver's existing top-K; never an unbounded search.*
-- **D5 — Recitation (LEC+RCT) pairing.** Model recitation as a co-requisite section pairing in `conflictDetection` (a valid combo must include a compatible LEC+RCT pair). *Default: a dedicated sub-phase (Phase F) — it needs a FOSE field audit (does the corpus carry the LEC↔RCT link?); until built, hedge ("I can't yet verify recitation timing — check the section's recitations with your adviser").*
-- **D6 — Section-picker UI scope.** Surface the live sections + conflict-free combos in the workspace (read-only picker that drives `materialize_sections`/`confirm_section_combination`), plus the re-plan proposal when a conflict forces one. *Default: a workspace section-picker panel fed by a new `/api/v2/materialize` route wrapping the existing tool; the re-plan reuses the existing proposal surface.*
+- **D5 — Multi-component courses (LEC + RCT / LAB / TUT).** A course selection picks one section of EACH required component, and ALL component times join conflict detection. Pairing-linkage (which RCT pairs with which LEC) is NOT in the FOSE search row (audit). *Default: free-pairing approximation (any RCT/LAB of the course, time-compatible) + hedge; a `getCourseDetails` probe is the refinement (Phase F).*
+- **D6 — Waitlist is feasible, just lower priority.** A waitlisted section keeps a schedule feasible IFF it has a valid open fallback. *Default: include waitlist schedules, penalize per waitlisted section in scoring, require the fallback (preferentially a same-course open section ⇒ Albert auto-swap, grad-safe), surface the auto-swap advice; the engine only RECOMMENDS, never registers.*
+- **D7 — Present top-5; escalate on reject-all.** *Default: rank feasible schedules by score, show top 5 + a "see more" (next 5 by score); run the §2-④ escalation ladder ONLY when the student rejects every feasible schedule, or none is feasible.*
+- **D8 — Waitlist number.** Not available from FOSE search (audit — only `total`/capacity + `O`/`W`/`C`). *Default: decide on status + student willingness + capacity, and HEDGE the queue length; optionally probe `getCourseDetails` for a count (open question G0).*
+- **D9 — Section-picker UI scope.** A workspace top-5 schedule picker (read-only) fed by a new `/api/v2/materialize` route wrapping the orchestrator; "use this schedule" drives `confirm_section_combination`. The escalation re-plan reuses the existing `plan_proposal` proposal surface. *Default: as stated.*
 
 ---
 
-## Phase A — The section→replan bridge (engine, pure)
+> **Phase ↔ §2 map.** The PRIMARY flow (§2 ①②③ — enumerate, score, top-5 picker) is **Phase 0** below. The structural **escalation** (§2 ④) is **Phases A–D** (bridge / swapHook / cross-term / SOFT-reject). **Phase F** (multi-component) + **Phase G** (waitlist) supply the feasibility rules ① depends on, so they land WITH Phase 0. **Phase E** is the picker UI. Suggested build order: **F0** (pairing audit) → **F1 + G1** (component + O/W feasibility) → **Phase 0** (enumerate + score + top-5) → **E** (picker) → **A–D** (escalation) → **G3** (auto-swap advice).
 
-**Goal:** a pure module that turns a `MaterializationResult` (+ the current `ForwardSchedule` + DPR + a rejection signal) into a ranked list of candidate plan-mutation batches, each already re-solved + validated.
+## Phase 0 — Feasible-schedule enumeration + scoring + top-5 picker (PRIMARY; §2 ①②③)
+
+**Goal:** from a term's planned courses + live FOSE sections, produce the ranked top-N feasible single-term schedules.
+
+**Files:** extend `sectionMaterialization/materialize.ts` (group by `schd`, enumerate per-component, score) + `conflictDetection.ts` (multi-block selections) + `applySchedulingPreferences.ts` (soft scoring); reuse `MAX_COMBINATIONS=50`.
+
+- [ ] **0.1 — component grouping:** group a course's sections by `schd`; a *course selection* = one section of each required component type present (LEC + any RCT / LAB / TUT). Test: CSCI-UA 101 → lecture-only selections; CHEM-UA 125 → LEC × LAB × (RCT/TUT) selections.
+- [ ] **0.2 — feasible enumeration:** enumerate schedules (one selection per course); keep only those with **no time-conflict across ALL component blocks** (extend `enumerateConflictFreeCombinations` to multi-block selections), **all open-or-waitlist**, **strict-prefs-ok**, and **waitlist ⇒ an open fallback exists** (Phase G). Test: a fixture where the only conflict-free schedule needs one specific recitation.
+- [ ] **0.3 — score + rank:** score = open ≻ waitlist penalty + fewer-waitlists-better + soft-pref rerank (Decision #43 weights); return top-N sorted. Test: an all-open schedule outranks an equivalent waitlist one; a soft-pref match outranks a non-match.
+- [ ] **0.4 — top-5 + see-more contract:** the result exposes the top 5 + a cursor for the next 5 by score. Test: >5 feasible → page 1 = 5, page 2 = next 5.
+
+## Phase A — The escalation bridge (§2 ④; engine, pure)
+
+**Goal:** a pure module that turns a `MaterializationResult` (+ the current `ForwardSchedule` + DPR + a rejection signal) into a ranked list of candidate plan-mutation batches, each already re-solved + validated. **Runs only when the student rejects every feasible schedule (or none is feasible).**
 
 **Files:** NEW `packages/engine/src/agent/sectionMaterialization/sectionReplanBridge.ts`; read `materialize.ts` (result shape), `forwardSchedule/planChangeHelpers.ts` (mutation kinds + `applyMutationsToPreferences`/`resolveBindMutations`), `forwardSchedule/build.ts` (`finalizeForwardSchedule`), `forwardSchedule/buildSolverInput.ts`.
 
