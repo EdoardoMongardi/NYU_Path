@@ -16,6 +16,7 @@ import {
     deterministicTop5,
     revalidatePick,
     paginate,
+    buildAutoSwapAdvice,
 } from "../../src/agent/sectionMaterialization/agentCuration.js";
 import type { FeasibleCandidateView } from "../../src/agent/sectionMaterialization/materializeFeasible.js";
 
@@ -166,6 +167,34 @@ describe("revalidatePick (guardrail)", () => {
         const res = revalidatePick([noBackup]);
         expect(res.valid).toEqual([]);
         expect(res.rejected[0]!.reason.toLowerCase()).toContain("backup");
+    });
+});
+
+describe("buildAutoSwapAdvice (G3)", () => {
+    it("names both CRNs + the course for a waitlisted section with a verified backup", () => {
+        const c = candidate("wl", {
+            status: "W",
+            waitlistCrns: ["wl-a"],
+            openFallbacks: [{ forCrn: "wl-a", fallbackCrn: "BK-OPEN" }],
+        });
+        const advice = buildAutoSwapAdvice(c);
+        expect(advice).toHaveLength(1);
+        expect(advice[0]).toContain("wl-a");      // the waitlisted CRN
+        expect(advice[0]).toContain("BK-OPEN");   // the verified open backup CRN
+        expect(advice[0]).toContain("A");         // the course code
+        expect(advice[0].toLowerCase()).toContain("auto-swap");
+    });
+
+    it("returns no advice for an all-open candidate", () => {
+        expect(buildAutoSwapAdvice(candidate("open"))).toEqual([]);
+    });
+
+    it("never invents a backup the tool didn't verify (a waitlist with no recorded fallback yields a hedge, not a fabricated CRN)", () => {
+        const c = candidate("nb", { status: "W", waitlistCrns: ["nb-a"], openFallbacks: [] });
+        const advice = buildAutoSwapAdvice(c);
+        // No fabricated backup CRN; the copy is an honest hedge.
+        expect(advice.join(" ")).not.toMatch(/CRN\s+\S*BK/i);
+        expect(advice.join(" ").toLowerCase()).toContain("verify");
     });
 });
 

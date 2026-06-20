@@ -160,6 +160,44 @@ export function revalidatePick(picked: FeasibleCandidateView[]): RevalidateResul
     return { valid, rejected };
 }
 
+/**
+ * G3 — open-backup + Albert auto-swap advice for a candidate's waitlisted
+ * sections. Deterministic copy that NAMES the specific verified backup the
+ * tool already confirmed conflict-free (`openFallbacks.fallbackCrn`, §2①(d)) —
+ * never a freshly-guessed section. The engine only RECOMMENDS; it never
+ * registers (CORE RULE 8 / core_philosophy.md:11). A waitlisted section with
+ * no recorded backup yields an honest hedge, not a fabricated CRN. An all-open
+ * candidate yields no advice. Pure.
+ */
+export function buildAutoSwapAdvice(candidate: FeasibleCandidateView): string[] {
+    const courseOfCrn = new Map<string, string>();
+    for (const course of candidate.courses) {
+        for (const comp of course.components) courseOfCrn.set(comp.crn, course.code);
+    }
+    const backupOf = new Map(candidate.openFallbacks.map(f => [f.forCrn, f.fallbackCrn]));
+
+    const advice: string[] = [];
+    for (const wlCrn of candidate.waitlistCrns) {
+        const code = courseOfCrn.get(wlCrn) ?? "this course";
+        const backup = backupOf.get(wlCrn);
+        if (backup !== undefined) {
+            advice.push(
+                `For ${code}: you'd be on the WAITLIST for section CRN ${wlCrn}. Register the open ` +
+                `backup section CRN ${backup} now and bind the waitlisted section to it via Albert's ` +
+                `auto-swap — if the waitlist clears, Albert swaps you into CRN ${wlCrn} automatically; ` +
+                `if it never clears you keep the backup, so your plan stays valid either way. I can't ` +
+                `see the waitlist queue length — verify it in Albert.`,
+            );
+        } else {
+            advice.push(
+                `For ${code}: section CRN ${wlCrn} is waitlist-only and I couldn't verify a conflict-free ` +
+                `open backup — verify your options in Albert before relying on this section.`,
+            );
+        }
+    }
+    return advice;
+}
+
 export interface Page<T> {
     page: number;
     pageSize: number;
