@@ -25,6 +25,7 @@ import {
     runProposeStage,
     runProposeWhatIfStage,
     runConfirmStage,
+    runMaterializeFeasibleStage,
     type RunConfirmError,
     type RunProposeError,
 } from "./planActionOrchestrator.js";
@@ -152,6 +153,35 @@ function formatZodIssues(err: unknown): string {
  * `schema` validates the body shape; `buildMutations` lifts it to the
  * canonical PlanMutation[] the orchestrator consumes.
  */
+/**
+ * Phase 38 E1 — the READ-ONLY materialize_feasible route handler. Auth +
+ * rate-limit + JSON parse (via `preflight`), validate the body, then run
+ * the read-only stage. Returns the verified candidate set; never persists
+ * (R1 holds). Maps the typed errors to the same HTTP codes as propose.
+ */
+export async function handleMaterializeRoute<T extends { targetTerm: string }>(
+    req: NextRequest,
+    schema: ZodTypeAny,
+): Promise<NextResponse> {
+    const pre = await preflight(req);
+    if (!pre.ok) return pre.response;
+
+    let parsed: T;
+    try {
+        parsed = schema.parse(pre.body) as T;
+    } catch (err) {
+        return NextResponse.json(
+            { error: `Invalid request body: ${formatZodIssues(err)}` },
+            { status: 400 },
+        );
+    }
+
+    const result = await runMaterializeFeasibleStage(pre.studentId, parsed.targetTerm);
+    if (!result.ok) return mapProposeError(result.error);
+
+    return NextResponse.json(result.result);
+}
+
 export async function handleProposeRoute<T>(
     req: NextRequest,
     schema: ZodTypeAny,

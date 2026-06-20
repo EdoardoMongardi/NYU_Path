@@ -299,3 +299,125 @@ export function makeFrozenSeamEvaluator(
         };
     };
 }
+
+// ============================================================
+// E4 — the §2⑤ BOUNDED outer loop (materialize → escalate → re-materialize)
+// ============================================================
+
+/** Injected dependencies for the outer loop (production wires
+ *  `materialize_feasible` + the bridge; tests stub both). */
+export interface SectionReplanLoopDeps {
+    /** Materialize the near-term of a plan → the feasibility signal A1 reads. */
+    materialize: (
+        plan: ForwardSchedule,
+    ) => Promise<{ candidateCount: number; unavailableCourses: string[]; nearTerm: string }>;
+    /** Escalate a classified failure on a plan → the ranked validated resolutions (A2+A3). */
+    escalate: (failure: SectionFailure, plan: ForwardSchedule, nearTerm: string) => Promise<ResolutionResult>;
+}
+
+export interface SectionReplanLoopOptions {
+    /** Max escalate↔re-materialize cycles before the honest no-op (default 2). */
+    cap?: number;
+    /** An explicit student rejection — applied to the FIRST classification only. */
+    rejectedCourseIds?: string[];
+}
+
+export type SectionReplanLoopResult =
+    | { kind: "feasible"; nearTerm: string; cycles: number }
+    | {
+          kind: "replan";
+          /** Accumulated mutations transforming the original plan → finalPlan. */
+          mutations: PlanMutation[];
+          movedCourseIds: string[];
+          finalPlan: ForwardSchedule;
+          nearTerm: string;
+          cycles: number;
+          gradTermChanged: boolean;
+          gradTerm: string;
+      }
+    | { kind: "no-op"; reason: string; cycles: number; nearTerm: string };
+
+/**
+ * E4 / §2⑤ — the BOUNDED outer loop. Materialize the near-term; if it's
+ * feasible, stop. Otherwise classify the failure and escalate (A2+A3) to a
+ * validated re-plan, then RE-materialize the NEW near-term and repeat — so a
+ * structural re-plan is never shipped without verifying its new near-term is
+ * itself schedulable. Bounded by `cap`: past the cap (or when no valid re-plan
+ * exists) it falls to an honest no-op — it can NEVER loop forever.
+ *
+ * The explicit `rejectedCourseIds` signal applies only to the FIRST
+ * classification (the student rejected THIS term's sections); subsequent
+ * cycles classify purely on the re-materialized feasibility. The frozen
+ * validator is reached only through `deps.escalate` (the injected bridge),
+ * so this orchestrator never imports the solver.
+ */
+export async function runSectionReplanLoop(
+    plan: ForwardSchedule,
+    deps: SectionReplanLoopDeps,
+    opts: SectionReplanLoopOptions = {},
+): Promise<SectionReplanLoopResult> {
+    const cap = opts.cap ?? 2;
+    let current = plan;
+    let cycles = 0;
+    const mutations: PlanMutation[] = [];
+    const moved = new Set<string>();
+    let gradTerm = plan.graduationTerm;
+    let gradTermChanged = false;
+
+    // Hard upper bound on iterations as a belt-and-suspenders guard against a
+    // mis-wired dep — the loop returns on feasible / no-op / cap long before this.
+    for (let guard = 0; guard <= cap + 1; guard++) {
+        const m = await deps.materialize(current);
+        const rejectedCourseIds = cycles === 0 ? opts.rejectedCourseIds : undefined;
+        const failure = classifySectionFailure({
+            candidateCount: m.candidateCount,
+            unavailableCourses: m.unavailableCourses,
+            rejectedCourseIds,
+        });
+
+        if (failure === null) {
+            return cycles === 0
+                ? { kind: "feasible", nearTerm: m.nearTerm, cycles }
+                : {
+                      kind: "replan",
+                      mutations,
+                      movedCourseIds: [...moved],
+                      finalPlan: current,
+                      nearTerm: m.nearTerm,
+                      cycles,
+                      gradTermChanged,
+                      gradTerm,
+                  };
+        }
+
+        if (cycles >= cap) {
+            return {
+                kind: "no-op",
+                reason: `These courses still can't be scheduled together after ${cap} re-plan attempt${cap === 1 ? "" : "s"}; verify with your adviser.`,
+                cycles,
+                nearTerm: m.nearTerm,
+            };
+        }
+
+        const escalation = await deps.escalate(failure, current, m.nearTerm);
+        const best = escalation.resolutions[0];
+        if (best === undefined) {
+            return {
+                kind: "no-op",
+                reason: escalation.reason ?? "No valid re-plan keeps your graduation target with these courses next term.",
+                cycles,
+                nearTerm: m.nearTerm,
+            };
+        }
+
+        mutations.push(...best.batch.mutations);
+        best.batch.movedCourseIds.forEach(c => moved.add(c));
+        current = best.schedule;
+        gradTerm = best.gradTerm;
+        gradTermChanged = gradTermChanged || best.gradTermChanged;
+        cycles++;
+    }
+
+    // Unreachable in practice (the cap branch returns first); satisfies the type.
+    return { kind: "no-op", reason: "section re-plan exceeded its iteration guard", cycles, nearTerm: plan.graduationTerm };
+}

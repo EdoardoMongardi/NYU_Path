@@ -117,6 +117,7 @@ describe("buildTool + ToolRegistry", () => {
             "plan_forward_degree",
             "probe_counterfactual",
             "propose_plan_change",
+            "propose_section_replan",
             "propose_whatif_assumption",
             "run_full_audit",
             "search_availability",

@@ -14,8 +14,12 @@ import {
     generateResolutionLadder,
     validateResolutionCandidates,
     makeFrozenSeamEvaluator,
+    runSectionReplanLoop,
     type ResolutionBatch,
     type BatchEvaluation,
+    type ValidatedResolution,
+    type ResolutionResult,
+    type SectionReplanLoopDeps,
 } from "../../src/agent/sectionMaterialization/sectionReplanBridge.js";
 import type { ForwardSchedule } from "@nyupath/shared";
 import type { ToolSession } from "../../src/agent/tool.js";
@@ -212,5 +216,88 @@ describe("validateResolutionCandidates — A3/A4", () => {
         const evaluate = makeFrozenSeamEvaluator(session, dpr, plan);
         const result = evaluate({ rung: 2, strategy: "noop", mutations: [], movedCourseIds: [] });
         expect(typeof result.feasible).toBe("boolean");
+    });
+});
+
+describe("runSectionReplanLoop — E4 (§2⑤ bounded outer loop)", () => {
+    const plan = (tag: string) => ({ graduationTerm: "2027-spring", _tag: tag } as unknown as ForwardSchedule);
+    const resolution = (toPlan: ForwardSchedule, moved: string[]): ValidatedResolution => ({
+        batch: { rung: 2, strategy: "move", mutations: [{ kind: "move", courseId: moved[0]!, fromTerm: "2026-fall", toTerm: "2027-spring" }], movedCourseIds: moved },
+        schedule: toPlan,
+        gradTerm: "2027-spring",
+        gradTermChanged: false,
+        movedCount: moved.length,
+    });
+
+    it("near-term already feasible → kind 'feasible', no escalation", async () => {
+        const deps: SectionReplanLoopDeps = {
+            materialize: async () => ({ candidateCount: 3, unavailableCourses: [], nearTerm: "2026-fall" }),
+            escalate: async () => { throw new Error("escalate must not be called when feasible"); },
+        };
+        const r = await runSectionReplanLoop(plan("p0"), deps, { cap: 2 });
+        expect(r.kind).toBe("feasible");
+        expect(r.nearTerm).toBe("2026-fall");
+    });
+
+    it("escalates once, then the new near-term is feasible → kind 'replan' carrying the move mutations", async () => {
+        let call = 0;
+        const replanned = plan("p1");
+        const deps: SectionReplanLoopDeps = {
+            materialize: async () => {
+                call++;
+                // 1st materialize: no feasible candidate (course-wipe). 2nd (post-move): feasible.
+                return call === 1
+                    ? { candidateCount: 0, unavailableCourses: ["CSCI-UA 421"], nearTerm: "2026-fall" }
+                    : { candidateCount: 2, unavailableCourses: [], nearTerm: "2027-spring" };
+            },
+            escalate: async (): Promise<ResolutionResult> => ({ resolutions: [resolution(replanned, ["CSCI-UA 421"])], reason: null }),
+        };
+        const r = await runSectionReplanLoop(plan("p0"), deps, { cap: 2 });
+        expect(r.kind).toBe("replan");
+        expect(r.cycles).toBe(1);
+        expect(r.movedCourseIds).toContain("CSCI-UA 421");
+        expect(r.mutations).toEqual([{ kind: "move", courseId: "CSCI-UA 421", fromTerm: "2026-fall", toTerm: "2027-spring" }]);
+        expect(r.finalPlan).toBe(replanned);
+    });
+
+    it("never loops forever: still infeasible after the cap → honest no-op", async () => {
+        const deps: SectionReplanLoopDeps = {
+            materialize: async () => ({ candidateCount: 0, unavailableCourses: ["X"], nearTerm: "2026-fall" }),
+            escalate: async (): Promise<ResolutionResult> => ({ resolutions: [resolution(plan("pN"), ["X"])], reason: null }),
+        };
+        const r = await runSectionReplanLoop(plan("p0"), deps, { cap: 2 });
+        expect(r.kind).toBe("no-op");
+        expect(r.cycles).toBe(2);
+        expect(r.reason).toMatch(/cap|attempt|still/i);
+    });
+
+    it("escalation finds no valid re-plan → honest no-op carrying the bridge reason", async () => {
+        const deps: SectionReplanLoopDeps = {
+            materialize: async () => ({ candidateCount: 0, unavailableCourses: ["X"], nearTerm: "2026-fall" }),
+            escalate: async (): Promise<ResolutionResult> => ({ resolutions: [], reason: "would push graduation past your target" }),
+        };
+        const r = await runSectionReplanLoop(plan("p0"), deps, { cap: 2 });
+        expect(r.kind).toBe("no-op");
+        expect(r.reason).toContain("graduation");
+    });
+
+    it("passes an explicit reject signal into the FIRST classification only", async () => {
+        const seen: Array<string[] | undefined> = [];
+        let call = 0;
+        const deps: SectionReplanLoopDeps = {
+            materialize: async () => {
+                call++;
+                return call === 1
+                    ? { candidateCount: 3, unavailableCourses: [], nearTerm: "2026-fall" } // candidates exist, but a rejection forces escalation
+                    : { candidateCount: 2, unavailableCourses: [], nearTerm: "2027-spring" };
+            },
+            escalate: async (failure): Promise<ResolutionResult> => {
+                seen.push(failure.courseIds);
+                return { resolutions: [resolution(plan("p1"), failure.courseIds)], reason: null };
+            },
+        };
+        const r = await runSectionReplanLoop(plan("p0"), deps, { cap: 2, rejectedCourseIds: ["CSCI-UA 421"] });
+        expect(r.kind).toBe("replan");
+        expect(seen[0]).toEqual(["CSCI-UA 421"]); // soft-rejection on cycle 0
     });
 });

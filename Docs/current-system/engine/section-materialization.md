@@ -1,6 +1,6 @@
 # Section Materialization Subsystem
 
-> Last verified against code: 2026-06-20 (Phase 38 FOSE Phase-0 slice landed — added the multi-component free-pairing model, the two-state waitlist-backup feasibility rule, the `materialize_feasible` read-only tool, and the agent-curation guardrails; see §8c. The legacy `materialize_sections` 11-step path below is UNCHANGED except the internal `isOpenStatus` helper was renamed to `isAvailableStatus`/moved to `statusHelpers.ts` — behavior identical). Prior: 2026-06-19 (FOSE-prep audit); 2026-06-10 (planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-20 (Phase 38 — the FOSE Phase-0 engine slice AND Phase E integration landed: the multi-component free-pairing model, the two-state waitlist-backup rule, the `materialize_feasible` read-only tool, the agent-curation guardrails, the escalation bridge + bounded outer loop, and the agent reachability + `/api/v2/materialize` route + `propose_section_replan` proposal wiring; see §8c. The legacy `materialize_sections` 11-step path below is UNCHANGED except the internal `isOpenStatus` helper was renamed to `isAvailableStatus`/moved to `statusHelpers.ts` — behavior identical). Prior: 2026-06-19 (FOSE-prep audit); 2026-06-10 (planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
@@ -358,7 +358,14 @@ When the student rejects every feasible schedule (or none is feasible), `classif
 - **SOFT-rejection preferences** (Phase D) — `SchedulingPreferences.rejectInstructor` / `rejectSection` strict-drop in `applySchedulingPreferences`; a rejection that wipes a course flows through `unavailableCourses` → the bridge.
 - **Waitlist strategy** (Phase G) — `willingToWaitlist` (G2: `false` ⇒ open-only filter ⇒ waitlist-only course → `unavailableCourses` → bridge) + `buildAutoSwapAdvice` (G3: deterministic open-backup + Albert auto-swap copy naming the verified CRNs, hedge when unverified).
 
-> **Deferred (web integration only — the engine layer of plan 38 is complete):** the `/api/v2/materialize` route wrapping `materialize_feasible` + the live agent-curation route wiring + the escalation-proposal-surface reuse (Phase E1/E3; E2 visual picker is deferred to its own mockup plan). The injected `backupResolver` (different-course grad-valid waitlist backup) and the live-FOSE `isOfferedAndOpen` check are the seams those route-layer phases fill.
+### Integration & reachability — Phase E (built)
+The green engine is now wired end-to-end:
+- **E0 reachability** (`systemPrompt.ts`) — the agent is routed to call `materialize_feasible` for near-term section feasibility ("can I take these next term?") and to curate the top ~5 over its VERIFIED candidates (the §2.5 boundary: rank tool-returned `candidateId`s, never enumerate/judge), and to call `propose_section_replan` when there's no feasible candidate / the student rejects all.
+- **E1 route** (`apps/web/app/api/v2/materialize/route.ts` → `handleMaterializeRoute` → `runMaterializeFeasibleStage`) — read-only; returns the Phase-0.3 candidate set + `unavailableCourses` + hedges. R1: never persists, never writes `parsed_dpr` (test-verified).
+- **E4 bounded outer loop** (`runSectionReplanLoop` in `sectionReplanBridge.ts` + `buildSectionReplanLoopDeps` in `sectionReplanWiring.ts`) — materialize near-term → on failure classify + escalate via the ladder → re-materialize the NEW near-term → bounded (cap=2; past the cap → honest no-op). The wiring composes `materializeFeasible` + the bridge + the within-term finder + the frozen-seam evaluator; missing FOSE data (state ≠ "full") is treated as "can't check", not a failure.
+- **E3 escalation proposal** (`propose_section_replan` tool + the chat-v2 route block) — the agent calls the tool (narration + recommended mutations); the route re-derives the re-plan server-side (`runSectionReplanStage`) and stages a VALID one through the EXISTING `runProposeStage` → `plan_proposal` SSE → Confirm chokepoint (no new UI; invalid → the existing red card; no-op → no SSE). R1: staging ≠ committing — nothing is written until the student clicks Confirm, and never to `parsed_dpr`.
+
+> **Deferred:** **E2** the visual top-5 section picker (its own follow-up mockup plan, after owner sign-off — builds against the working `materialize_feasible` + E1 route + the Phase-0.3 schema, zero rework). **E5** different-course backup graduation-validity (`backupResolver` injection point exists in `feasibleSchedules.ts`; same-course backups cover the common path; wire only when needed). The live-FOSE `isOfferedAndOpen` check (rung-1 within-term swap) is injected by the wiring.
 
 ---
 
