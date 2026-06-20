@@ -1,6 +1,6 @@
 # Section Materialization Subsystem
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-19 (re-verified during the FOSE-prep audit — no drift; `MAX_COMBINATIONS=50`, the `swapHook` stub, and the 11-step orchestrator all confirmed against the live `sectionMaterialization/` layer). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
