@@ -21,6 +21,7 @@ import {
     type ResolutionResult,
     type SectionReplanLoopDeps,
 } from "../../src/agent/sectionMaterialization/sectionReplanBridge.js";
+import { applyMutationsToPreferences } from "../../src/agent/forwardSchedule/planChangeHelpers.js";
 import type { ForwardSchedule } from "@nyupath/shared";
 import type { ToolSession } from "../../src/agent/tool.js";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
@@ -88,8 +89,13 @@ describe("generateResolutionLadder — A2", () => {
         });
         const rung2 = batches.find(b => b.rung === 2);
         expect(rung2).toBeDefined();
+        // A bare `move` only EXCLUDES the course (term-agnostic) → the solver
+        // drops it. Like /api/plan/move, the batch MUST also pin it to toTerm
+        // (freeze:true — freeze:false is a no-op at the prefs layer) so the
+        // course actually RELOCATES instead of vanishing.
         expect(rung2!.mutations).toEqual([
             { kind: "move", courseId: "CSCI-UA 421", fromTerm: "2026-fall", toTerm: "2027-spring" },
+            { kind: "pin", courseId: "CSCI-UA 421", term: "2027-spring", freeze: true },
         ]);
         expect(rung2!.movedCourseIds).toEqual(["CSCI-UA 421"]);
     });
@@ -102,9 +108,12 @@ describe("generateResolutionLadder — A2", () => {
         });
         const rung3 = batches.find(b => b.rung === 3);
         expect(rung3).toBeDefined();
+        // Each moved course gets its move + relocation pin (see rung 2).
         expect(rung3!.mutations).toEqual([
             { kind: "move", courseId: "CSCI-UA 421", fromTerm: "2026-fall", toTerm: "2027-spring" },
+            { kind: "pin", courseId: "CSCI-UA 421", term: "2027-spring", freeze: true },
             { kind: "move", courseId: "MATH-UA 121", fromTerm: "2026-fall", toTerm: "2027-spring" },
+            { kind: "pin", courseId: "MATH-UA 121", term: "2027-spring", freeze: true },
         ]);
         expect(rung3!.movedCourseIds.length).toBeLessThanOrEqual(2);
     });
@@ -128,6 +137,24 @@ describe("generateResolutionLadder — A2", () => {
         });
         expect(batches.find(b => b.rung === 2)).toBeUndefined();
         expect(batches.find(b => b.rung === 3)).toBeUndefined();
+    });
+
+    it("a rung-2 move batch RELOCATES the course (pins toTerm) — not just excludes it (drops it)", () => {
+        // Integration with the real prefs primitive (the same one /api/plan/move +
+        // the frozen-seam evaluator + runProposeStage all use). A bare `move`
+        // only excludes (term-agnostic → drop); the batch must also pin toTerm.
+        const batches = generateResolutionLadder({
+            ...baseCtx,
+            failure: { kind: "course-wipe", courseIds: ["CSCI-UA 421"] },
+        });
+        const rung2 = batches.find(b => b.rung === 2)!;
+        const { prefs } = applyMutationsToPreferences({}, rung2.mutations);
+        // The course is excluded from the near term AND pinned to the later term
+        // — so the solver relocates it instead of dropping it from the plan.
+        expect(prefs.exclusions ?? []).toContainEqual({ courseId: "CSCI-UA 421", term: "2026-fall" });
+        expect(prefs.pins ?? []).toContainEqual(
+            expect.objectContaining({ courseId: "CSCI-UA 421", term: "2027-spring" }),
+        );
     });
 });
 
@@ -299,5 +326,36 @@ describe("runSectionReplanLoop — E4 (§2⑤ bounded outer loop)", () => {
         const r = await runSectionReplanLoop(plan("p0"), deps, { cap: 2, rejectedCourseIds: ["CSCI-UA 421"] });
         expect(r.kind).toBe("replan");
         expect(seen[0]).toEqual(["CSCI-UA 421"]); // soft-rejection on cycle 0
+    });
+
+    it("gradTermChanged is computed against the ORIGINAL plan at return time (not OR-accumulated)", async () => {
+        // The re-plan's final schedule shifts graduation to a later term.
+        const shifted = { graduationTerm: "2027-fall" } as unknown as ForwardSchedule;
+        let call = 0;
+        const deps: SectionReplanLoopDeps = {
+            materialize: async () => {
+                call++;
+                return call === 1
+                    ? { candidateCount: 0, unavailableCourses: ["X"], nearTerm: "2026-fall" }
+                    : { candidateCount: 2, unavailableCourses: [], nearTerm: "2027-spring" };
+            },
+            escalate: async (): Promise<ResolutionResult> => ({ resolutions: [resolution(shifted, ["X"])], reason: null }),
+        };
+        const r = await runSectionReplanLoop(plan("p0"), deps, { cap: 2 });
+        expect(r.kind).toBe("replan");
+        if (r.kind === "replan") {
+            expect(r.gradTerm).toBe("2027-fall");
+            expect(r.gradTermChanged).toBe(true); // 2027-fall !== original 2027-spring
+        }
+    });
+
+    it("feasible-but-unverified (materialize checked:false) → kind 'feasible' with checked:false", async () => {
+        const deps: SectionReplanLoopDeps = {
+            materialize: async () => ({ candidateCount: 1, unavailableCourses: [], nearTerm: "2027-fall", checked: false }),
+            escalate: async () => { throw new Error("escalate must not be called when feasible"); },
+        };
+        const r = await runSectionReplanLoop(plan("p0"), deps, { cap: 2 });
+        expect(r.kind).toBe("feasible");
+        if (r.kind === "feasible") expect(r.checked).toBe(false);
     });
 });

@@ -136,12 +136,24 @@ export function generateResolutionLadder(ctx: LadderContext): ResolutionBatch[] 
 
     // Rungs 2 + 3 need a later term to move into.
     if (nearestLater !== undefined) {
+        // A `move` mutation alone only EXCLUDES the course (term-agnostically),
+        // so the solver would DROP it from the plan rather than relocate it (see
+        // applyMutationsToPreferences' move case — the toTerm placement is the
+        // caller's job). Mirror `/api/plan/move`: pair every move with a
+        // `pin(toTerm, freeze:true)` so the course actually lands in the later
+        // term. (freeze:false is a no-op at the prefs layer, so freeze MUST be
+        // true here — there is no route-layer toTerm placement on the bridge path.)
+        const relocate = (courseId: string): PlanMutation[] => [
+            { kind: "move", courseId, fromTerm: nearTerm, toTerm: nearestLater },
+            { kind: "pin", courseId, term: nearestLater, freeze: true },
+        ];
+
         // Rung 2 — single-course cross-term move (one batch per failing course).
         for (const courseId of failure.courseIds) {
             batches.push({
                 rung: 2,
                 strategy: `move ${courseId} to ${nearestLater}`,
-                mutations: [{ kind: "move", courseId, fromTerm: nearTerm, toTerm: nearestLater }],
+                mutations: relocate(courseId),
                 movedCourseIds: [courseId],
             });
         }
@@ -152,12 +164,7 @@ export function generateResolutionLadder(ctx: LadderContext): ResolutionBatch[] 
             batches.push({
                 rung: 3,
                 strategy: `move ${moved.join(" + ")} to ${nearestLater}`,
-                mutations: moved.map(courseId => ({
-                    kind: "move" as const,
-                    courseId,
-                    fromTerm: nearTerm,
-                    toTerm: nearestLater,
-                })),
+                mutations: moved.flatMap(relocate),
                 movedCourseIds: moved,
             });
         }
@@ -307,10 +314,13 @@ export function makeFrozenSeamEvaluator(
 /** Injected dependencies for the outer loop (production wires
  *  `materialize_feasible` + the bridge; tests stub both). */
 export interface SectionReplanLoopDeps {
-    /** Materialize the near-term of a plan → the feasibility signal A1 reads. */
+    /** Materialize the near-term of a plan → the feasibility signal A1 reads.
+     *  `checked` is false when there was no live FOSE data to verify against
+     *  (state ≠ "full" / no concrete courses) — the loop reports such a term as
+     *  feasible-BUT-UNVERIFIED so the agent hedges instead of over-claiming. */
     materialize: (
         plan: ForwardSchedule,
-    ) => Promise<{ candidateCount: number; unavailableCourses: string[]; nearTerm: string }>;
+    ) => Promise<{ candidateCount: number; unavailableCourses: string[]; nearTerm: string; checked?: boolean }>;
     /** Escalate a classified failure on a plan → the ranked validated resolutions (A2+A3). */
     escalate: (failure: SectionFailure, plan: ForwardSchedule, nearTerm: string) => Promise<ResolutionResult>;
 }
@@ -323,7 +333,13 @@ export interface SectionReplanLoopOptions {
 }
 
 export type SectionReplanLoopResult =
-    | { kind: "feasible"; nearTerm: string; cycles: number }
+    | {
+          kind: "feasible";
+          nearTerm: string;
+          cycles: number;
+          /** False when there was no live FOSE data to verify (agent should hedge). */
+          checked: boolean;
+      }
     | {
           kind: "replan";
           /** Accumulated mutations transforming the original plan → finalPlan. */
@@ -361,8 +377,6 @@ export async function runSectionReplanLoop(
     let cycles = 0;
     const mutations: PlanMutation[] = [];
     const moved = new Set<string>();
-    let gradTerm = plan.graduationTerm;
-    let gradTermChanged = false;
 
     // Hard upper bound on iterations as a belt-and-suspenders guard against a
     // mis-wired dep — the loop returns on feasible / no-op / cap long before this.
@@ -377,7 +391,7 @@ export async function runSectionReplanLoop(
 
         if (failure === null) {
             return cycles === 0
-                ? { kind: "feasible", nearTerm: m.nearTerm, cycles }
+                ? { kind: "feasible", nearTerm: m.nearTerm, cycles, checked: m.checked ?? true }
                 : {
                       kind: "replan",
                       mutations,
@@ -385,8 +399,10 @@ export async function runSectionReplanLoop(
                       finalPlan: current,
                       nearTerm: m.nearTerm,
                       cycles,
-                      gradTermChanged,
-                      gradTerm,
+                      // Computed against the ORIGINAL plan at return time (a
+                      // shift-then-unshift across cycles nets to unchanged).
+                      gradTermChanged: current.graduationTerm !== plan.graduationTerm,
+                      gradTerm: current.graduationTerm,
                   };
         }
 
@@ -413,8 +429,6 @@ export async function runSectionReplanLoop(
         mutations.push(...best.batch.mutations);
         best.batch.movedCourseIds.forEach(c => moved.add(c));
         current = best.schedule;
-        gradTerm = best.gradTerm;
-        gradTermChanged = gradTermChanged || best.gradTermChanged;
         cycles++;
     }
 

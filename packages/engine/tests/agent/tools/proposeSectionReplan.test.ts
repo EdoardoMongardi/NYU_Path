@@ -89,13 +89,21 @@ describe("propose_section_replan — call", () => {
     });
 
     it("near-term already feasible → kind 'feasible' (no escalation needed)", async () => {
-        mockedLoop.mockResolvedValue({ kind: "feasible", nearTerm: "2026-fall", cycles: 0 });
+        mockedLoop.mockResolvedValue({ kind: "feasible", nearTerm: "2026-fall", cycles: 0, checked: true });
         const out = await proposeSectionReplanTool.call({}, ctx());
         expect(out.kind).toBe("feasible");
+        expect(out.summary.toLowerCase()).toContain("schedulable");
+    });
+
+    it("feasible but UNVERIFIED (no FOSE data) → hedges instead of over-claiming schedulability", async () => {
+        mockedLoop.mockResolvedValue({ kind: "feasible", nearTerm: "2027-fall", cycles: 0, checked: false });
+        const out = await proposeSectionReplanTool.call({}, ctx());
+        expect(out.kind).toBe("feasible");
+        expect(out.summary.toLowerCase()).toMatch(/couldn't verify|not.*published|closer to registration/);
     });
 
     it("passes rejectedCourseIds through to the loop", async () => {
-        mockedLoop.mockResolvedValue({ kind: "feasible", nearTerm: "2026-fall", cycles: 0 });
+        mockedLoop.mockResolvedValue({ kind: "feasible", nearTerm: "2026-fall", cycles: 0, checked: true });
         await proposeSectionReplanTool.call({ rejectedCourseIds: ["CSCI-UA 421"] }, ctx());
         expect(mockedLoop.mock.calls[0]![2]).toMatchObject({ rejectedCourseIds: ["CSCI-UA 421"] });
     });

@@ -75,13 +75,14 @@ export function buildSectionReplanLoopDeps(
         materialize: async (plan) => {
             const near = nearSemesterOf(plan);
             // No non-locked term, or no concrete courses there → nothing to
-            // section-check ⇒ NOT a failure (don't escalate on absence).
-            if (!near) return { candidateCount: 1, unavailableCourses: [], nearTerm: plan.graduationTerm };
+            // section-check ⇒ NOT a failure (don't escalate on absence), but
+            // `checked:false` since no live schedulability was verified.
+            if (!near) return { candidateCount: 1, unavailableCourses: [], nearTerm: plan.graduationTerm, checked: false };
             const courseIds = near.slots
                 .filter((s): s is Extract<typeof s, { kind: "specific_planned" }> => s.kind === "specific_planned")
                 .map((s) => s.courseId);
             if (courseIds.length === 0) {
-                return { candidateCount: 1, unavailableCourses: [], nearTerm: near.term };
+                return { candidateCount: 1, unavailableCourses: [], nearTerm: near.term, checked: false };
             }
             const r = await materializeFeasible({
                 termCode: near.term,
@@ -91,11 +92,12 @@ export function buildSectionReplanLoopDeps(
                 ...(opts.cache ? { cache: opts.cache } : {}),
             });
             // Only a "full" verdict carries real feasibility signal. unavailable/
-            // partial = no live FOSE data ⇒ can't check ⇒ not a failure.
+            // partial = no live FOSE data ⇒ can't check ⇒ not a failure (and
+            // checked:false so the agent hedges instead of over-claiming).
             if (r.state !== "full") {
-                return { candidateCount: 1, unavailableCourses: [], nearTerm: near.term };
+                return { candidateCount: 1, unavailableCourses: [], nearTerm: near.term, checked: false };
             }
-            return { candidateCount: r.candidates.length, unavailableCourses: r.unavailableCourses, nearTerm: near.term };
+            return { candidateCount: r.candidates.length, unavailableCourses: r.unavailableCourses, nearTerm: near.term, checked: true };
         },
 
         escalate: async (failure, plan, nearTerm) => {

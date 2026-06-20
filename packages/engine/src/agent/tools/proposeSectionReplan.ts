@@ -83,7 +83,10 @@ export const proposeSectionReplanTool = buildTool<typeof inputSchema, ProposeSec
         if (result.kind === "feasible") {
             return {
                 kind: "feasible",
-                summary: "The near term is schedulable as planned — no structural re-plan is needed.",
+                summary: result.checked
+                    ? "The near term is schedulable as planned — no structural re-plan is needed."
+                    : "I couldn't verify the near term's sections — NYU hasn't published section data for it yet. " +
+                      "No re-plan is needed on what I can see; verify the live sections closer to registration.",
             };
         }
         if (result.kind === "no-op") {
