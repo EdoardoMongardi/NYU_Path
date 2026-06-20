@@ -56,6 +56,26 @@ describe("resolveIpSectionsToBlocks — #2", () => {
         expect(unresolved.sort()).toEqual(["CSCI-UA 101", "PHYS-UA 11"]);
     });
 
+    it("an empty/blank meets with no meetingTimes and no CRN is UNRESOLVED (not silently async) — avoids a conflict blind spot", async () => {
+        const { blocks, unresolved } = await resolveIpSectionsToBlocks(
+            [{ courseId: "X", meets: "" }, { courseId: "Y", meets: "   " }],
+            "1268",
+            { searchFn },
+        );
+        expect(blocks).toEqual([]);
+        expect(unresolved.sort()).toEqual(["X", "Y"]);
+    });
+
+    it("a genuine async token (Does Not Meet) IS resolved (no block, not hedged)", async () => {
+        const { blocks, unresolved } = await resolveIpSectionsToBlocks(
+            [{ courseId: "Z", meets: "Does Not Meet" }],
+            "1268",
+            { searchFn },
+        );
+        expect(blocks).toEqual([]);
+        expect(unresolved).toEqual([]);
+    });
+
     it("accumulates blocks across multiple resolved IP courses", async () => {
         const { blocks } = await resolveIpSectionsToBlocks(
             [{ courseId: "CSCI-UA 101", crn: "8919" }, { courseId: "X", meetingTimes: TUE_9_10 }],

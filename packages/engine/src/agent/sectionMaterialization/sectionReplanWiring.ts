@@ -27,6 +27,7 @@ import {
     type SectionReplanLoopDeps,
 } from "./sectionReplanBridge.js";
 import { findWithinTermAlternatives, makeLeafSiblingsResolver } from "./withinTermSwap.js";
+import { isAvailableStatus } from "./statusHelpers.js";
 
 type SearchFn = (termCode: string, keyword: string) => Promise<unknown[]>;
 
@@ -42,12 +43,18 @@ function nearSemesterOf(plan: ForwardSchedule) {
     return plan.semesters.find((s) => !s.locked);
 }
 
-/** Live "offered + open/waitlist this term" check (rung-1 swap candidates). */
-function makeFoseOpenCheck(searchFn: SearchFn): (courseId: string, term: string) => Promise<boolean> {
+/**
+ * Live "offered + usable this term" check (rung-1 within-term swap candidates).
+ * Uses `isAvailableStatus` (O | W | A) — NOT a bare O||W — because the public
+ * FOSE API returns `stat:"A"` for every live section (seat status unknown); a
+ * bare O/W check would reject every live sibling and silently kill rung-1.
+ * Exported for direct unit testing against all-"A" rows.
+ */
+export function makeFoseOpenCheck(searchFn: SearchFn): (courseId: string, term: string) => Promise<boolean> {
     return async (courseId, term) => {
         try {
             const rows = (await searchFn(term, courseId)) as Array<{ code?: string; stat?: string }>;
-            return rows.some((r) => r.code === courseId && (r.stat === "O" || r.stat === "W"));
+            return rows.some((r) => r.code === courseId && isAvailableStatus(r.stat ?? ""));
         } catch {
             return false;
         }

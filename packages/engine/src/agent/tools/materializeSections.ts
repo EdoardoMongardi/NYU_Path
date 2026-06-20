@@ -251,6 +251,19 @@ export const materializeSectionsTool = buildTool({
             });
         }
 
+        // Seat-status honesty (Phase 38): the public FOSE API returns "A"
+        // (offered, seat-status unknown) for every live section — never live
+        // open/waitlist/closed. If any staged section is "A", say so rather
+        // than implying these combinations are confirmed-registrable.
+        const hasUnknownSeat = result.semester.combinations.some((combo) =>
+            combo.sections.some((s) => s.status === "A"),
+        );
+        const seatHedge = hasUnknownSeat
+            ? " NOTE: NYU's public course data does not show live seat availability " +
+              "(open/waitlist/closed) — these combinations are conflict-free + offered, " +
+              "but verify each section is actually open in Albert before registering."
+            : "";
+
         const out: MaterializeSectionsOutput = {
             ...result,
             // Append the IP-section uncertainty caveat to the
@@ -258,7 +271,7 @@ export const materializeSectionsTool = buildTool({
             // LLM summary. The conflict-free combinations only span the
             // `specific_planned` courseIds we passed; pre-registered IP
             // courses are absent from the conflict graph.
-            message: result.message + ipWarning,
+            message: result.message + ipWarning + seatHedge,
             proposals,
             targetTerm: input.targetTerm,
         };

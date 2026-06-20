@@ -22,6 +22,7 @@
 import { z } from "zod";
 import { conflicts } from "./conflictDetection.js";
 import type { FeasibleCandidateView } from "./materializeFeasible.js";
+import type { MeetingPattern } from "./types.js";
 
 /** The agent's schema-forced top-5 selection over candidateIds. */
 export const agentSelectionSchema = z.object({
@@ -110,7 +111,10 @@ export interface RevalidateResult {
  * A candidate failing any check is rejected with a reason — a
  * tampered / infeasible pick can never reach a confirm. Pure.
  */
-export function revalidatePick(picked: FeasibleCandidateView[]): RevalidateResult {
+export function revalidatePick(
+    picked: FeasibleCandidateView[],
+    occupiedBlocks: MeetingPattern[] = [],
+): RevalidateResult {
     const valid: FeasibleCandidateView[] = [];
     const rejected: Array<{ candidateId: string; reason: string }> = [];
 
@@ -127,8 +131,15 @@ export function revalidatePick(picked: FeasibleCandidateView[]): RevalidateResul
             continue;
         }
 
-        // 2. no two blocks may conflict in time
+        // 2. no two blocks may conflict in time, AND no block may clash with the
+        // already-registered IP-course times (occupiedBlocks) — the same
+        // invariant the enumerator enforced, re-asserted before any confirm.
         let conflictFound = false;
+        const ipClash = components.find(comp => conflicts(comp.meetingBlocks, occupiedBlocks));
+        if (ipClash) {
+            rejected.push({ candidateId: c.candidateId, reason: `section ${ipClash.crn} clashes with an already-registered course` });
+            continue;
+        }
         const blocks = components.map(comp => comp.meetingBlocks);
         for (let i = 0; i < blocks.length && !conflictFound; i++) {
             for (let j = i + 1; j < blocks.length; j++) {

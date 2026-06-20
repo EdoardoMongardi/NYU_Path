@@ -162,6 +162,16 @@ describe("revalidatePick (guardrail)", () => {
         expect(res.rejected[0]!.reason.toLowerCase()).toContain("conflict");
     });
 
+    it("rejects a candidate that clashes with occupiedBlocks (already-registered IP course)", () => {
+        const c = candidate("ip-clash", { blocks: [{ day: "M", startMin: 540, endMin: 600 }] });
+        // Same candidate is fine with no occupied blocks...
+        expect(revalidatePick([c]).valid.map(v => v.candidateId)).toEqual(["ip-clash"]);
+        // ...but rejected when an IP course already occupies Mon 9–10.
+        const res = revalidatePick([c], [{ day: "M", startMin: 540, endMin: 600 }]);
+        expect(res.valid).toEqual([]);
+        expect(res.rejected[0]!.reason.toLowerCase()).toContain("already-registered");
+    });
+
     it("rejects a waitlisted candidate missing its open backup", () => {
         const noBackup = candidate("nb", { status: "W", waitlistCrns: ["nb-a"], openFallbacks: [] });
         const res = revalidatePick([noBackup]);

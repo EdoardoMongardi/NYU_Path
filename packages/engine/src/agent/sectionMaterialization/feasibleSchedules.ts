@@ -149,6 +149,7 @@ function resolveWaitlistBackups(
     flatSections: SectionView[],
     componentsByCourse: Map<string, CourseComponents>,
     backupResolver: BackupResolver | undefined,
+    occupiedBlocks: MeetingPattern[],
 ): OpenFallback[] | null {
     const fallbacks: OpenFallback[] = [];
     // Blocks of the backups already chosen for earlier W sections in this
@@ -166,15 +167,18 @@ function resolveWaitlistBackups(
             .flatMap(other => other.meetingPatterns);
 
         // (1) Prefer a same-course, same-component OPEN backup that is
-        // conflict-free with BOTH the rest AND the other chosen backups
-        // (Albert auto-swap, grad-trivial).
+        // conflict-free with the rest, the other chosen backups, AND the
+        // already-registered IP-course times (occupiedBlocks) — you'd
+        // actually register the backup, so it can't clash with what the
+        // student is already enrolled in.
         const group = componentsByCourse.get(s.courseId)?.components.get(normalizeComponent(s.schd));
         const sameCourse = (group ?? []).find(
             b =>
                 isOpen(b) &&
                 b.crn !== s.crn &&
                 !conflicts(b.meetingPatterns, restPatterns) &&
-                !conflicts(b.meetingPatterns, chosenBackupPatterns),
+                !conflicts(b.meetingPatterns, chosenBackupPatterns) &&
+                !conflicts(b.meetingPatterns, occupiedBlocks),
         );
         if (sameCourse !== undefined) {
             fallbacks.push({ forCrn: s.crn, fallbackCrn: sameCourse.crn });
@@ -189,7 +193,7 @@ function resolveWaitlistBackups(
         const resolved = backupResolver?.({
             waitlisted: s,
             restPatterns,
-            otherBackupPatterns: [...chosenBackupPatterns],
+            otherBackupPatterns: [...chosenBackupPatterns, ...occupiedBlocks],
         });
         if (resolved != null) {
             fallbacks.push({ forCrn: s.crn, fallbackCrn: resolved.fallbackCrn });
@@ -252,7 +256,7 @@ function runEnumeration(
             // In waitlist-only mode skip no-waitlist candidates (the prior pass
             // owns them — this guarantees open ≻ waitlist survives truncation).
             if (mode === "waitlist-only" && !hasWaitlist) return;
-            const fallbacks = resolveWaitlistBackups(pickedSections, componentsByCourse, backupResolver);
+            const fallbacks = resolveWaitlistBackups(pickedSections, componentsByCourse, backupResolver, occupiedBlocks);
             if (fallbacks === null) return; // a W section lacked a valid backup
             candidates.push({
                 selections: picked.map(p => ({ ...p, sections: [...p.sections] })),

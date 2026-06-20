@@ -141,7 +141,10 @@ export const materializeFeasibleTool = buildTool<typeof inputSchema, Materialize
 
         // #2 — already-registered (IP) courses occupy fixed times the remaining
         // courses must avoid. Resolve any student-supplied sections → blocks.
-        const ipSections = input.ipSections ?? [];
+        // Only honor ipSections for courses that ARE in_progress in this term
+        // (a mismatched courseId must not spuriously constrain the candidates).
+        const ipSlotSet = new Set(ipCourseIds);
+        const ipSections = (input.ipSections ?? []).filter(s => ipSlotSet.has(s.courseId));
         const { blocks: occupiedBlocks, unresolved } = ipSections.length > 0
             ? await resolveIpSectionsToBlocks(ipSections, input.targetTerm, { cache: SHARED_FOSE_CACHE })
             : { blocks: [], unresolved: [] as string[] };

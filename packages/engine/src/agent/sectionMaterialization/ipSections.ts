@@ -67,14 +67,22 @@ export async function resolveIpSectionsToBlocks(
     const unresolved: string[] = [];
 
     for (const ip of ipSections) {
-        // 1. Student-supplied times take precedence (no FOSE call).
-        if (ip.meetingTimes !== undefined || ip.meets !== undefined) {
+        // 1. Student-supplied times take precedence (no FOSE call). Only when
+        // there is ACTUAL time content — an empty/blank meets with no
+        // meetingTimes must NOT be treated as "asynchronous" (parseMeetingTimes
+        // maps "" → async); that would silently resolve the course to no block
+        // AND no hedge = a time-conflict blind spot. Blank → fall through to
+        // the CRN lookup, else unresolved (hedged).
+        const hasMeetingTimes = ip.meetingTimes !== undefined && ip.meetingTimes.trim() !== "";
+        const hasMeets = ip.meets !== undefined && ip.meets.trim() !== "";
+        if (hasMeetingTimes || hasMeets) {
             const parsed = parseMeetingTimes(ip.meets ?? "", ip.meetingTimes);
             if (parsed.kind === "ok") {
                 blocks.push(...parsed.patterns);
                 continue;
             }
-            // asynchronous = no meeting time → nothing to avoid; resolved.
+            // A genuine async token ("Does Not Meet" / online / TBA) → no
+            // meeting time to avoid; resolved.
             if (parsed.kind === "asynchronous") continue;
             unresolved.push(ip.courseId);
             continue;

@@ -204,6 +204,18 @@ describe("enumerateFeasibleSchedules — 0.2 waitlist backup", () => {
         expect(allOpen[0]!.selections[0]!.sections[0]!.crn).toBe("o1");
     });
 
+    it("a waitlist backup that clashes with an occupiedBlock (IP course) is NOT a valid backup → the W candidate is rejected", () => {
+        // X: lx waitlisted (Mon); its only open same-course backup bx is Tue.
+        // The student is already registered for an IP course at Tue → bx clashes
+        // it → no valid backup → the lx candidate must be rejected.
+        const X = groupByComponent("X", "X", [
+            sec("X", "lx", "LEC", "W", [MON(540, 600)]),
+            sec("X", "bx", "LEC", "O", [TUE(540, 600)]),
+        ]);
+        const { candidates } = enumerateFeasibleSchedules([X], { occupiedBlocks: [TUE(540, 600)] });
+        expect(candidates.find(c => c.waitlistCrns.includes("lx"))).toBeUndefined();
+    });
+
     it("occupiedBlocks (already-registered IP-course times) exclude candidates that clash with them", () => {
         const X = groupByComponent("X", "X", [sec("X", "x1", "LEC", "O", [MON(540, 600)])]); // Mon 9-10
         // Student is already registered for an IP course meeting Mon 9-10 → clash.

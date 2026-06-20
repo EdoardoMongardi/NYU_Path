@@ -186,4 +186,18 @@ describe("materialize_feasible — call", () => {
         // The IP course's section IS known now → no elicitation hedge for it.
         expect(out.hedges.some(h => h.includes("CSCI-UA 101"))).toBe(false);
     });
+
+    it("#2: an ipSection for a course that is NOT in_progress this term is ignored (no spurious occupiedBlocks)", async () => {
+        mocked.mockResolvedValue({
+            state: "full", termCode: "2026-fall", message: "ok",
+            candidates: [], truncated: false, hedges: [], unavailableCourses: [],
+        });
+        // No in_progress slot → a stray ipSection must not constrain candidates.
+        const sess = { forwardSchedule: schedule([semester("2026-fall", [specificPlanned("A")])]) };
+        await materializeFeasibleTool.call({
+            targetTerm: "2026-fall",
+            ipSections: [{ courseId: "GHOST-UA 1", meetingTimes: JSON.stringify([{ meet_day: "0", start_time: "900", end_time: "1000" }]) }],
+        }, ctx(sess));
+        expect(mocked.mock.calls[0]![0]!.occupiedBlocks).toBeUndefined();
+    });
 });
