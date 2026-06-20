@@ -8,9 +8,12 @@
 //
 //   (a) NO time conflict across ALL component blocks of every course
 //       (a recitation/lab clashes exactly like a lecture);
-//   (b) every chosen section is open (`O`) or waitlist (`W`) — the
-//       caller pre-filters closed/cancelled sections out of the
-//       component groups (orchestrator step);
+//   (b) every chosen section is usable — open (`O`), waitlist (`W`), or
+//       `A` (offered, seat-status-unknown — the only status the public
+//       FOSE API returns live); the caller pre-filters closed/cancelled
+//       sections out of the component groups (orchestrator step). It may
+//       also pass `occupiedBlocks` (already-registered IP-course times)
+//       the candidate must avoid;
 //   (c) [strict student prefs are applied upstream, before grouping];
 //   (d) the §2①(d) two-state waitlist backup: a `W` section keeps a
 //       candidate feasible ONLY if there is a SPECIFIC OPEN backup
@@ -95,6 +98,14 @@ export interface EnumerateFeasibleOptions {
     cap?: number;
     /** Different-course grad-valid backup resolver (Phase A/B/C). */
     backupResolver?: BackupResolver;
+    /**
+     * Phase 38 #2 — FIXED, already-occupied time blocks the candidate must
+     * avoid: the meeting times of courses the student is ALREADY registered for
+     * this term (IP courses). The DPR doesn't carry the registered section, so
+     * the caller resolves these (student-supplied CRN/times) and passes them
+     * here; every candidate's blocks must be conflict-free against them.
+     */
+    occupiedBlocks?: MeetingPattern[];
 }
 
 export interface FeasibleScheduleResult {
@@ -195,24 +206,26 @@ function resolveWaitlistBackups(
     return fallbacks;
 }
 
-/** Keep only the OPEN sections of each component group (drop waitlist). */
-function filterCourseToOpen(course: CourseComponents): CourseComponents {
+/** Keep only the NON-WAITLIST sections of each component group (drop W).
+ *  These are O (confirmed open) + A (offered, seat-unknown) — the tier that
+ *  needs no auto-swap backup. */
+function filterCourseToNonWaitlist(course: CourseComponents): CourseComponents {
     const components = new Map<string, SectionView[]>();
     for (const [key, sections] of course.components) {
-        components.set(key, sections.filter(isOpen));
+        components.set(key, sections.filter(s => !isWaitlist(s)));
     }
     return { ...course, components };
 }
 
-type EnumMode = "all-open" | "waitlist-only";
+type EnumMode = "non-waitlist" | "waitlist-only";
 
 /**
  * Core backtracking enumeration. Collects up to `cap` FEASIBLE candidates
  * matching `mode`:
- *   - "all-open"      → every candidate is all-open (input groups are
- *     pre-filtered to open sections, so none can be waitlist).
+ *   - "non-waitlist"  → every candidate has NO waitlist section (input
+ *     groups are pre-filtered to drop W, so candidates are O/A only).
  *   - "waitlist-only" → only candidates containing ≥1 waitlist section are
- *     kept (all-open ones are produced by the prior all-open pass).
+ *     kept (the no-waitlist ones are produced by the prior pass).
  * `componentsByCourse` must be the FULL (O|W) groups so same-course open
  * backups remain findable.
  */
@@ -222,6 +235,7 @@ function runEnumeration(
     cap: number,
     backupResolver: BackupResolver | undefined,
     mode: EnumMode,
+    occupiedBlocks: MeetingPattern[],
 ): FeasibleScheduleResult {
     const perCourseSelections = courses.map(c => enumerateCourseSelections(c));
     const candidates: FeasibleCandidate[] = [];
@@ -235,7 +249,7 @@ function runEnumeration(
         if (idx === courses.length) {
             const waitlistCrns = pickedSections.filter(isWaitlist).map(s => s.crn);
             const hasWaitlist = waitlistCrns.length > 0;
-            // In waitlist-only mode skip all-open candidates (the prior pass
+            // In waitlist-only mode skip no-waitlist candidates (the prior pass
             // owns them — this guarantees open ≻ waitlist survives truncation).
             if (mode === "waitlist-only" && !hasWaitlist) return;
             const fallbacks = resolveWaitlistBackups(pickedSections, componentsByCourse, backupResolver);
@@ -255,9 +269,11 @@ function runEnumeration(
                 truncated = true;
                 return;
             }
-            // Every block of this selection must be conflict-free with
-            // every already-picked block (across courses).
+            // Every block of this selection must be conflict-free with every
+            // already-picked block (across courses) AND with the fixed
+            // occupied blocks (already-registered IP courses this term).
             const clashes = selection.sections.some(s =>
+                conflicts(s.meetingPatterns, occupiedBlocks) ||
                 pickedSections.some(prev => conflicts(prev.meetingPatterns, s.meetingPatterns)),
             );
             if (clashes) continue;
@@ -278,7 +294,7 @@ function runEnumeration(
  * already be filtered to open/waitlist sections (closed/cancelled
  * removed) and have any strict scheduling preferences applied.
  *
- * TWO PASSES so the cap never drops an all-open candidate in favor of a
+ * TWO PASSES so the cap never drops a no-waitlist candidate in favor of a
  * waitlist-containing one (the binding "open ≻ waitlist" invariant must
  * survive truncation): pass 1 enumerates ALL-OPEN candidates over the
  * open-only groups; pass 2 fills any remaining cap budget with
@@ -296,18 +312,21 @@ export function enumerateFeasibleSchedules(
     // FULL groups — so the waitlist backup search can see open sections.
     const componentsByCourse = new Map(courses.map(c => [c.courseId, c]));
 
-    // Pass 1 — all-open candidates only (over open-filtered groups).
-    const openCourses = courses.map(filterCourseToOpen);
-    const pass1 = runEnumeration(openCourses, componentsByCourse, cap, opts.backupResolver, "all-open");
+    // Pass 1 — NO-WAITLIST candidates (over groups with W dropped). These
+    // never need an auto-swap backup; doing them first guarantees the cap
+    // can't drop a no-waitlist candidate in favor of a waitlist one.
+    const nonWaitlistCourses = courses.map(filterCourseToNonWaitlist);
+    const occupiedBlocks = opts.occupiedBlocks ?? [];
+    const pass1 = runEnumeration(nonWaitlistCourses, componentsByCourse, cap, opts.backupResolver, "non-waitlist", occupiedBlocks);
 
     if (pass1.candidates.length >= cap) {
-        // The cap is full of all-open candidates; more (open or waitlist) exist.
+        // The cap is full of no-waitlist candidates; more exist.
         return { candidates: pass1.candidates, truncated: true };
     }
 
     // Pass 2 — fill the remaining budget with waitlist-containing candidates.
     const remaining = cap - pass1.candidates.length;
-    const pass2 = runEnumeration(courses, componentsByCourse, remaining, opts.backupResolver, "waitlist-only");
+    const pass2 = runEnumeration(courses, componentsByCourse, remaining, opts.backupResolver, "waitlist-only", occupiedBlocks);
 
     return {
         candidates: [...pass1.candidates, ...pass2.candidates],

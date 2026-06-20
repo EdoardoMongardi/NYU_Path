@@ -192,6 +192,29 @@ describe("materializeFeasible — 0.3 orchestrator", () => {
         expect(result.candidates.some(c => c.hasWaitlist)).toBe(true);
     });
 
+    it("all-'A' sections (the LIVE FOSE reality) still produce candidates + a seat-status hedge (not spurious 'unavailable')", async () => {
+        // Live FOSE returns stat:"A" (offered, seat-status-unknown) for every
+        // section — never O/W/C. The candidates must still be produced (they're
+        // conflict-free + offered); seat availability is hedged, not asserted.
+        const map: Record<string, RawRow[]> = {
+            A: [row("A", "a1", MON_9_10, { stat: "A", total: "30" })],
+            B: [row("B", "b1", TUE_9_10, { stat: "A", total: "25" })],
+        };
+        const result = await materializeFeasible({
+            termCode: "1268",
+            courseIds: ["A", "B"],
+            searchFn: searchFromMap(map),
+            cache: new FoseCache<unknown[]>(),
+        });
+        expect(result.state).toBe("full");
+        expect(result.candidates.length).toBeGreaterThan(0);
+        expect(result.unavailableCourses).toEqual([]); // NOT spuriously wiped
+        // component status carries "A" (unknown), and a seat-status hedge fires.
+        const statuses = result.candidates[0]!.courses.flatMap(c => c.components.map(comp => comp.status));
+        expect(statuses).toContain("A");
+        expect(result.hedges.some(h => /seat|availability|albert/i.test(h))).toBe(true);
+    });
+
     it("unavailable state: searchFn returns nothing → no candidates", async () => {
         const result = await materializeFeasible({
             termCode: "1268",

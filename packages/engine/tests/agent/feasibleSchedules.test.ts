@@ -203,4 +203,14 @@ describe("enumerateFeasibleSchedules — 0.2 waitlist backup", () => {
         expect(allOpen).toHaveLength(1);
         expect(allOpen[0]!.selections[0]!.sections[0]!.crn).toBe("o1");
     });
+
+    it("occupiedBlocks (already-registered IP-course times) exclude candidates that clash with them", () => {
+        const X = groupByComponent("X", "X", [sec("X", "x1", "LEC", "O", [MON(540, 600)])]); // Mon 9-10
+        // Student is already registered for an IP course meeting Mon 9-10 → clash.
+        const clash = enumerateFeasibleSchedules([X], { occupiedBlocks: [MON(540, 600)] });
+        expect(clash.candidates).toHaveLength(0);
+        // A non-clashing occupied block (Tue) leaves the candidate feasible.
+        const ok = enumerateFeasibleSchedules([X], { occupiedBlocks: [TUE(540, 600)] });
+        expect(ok.candidates).toHaveLength(1);
+    });
 });

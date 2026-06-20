@@ -61,8 +61,12 @@ export interface ComponentView {
     meetingBlocks: MeetingPattern[];
     /** Instructor name(s), verbatim from FOSE (may be empty → TBA). */
     instr: string;
-    /** Open or Waitlist (closed/cancelled are never emitted). */
-    status: "O" | "W";
+    /**
+     * Section status: "O" = confirmed open, "W" = waitlist, "A" = offered but
+     * SEAT STATUS UNKNOWN (the only status the public FOSE API returns live —
+     * verify open/waitlist/closed in Albert). Closed/cancelled are never emitted.
+     */
+    status: "O" | "W" | "A";
     /** Section capacity (FOSE `total`) — NOT an enrolled/waitlist count. */
     capacity?: string;
 }
@@ -123,7 +127,7 @@ const componentViewSchema = z.object({
     meets: z.string(),
     meetingBlocks: z.array(meetingBlockSchema),
     instr: z.string(),
-    status: z.enum(["O", "W"]),
+    status: z.enum(["O", "W", "A"]),
     capacity: z.string().optional(),
 });
 
@@ -165,6 +169,11 @@ const WAITLIST_HEDGE =
     "A waitlisted section is included with a registrable open backup (Albert auto-swap). " +
     "NYU's course data does not expose the waitlist queue length — check your position in Albert.";
 
+const SEAT_STATUS_HEDGE =
+    "Seat availability (open / waitlist / closed) is NOT in NYU's public course data — " +
+    "it lives only in Albert. These schedules are verified to EXIST and fit together with no " +
+    "time conflicts, but confirm each section is actually open before relying on it.";
+
 // ---- Args ----
 
 export interface MaterializeFeasibleArgs {
@@ -174,6 +183,12 @@ export interface MaterializeFeasibleArgs {
     /** Different-course grad-valid waitlist backup resolver (Phase A/B/C). */
     backupResolver?: BackupResolver;
     cap?: number;
+    /**
+     * Phase 38 #2 — fixed meeting blocks of courses the student is ALREADY
+     * registered for this term (resolved from their CRNs/times). Every emitted
+     * candidate is conflict-free against these.
+     */
+    occupiedBlocks?: MeetingPattern[];
     searchFn?: (termCode: string, keyword: string) => Promise<unknown[]>;
     cache?: FoseCache<unknown[]>;
 }
@@ -188,8 +203,9 @@ function toComponentView(s: SectionView): ComponentView {
         meets: s.rawMeets,
         meetingBlocks: s.meetingPatterns,
         instr: s.instructor,
-        // Guaranteed O|W by the upstream filter; narrow defensively.
-        status: s.status === "W" ? "W" : "O",
+        // Upstream filter guarantees O|W|A (closed dropped). Map O→O, W→W,
+        // anything else (the live "A" = seat-status-unknown) → "A".
+        status: s.status === "O" ? "O" : s.status === "W" ? "W" : "A",
         capacity: s.capacity,
     };
 }
@@ -222,6 +238,7 @@ export async function materializeFeasible(
         schedulingPreferences,
         backupResolver,
         cap = MAX_COMBINATIONS,
+        occupiedBlocks,
         searchFn = defaultSearchCourses as (t: string, k: string) => Promise<unknown[]>,
         cache = DEFAULT_CACHE,
     } = args;
@@ -303,6 +320,7 @@ export async function materializeFeasible(
     const { candidates: rawCandidates, truncated } = enumerateFeasibleSchedules(courses, {
         cap,
         backupResolver,
+        ...(occupiedBlocks ? { occupiedBlocks } : {}),
     });
 
     // ---- 7. deterministic pre-rank ----
@@ -317,6 +335,12 @@ export async function materializeFeasible(
     const hasMultiComponent = courses.some(c => c.components.size > 1);
     if (hasMultiComponent) hedges.push(PAIRING_HEDGE);
     if (candidates.some(c => c.hasWaitlist)) hedges.push(WAITLIST_HEDGE);
+    // Any "A" (seat-status-unknown) section → hedge live availability (the
+    // common live case: FOSE never exposes O/W/C).
+    const hasUnknownSeat = candidates.some(c =>
+        c.courses.some(course => course.components.some(comp => comp.status === "A")),
+    );
+    if (hasUnknownSeat) hedges.push(SEAT_STATUS_HEDGE);
     if (unavailableCourses.length > 0) {
         hedges.push(
             `These planned courses have NO open or waitlist section in ${termCode}: ` +

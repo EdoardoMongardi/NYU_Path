@@ -2,20 +2,30 @@
 // sectionMaterialization/statusHelpers.ts — Phase 38 Task G1
 // ============================================================
 // FOSE enrollment-status predicates. Phase 38 splits the old
-// `isOpenStatus` (which conflated `"O"` and `"W"`): a waitlist
-// section is now distinct from an open one. Three predicates:
-//   - isAvailableStatus → O or W  (the "keep in the pool" filter;
-//     a W is still usable via the auto-swap backup, §2①(d))
-//   - isOpenStatus      → O only  (truly open — no waitlist)
+// `isOpenStatus` (which conflated `"O"` and `"W"`):
+//   - isAvailableStatus → O, W, or A  (the "keep in the pool" filter:
+//     a usable, non-closed section)
+//   - isOpenStatus      → O only  (a CONFIRMED open seat)
 //   - isWaitlistStatus  → W only
 //
-// Status codes (verified against the FOSE schema):
-//   "O" = open, "W" = waitlist, "C" = closed, "A" = active (pre-reg).
+// Status codes:
+//   "O" = open, "W" = waitlist, "C" = closed,
+//   "A" = Active/offered, SEAT STATUS UNKNOWN.
+//
+// CRITICAL (verified 2026-06-20): the public FOSE/bulletins API returns
+// `stat:"A"` for EVERY live section — including past terms — and never
+// O/W/C. Live open/waitlist/closed lives only in authenticated
+// Albert/PeopleSoft (out of reach for this read-only adviser). So in
+// practice `"A"` is the ONLY live status, and it is USABLE for
+// time-conflict feasibility (the section exists + has a meeting time);
+// seat availability is HEDGED, not asserted. Excluding "A" dropped every
+// live section → zero candidates. O/W/C handling is retained for the
+// case where real status is known (e.g. student-supplied from Albert).
 // ============================================================
 
-/** O or W — the section is usable (open, or waitlist with a backup). */
+/** O, W, or A — a usable (non-closed) section: keep it in the pool. */
 export function isAvailableStatus(status: string): boolean {
-    return status === "O" || status === "W";
+    return status === "O" || status === "W" || status === "A";
 }
 
 /** O only — truly open, no waitlist. */

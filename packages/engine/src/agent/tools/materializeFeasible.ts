@@ -24,6 +24,7 @@ import {
     type MaterializeFeasibleResult,
 } from "../sectionMaterialization/materializeFeasible.js";
 import { FoseCache } from "../sectionMaterialization/foseCache.js";
+import { resolveIpSectionsToBlocks } from "../sectionMaterialization/ipSections.js";
 
 // Module-level cache shared across calls in a session (5-min TTL).
 const SHARED_FOSE_CACHE = new FoseCache<unknown[]>();
@@ -35,6 +36,25 @@ const inputSchema = z.object({
         .describe(
             'Solver-format term identifier, e.g. "2026-fall". Must match a ' +
             "non-locked semester in session.forwardSchedule.",
+        ),
+    ipSections: z
+        .array(
+            z.object({
+                courseId: z.string(),
+                crn: z.string().optional(),
+                meets: z.string().optional(),
+                meetingTimes: z.string().optional(),
+            }),
+        )
+        .optional()
+        .describe(
+            "The sections of courses the student is ALREADY REGISTERED for in " +
+            "this term (their in-progress/IP courses). The DPR does NOT show " +
+            "which section, so ASK the student and pass each course's CRN (looked " +
+            "up live) or its meeting times here — so the feasible schedules avoid " +
+            "time-conflicting against what they're already enrolled in. Omit if " +
+            "the term has no already-registered courses (or the student doesn't " +
+            "know them — the result will hedge).",
         ),
 });
 
@@ -95,8 +115,10 @@ export const materializeFeasibleTool = buildTool<typeof inputSchema, Materialize
         const semester = schedule.semesters.find(s => s.term === input.targetTerm)!;
 
         const courseIds: string[] = [];
+        const ipCourseIds: string[] = [];
         for (const slot of semester.slots) {
             if (slot.kind === "specific_planned") courseIds.push(slot.courseId);
+            else if (slot.kind === "in_progress") ipCourseIds.push(slot.courseId);
         }
 
         if (courseIds.length === 0) {
@@ -117,16 +139,46 @@ export const materializeFeasibleTool = buildTool<typeof inputSchema, Materialize
         const schedulingPreferences =
             session.schedulePreferences?.schedulingPreferences ?? undefined;
 
+        // #2 — already-registered (IP) courses occupy fixed times the remaining
+        // courses must avoid. Resolve any student-supplied sections → blocks.
+        const ipSections = input.ipSections ?? [];
+        const { blocks: occupiedBlocks, unresolved } = ipSections.length > 0
+            ? await resolveIpSectionsToBlocks(ipSections, input.targetTerm, { cache: SHARED_FOSE_CACHE })
+            : { blocks: [], unresolved: [] as string[] };
+
         const result = await runMaterializeFeasible({
             termCode: input.targetTerm,
             courseIds,
             schedulingPreferences,
+            ...(occupiedBlocks.length > 0 ? { occupiedBlocks } : {}),
             cache: SHARED_FOSE_CACHE,
         });
 
+        // Elicit-or-hedge for IP courses whose section we don't know: any IP
+        // course in this term the student didn't supply a (resolvable) section
+        // for is a time-conflict blind spot — name it + ask, never silently
+        // ignore it (the schedules below can't be conflict-checked against it).
+        const suppliedIds = new Set(ipSections.map(s => s.courseId));
+        const unknownIp = [
+            ...ipCourseIds.filter(id => !suppliedIds.has(id)),
+            ...unresolved,
+        ].filter((v, i, a) => a.indexOf(v) === i);
+        const withIpHedge: MaterializeFeasibleResult = unknownIp.length > 0
+            ? {
+                  ...result,
+                  hedges: [
+                      ...result.hedges,
+                      `You're already registered for ${unknownIp.join(", ")} in ${input.targetTerm}, ` +
+                      `but I don't know which section(s) — your DPR doesn't show the CRN/times. Tell me ` +
+                      `their CRNs (or meeting times) so I can avoid time conflicts; otherwise verify the ` +
+                      `schedules below against your actual Albert registration.`,
+                  ],
+              }
+            : result;
+
         // Guardrail (§2.5): the tool re-validates its own output against the
         // locked schema before returning — a malformed candidate cannot escape.
-        return materializeFeasibleResultSchema.parse(result) as MaterializeFeasibleResult;
+        return materializeFeasibleResultSchema.parse(withIpHedge) as MaterializeFeasibleResult;
     },
     summarizeResult(out) {
         const lines: string[] = [];

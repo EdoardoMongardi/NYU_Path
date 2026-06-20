@@ -103,7 +103,7 @@ export interface RevalidateResult {
 /**
  * Re-validate the chosen candidates before surfacing/confirming
  * (§2.5 guardrail; §2①(d)). Re-asserts, per candidate:
- *   - every component status is O or W;
+ *   - every component status is usable (O, W, or A) — closed never feasible;
  *   - no two component blocks conflict in time;
  *   - every waitlisted section has a recorded open backup;
  *   - the waitlist tag is consistent with the W-status components.
@@ -117,10 +117,13 @@ export function revalidatePick(picked: FeasibleCandidateView[]): RevalidateResul
     for (const c of picked) {
         const components = c.courses.flatMap(course => course.components);
 
-        // 1. status must be O or W (closed/cancelled never feasible)
-        const badStatus = components.find(comp => comp.status !== "O" && comp.status !== "W");
+        // 1. status must be usable — O (open), W (waitlist), or A (offered,
+        // seat-unknown). Only closed/cancelled is infeasible.
+        const badStatus = components.find(
+            comp => comp.status !== "O" && comp.status !== "W" && comp.status !== "A",
+        );
         if (badStatus) {
-            rejected.push({ candidateId: c.candidateId, reason: `section ${badStatus.crn} is not open/waitlist` });
+            rejected.push({ candidateId: c.candidateId, reason: `section ${badStatus.crn} is not a usable (open/waitlist/offered) section` });
             continue;
         }
 

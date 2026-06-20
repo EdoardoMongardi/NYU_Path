@@ -51,10 +51,20 @@ function softProductOf(
 function reasonFor(candidate: FeasibleCandidate, softProduct: number): string {
     const parts: string[] = [];
     const wl = candidate.waitlistCrns.length;
-    if (wl === 0) {
-        parts.push("all sections open");
-    } else {
+    if (wl > 0) {
         parts.push(`${wl} waitlisted section${wl === 1 ? "" : "s"} (lower priority — auto-swap backup required)`);
+    } else {
+        // No waitlist section. Only claim "open" when EVERY section is a
+        // CONFIRMED open seat (status "O"). Live FOSE returns "A" (seat status
+        // unknown), so an all-"A" candidate must not be described as "open".
+        const allConfirmedOpen = candidate.selections.every(sel =>
+            sel.sections.every(s => s.status === "O"),
+        );
+        parts.push(
+            allConfirmedOpen
+                ? "all sections open"
+                : "conflict-free; live seat status unverified — check availability in Albert",
+        );
     }
     if (softProduct > 1) parts.push("matches your scheduling preferences");
     else if (softProduct < 1) parts.push("partially matches your scheduling preferences");

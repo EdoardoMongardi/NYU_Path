@@ -158,4 +158,32 @@ describe("materialize_feasible — call", () => {
         expect(mocked).not.toHaveBeenCalled();
         expect(out.state).toBe("unavailable");
     });
+
+    it("#2: an already-registered (IP) course with no supplied section → result hedges (elicit its section)", async () => {
+        mocked.mockResolvedValue({
+            state: "full", termCode: "2026-fall", message: "ok",
+            candidates: [], truncated: false, hedges: [], unavailableCourses: [],
+        });
+        const ipSlot = { kind: "in_progress", courseId: "CSCI-UA 101" } as unknown as ScheduleSlot;
+        const sess = { forwardSchedule: schedule([semester("2026-fall", [specificPlanned("A"), ipSlot])]) };
+        const out = await materializeFeasibleTool.call({ targetTerm: "2026-fall" }, ctx(sess));
+        expect(out.hedges.some(h => h.includes("CSCI-UA 101") && /section|crn|conflict/i.test(h))).toBe(true);
+    });
+
+    it("#2: supplied IP section times are passed as occupiedBlocks to the orchestrator (no hedge for it)", async () => {
+        mocked.mockResolvedValue({
+            state: "full", termCode: "2026-fall", message: "ok",
+            candidates: [], truncated: false, hedges: [], unavailableCourses: [],
+        });
+        const ipSlot = { kind: "in_progress", courseId: "CSCI-UA 101" } as unknown as ScheduleSlot;
+        const sess = { forwardSchedule: schedule([semester("2026-fall", [specificPlanned("A"), ipSlot])]) };
+        const out = await materializeFeasibleTool.call({
+            targetTerm: "2026-fall",
+            ipSections: [{ courseId: "CSCI-UA 101", meetingTimes: JSON.stringify([{ meet_day: "0", start_time: "900", end_time: "1000" }]) }],
+        }, ctx(sess));
+        const passed = mocked.mock.calls[0]![0]!.occupiedBlocks;
+        expect(passed).toEqual([{ day: "M", startMin: 540, endMin: 600 }]);
+        // The IP course's section IS known now → no elicitation hedge for it.
+        expect(out.hedges.some(h => h.includes("CSCI-UA 101"))).toBe(false);
+    });
 });

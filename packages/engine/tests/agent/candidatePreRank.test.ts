@@ -19,11 +19,15 @@ import type { FeasibleCandidate } from "../../src/agent/sectionMaterialization/f
 import type { SectionView } from "../../src/agent/sectionMaterialization/types.js";
 
 describe("status helpers", () => {
-    it("isAvailableStatus is true for O and W (the keep-in-pool predicate)", () => {
+    it("isAvailableStatus keeps O, W, AND A (offered/seat-unknown); excludes only C/closed", () => {
         expect(isAvailableStatus("O")).toBe(true);
         expect(isAvailableStatus("W")).toBe(true);
+        // "A" = Active/offered, seat status unknown (the ONLY status the public
+        // FOSE API ever returns live). It is usable for time-conflict
+        // feasibility — excluding it dropped every live section. (2026-06-20
+        // finding: FOSE never exposes O/W/C; that's Albert/PeopleSoft only.)
+        expect(isAvailableStatus("A")).toBe(true);
         expect(isAvailableStatus("C")).toBe(false);
-        expect(isAvailableStatus("A")).toBe(false);
     });
     it("isOpenStatus is true ONLY for O (W is no longer plainly open)", () => {
         expect(isOpenStatus("O")).toBe(true);
@@ -112,6 +116,14 @@ describe("preRankCandidates — G1", () => {
         expect(ranked[0]!.candidate).toBe(open);
         expect(Number.isFinite(ranked[0]!.preScore)).toBe(true);
         expect(Number.isFinite(ranked[1]!.preScore)).toBe(true);
+    });
+
+    it("does NOT claim 'open' for an all-A (seat-status-unknown) candidate", () => {
+        const allA = candidate([["a1", "A"], ["a2", "A"]]);
+        const ranked = preRankCandidates([allA]);
+        const reason = ranked[0]!.preRankReason.toLowerCase();
+        expect(reason).not.toContain("open");
+        expect(reason).toMatch(/unverified|seat|albert/);
     });
 
     it("a multiplier of exactly -1 (softProduct+1 === 0, would divide by zero) does not produce NaN/Infinity", () => {
