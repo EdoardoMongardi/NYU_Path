@@ -3,6 +3,7 @@
 All project documentation lives in this folder. Organized 2026-06-10 (full repo audit + consolidation).
 **Start here:** [`core_philosophy.md`](core_philosophy.md) — the project north-star (what the agent must be, "deterministic on validity then preferred", DPR-first, all NYU undergrad). Read it before anything else; it is the standard every other doc serves.
 **Then, reading order for a newcomer:** `current-system/00-overview.md` → `specs/2026-06-05-planning-engine-rebuild-design.md` → `current-system/engine/forward-schedule.md`.
+**Fast retrieval / navigation:** [`index.json`](index.json) — machine-readable concept → spec → implementation → tests crosswalk (query with jq/grep to scope an audit or locate code before deep-diving); [`FROZEN.md`](FROZEN.md) — the frozen engine contract + R1 guardrail manifest (what must never change + its guard tests); [`STATUS.md`](STATUS.md) — rolling current status.
 
 | Folder | What it holds | Ordering |
 |---|---|---|
