@@ -32,6 +32,8 @@ The architecture splits each mutation into a strict two-stage handshake:
 
 Two auxiliary routes wrap the bubble UX: `/api/plan/explain-polish` streams an LLM rewrite of the deterministic explanation text, and `/api/plan/stage2` streams per-term FOSE section enrichments.
 
+> **Plan 38 — `/api/v2/materialize` (read-only; 😴 FOSE-DORMANT).** A separate route (`apps/web/app/api/v2/materialize/route.ts` → `handleMaterializeRoute` → `runMaterializeFeasibleStage` in `planActionOrchestrator.ts`) wraps the deterministic `materialize_feasible` engine: given a target term it returns the verified feasible section-candidate set (Phase-0.3 schema) + `unavailableCourses` + cite-or-hedge notes. It is **read-only** — never persists, never writes `students.parsed_dpr` (R1, test-verified). The section→structure escalation (`propose_section_replan`) reuses the EXISTING `runProposeStage` → `plan_proposal` → Confirm chokepoint documented here (no new commit path). This whole FOSE layer is merged to local `main` but **dormant pending an NYU live-enrollment API** — see `CLAUDE.md` Current status + `section-materialization.md` §8c.
+
 ```mermaid
 flowchart LR
     UI[Chat UI - ⋯-menu verb] --> Add[/api/plan/add/]

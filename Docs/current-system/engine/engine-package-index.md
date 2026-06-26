@@ -1,17 +1,17 @@
 # `@nyupath/engine` Package Index
 
-> Last verified against code: 2026-06-19 (plans 35/36/37: 22 live tools; `propose_whatif_assumption` added (Plan 35); `slotActionMatrix.ts`, `passFailLimitAxis.ts`, `data/passFailDefaults.ts`, expanded `client.ts` added (Plan 37); `planChangeHelpers.ts` gained `resolveBindMutations`/`findPlaceholderSlot` (Plan 37 J2). Prior: 2026-06-15 — cohort gate subsystem removed).
+> Last verified against code: 2026-06-21 (plan 38: **24 live tools** — `materialize_feasible` + `propose_section_replan` added (both read-only); new `sectionMaterialization/` modules `componentGrouping.ts`, `feasibleSchedules.ts`, `statusHelpers.ts`, `candidatePreRank.ts`, `materializeFeasible.ts`, `agentCuration.ts`, `ipSections.ts`, `sectionReplanBridge.ts`, `sectionReplanWiring.ts`, `withinTermSwap.ts`; the barrel re-exports the Phase-38 symbols; `tool.ts` gained an optional `outputSchema?`. **This FOSE section-feasibility layer is merged but 😴 DORMANT pending an NYU live-enrollment API** — see `CLAUDE.md` Current status + `section-materialization.md` §8c.). Prior: 2026-06-19 (plans 35/36/37: 22 live tools; `slotActionMatrix.ts`, `passFailLimitAxis.ts` added; `planChangeHelpers.ts` gained `resolveBindMutations`).
 
 ## Purpose
 
-Everything the rest of the app needs from the engine flows through one front door. This document is the map of that door. `@nyupath/engine` is a TypeScript library (no website, no server, just code) that bundles the business logic: academic-standing/GPA calculators, the DPR parser, the agent loop and its 22 tools, the forward-schedule planner, the RAG policy-search stack, the LLM client adapters, and the persistence interfaces. The web app and CLI import only the names listed in this barrel, not the deep internals — so the engine can reorganize inside without breaking consumers, as long as the exported names keep working.
+Everything the rest of the app needs from the engine flows through one front door. This document is the map of that door. `@nyupath/engine` is a TypeScript library (no website, no server, just code) that bundles the business logic: academic-standing/GPA calculators, the DPR parser, the agent loop and its 24 tools, the forward-schedule planner, the RAG policy-search stack, the LLM client adapters, and the persistence interfaces. The web app and CLI import only the names listed in this barrel, not the deep internals — so the engine can reorganize inside without breaking consumers, as long as the exported names keep working.
 
 ```mermaid
 flowchart LR
     Web[Web App] --> Barrel[Engine barrel]
     CLI[CLI Tool] --> Barrel
     Barrel --> Standing[Standing + GPA]
-    Barrel --> Agent[Agent loop + 22 tools]
+    Barrel --> Agent[Agent loop + 24 tools]
     Barrel --> Planner[Forward schedule]
     Barrel --> RAG[RAG policy search]
     Barrel --> DPR[DPR parser]
@@ -72,7 +72,7 @@ agent/
   llmClient.ts recordingClient.ts registry.ts
   clients/        openaiClient.ts anthropicClient.ts index.ts
   verifiers/      multiIntentDetector.ts blockquoteAttribution.ts
-  tools/          22 tool modules (see §4)
+  tools/          24 tool modules (see §4)
   forwardSchedule/    solver, search, validator, materialize, alternatives, ...
                       slotActionMatrix.ts        ← Plan 37 D1 — 3-state × F3-window × P/F-policy action gate; also re-exported via client.ts
                       passFailLimitAxis.ts       ← Plan 37 C1 — 8th validator axis checkPassFailLimits(dpr, passFailConfig)
@@ -109,9 +109,9 @@ The agent group (`index.ts:48-125`) re-exports: the loop (`runAgentTurn`, `runAg
 
 ---
 
-## 4. The agent barrel (`agent/index.ts`) and the 22 live tools
+## 4. The agent barrel (`agent/index.ts`) and the 24 live tools
 
-The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types, and the tool registry. The registry (`registry.ts`) wires **exactly 22 live tools** into `ALL_NYUPATH_TOOLS`:
+The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types + the Phase-38 FOSE symbols, and the tool registry. The registry (`registry.ts`) wires **exactly 24 live tools** into `ALL_NYUPATH_TOOLS` (the last two — `materialize_feasible`, `propose_section_replan` — are the FOSE section-feasibility layer, merged but 😴 dormant pending an NYU live-enrollment API):
 
 ```
 run_full_audit              what_if_audit              search_policy

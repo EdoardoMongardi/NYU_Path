@@ -324,6 +324,8 @@ The orchestrator above is driven by a `materialize_sections` / `confirm_section_
 
 ## 8c. The feasible-candidate path — `materialize_feasible` (Phase 38)
 
+> **😴 DORMANT (parked 2026-06-21) — the code below is LIVE but FOSE work is paused pending an external API.** Everything in §8c/§8d is implemented, merged to local `main` (`c667262`), tested, and reachable. It is NOT disabled — it still delivers time-conflict feasibility, multi-component free-pairing, the cross-term re-plan, and requirement validity. BUT the public FOSE API never exposes live open/waitlist/closed (only `stat:"A"` = offered/seat-unknown — see the seat-status note below), so the availability-aware features are dormant + hedged. Resuming (real seat data, the **E2** visual picker, **E5** backup grad-validity) is **blocked on an official NYU live-enrollment API** (pursued via NYU IT). Until then, no further FOSE work — see `Docs/plans/38-...md` (Status banner) + `CLAUDE.md` (Current status).
+
 A second, parallel entry point added in Phase 38 (plan `38-2026-06-19-fose-section-scheduling-replan.md`, §2 ①–③ + §2.5). Where `materialize_sections` (§8/§8b) picks ONE section per course and stages combinations for the legacy sidebar, `materialize_feasible` models **multi-component courses** (lecture + recitation/lab), enforces a **graduation-safe waitlist rule**, and returns a **schema-validated, pre-ranked candidate set** that an agent ranks/curates over — the agent never enumerates or judges validity itself (the §2.5 hybrid boundary). The legacy path is untouched.
 
 ### Free-pairing multi-component model (`componentGrouping.ts`)

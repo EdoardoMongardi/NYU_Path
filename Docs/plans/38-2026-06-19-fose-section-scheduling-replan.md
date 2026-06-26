@@ -2,7 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax. **Before any work, read [`Docs/core_philosophy.md`](../core_philosophy.md).**
 
-> **Status:** PLANNED (written 2026-06-19, verified against code at `main` `ffd3834`). Supersedes the deferred FOSE re-plan items in spec §9 and the stubbed Decision #19 in `materialize.ts`/`materializeSections.ts`.
+> **Status: ✅ IMPLEMENTED + MERGED, now 😴 DORMANT (parked 2026-06-21) — blocked on external data.**
+> Phases 0 / A–D / E (engine + escalation bridge + integration) + the live-data corrections (#1 seat-status-unknown model, #2 already-registered-IP conflict) are DONE, reviewed (4 adversarial-review rounds), and **merged to LOCAL `main`** (`--no-ff` merge `c667262`; **NOT pushed to `origin`** — owner pushes when ready). Suite 2820 green; engine + web tsc clean; frozen contract + R1 intact. The code stays LIVE (it is honest + still delivers time-conflict feasibility, multi-component free-pairing, the cross-term re-plan, and requirement validity); it is NOT disabled.
+>
+> **Why dormant:** the public FOSE/bulletins API exposes only `stat:"A"` (offered, **seat-status unknown**) — never live open/waitlist/closed, no seat/waitlist counts, no recitation↔lecture linkage. Live availability lives only in **authenticated Albert/PeopleSoft** (no public endpoint; verified 2026-06-20). So the availability-aware features (real open≻waitlist ranking, waitlist auto-swap, waitlist numbers) are built-but-DORMANT, hedged via elicit-or-hedge. **NYU's official Course System API is catalog-tier (daily refresh, no seat fields).**
+>
+> **Resumption trigger:** an official NYU data source for **section-level live enrollment** (open/waitlist/closed + waitlist counts + recitation linkage) — pursued via NYU IT (`it-apiservices@nyu.edu`, `dataaccess.it.nyu.edu`, Service Account + OAuth, ~3–6 wk). When that lands, wire it behind the existing elicit-or-hedge seam (a `SeatStatusProvider`) — no engine rework — and resume the deferred UI: **E2** (the visual top-5 section picker, its own mockup plan) and **E5** (different-course backup graduation-validity). Until then: **no further FOSE work.**
+>
+> Original plan status: PLANNED (written 2026-06-19, verified against code at `main` `ffd3834`). Supersedes the deferred FOSE re-plan items in spec §9 and the stubbed Decision #19 in `materialize.ts`/`materializeSections.ts`.
 
 ---
 
