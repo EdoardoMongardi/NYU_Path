@@ -399,7 +399,7 @@
       ],
       "owner": "engine",
       "verified": true,
-      "notes": "This FOSE layer is merged but DORMANT pending an NYU live-enrollment API (every FOSE section returns stat:'A'). Additional impl modules named in the doc (statusHelpers.ts, conflictDetection.ts, componentGrouping.ts, ipSections.ts, sectionReplanWiring.ts, withinTermSwap.ts, agentCuration.ts) exist but only a representative subset is listed in impl; all listed paths verified OK."
+      "notes": "This FOSE layer was BUILT + merged, then DROPPED from the live agent on 2026-07-14: materialize_feasible + propose_section_replan are UNREGISTERED from ALL_NYUPATH_TOOLS and their prompt routing removed (no acceptable live-seat-data source — every FOSE section returns stat:'A'; no official API; public search reCAPTCHA-gated). Disconnection, not deletion — the engine code + impl modules + unit tests below REMAIN in-repo (importable, still tested; guard packages/engine/tests/agent/foseDeactivated.test.ts), revivable by re-registering. Additional impl modules named in the doc (statusHelpers.ts, conflictDetection.ts, componentGrouping.ts, ipSections.ts, sectionReplanWiring.ts, withinTermSwap.ts, agentCuration.ts) exist but only a representative subset is listed in impl; all listed paths verified OK."
     },
     {
       "concept": "Session state (ToolSession — the shared per-turn state bag)",
@@ -448,7 +448,7 @@
       "notes": "No standalone toolEnvelope.test.ts. The envelope's only live effect is textual (renderEnvelopeMeta); the verbatim/semi_hardened path it feeds is exercised by verbatimValidator.test.ts via validateResponse. EnvelopeMeta.verbatim is a reserved-but-unused field per the doc — mapping is approximate (no direct renderEnvelopeMeta unit test)."
     },
     {
-      "concept": "Tool contract & registry (buildTool, ToolRegistry, ALL_NYUPATH_TOOLS = 24 tools)",
+      "concept": "Tool contract & registry (buildTool, ToolRegistry, ALL_NYUPATH_TOOLS = 22 tools; the 2 FOSE tools were unregistered 2026-07-14)",
       "area": "engine",
       "currentSystemDoc": "Docs/current-system/engine/tool-registry.md",
       "spec": "",

@@ -132,7 +132,7 @@ When the clarifier returns `!isClear && output.length > 0`, the route streams th
 
 ## 9. Agent Loop Invocation
 
-The loop is `runAgentTurnStreaming(primary, buildDefaultRegistry(), session, userMessage, opts)` (`route.ts:610-668`). `buildDefaultRegistry()` returns the 24 live tools (see the agent/tools docs). The options object carries:
+The loop is `runAgentTurnStreaming(primary, buildDefaultRegistry(), session, userMessage, opts)` (`route.ts:610-668`). `buildDefaultRegistry()` returns the 22 live tools (see the agent/tools docs). The options object carries:
 
 - `systemPrompt` — the final system prompt (with multi-intent briefing if any).
 - `priorMessages` — the cross-session session-summary string as a leading system message (when present) plus the client-sent history as `LLMMessage`s (`route.ts:568-576`).

@@ -1,12 +1,12 @@
 # Tool Registry & Tool Contract
 
-> Last verified against code: 2026-06-21 (Plan 38 — added `materialize_feasible` + `propose_section_replan`, both read-only, bringing the registry to **24 tools**; they belong to the FOSE section-feasibility layer, which is implemented + merged to local `main` but 😴 DORMANT pending an NYU live-enrollment API — see `CLAUDE.md` Current status. The `tool.ts` contract also gained an optional `outputSchema?` field, used by `materialize_feasible`). Prior: 2026-06-19 (Plan 37 — `proposeWhatIfAssumption` validateInput guards; count corrected to 22).
+> Last verified against code: 2026-07-14 (Plan 38's two FOSE tools — `materialize_feasible` + `propose_section_replan` — were **DROPPED from the live agent / unregistered from the default registry on 2026-07-14**, bringing the registry back to **22 tools**; the FOSE section-feasibility layer is deactivated — no acceptable live-seat-data source (no official NYU live-enrollment API; the public PeopleSoft class search that shows open/closed is reCAPTCHA-gated) — though the tool code + imports + exports + unit tests remain in the repo, revivable by re-registering the two tools. See `CLAUDE.md` Current status). Prior: 2026-06-21 (Plan 38 — added the two read-only tools, count 24; the `tool.ts` contract also gained an optional `outputSchema?` field, used by `materialize_feasible`). 2026-06-19 (Plan 37 — `proposeWhatIfAssumption` validateInput guards; count corrected to 22).
 
 > **Source files:** `packages/engine/src/agent/tool.ts`, `packages/engine/src/agent/registry.ts`
 
 ## Purpose
 
-The AI doesn't look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 24 such tools, each good at one thing (auditing a degree, finding a course, planning the remaining degree, etc.). To keep them consistent, every tool follows the same recipe: a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some surface a verbatim string the reply MUST contain, the rest are synthesized freely.
+The AI doesn't look up the student's transcript or search the bulletin itself — it asks specialized helpers called "tools" to do those jobs. There are 22 such tools, each good at one thing (auditing a degree, finding a course, planning the remaining degree, etc.). To keep them consistent, every tool follows the same recipe: a name the AI can call, a description telling the AI what it does, a list of inputs it accepts, the actual code that runs, and a way to turn its result into text the AI can read. The "registry" is just a labeled shelf — when the AI says "use the find-a-course tool," the registry grabs the right one off the shelf and runs it. Tools also come in three flavors depending on how strictly the AI must repeat their output: some surface a verbatim string the reply MUST contain, the rest are synthesized freely.
 
 ```mermaid
 flowchart LR
@@ -23,7 +23,7 @@ flowchart LR
 
 ---
 
-This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 24 live tools.
+This module defines the abstract contract every agent tool must satisfy, the factory used to build one, the registry that holds them, and the default registry that wires up the 22 live tools.
 
 ---
 
@@ -104,7 +104,7 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 
 ## 5. `ALL_NYUPATH_TOOLS` — the wired set
 
-`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS`, containing exactly **24** tools in this fixed order (plan 38 added #23 + #24, both read-only — part of the FOSE section-feasibility layer, which is implemented + merged but 😴 DORMANT pending an NYU live-enrollment API; they are LIVE + reachable, just data-limited + hedged):
+`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS`, containing exactly **22** tools in this fixed order. (Plan 38 had added `materialize_feasible` (#23) + `propose_section_replan` (#24), both read-only, part of the FOSE section-feasibility layer — but those two were **DROPPED from the live agent / unregistered from `ALL_NYUPATH_TOOLS` on 2026-07-14** and no longer appear in the array; their code + imports + exports + unit tests remain in the repo, revivable by re-registering — see the note below the list.):
 
 ```
 1.  run_full_audit
@@ -129,15 +129,15 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 20. compare_plan_alternatives
 21. materialize_sections
 22. confirm_section_combination
-23. materialize_feasible           ← added plan 38 (verified feasible section candidates; read-only; FOSE-dormant)
-24. propose_section_replan         ← added plan 38 (section→structure escalation; read-only; FOSE-dormant)
 ```
+
+> **Dropped 2026-07-14:** `materialize_feasible` and `propose_section_replan` were added by plan 38 (as #23 + #24) but were **DROPPED from the live agent / unregistered on 2026-07-14** — they are no longer in `ALL_NYUPATH_TOOLS`, so the live agent can no longer call them, and their section-feasibility routing was removed from the system prompt. The tool code + imports + exports + unit tests remain in the repo (importable, still unit-tested); revival = re-registering the two tools + restoring the prompt routing.
 
 `buildDefaultRegistry()` (`registry.ts:102-104`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts`).
 
 ### Plan 37 tool enhancements (guards on existing tools)
 
-No new tools were added **in plan 37** (plan 35 added `propose_whatif_assumption`); **plan 38 then added two read-only tools — `materialize_feasible` (#23) and `propose_section_replan` (#24) — bringing the registry to 24.** Those two belong to the FOSE section-feasibility layer, which is merged but 😴 DORMANT pending an NYU live-enrollment API (still registered + reachable, just data-limited + hedged; see `CLAUDE.md` Current status + `section-materialization.md` §8c). Three live tool behaviors changed in plan 37:
+No new tools were added **in plan 37** (plan 35 added `propose_whatif_assumption`); **plan 38 then added two read-only tools — `materialize_feasible` and `propose_section_replan` — but both were DROPPED from the live agent / unregistered on 2026-07-14, leaving the registry at 22.** Those two belong to the FOSE section-feasibility layer, which is now deactivated (dropped from the live agent — no acceptable live-seat-data source; the tool code + unit tests remain in the repo, revivable by re-registering; see `CLAUDE.md` Current status + `section-materialization.md` §8c). Three live tool behaviors changed in plan 37:
 
 - **`propose_whatif_assumption` — D-7 IP-membership guard + D-4 P/F-eligibility gate.** `proposeWhatIfAssumptionTool.validateInput` now checks two conditions before calling the tool:
   1. **IP-membership (D-7):** the `courseId` arg must be an `in_progress` row in the authoritative DPR. A withdraw/pass-fail targeting a `completed` or `specific_planned` course is rejected with a clear message ("Withdraw / pass-fail applies only to a course you're currently taking (in progress). <course> is <completed / planned> — to remove a planned course, drop it instead."). This makes the D-2 PLANNED-slot restriction a real engine guard, not just a dormant UI gate.
@@ -171,7 +171,7 @@ sequenceDiagram
     participant Tool as Tool.call
 
     Route->>Reg: buildDefaultRegistry()
-    Reg-->>Route: registry (24 tools)
+    Reg-->>Route: registry (22 tools)
     Route->>Loop: runAgentTurnStreaming(client, registry, session, msg, opts)
     Loop->>Reg: registry.list() (via toLLMToolDefs)
     Reg-->>Loop: [Tool, …]

@@ -1,17 +1,17 @@
 # `@nyupath/engine` Package Index
 
-> Last verified against code: 2026-06-21 (plan 38: **24 live tools** — `materialize_feasible` + `propose_section_replan` added (both read-only); new `sectionMaterialization/` modules `componentGrouping.ts`, `feasibleSchedules.ts`, `statusHelpers.ts`, `candidatePreRank.ts`, `materializeFeasible.ts`, `agentCuration.ts`, `ipSections.ts`, `sectionReplanBridge.ts`, `sectionReplanWiring.ts`, `withinTermSwap.ts`; the barrel re-exports the Phase-38 symbols; `tool.ts` gained an optional `outputSchema?`. **This FOSE section-feasibility layer is merged but 😴 DORMANT pending an NYU live-enrollment API** — see `CLAUDE.md` Current status + `section-materialization.md` §8c.). Prior: 2026-06-19 (plans 35/36/37: 22 live tools; `slotActionMatrix.ts`, `passFailLimitAxis.ts` added; `planChangeHelpers.ts` gained `resolveBindMutations`).
+> Last verified against code: 2026-07-14 (**22 live tools**. Plan 38 (FOSE section-scheduling) was **DROPPED from the live agent on 2026-07-14**: its two tools — `materialize_feasible` + `propose_section_replan` — are now **UNREGISTERED** (removed from `ALL_NYUPATH_TOOLS` in `registry.ts`) and unrouted (their section-feasibility block was removed from `systemPrompt.ts`), so the live agent can no longer call them. This is a disconnection, not a deletion: the tool code, imports, barrel exports, and unit tests REMAIN (importable, still unit-tested — guard `tests/agent/foseDeactivated.test.ts`; revivable by re-registering the two tools + restoring the prompt routing). The `sectionMaterialization/` modules `componentGrouping.ts`, `feasibleSchedules.ts`, `statusHelpers.ts`, `candidatePreRank.ts`, `materializeFeasible.ts`, `agentCuration.ts`, `ipSections.ts`, `sectionReplanBridge.ts`, `sectionReplanWiring.ts`, `withinTermSwap.ts` still exist; the barrel still re-exports the Phase-38 symbols; `tool.ts` still carries the optional `outputSchema?`. See `CLAUDE.md` Current status + `section-materialization.md` §8c.). Prior: 2026-06-19 (plans 35/36/37: 22 live tools; `slotActionMatrix.ts`, `passFailLimitAxis.ts` added; `planChangeHelpers.ts` gained `resolveBindMutations`).
 
 ## Purpose
 
-Everything the rest of the app needs from the engine flows through one front door. This document is the map of that door. `@nyupath/engine` is a TypeScript library (no website, no server, just code) that bundles the business logic: academic-standing/GPA calculators, the DPR parser, the agent loop and its 24 tools, the forward-schedule planner, the RAG policy-search stack, the LLM client adapters, and the persistence interfaces. The web app and CLI import only the names listed in this barrel, not the deep internals — so the engine can reorganize inside without breaking consumers, as long as the exported names keep working.
+Everything the rest of the app needs from the engine flows through one front door. This document is the map of that door. `@nyupath/engine` is a TypeScript library (no website, no server, just code) that bundles the business logic: academic-standing/GPA calculators, the DPR parser, the agent loop and its 22 tools, the forward-schedule planner, the RAG policy-search stack, the LLM client adapters, and the persistence interfaces. The web app and CLI import only the names listed in this barrel, not the deep internals — so the engine can reorganize inside without breaking consumers, as long as the exported names keep working.
 
 ```mermaid
 flowchart LR
     Web[Web App] --> Barrel[Engine barrel]
     CLI[CLI Tool] --> Barrel
     Barrel --> Standing[Standing + GPA]
-    Barrel --> Agent[Agent loop + 24 tools]
+    Barrel --> Agent[Agent loop + 22 tools]
     Barrel --> Planner[Forward schedule]
     Barrel --> RAG[RAG policy search]
     Barrel --> DPR[DPR parser]
@@ -109,9 +109,9 @@ The agent group (`index.ts:48-125`) re-exports: the loop (`runAgentTurn`, `runAg
 
 ---
 
-## 4. The agent barrel (`agent/index.ts`) and the 24 live tools
+## 4. The agent barrel (`agent/index.ts`) and the 22 live tools
 
-The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types + the Phase-38 FOSE symbols, and the tool registry. The registry (`registry.ts`) wires **exactly 24 live tools** into `ALL_NYUPATH_TOOLS` (the last two — `materialize_feasible`, `propose_section_replan` — are the FOSE section-feasibility layer, merged but 😴 dormant pending an NYU live-enrollment API):
+The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types + the Phase-38 FOSE symbols, and the tool registry. The registry (`registry.ts`) wires **exactly 22 live tools** into `ALL_NYUPATH_TOOLS` (listed below). The two FOSE section-feasibility tools — `materialize_feasible` and `propose_section_replan` — were **DROPPED from the live agent on 2026-07-14**: they are removed from `ALL_NYUPATH_TOOLS` and their prompt routing is gone, so the loop can no longer reach them. Their tool code + barrel exports remain (importable, still unit-tested — guard `tests/agent/foseDeactivated.test.ts`), revivable by re-registering + restoring the prompt routing:
 
 ```
 run_full_audit              what_if_audit              search_policy

@@ -2,7 +2,7 @@
 
 `CLAUDE.md` keeps only a one-line pointer to this file; the detailed status lives here so the always-loaded instructions stay lean. **Update this file after each verified-and-confirmed phase** (core philosophy point #6), the same way you revise the matching `Docs/current-system/` doc.
 
-**Last updated:** 2026-06-26
+**Last updated:** 2026-07-14
 
 ---
 
@@ -30,8 +30,10 @@ The W/pass-fail consequence is **computed**, not just hedged: pure DPR transform
 
 Slot-editor + 4 actions + the per-school P/F 8th validator axis + never-commit-invalid. One consolidation landed 35 ⊆ 36 ⊆ 37 on the trunk.
 
-## Plan 38 — FOSE section-scheduling (IMPLEMENTED + merged to LOCAL `main` `c667262`; 😴 DORMANT, parked 2026-06-21; NOT pushed to `origin`)
+## Plan 38 — FOSE section-scheduling (BUILT + merged to LOCAL `main` `c667262`; ❌ DROPPED from the live agent 2026-07-14, branch `chore/deactivate-fose-live-agent`)
 
-The full section-feasibility capability is done + reviewed (4 adversarial rounds) + merged (`--no-ff`; suite 2820 green; frozen contract + R1 intact): the `materialize_feasible` read-only tool (deterministic, schema-locked candidate set; the agent ranks tool-verified candidates only), multi-component free-pairing + the two-state waitlist backup, the escalation bridge (`sectionReplanBridge` — classify→ladder→re-solve-through-the-FROZEN-seam→honest-no-op) + the `propose_section_replan` tool + the bounded outer loop, the `/api/v2/materialize` route, and the agent-curation guardrails.
+The full section-feasibility capability was built + reviewed (4 adversarial rounds) + merged (`--no-ff`; frozen contract + R1 intact): the `materialize_feasible` read-only tool (deterministic, schema-locked candidate set; the agent ranks tool-verified candidates only), multi-component free-pairing + the two-state waitlist backup, the escalation bridge (`sectionReplanBridge` — classify→ladder→re-solve-through-the-FROZEN-seam→honest-no-op) + the `propose_section_replan` tool + the bounded outer loop, the `/api/v2/materialize` route, and the agent-curation guardrails.
 
-**Why dormant:** the public FOSE API never returns live open/waitlist/closed (every section is `stat:"A"` = offered/seat-unknown; live availability is Albert/PeopleSoft-only, behind SSO, no public endpoint — verified 2026-06-20). So the availability-aware features (open≻waitlist ranking, waitlist auto-swap, waitlist counts) are built-but-dormant + honestly hedged (elicit-or-hedge) while the time-conflict + structural value works now. The code stays LIVE (not disabled — it's honest + useful). **Resumption is blocked on an official NYU live-enrollment API** (pursued via NYU IT). When it lands: plug a `SeatStatusProvider` behind the existing seam (no engine rework) + resume the deferred UI (**E2** visual top-5 picker — its own mockup plan; **E5** different-course backup grad-validity). **Until then: no further FOSE work.**
+**Dropped from the live agent (2026-07-14):** the two FOSE tools (`materialize_feasible`, `propose_section_replan`) are now **UNREGISTERED** from `ALL_NYUPATH_TOOLS` and their SECTION-FEASIBILITY prompt routing removed, so the live agent no longer offers section-scheduling (registry **24 → 22 live tools**; suite 2820 green; guard: `packages/engine/tests/agent/foseDeactivated.test.ts`). This is a **disconnection, not a deletion** — the tool code + imports + exports + unit tests remain in the repo (revivable by re-registering + restoring the routing). `materialize_sections` / `confirm_section_combination` (Phase-15/17 core near-term section fill, auto-chained from `plan_forward_degree`) are **unaffected**.
+
+**Why dropped:** the whole capability only becomes genuinely useful with live seat status, and there is **no acceptable source for it**. The public FOSE API never returns open/waitlist/closed (every section is `stat:"A"`; live availability is Albert/PeopleSoft-only, SSO-gated — verified 2026-06-20). Investigated every alternative (2026-07-14): **no official NYU live-enrollment API**; the public PeopleSoft class search that *does* show open/closed is **reCAPTCHA-gated** (defeating it is off-limits + against NYU's intent); and a **student-driven browser helper** (student reads their own Albert page, feeds it in) — while technically viable since the engine's O/W/C machinery is already built — was judged **not worth the build/maintenance/policy cost** for a personal project, and cannot do live monitoring anyway. Without real data the design degrades to a high-friction elicit-or-hedge loop, so the owner dropped FOSE. **No further FOSE work.**
