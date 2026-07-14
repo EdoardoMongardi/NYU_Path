@@ -95,8 +95,16 @@ export const ALL_NYUPATH_TOOLS: Array<Tool<ZodTypeAny, unknown>> = [
     comparePlanAlternativesTool as unknown as Tool<ZodTypeAny, unknown>,
     materializeSectionsTool as unknown as Tool<ZodTypeAny, unknown>,
     confirmSectionCombinationTool as unknown as Tool<ZodTypeAny, unknown>,
-    materializeFeasibleTool as unknown as Tool<ZodTypeAny, unknown>,
-    proposeSectionReplanTool as unknown as Tool<ZodTypeAny, unknown>,
+    // FOSE (plan 38) — DEACTIVATED 2026-07-14 (owner decision: drop FOSE; no
+    // acceptable live-seat-data source — official API absent, public search is
+    // reCAPTCHA-gated, and the student-driven helper isn't worth building).
+    // `materialize_feasible` + `propose_section_replan` are UNREGISTERED, so the
+    // live agent can no longer call them and the prompt no longer routes to them.
+    // The tool code + imports + exports below REMAIN (importable, unit-tested) —
+    // this is a disconnection, not a deletion. To revive: re-add the two entries
+    // here + restore the SECTION-FEASIBILITY routing block in systemPrompt.ts.
+    //   materializeFeasibleTool as unknown as Tool<ZodTypeAny, unknown>,
+    //   proposeSectionReplanTool as unknown as Tool<ZodTypeAny, unknown>,
 ];
 
 /**
