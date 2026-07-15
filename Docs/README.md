@@ -16,6 +16,13 @@ All project documentation lives in this folder. Organized 2026-06-10 (full repo 
 | [`mockups/`](mockups/) | HTML / visual mockups referenced by plans (e.g. the scenarios-workspace UI) | n/a |
 | [`deprecated/`](deprecated/) | Docs for **removed** code, kept for history — do not trust as current | n/a |
 
+## Living docs vs point-in-time records
+
+Docs fall into two kinds, updated differently — this split is what prevents cross-doc reference drift:
+
+- **Living docs** — describe the system **today**; kept in sync with code (per [`../CLAUDE.md`](../CLAUDE.md) §4.1, with greppable counts guarded by `packages/engine/tests/agent/docConsistency.test.ts`): [`core_philosophy.md`](core_philosophy.md), [`STATUS.md`](STATUS.md), [`FROZEN.md`](FROZEN.md), [`GLOSSARY.md`](GLOSSARY.md), [`index.json`](index.json), everything under [`current-system/`](current-system/), plus the repo-root `README.md` and `CLAUDE.md`. **When a fact changes, grep these for the old value and reconcile every hit** — `bash tools/check-living-docs.sh '<term>'`.
+- **Point-in-time records** — dated snapshots, **never** retro-edited: [`plans/`](plans/), [`audits/`](audits/), [`reports/`](reports/), [`deprecated/`](deprecated/), [`specs/`](specs/). A June plan's now-stale counts are correct history — leave it.
+
 ## current-system/ — the living docs
 
 - `00-overview.md` — plain-English tour of the whole product.

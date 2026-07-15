@@ -88,7 +88,7 @@ A PR isn't done until it includes, **in the same PR**:
 - the **§Conventions verify commands pass** on the branch tip (both `tsc --noEmit` runs + `vitest run`) — this is what "green" means;
 - **gstack `/review` clean** — run before opening the PR and iterate until every finding is fixed or explicitly waived by Edoardo (this run satisfies the superpowers requesting-code-review step; process feedback per receiving-code-review);
 - **Edoardo's explicit approval** (in chat or on the GitHub PR);
-- **all related docs updated** — `Docs/current-system/`, `Docs/STATUS.md` + the §Current-status summary in this file, the root `README.md` if setup or system shape changed, `Docs/index.json` + `Docs/FROZEN.md` if code moved or the frozen seam changed, the PR's plan file reconciled with what was actually built, and the design spec if it changed.
+- **all related docs updated** — `Docs/current-system/`, `Docs/STATUS.md` + the §Current-status summary in this file, the root `README.md` if setup or system shape changed, `Docs/index.json` + `Docs/FROZEN.md` if code moved or the frozen seam changed, the PR's plan file reconciled with what was actually built, and the design spec if it changed. A changed fact usually lives in **several** living docs, not one — before marking docs done, grep the living docs for the **old** value/term and reconcile every hit (`bash tools/check-living-docs.sh '<term>'`; greppable counts are also guarded by `docConsistency.test.ts`). **Never edit point-in-time records** (`Docs/plans/`, `audits/`, `reports/`, `deprecated/`, `specs/`) — a dated plan's now-stale counts are correct history (see `Docs/README.md` → "Living docs vs point-in-time records").
 
 ### 5. Least-hallucination practices (non-negotiable)
 
