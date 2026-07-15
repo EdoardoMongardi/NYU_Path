@@ -1,0 +1,42 @@
+name: CI
+
+# Turns CLAUDE.md's "verify before claiming done" sequence into a merge gate.
+# The suite is designed to run headlessly: offline tests delete DATABASE_URL to
+# force the in-memory path, and the live-DB / live-LLM suites self-skip via
+# `describe.skipIf(...)` when no secret is present — so no secrets are needed.
+# @nyupath/engine resolves to TypeScript source (package.json exports → ./src),
+# so tsc --noEmit + vitest run without a build step (never `tsc -b`; it emits
+# .js shadows that vitest would run instead of the .ts sources).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck — engine
+        run: npx tsc --noEmit
+        working-directory: packages/engine
+
+      - name: Typecheck — web
+        run: npx tsc --noEmit
+        working-directory: apps/web
+
+      - name: Test suite (repo root)
+        run: npx vitest run
