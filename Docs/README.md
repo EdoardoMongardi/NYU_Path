@@ -3,7 +3,7 @@
 All project documentation lives in this folder. Organized 2026-06-10 (full repo audit + consolidation).
 **Start here:** [`core_philosophy.md`](core_philosophy.md) — the project north-star (what the agent must be, "deterministic on validity then preferred", DPR-first, all NYU undergrad). Read it before anything else; it is the standard every other doc serves.
 **Then, reading order for a newcomer:** `current-system/00-overview.md` → `specs/2026-06-05-planning-engine-rebuild-design.md` → `current-system/engine/forward-schedule.md`.
-**Fast retrieval / navigation:** [`index.json`](index.json) — machine-readable concept → spec → implementation → tests crosswalk (query with jq/grep to scope an audit or locate code before deep-diving); [`FROZEN.md`](FROZEN.md) — the frozen engine contract + R1 guardrail manifest (what must never change + its guard tests); [`STATUS.md`](STATUS.md) — rolling current status.
+**Fast retrieval / navigation:** [`index.json`](index.json) — machine-readable concept → spec → implementation → tests crosswalk (query with jq/grep to scope an audit or locate code before deep-diving); [`FROZEN.md`](FROZEN.md) — the frozen engine contract + R1 guardrail manifest (what must never change + its guard tests); [`STATUS.md`](STATUS.md) — rolling current status; [`GLOSSARY.md`](GLOSSARY.md) — one-line definitions of the in-house jargon.
 
 | Folder | What it holds | Ordering |
 |---|---|---|
@@ -13,13 +13,14 @@ All project documentation lives in this folder. Organized 2026-06-10 (full repo 
 | [`audits/`](audits/) | Point-in-time audits, QA reports, adversarial spot-checks | date prefix (creation) |
 | [`reports/`](reports/) | Eval / benchmark / calibration run reports | date prefix (run date) |
 | [`reference/`](reference/) | Reference (privacy/data-handling, undergrad schools, eval-set provenance, prereq sources) | n/a |
+| [`mockups/`](mockups/) | HTML / visual mockups referenced by plans (e.g. the scenarios-workspace UI) | n/a |
 | [`deprecated/`](deprecated/) | Docs for **removed** code, kept for history — do not trust as current | n/a |
 
 ## current-system/ — the living docs
 
 - `00-overview.md` — plain-English tour of the whole product.
 - `engine/` — one doc per engine subsystem (`packages/engine`): agent loop, system prompt, response validator, tool registry, DPR parser, **forward-schedule (the constraint-search planner)**, RAG, persistence, …
-- `tools/` — one doc per live agent tool (21 registered in `packages/engine/src/agent/registry.ts`).
+- `tools/` — one doc per live agent tool (22 registered in `packages/engine/src/agent/registry.ts`; the 1:1 doc↔registry match is guarded by `packages/engine/tests/agent/frozenContractManifest.test.ts`).
 - `web/` — the Next.js app (`apps/web`): chat route, plan-action routes, stores, UI.
 - `surrounding/` — shared package, data directory, offline data pipeline.
 

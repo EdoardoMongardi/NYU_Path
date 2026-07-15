@@ -22,7 +22,7 @@ NYU Path is a **chat-based academic advisor** for **NYU undergraduates**. A stud
 graph LR
     STUDENT([🧑‍🎓 Student]) -->|asks a question| CHAT[💬 Chat UI]
     CHAT --> BRAIN{🧠 Smart Advisor}
-    BRAIN -->|when it needs facts| TOOLS[🛠️ Toolbox<br/>21 specialists]
+    BRAIN -->|when it needs facts| TOOLS[🛠️ Toolbox<br/>22 specialists]
     TOOLS -->|fetches from| MEMORY[(📚 Knowledge:<br/>your DPR,<br/>NYU bulletin,<br/>live class data)]
     MEMORY -->|facts| TOOLS
     TOOLS -->|results| BRAIN
@@ -31,7 +31,7 @@ graph LR
     GUARD -.fails: redo it.-> BRAIN
 ```
 
-That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 21 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy/curriculum lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
+That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 22 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy/curriculum lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
 
 ---
 
@@ -76,7 +76,7 @@ This is the "brain" — an LLM (Anthropic's Claude Sonnet 4.6 by default, OpenAI
 
 ### The tools (deterministic functions)
 
-There are **21 of them** (the live registry is `packages/engine/src/agent/registry.ts`). Each one knows how to do one thing — for example, "run a full degree audit", "plan every term until graduation", or "search the policy bulletin for the rule on pass/fail courses". Tools are written in TypeScript. They read data files and the student's session, they run their algorithm, and they return a result. They never call the language model. The advisor uses tools the way a doctor uses a calculator and a reference book — to get numbers and facts the doctor shouldn't be guessing.
+There are **22 of them** (the live registry is `packages/engine/src/agent/registry.ts`). Each one knows how to do one thing — for example, "run a full degree audit", "plan every term until graduation", or "search the policy bulletin for the rule on pass/fail courses". Tools are written in TypeScript. They read data files and the student's session, they run their algorithm, and they return a result. They never call the language model. The advisor uses tools the way a doctor uses a calculator and a reference book — to get numbers and facts the doctor shouldn't be guessing.
 
 ### The planner (a constraint-search engine)
 
@@ -212,7 +212,7 @@ Every subsystem of the AI brain. The most important ones:
 
 Plus smaller pieces: the clarifier (handles ambiguous questions), the template matcher (curated answers for FAQs), the LLM clients (OpenAI/Anthropic adapters), and various data loaders.
 
-### `current-system/tools/` — 21 documents
+### `current-system/tools/` — 22 documents
 One file per **live** tool the AI can call. Each explains: what it does, what it needs, the algorithm, what it returns, and what other tools it works with. See the [tool catalog table](#8-quick-tool-catalog) below.
 
 ### `current-system/web/` — 12 documents
@@ -237,6 +237,7 @@ Segregated so the live docs stay clean. These describe tools and subsystems that
 | `view_forward_plan` | Shows the most recently built plan, no recompute |
 | `propose_plan_change` | "What would happen if I changed the plan in this way?" — shows impact |
 | `probe_counterfactual` | Read-only what-if: re-solves a hypothetical and narrates whether it stays valid or is "INFEASIBLE because <failing axis + reason>" |
+| `propose_whatif_assumption` | Confirmable current-term what-if (withdraw / pass-fail): re-runs the frozen pipeline on a DPR transform; a confirm persists only the resulting plan, never the DPR |
 | `confirm_plan_change` | Applies a previously proposed change |
 | `simulate_alternatives` | Tries 2–3 plan variants (summer, J-term, extend graduation) |
 | `compare_plan_alternatives` | Side-by-side comparison of alternatives the planner already produced |
@@ -254,7 +255,7 @@ Segregated so the live docs stay clean. These describe tools and subsystems that
 | `update_profile` | Proposes a profile change (school, catalog year, programs, visa) |
 | `confirm_profile_update` | Applies a proposed profile change |
 
-That's all **21** live tools (`packages/engine/src/agent/registry.ts`). Three tools that appeared in earlier versions of this doc are **gone**: `check_transfer_eligibility` and `check_overlap` were removed — internal-transfer eligibility and program double-counting are now answered by citing the bulletin through `search_policy` — and `plan_semester` (the legacy single-term planner) was fully deleted, not retained for reference. Docs for the removed pieces live in [`../deprecated/`](../deprecated/README.md).
+That's all **22** live tools (`packages/engine/src/agent/registry.ts`). Three tools that appeared in earlier versions of this doc are **gone**: `check_transfer_eligibility` and `check_overlap` were removed — internal-transfer eligibility and program double-counting are now answered by citing the bulletin through `search_policy` — and `plan_semester` (the legacy single-term planner) was fully deleted, not retained for reference. Docs for the removed pieces live in [`../deprecated/`](../deprecated/README.md).
 
 ---
 

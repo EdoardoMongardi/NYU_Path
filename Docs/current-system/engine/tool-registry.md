@@ -36,7 +36,7 @@ Every tool implements this shape (generic over a Zod input schema and an output 
 | `name` | string | Stable identifier the model uses (e.g., `run_full_audit`). |
 | `description` | string | Free-form description shown to the model. Concatenated with `prompt(session)` in `toLLMToolDefs`. |
 | `inputSchema` | Zod schema | Validates the model's tool call args before `call` runs (`safeParse` in the loop). |
-| `isReadOnly` | boolean | Defaults to true via `buildTool`. Mutating tools set it to false — `plan_forward_degree`, `confirm_plan_change`, `confirm_section_combination`, and `update_profile` all declare `isReadOnly: false`. It is a labeling field (the loop does not gate on it), but it does flag the four tools that write to session. |
+| `isReadOnly` | boolean | Defaults to true via `buildTool`. Mutating tools set it to false — `plan_forward_degree`, `confirm_plan_change`, `confirm_section_combination`, and `confirm_profile_update` all declare `isReadOnly: false`. (Note `update_profile` is `isReadOnly: true` — it only STAGES a profile change; `confirm_profile_update` is the writer in that two-step.) It is a labeling field (the loop does not gate on it), but it does flag the four tools that write to session. |
 | `maxResultChars` | number | Cap on the stringified result (default 2000). `summarizeResult` output is truncated to this. |
 | `outputMode?` | `"template" \| "semi_hardened" \| "synthesis"` | Defaults to `"synthesis"`. See §3. |
 | `validateInput?(input, ctx)` | async fn | Optional pre-call check. Returns `{ ok: true }` or `{ ok: false, userMessage }`. A failed result is wrapped by the loop as `validation failed: <userMessage>`. |
