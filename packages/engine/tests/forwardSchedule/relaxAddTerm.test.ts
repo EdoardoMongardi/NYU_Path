@@ -10,7 +10,8 @@
  *   - Each course is 4 credits (3 courses × 4 = 12 credits total)
  *   - Student has 116 credits earned, needs 12 more (grad min 128)
  *
- * Wall-clock derivation (today = June 2026 = Summer):
+ * Wall-clock derivation (today = June 2026 = Summer — PINNED, see the
+ * FROZEN CLOCK block below the imports; this premise is no longer ambient):
  *   - inferCurrentTerm → "2026-summer"
  *   - deriveGraduationTerm("2026-summer", 116, 128, 16):
  *       semestersNeeded = ceil(12/16) = 1
@@ -35,7 +36,7 @@
  *     graduationTerm="2026-fall".
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { buildForwardSchedule } from "../../src/agent/forwardSchedule/build.js";
 import { buildSolverInputWithRules } from "../../src/agent/forwardSchedule/buildSolverInput.js";
 import { solveForwardSchedule } from "../../src/agent/forwardSchedule/solver.js";
@@ -43,6 +44,30 @@ import { finalizeForwardSchedule } from "../../src/agent/forwardSchedule/build.j
 import type { ToolSession } from "../../src/agent/tool.js";
 import type { DegreeProgressReport } from "../../src/dpr/schema.js";
 import type { SolverInput } from "../../src/agent/forwardSchedule/types.js";
+
+// ---------------------------------------------------------------------------
+// ⚑ FROZEN CLOCK (file-wide).
+// ---------------------------------------------------------------------------
+// Every derived-horizon case below is written against the wall-clock premise
+// stated in the header: "today = June 2026 = Summer", from which
+// inferCurrentTerm yields "2026-summer" and the naive 1-term derived window is
+// "2026-fall". That premise came from the real clock, so it silently expired.
+// Once real time passed into Fall 2026 the naive window moved to
+// "2027-spring", and the `naiveTerm = "2026-fall"` comparison below degraded
+// into a comparison against a PAST term — it kept passing while no longer
+// testing that relax extends anything. Pinning the clock restores the
+// documented premise and makes these cases deterministic.
+//
+// `toFake: ["Date"]` fakes ONLY the clock; setTimeout/setInterval keep real
+// behavior. Safe for the solver, which reads Date.now() only for the
+// `computedAt` stamp (build.ts) and has no wall-clock search budget.
+beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-05T00:00:00Z"));
+});
+afterEach(() => {
+    vi.useRealTimers();
+});
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers (mirrored from forwardScheduleBuild.test.ts)
