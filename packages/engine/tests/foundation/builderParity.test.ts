@@ -11,9 +11,17 @@
  *  3. coreqs — both paths build the coreq map (non-zero when session.prereqs has coreqs)
  *
  * Additional parity checks: offerings non-empty, programRules equal.
+ *
+ * ⚑ FROZEN CLOCK. currentTerm is derived from the WALL CLOCK
+ * (deriveTemporalContext via `new Date()`), so this suite pins the clock to
+ * 2026-06-05 — the date it was authored against. Without the pin the
+ * currentTerm assertion below drifts with real time and, once real time
+ * reached Fall 2026, its "not the stale fallback" sentinel silently collided
+ * with the correct wall-clock answer ("2026-fall") and the suite began
+ * failing for calendar reasons rather than code reasons.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { buildSolverInput } from "../../src/agent/forwardSchedule/buildSolverInput.js";
 import { buildSolverInputFromSession } from "../../src/agent/forwardSchedule/planChangeHelpers.js";
 import type { ToolSession } from "../../src/agent/tool.js";
@@ -38,7 +46,7 @@ function makeMeta() {
  * Minimal DPR with:
  * - 96 credits used (32 remaining to 128 minimum)
  * - No IP rows (so inferring from last-IP would fall back to default "2026-fall",
- *   while wall-clock from the test date of 2026-06-05 yields "2026-spring")
+ *   while wall-clock from the frozen test date of 2026-06-05 yields "2026-summer")
  * - residencyRequired = 64 (so residencyMinCredits is non-null in both paths)
  * - One requirement group with a major-required leaf (so majorCreditMinimum > 0)
  */
@@ -156,6 +164,18 @@ describe("RC-4/PLAN-2 — unified buildSolverInput parity", () => {
     const dpr = makeFixtureDpr();
     const session = makeFixtureSession();
 
+    // Pin the wall clock to the date this suite was authored against, so
+    // currentTerm derivation is deterministic forever. `toFake: ["Date"]`
+    // fakes ONLY the clock — setTimeout/setInterval keep real behavior, so a
+    // future async addition to the builder cannot hang on a frozen timer.
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-06-05T00:00:00Z"));
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
     it("buildSolverInput is importable", () => {
         expect(typeof buildSolverInput).toBe("function");
     });
@@ -180,16 +200,23 @@ describe("RC-4/PLAN-2 — unified buildSolverInput parity", () => {
         const direct = buildSolverInput(session, dpr, {});
         const fromSession = buildSolverInputFromSession(session, dpr);
 
-        // Both must agree (unified builder used for both)
+        // Both must agree (unified builder used for both).
         expect(direct.currentTerm).toBe(fromSession.currentTerm);
-        // With no IP rows, the old edit-path last-IP fallback would return "2026-fall".
-        // Wall-clock (today = 2026-06-05, June is summer) → "2026-summer".
-        // This asserts the edit path is no longer using last-IP logic.
-        // The key assertion is that BOTH paths return the SAME wall-clock value.
-        // We also assert it is NOT the old last-IP fallback "2026-fall":
+
+        // With the clock frozen to 2026-06-05, wall-clock resolves to
+        // "2026-summer" (termInSession: June → Summer). Assert that
+        // POSITIVELY — it pins the derived value instead of merely excluding
+        // one, so a future drift in the season boundaries fails loudly here.
+        expect(fromSession.currentTerm).toBe("2026-summer");
+
+        // "2026-fall" is the value BOTH stale paths produce: the old edit-path
+        // last-IP fallback (this fixture deliberately has no IP rows) AND
+        // inferCurrentTerm's own defensive fallback in buildSolverInput.ts.
+        // Excluding it proves the wall-clock path actually ran.
+        // ⚑ This sentinel only discriminates while the clock is frozen off
+        // Fall — it is exactly the assertion that broke when real time reached
+        // Fall 2026 and "2026-fall" became the CORRECT answer. Keep the pin.
         expect(fromSession.currentTerm).not.toBe("2026-fall");
-        // And both agree:
-        expect(direct.currentTerm).toBe(fromSession.currentTerm);
     });
 
     it("both paths build a coreq map (non-empty when prereqs has coreqs)", () => {
