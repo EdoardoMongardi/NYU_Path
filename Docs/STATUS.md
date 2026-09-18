@@ -2,7 +2,7 @@
 
 `CLAUDE.md` keeps a one-breath status summary + a pointer; the detailed status lives here so the always-loaded instructions stay lean. **Update this file (and that summary in `CLAUDE.md`) in the same PR as the code**, per `CLAUDE.md` §4.1 — the same way you revise the matching `Docs/current-system/` doc (core philosophy point #6).
 
-**Last updated:** 2026-07-14
+**Last updated:** 2026-09-17
 
 ---
 
@@ -37,3 +37,13 @@ The full section-feasibility capability was built + reviewed (4 adversarial roun
 **Dropped from the live agent (2026-07-14):** the two FOSE tools (`materialize_feasible`, `propose_section_replan`) are now **UNREGISTERED** from `ALL_NYUPATH_TOOLS` and their SECTION-FEASIBILITY prompt routing removed, so the live agent no longer offers section-scheduling (registry **24 → 22 live tools**; full suite green; guards: `packages/engine/tests/agent/foseDeactivated.test.ts` + `frozenContractManifest.test.ts`). This is a **disconnection, not a deletion** — the tool code + imports + exports + unit tests remain in the repo (revivable by re-registering + restoring the routing). `materialize_sections` / `confirm_section_combination` (Phase-15/17 core near-term section fill, auto-chained from `plan_forward_degree`) are **unaffected**.
 
 **Why dropped:** the whole capability only becomes genuinely useful with live seat status, and there is **no acceptable source for it**. The public FOSE API never returns open/waitlist/closed (every section is `stat:"A"`; live availability is Albert/PeopleSoft-only, SSO-gated — verified 2026-06-20). Investigated every alternative (2026-07-14): **no official NYU live-enrollment API**; the public PeopleSoft class search that *does* show open/closed is **reCAPTCHA-gated** (defeating it is off-limits + against NYU's intent); and a **student-driven browser helper** (student reads their own Albert page, feeds it in) — while technically viable since the engine's O/W/C machinery is already built — was judged **not worth the build/maintenance/policy cost** for a personal project, and cannot do live monitoring anyway. Without real data the design degrades to a high-friction elicit-or-hedge loop, so the owner dropped FOSE. **No further FOSE work.** The binding philosophy's live-availability mandate is now marked **DORMANT** (conditioned on a seat-data source appearing) — see the FOSE callout at the top of [`core_philosophy.md`](core_philosophy.md).
+
+## Plan 40 — production test suite (PLANNED; nothing implemented)
+
+`Docs/plans/40-2026-09-16-production-test-suite.md` — a comprehensive production evaluation of the whole system (chat agent + 22 tools + web UI), scored on correctness, quality, UI behavior and latency, starting from the real CAS Computer Science/Math DPR. Three harness levels (engine in-process · route + SSE against a production build · Playwright), a 56-category question taxonomy (~1,050 cases), and a binding ground-truth doctrine: every expected answer is re-derived from the DPR text, the bulletin text, or a hand computation — never from the system's own output.
+
+Backed by a 26-agent survey (12 investigators + 12 adversarial skeptics + synthesizer + completeness critic): `Docs/audits/2026-09-17-production-test-capability-survey.md`. **All twelve units came back partially reliable** and about a third of the proposed test seeds were circular, which is why the doctrine above is binding.
+
+**Stage 0 blockers found (each becomes its own PR, none implemented yet):** `next build` fails because the what-if-audit route exports non-route helpers; `tools/bulletin-parser/extractCoreqs.ts` runs its extractor on import, so `vitest` can rewrite `prereqs.json` and spend Anthropic calls; the chat (30/day) and plan-action (60/day) rate limits have no env override; there is no browser test tooling and only three `data-testid` hooks in the whole chat UI.
+
+**Defect ledger:** 35 known-bug watch items and 25 expected-hedge items are tabulated in the plan's §1.5, each with a code citation. The most serious, orchestrator-verified: a six-course "complete all of these" major requirement is modeled as a pick-one pool, so after a hypothetical failure the re-solve drops a still-required course and still returns the plan as valid.
