@@ -2,7 +2,7 @@
 
 `CLAUDE.md` keeps a one-breath status summary + a pointer; the detailed status lives here so the always-loaded instructions stay lean. **Update this file (and that summary in `CLAUDE.md`) in the same PR as the code**, per `CLAUDE.md` §4.1 — the same way you revise the matching `Docs/current-system/` doc (core philosophy point #6).
 
-**Last updated:** 2026-09-17
+**Last updated:** 2026-10-01
 
 ---
 
@@ -40,10 +40,12 @@ The full section-feasibility capability was built + reviewed (4 adversarial roun
 
 ## Plan 40 — production test suite (PLANNED; nothing implemented)
 
-`Docs/plans/40-2026-09-16-production-test-suite.md` — a comprehensive production evaluation of the whole system (chat agent + 22 tools + web UI), scored on correctness, quality, UI behavior and latency, starting from the real CAS Computer Science/Math DPR. Three harness levels (engine in-process · route + SSE against a production build · Playwright), a 56-category question taxonomy (~1,050 cases), and a binding ground-truth doctrine: every expected answer is re-derived from the DPR text, the bulletin text, or a hand computation — never from the system's own output.
+`Docs/plans/40-2026-09-16-production-test-suite.md` — a comprehensive production evaluation of the whole system (chat agent + 22 tools + web UI), scored on correctness, quality, UI behavior and latency, starting from the real CAS Computer Science/Math DPR. Three harness levels (engine in-process · route + SSE against a production build · Playwright), a 57-category question taxonomy (~1,080 cases), and a binding ground-truth doctrine: every expected answer is re-derived from the DPR text, the bulletin text, or a hand computation — never from the system's own output.
 
 Backed by a 26-agent survey (12 investigators + 12 adversarial skeptics + synthesizer + completeness critic): `Docs/audits/2026-09-17-production-test-capability-survey.md`. **All twelve units came back partially reliable** and about a third of the proposed test seeds were circular, which is why the doctrine above is binding.
 
 **Stage 0 blockers found (each becomes its own PR, none implemented yet):** `next build` fails because the what-if-audit route exports non-route helpers; `tools/bulletin-parser/extractCoreqs.ts` runs its extractor on import, so `vitest` can rewrite `prereqs.json` and spend Anthropic calls; the chat (30/day) and plan-action (60/day) rate limits have no env override; there is no browser test tooling and only three `data-testid` hooks in the whole chat UI.
 
-**Defect ledger:** 39 known-bug watch items and 25 expected-hedge items are tabulated in the plan's §1.5, each with a code citation. The most serious, orchestrator-verified: a six-course "complete all of these" major requirement is modeled as a pick-one pool, so after a hypothetical failure the re-solve drops a still-required course and still returns the plan as valid.
+**Defect ledger:** 50 known-bug watch items and 29 expected-hedge items are tabulated in the plan's §1.5, each with a code citation. The most serious, orchestrator-verified: a six-course "complete all of these" major requirement is modeled as a pick-one pool, so after a hypothetical failure the re-solve drops a still-required course and still returns the plan as valid.
+
+**Rules the DPR does not state (audit 2026-10-01):** `Docs/audits/2026-10-01-dpr-silent-rules-audit.md`, recorded in the plan's §1.7. A DPR cannot carry discretionary or delegated rules (DUS excusals, substitutions, department-website lists, "by advisement" slots), and the bulletin layer fails on them today: both retrieval tools cut off program-page footnotes, the decisive outcome of the owner's MATH-UA 352 / CSCI-UA 421 question exists only on an un-ingested department page, and the system prompt calls the DPR complete. Discretion language appears on ~70% of undergraduate program pages (keyword upper bound). Plan 40 tests this (category C57, KB-40–KB-50, EH-26–EH-29); the fixes go in their own plan. Open owner decision: whether to ingest department pages as a lower-authority source.
