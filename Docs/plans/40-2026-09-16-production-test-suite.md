@@ -116,6 +116,10 @@ Coverage: 22 live tools read end-to-end; 96 capabilities and 159 question seeds 
 | KB-33 | **An all-of requirement is modeled as a pick-one pool.** R1142/20 lists six required CS courses ("6.00 required, 5.00 used, 1.00 needed"), but the engine treats them as interchangeable: in the baseline plan the CSCI-UA 421 slot lists `CSCI-UA 101` as an alternative, and after `fail_completed CSCI-UA 102` the re-solve places **only CSCI-UA 102** while CSCI-UA 421 survives merely as `rationale.consideredAlternatives[1]` / `flexibility.alternativeCourses[1]` — never as a slot. The result is returned `feasible: true`, `state: valid-with-trade-offs`, `conflicts: null` although two of the six courses are now missing. *(Orchestrator-verified directly from the recorded probe output, not only from the unit report.)* | baseline `07_counterfactual_whatif.json` → `probe_fail_completed_CSCI102`; `graduationPathValidator.ts:173-176` | The suite's invariant checker (Stage 3) must fail this plan. This is the clearest candidate for "ships an invalid plan" and belongs in §9 #7's frozen-seam decision. |
 | KB-34 | The withdrawn / pass-failed course stays rendered as an `in_progress` slot, so Fall 2026 still shows 16 credits even though the engine's own F-1 hedge computes the post-withdraw 12. A reply saying "withdrawing keeps you at 16 credits" would be wrong. | baseline §2.7 (B-9); `whatIfAssumption.ts:327-343` | Branch-B cases assert the stated post-withdraw credit total matches the hedge's arithmetic. |
 | KB-35 | A **domestic** student below 12 credits gets the fixed prefix "Below F-1 full-time floor (8 credits). Domestic student below 12-credit full-time threshold…" — an F-1 claim to a domestic student. | `constraintModel.ts:548`; `materializePlan.ts:911`; `visaValidator.ts:125` | A light-load case for a domestic student must not produce F-1 language; the expected response is a Tier-C adviser/financial-aid clarification. |
+| KB-36 | **Prerequisite coverage outside CAS (verified 2026-09-29 against the bulletin itself).** Of courses whose bulletin entry states a real prerequisite, the planner's data records it for CAS 90% (770), Stern 100% (23), Steinhardt 97% (48), Tandon 78% (365), Tisch 72% (96), NYU Abu Dhabi 68% (460) — mostly standing/placement conditions missed at the last three — but **NYU Shanghai 1% (4 of 401), SPS 0% (148), Nursing 0% (15)**. Shanghai writes prerequisites as free text inside the description, often with nicknames ("Prerequisite: ICS or A- in ICP."), so the extractor records an **empty** list; SPS and Nursing were never extracted. This contradicts plan 39's "Shanghai prerequisites are fine", and plan 39 A2's interim warning (fires only when a course has *no record at all*) would **never fire for Shanghai**, the worst-covered school. CAS also loses escape clauses ("…OR any equivalent courses" on CSCI-UA 421). | `packages/engine/src/data/prereqs.json`; `buildSolverInput.ts:301-310`; `tools/bulletin-parser/` | The suite's prerequisite invariant reads the bulletin text for the courses in play, never `prereqs.json`; a Shanghai/SPS/Nursing plan that orders a course before its prerequisite must fail; the A2 warning must also fire on empty records for these schools. Fix = its own plan (§9 #13). |
+| KB-37 | `courseSuffixMap.ts` mislabels schools: `-UN` → "Gallatin" (bulletin: Nursing), `-UF` → "Tisch" (bulletin: Liberal Studies), and has no entry for `-UG` (Gallatin) or `-UC` (SPS); `-UP` (Liberal Studies) matches no bulletin course. Only `search_courses` consumes it. | `packages/engine/src/data/courseSuffixMap.ts:32-41` | Course-search cases for Nursing, Gallatin, Liberal Studies and SPS courses assert the correct school label and home/cross-school classification. |
+| KB-38 | **Refusals are shipped as empty answers.** Newer Claude models can return HTTP 200 with `stop_reason: "refusal"` and empty content. The block path maps it to `"other"`; the streaming path (the only production path) never sets `finishReason`; no fallback fires (fallback runs only on a thrown error); there is no empty-text guard, so the student gets an empty reply. | `anthropicClient.ts:269-278, 335-350`; `agentLoop.ts:380, 688-708, 930, 992`; `chat/v2/route.ts:1141-1227` | Fixed inside Task 0.8; a degradation case injects a refusal and asserts fallback or an honest message, never an empty bubble. |
+| KB-39 | Thinking blocks are never replayed between tool iterations (`LLMMessage` has no field for them), so the model loses its earlier reasoning on every tool call within a turn. It is API-safe — dropping *all* thinking is allowed under the preserved-thinking rules — but costs reasoning continuity. | `llmClient.ts:23-30`; `anthropicClient.ts:148-151, 255-267` | Not a defect to gate on; a candidate quality improvement to measure after the model switch. |
 
 **Expected hedges (accepted limitations — the correct answer is the honest limit):**
 
@@ -196,6 +200,24 @@ A full offline probe ran the real pipeline on the redacted fixture at a pinned c
 
 
 ---
+
+### 1.6 Decisions recorded 2026-09-30
+
+| Decision | Value | Status |
+|---|---|---|
+| Product's primary model | `claude-sonnet-5-5`, adaptive thinking with `display: "summarized"`, `output_config.effort: "medium"` | **Decided by the owner** (no comparison run). Rationale: same vendor as today, so no new processor for student records; stronger than Sonnet 4.6 on the public agent benchmarks that include both; $2/$10 vs $3/$15 per M tokens (≈10–13% cheaper per same text after its ~30% larger tokenizer); supported until ≥2027-09-28; Sonnet 4.6's thinking-budget mode is already deprecated. Risks: two days old at decision time; not a one-line switch (Task 0.8). Revisit via the comparison stage if it underperforms. |
+| Prompt caching | On: breakpoints on the last tool definition and the system prompt | Decided. Tool definitions are identical for every student (≈12k tokens), so that block is cacheable across all users. |
+| Execution tiers | Deterministic / live-API / Claude-plan, per §4.6 | Decided |
+| Checkpointing | File-based, per §4.6 | Decided |
+| Determinism (§9 #10) | Production settings, report pass rates | Settled: Sonnet 5.5 rejects any temperature other than 1. |
+| Owner facts (§9 #6) | F-1 student; graduation target Spring 2027; Fall 2026 registration = CORE-UA 700, MATH-UA 251, MATH-UA 343, MPAJZ-UE 71 (16 credits); unofficial transcript printed 07/29/2026 shows Spring 2026 grades, including **MATH-UA 334 = P**, and the Dean's List for the academic year | Received. Consequences below. |
+| Fallback model | `claude-sonnet-4-6` during the transition (replacing gpt-4.1-mini, the weakest model surveyed) | Recommended — pending owner confirmation (§9 #4) |
+
+**Consequences of the owner facts for the answer key (Stage 1):**
+- **MATH-UA 251 is running** (section 001 on the registration). The catalog marks it spring-only, but the record wins; R1142/70 stays satisfied by an in-progress course.
+- **MATH-UA 334 was taken pass/fail.** CAS rule B and the DPR's own RG5076 text both bar pass/fail for the major, so the two-advanced-math requirement (R1142/60) very likely re-opens. Spring 2027 would then need a third course (CSCI-UA 421 + one Texts & Ideas + an advanced math course), which also brings the term to 12 credits and meets the F-1 floor without a reduced-load approval. Confidence: medium — how the audit re-slots MATH-UA 251 / 343 is not knowable from the transcript; confirm with a fresh DPR and the adviser.
+- **The fourth Fall 2026 course (MPAJZ-UE 71, 4 credits)** takes outside-CAS credit to 18 of 16, matching the June what-if report's "Not Satisfied".
+- **The April DPR fixture is now stale** (it shows MATH-UA 334 in progress and three Fall courses). Stage 1 adds a fresh DPR downloaded from Albert as a second fixture and keeps the April one for stale-record cases. The 334 situation itself becomes a Branch-B what-if case ("I took MATH-UA 334 pass/fail — what does that change?"), which the engine can compute via its pass/fail transform.
 
 ## 2. Ground-truth doctrine (binding for every case)
 
@@ -331,6 +353,25 @@ The product runs Sonnet with extended thinking at temperature 1 on the streaming
 `smoke` (~25 cases, every category, L0+L1, <15 min) · `full` (all cases, all levels) · `regression` (RecordingLLMClient replays of a frozen full run — no LLM cost — to catch engine/route regressions) · `judge-calibration` (human vs LLM-judge agreement on a fixed 40-case sample, Cohen's κ ≥ 0.7 gate, reusing `packages/engine/tests/eval/cohensKappa.ts`).
 
 ---
+
+### 4.6 Execution tiers, Claude-plan usage, and file checkpoints (decided 2026-09-30)
+
+| Tier | What runs there | Cases | Cost per full pass |
+|---|---|---|---|
+| **D — deterministic** | Tool outputs, planner plans, validator verdicts, route and SSE contracts, persistence, authorization, UI flows with a recorded or stubbed model reply, most of the known-defect ledger | ~489 | $0; runs in CI |
+| **L — live product (API key)** | Cases whose subject is the model's own behavior: routing, wording, hedging, refusals, synthesis, multi-turn handling | ~431, plus ~60 simulated-student conversations | ≈$100 with Sonnet 5.5 + caching (±50% until adaptive-thinking output is measured); 3 repetitions only for release gates (≈$250–300) |
+| **P — Claude plan (Max)** | Judging (Opus 5.5), simulated students (Sonnet 5.5 Claude Code agents talking to the local server over HTTP), triage and reports | all judged cases | ≈25–35% of the weekly allowance per full run, over 2–3 five-hour windows (low–medium confidence; measured in the pilot by a 20-case judge batch and the usage-card delta). A release gate roughly triples the judging share. |
+
+The case split comes from a classifier plus a skeptic over all 56 categories (`Docs/audits/2026-09-17-production-test-capability-survey.md` provenance; run `wf_ae668a92-da8`).
+
+**Policy boundary (verified 2026-09-30).** Tier P is ordinary Claude Code use and draws on the plan's limits. NYU Path's own model calls must stay on the API key: Anthropic's Claude Code legal-and-compliance page prohibits routing requests through Free, Pro or Max plan credentials, and using the `claude` binary as another application's model backend is not covered by any page. It would also not be a production test — `claude -p` executes MCP tools inside its own loop and exposes none of the product's thinking, effort or sampling controls.
+
+**Checkpoints and resume.**
+- Every unit of work writes its own result file: `evals/prod/runs/<runId>/<caseId>.product.json`, `.judge.json`, `.sim.json`. A runner skips any case whose file exists, so a run resumes from **any** session, including a scheduled one after a limit reset. (Workflow resume is same-session only and loses in-flight agents; that happened five times during the survey.)
+- `evals/prod/runs/<runId>/manifest.json` pins model ids, effort, flags (caching, polish), bulletin snapshot date and the DPR fixture hash; a resumed run refuses to continue if the manifest no longer matches.
+- Judge batches stay small (10–20 cases per agent) so a limit hit wastes little.
+- Headless `claude -p` jobs stop at a usage limit instead of waiting; scripts detect "You've hit your … limit" and exit cleanly for a later resume. The `claude` CLI refuses to start inside a Claude Code session — run tier-P scripts from a terminal or a fresh session.
+- Orchestrate tier P from a **fresh, short session**: this session's 750k-token context made every step expensive in allowance terms.
 
 ## 4b. Harness risks that must be settled before authoring (completeness critic)
 
@@ -728,6 +769,27 @@ git commit -m "chore(evals): add Playwright + production launch config for the b
 
 `fix/builder-parity-clock-timebomb` (other session) must merge before the suite's CI gate is meaningful; no work here except rebasing this branch afterwards. If it has not merged by Stage 5, add a follow-up: the assertion at `builderParity.test.ts:190` should compare against the calendar-derived current term for a **fixed injected clock**, never the wall clock.
 
+#### Task 0.7: Prompt caching on the Anthropic client (production + tests)
+
+**Files:** Modify `packages/engine/src/agent/clients/anthropicClient.ts` (block path ~:115-134, streaming path ~:179-198), `packages/engine/src/agent/llmClient.ts` (usage type); Test `packages/engine/tests/agent/anthropicCaching.test.ts` (copy the SDK-stub pattern from `anthropicThinking.test.ts:4-68`); Docs `Docs/current-system/engine/llm-clients.md`.
+
+- [ ] **Step 1: Failing test** — for both `complete()` and `streamComplete()`, assert the request body has `system` as an array whose last block is `{ type: "text", text: <prompt>, cache_control: { type: "ephemeral" } }`, and that only the last tool carries `cache_control: { type: "ephemeral" }`. Assert the returned usage exposes `cacheReadTokens` / `cacheWriteTokens` from `usage.cache_read_input_tokens` / `usage.cache_creation_input_tokens`.
+- [ ] **Step 2: Implement** — `system: [{ type: "text", text: args.system, cache_control: { type: "ephemeral" } }]`; in the tools map add `...(i === arr.length - 1 ? { cache_control: { type: "ephemeral" } } : {})`; extend the usage type with the two optional fields. No other request field changes.
+- [ ] **Step 3: Verify** — both `tsc --noEmit` + `npx vitest run`; then one live call per path with `ANTHROPIC_API_KEY` set, called twice within five minutes: the second response must report `cache_read_input_tokens > 0` (record the numbers in the PR).
+- [ ] **Step 4: Commit** — `feat(engine): prompt caching on the Anthropic client (tools + system breakpoints)`.
+
+#### Task 0.8: Switch the primary model to claude-sonnet-5-5 (contract verified 2026-09-30)
+
+Not a one-line change: Sonnet 5.5 returns 400 on `thinking.type: "enabled"` with `budget_tokens`, on `thinking.type: "disabled"`, on any `temperature` other than 1 (incl. the 0 the loop sends today), and on forced `tool_choice` (never used here). Sources: platform.claude.com migration guide (Sonnet 4.6 breaking changes), extended-thinking and effort pages, `api/messages/create`.
+
+**Files:** `anthropicClient.ts`, `clients/index.ts:65-68`, root `package.json` (`@anthropic-ai/sdk` ^0.91.1 → ≥0.129.0, which adds `claude-sonnet-5-5` and `between_tools`), `agentLoop.ts` (refusal handling), tests `anthropicThinking.test.ts` (its assertions at :81-83, :102 encode the old contract), `clients.test.ts`, new `anthropicSonnet55.test.ts`; living docs `CLAUDE.md` §Conventions, `README.md` Models, `.env.example`, `Docs/STATUS.md`, `Docs/current-system/engine/llm-clients.md` (run `bash tools/check-living-docs.sh 'claude-sonnet-4-6'` and `'gpt-4.1-mini'`).
+
+- [ ] **Step 1: Failing tests** — a per-model profile: for `claude-sonnet-5-5` the streaming body has `thinking: { type: "adaptive", display: "summarized" }`, `output_config: { effort: "medium" }` (overridable by `NYUPATH_EFFORT`), and **no** `temperature`, `top_p` or `top_k`; the block path likewise sends no temperature; `NYUPATH_DISABLE_THINKING=1` sends `thinking: { type: "between_tools" }`. For `claude-sonnet-4-6` the existing budget behavior is unchanged (it remains the fallback). A streamed response with `stop_reason: "refusal"` throws a typed `ModelRefusalError`; the streaming path sets `finishReason` from `stop_reason`; the loop treats an empty final text as an error rather than a reply. Factory defaults: primary `anthropic` / `claude-sonnet-5-5`, fallback `anthropic` / `claude-sonnet-4-6` (pending §9 #4).
+- [ ] **Step 2: Implement** — a small capability table (`BUDGET_THINKING_MODELS = new Set(["claude-sonnet-4-6", "claude-haiku-4-5-20251001"])`; everything else gets the adaptive profile); thread `stop_reason` into the streaming result; throw on refusal so the existing fallback path runs; keep `display: "summarized"` so the chat's thinking stream is not silently emptied (Sonnet 5.5's default is `"omitted"`).
+- [ ] **Step 3: Verify** — both `tsc --noEmit` + `npx vitest run`; one live streaming turn on `claude-sonnet-5-5` through `runAgentTurnStreaming` with the fixture DPR (expect tool use + non-empty reply, record tokens and latency); one forced-fallback check.
+- [ ] **Step 4: Acceptance comparison (if approved, §9 #14)** — ~30 hard cases × 2 runs, Sonnet 4.6 vs Sonnet 5.5, ≤ $20.
+- [ ] **Step 5: Commit** — `feat(engine): primary model claude-sonnet-5-5 (adaptive thinking, effort medium, refusal handling)`.
+
 ### Stage 1 — DEEP: the DPR ground-truth key (agents + owner confirm)
 
 **Output:** `evals/prod/groundTruth/SAA_STD_DS.facts.json` (+ a readable `Docs/audits/2026-xx-xx-dpr-ground-truth-SAA_STD_DS.md`) — ≥ 100 rows: `id | fact | value | truthClass | provenance (page + RG/R id) | derivation | systemCanRead (parser field or "gap") | acceptable phrasings | ownerConfirm`.
@@ -803,19 +865,25 @@ Per-DPR template: `evals/prod/groundTruth/<DPR>.facts.json` via the Stage-1 slic
 - New living doc when Stage 5 lands: `Docs/current-system/surrounding/evaluation-harness.md` (+ `Docs/index.json` rows for `evals/prod/**`).
 - `Docs/reports/` receives every pilot/full run report.
 
-## 9. Open decisions for Edoardo
+## 9. Open decisions for Edoardo (status as of 2026-09-30)
 
-1. **Persistence target for L1/L2:** the real Neon DB with throwaway identities (recommended — it is the production path and the delete route is always-on) vs. a separate Neon branch/database for tests.
-2. **Judge model:** a non-Anthropic judge (e.g. `gpt-4.1`) vs. a different Anthropic model than the product's; recommendation: a distinct vendor to reduce shared-bias, calibrated by κ either way.
-3. **Visa variant weighting:** run every DPR-dependent case for both `domestic` and `f1` (doubles cost) vs. F-1 only for categories where it matters (A, F, G, H, K) — recommended.
-4. **Latency budgets:** the headless probe shows engine work is under 60 ms per call, so budgets measure the model and retrieval. Proposed p90 targets — first token ≤ 4 s, audit-type turns ≤ 20 s, planning turns ≤ 45 s, what-if uploads ≤ 60 s; confirm or adjust.
-5. **Rate-limit override vs. identity rotation:** Stage 0.3 (env override, default unchanged) is recommended; identity rotation alone cannot avoid the 30/day cap on long multi-turn cases.
-6. **Owner-confirm facts** (Stage 1 slice 7): your visa status, intended graduation term, post-April registration changes, and whether MATH-UA 251 actually runs in Fall 2026.
-7. **Frozen-contract findings (KB-21, KB-22, KB-33):** the validator's axis-1 leaf-skip and the IP double-count in axes 3/7 are inside the frozen seam (`Docs/FROZEN.md`). The suite will *detect* them via its own invariant checker; whether to amend the frozen contract is your call and gets its own plan if yes.
-8. **Re-scrape the bulletin before the first full run?** The mirror is from 2026-04-21. Re-scraping gives current rules but invalidates every policy citation authored against the old snapshot; keeping it means the suite measures the system against April's rules. Recommendation: keep the snapshot for v1 (so agent behavior is what is measured), and schedule a re-scrape + citation refresh as its own task.
-9. **Suite scale and budget.** 56 categories at the estimated counts is ~1,050–1,100 cases; at 3 repetitions for a temperature-1 system that is roughly 3,200 model turns per full run, plus the judge. Options: run `full` rarely and `smoke` often; cut repetitions for deterministic categories; or trim the taxonomy. A token/cost budget is needed before the first full run (D6 makes cost measurable).
-10. **Determinism configuration** (D2): accept production's temperature 1 and report pass rates, or run with thinking disabled for reproducibility and state that the suite measures a non-default configuration.
-11. **All-NYU scope now, or after a non-CAS DPR?** The critic calls this the largest strategic gap: the philosophy binds the agent to every NYU undergraduate, the repo already holds 11 school configs and the Shanghai and Abu Dhabi bulletins, yet DPR-independent cross-school questions are ~12 of 686 cases. D5 would raise it to ~60 without needing a new DPR.
+**Decided or settled:** primary model Sonnet 5.5 (§1.6); prompt caching; execution tiers and checkpoints (§4.6); determinism (#10, settled by the model); rate-limit overrides (#5, Task 0.3); owner facts received (#6, §1.6).
+
+**Still open — recommendation in bold:**
+1. **Test database:** **real Neon with throwaway accounts.**
+2. **Judge and calibration:** the judge is Opus 5.5 on the Claude plan — same vendor as the product, different model. Options: (a) judge scores stay advisory and nobody hand-labels; (b) **the owner hand-labels ~150 answers once (≈3–5 hours of yes/no checks) and the judge must agree with those labels at κ ≥ 0.6**; (c) add a second labeler for a 50-answer subset to measure human agreement. Replaces the inconsistent 0.7 / 0.8 thresholds elsewhere in this plan.
+3. **Visa variants:** **F-1 is the primary variant for this owner;** run domestic variants only where visa status changes the answer.
+4. **Fallback model:** **claude-sonnet-4-6 during the transition;** decide on a cross-vendor fallback after the comparison stage.
+5. **Latency:** **measure time to first visible answer** (the UI reveals text only after the turn), not first token; targets as proposed in the earlier §9 text.
+6. **Repetitions:** **three only for release gates**, one otherwise.
+7. **Frozen-seam defects (KB-21, KB-22, KB-33):** **fix in their own plan.**
+8. **Bulletin snapshot:** **keep 2026-04-21 for v1;** re-scrape as its own task.
+9. **All-NYU cases:** **add the ~60 cross-school questions now** (deep-dive D5).
+10. **Prerequisite coverage (KB-36, KB-37):** **schedule the Shanghai/SPS/Nursing extraction fix and the suffix-label fix as their own plan, and correct plan 39 A2's trigger to also fire on empty records.**
+11. **Fresh DPR:** **download a current DPR from Albert** as the second fixture (§1.6).
+12. **Plan-40 branch:** **push and open the docs PR.**
+13. **Independent advisers** checking part of the answer key: optional.
+14. **Small model comparison before switching (Task 0.8 Step 4):** **yes, ≤ $20** — 30 hard cases × 2 runs, Sonnet 4.6 vs 5.5; cheaper vendors (Gemini 3.8 Flash, GLM-5.3-Flash) later, when their client work is justified.
 
 ## Appendix A — Investigation provenance
 
