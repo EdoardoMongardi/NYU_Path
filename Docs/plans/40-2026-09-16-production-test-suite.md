@@ -77,7 +77,7 @@ Consolidated record: `Docs/audits/2026-09-17-production-test-capability-survey.m
 
 Coverage: 22 live tools read end-to-end; 96 capabilities and 159 question seeds catalogued; the skeptics refuted 13 investigator claims and flagged 9 seeds whose "ground truth" was circular (derived from the stored plan) — those seeds are re-derived by hand in Stage 3.
 
-**Known-bug watch (the system is wrong today; a case must FAIL until fixed, and each becomes its own issue/PR):**
+**Known-bug watch (the system is wrong today; a case must FAIL until fixed, and each becomes its own issue/PR; those cases carry `knownBug` (§5), so they report as known-failing instead of turning CI red):**
 
 | # | Behavior today | Where | What the case must assert instead |
 |---|---|---|---|
@@ -283,7 +283,7 @@ Produced by the synthesizer over all twelve verified unit reports, then extended
 | C37 | UI: auth & onboarding | mixed | 20 | Behaviour-probe |
 | C38 | UI: chat transport, streaming & the plan canvas | yes | 26 | Behaviour-probe |
 | C39 | UI: profile rail, session management & error surfaces | mixed | 18 | Behaviour-probe + calendar-relative |
-| C40 | Known-defect watch cases (cross-category regression ledger) | mixed | 30 | Per-defect; each watch case carries the independent oracle of its home category |
+| C40 | Known-defect watch cases (cross-category regression ledger) | mixed | 30 | Per-defect; each watch case carries the independent oracle of its home category and a `knownBug` tag (§5) |
 
 ### 3.2 The 16 categories the completeness critic added (~+370 cases)
 
@@ -438,6 +438,7 @@ Cases live under `evals/prod/cases/<category>/<id>.json` (one file per case; no 
   },
   "judgeRubric": "Reply must give 138 and explain that 28 are in progress; must not say credits are 'remaining'.",
   "repetitions": 1,
+  "knownBug": null,                      // or "KB-33": asserts the correct behavior, expected to fail until fixed (see below)
   "tags": ["counter-semantics", "ip-nuance"]
 }
 ```
@@ -446,6 +447,14 @@ Date-relative cases replace `dateRelative: null` with the name of a pure functio
 
 UI cases (`category: "O"`) add a `ui` block: `{ "steps": [{ "action": "click", "target": "slot:CSCI-UA 421", ...}], "expectDom": [...], "screenshot": true }`. Target vocabulary (U06 DOM-hook inventory; ARIA/text today, `data-testid` after Stage 0.4): landmarks `section[aria-label="Onboarding wizard"]`, `[role=list][aria-label="Wizard steps"]` (`aria-current="step"`), `[role=tablist][aria-label="Scenario tabs"]` → `[role=tab][aria-selected]` (first tab `📌 My Plan`), `[role=tabpanel]`, `[role=region][aria-label="Compare view"]`, `aside[aria-label="Your profile"]`, `section[aria-label="Scenarios"]`, `[aria-label="Student summary"]` + `[role=progressbar]`, `[role=note]` hedge blocks; buttons by accessible name `Sign out`, `Confirm — make this My Plan`, `Cancel`, `Ask why`, `Discard`, `⇄ Compare` (`aria-pressed`), `Close <label>`, `Open scenario: <label>`, `Compare scenario: <label>`, `Compare <label> with My Plan`, `Add a course to <term>` → input `Course to add to <term>` → `Add <course> to <term>` / `Cancel adding a course`, slot popover `[role=menu]` → `[role=menuitem]` `Drop | Withdraw | Pass/Fail` (+ `title` tooltip) + `Close`, `Upload Albert What-If audit for <program>`, `↻ Update DPR`, `Delete my account & data`, `⚠ Clear all data`, wizard `Build my plan` / Back / Skip / Next; wizard form ids `#wizard-home-school`, `#wizard-visa-status`, `#wizard-grad-term`, `#wizard-goals-visa`, `#wizard-workload`, `#wizard-summer`, `#wizard-jterm`, `#wizard-abroad`, `#wizard-honors`, `#wizard-free-text`; status `[role=status][aria-live=polite]` `Thinking` → `Reasoned for <dur>` / `Failed after <dur>`; existing testids `schedule-card-summary`, `whatif-upload-input`, `whatif-upload-spinner`; refusal bubbles `[data-kind="plan_action_bubble"][data-bubble-kind=soft_refusal|hard_refusal]`. Driver notes: the app uses native `window.alert/confirm` for Update DPR / Clear / Delete (handle `dialog` events); layout is desktop-only (viewport ≥ 1280 px); the validator chip text is `⚠ Could not fully ground this reply.`; the 429/400 server copy is **not** shown (generic "Something went wrong on our side…").
 
+**Known-bug cases (`knownBug`).** A case that exercises an open defect from the §1.5 ledger names it, e.g. `"knownBug": "KB-33"`. The tag changes how a result is reported, never what is asserted:
+- **The expectation stays the truth.** A tagged case's `expect` and `groundTruth` come from the independent oracle like every other case. Recording today's wrong output as the expectation, or loosening a check until it passes, is forbidden — it would freeze the bug.
+- **Fails as expected →** reported as *known-failing*: listed in the report, but it does not fail CI or a release gate. A crash or timeout is still an error, never known-failing.
+- **Passes unexpectedly →** in tier D this fails CI ("KB-n now passes: confirm the fix and remove the tag"), so the fixing PR turns the case into an ordinary regression guard. In tier L a pass is only reported, because live replies vary; the tag still comes off only in the fixing PR.
+- **One bug per case, kept narrow.** The tag covers the whole case, so a tagged case asserts only what its bug breaks; the rest of the same question goes in an untagged sibling case. A tag can then never hide an unrelated regression.
+- **Registry.** `evals/prod/knownBugs.json` is the living list — `id`, one-line summary, `status` (`open` | `fixed`), `gated`, issue link, fixing PR — seeded from §1.5, which is not edited after this plan merges. The schema rejects a tag naming an unknown or fixed bug, and a CI guard checks that every open, gated bug has at least one tagged case (KB-39 is not gated, per §1.5). Bugs fixed before the suite exists, such as KB-38 in Task 0.8, start as `fixed`; their cases are untagged regression guards.
+- **New bugs.** A defect confirmed in a run (Stage 6 onward) gets the next id and an issue, and its failing cases get the tag, so CI stays green on everything else.
+
 ---
 
 ## 6. Scoring model
@@ -453,7 +462,7 @@ UI cases (`category: "O"`) add a `ui` block: `{ "steps": [{ "action": "click", "
 1. **Deterministic layer (pass/fail per turn):** tool routing (`toolsAnyOf`), required/forbidden substrings and regexes, numeric grounding (every number in the reply appears in a tool result or the ground truth), rail presence rule, validator verdict, HTTP/SSE contract, plan-invariant checker (T2), latency budget.
 2. **Judge layer (0–5 per dimension, T3):** groundedness, completeness vs. ground truth, adviser quality (risk/trade-off, one focused follow-up, no over-hedging), clarity. The judge must be a **different model from the one under test** — the Phase-10 baseline runner graded the agent with its own model id, which is self-grading and its scores are not evidence. Reuse `packages/engine/tests/eval/judgePrompt.ts`'s claim-level rubric shape (generalizing its CAS/CS-specific rules) and `cohensKappa.ts`; no κ has ever been computed for the 4-axis rubric, so Stage 6 computes one before any judge score is trusted (κ ≥ 0.6 against the owner's labels, §1.6).
 3. **Human layer:** Edoardo spot-checks every `ownerConfirm` case and a random 10% of judged cases per full run.
-4. **Report:** `Docs/reports/<date>-prod-suite-<mode>.md` + JSON — per-category pass rates, judge means, latency percentiles, flaky list, regressions vs. the previous run, and a "system said X / truth is Y / provenance" table for every failure.
+4. **Report:** `Docs/reports/<date>-prod-suite-<mode>.md` + JSON — per-category pass rates (counted twice: over all cases, which measures the product, and excluding known-bug cases, which makes new regressions stand out), judge means, latency percentiles, flaky list, regressions vs. the previous run, a known-bug table (per id: status, tagged cases, still failing, unexpectedly passing), and a "system said X / truth is Y / provenance" table for every failure.
 
 ---
 
@@ -851,18 +860,18 @@ These run alongside Stages 1–3; five are blockers for authoring. Each produces
 
 ### Stage 4 — Question bank authoring
 
-- Finalize the taxonomy (§3) from the survey; set per-category targets; author cases in the §5 schema, each with provenance from Stages 1–3; every category gets **edge cases** (counter semantics, IP nuance, data-vs-reality, date boundaries, negations, multi-intent, ambiguous one-liners, adversarial injections, other-school phrasing, "register me for…" refusals, DPR-field change refusals → re-upload, no-DPR session behavior) and **known-limitation cases** (expected hedges).
+- Finalize the taxonomy (§3) from the survey; set per-category targets; author cases in the §5 schema, each with provenance from Stages 1–3; every category gets **edge cases** (counter semantics, IP nuance, data-vs-reality, date boundaries, negations, multi-intent, ambiguous one-liners, adversarial injections, other-school phrasing, "register me for…" refusals, DPR-field change refusals → re-upload, no-DPR session behavior) and **known-limitation cases** (expected hedges), plus at least one **known-bug case** per open, gated ledger item (tagged `knownBug`, §5).
 - Authoring rule (from `evals/cohorts/cohort_a.ts`): every required phrase traces to a source; every forbidden pattern reflects a real failure mode. Reuse per the §1.5.3 verdicts: adopt the phase-10 edge/adversarial cases after re-verifying each expectation, re-derive the 8 cohort-A real-DPR cases from Stage 1, and retire the golden sets that pin removed tools. Retiring cohort content means re-freezing its hash — a deliberate, reviewed step, because `evals/tests/**` runs in CI.
 - Add a redaction check over `evals/prod/**` (no real student name, N-number, or email in any committed case or report artifact).
 - Adversarial review: a fan-out of skeptics tries to (a) find a case whose expectation the system could satisfy while being wrong, (b) find a case whose expectation forbids a correct answer, (c) find a missing category. Iterate until two consecutive rounds add nothing (loop-until-dry).
 
 ### Stage 5 — Harness implementation (own plan: `41-…-production-test-harness.md`)
 
-Interface contracts fixed here so Stage 4 can author against them: `evals/prod/caseSchema.ts` (§5), `evals/prod/runners/{l0,l1,l2}.ts`, `evals/prod/scoring/{deterministic,judge,invariants}.ts`, `evals/prod/report.ts`, CLI `npx tsx evals/prod/run.ts --mode smoke|full|regression|judge-calibration --levels L0,L1 --variant domestic,f1 --cases <glob>`. Plan 41 follows the writing-plans format task-by-task (TDD, one file per responsibility), reusing `evals/cohort/composite.ts`, `packages/engine/tests/eval/judgePrompt.ts`, `cohensKappa.ts`, and `RecordingLLMClient`.
+Interface contracts fixed here so Stage 4 can author against them: `evals/prod/caseSchema.ts` (§5), `evals/prod/knownBugs.json` (§5), `evals/prod/runners/{l0,l1,l2}.ts`, `evals/prod/scoring/{deterministic,judge,invariants}.ts`, `evals/prod/report.ts`, CLI `npx tsx evals/prod/run.ts --mode smoke|full|regression|judge-calibration --levels L0,L1 --variant domestic,f1 --cases <glob>`. Plan 41 follows the writing-plans format task-by-task (TDD, one file per responsibility), reusing `evals/cohort/composite.ts`, `packages/engine/tests/eval/judgePrompt.ts`, `cohensKappa.ts`, and `RecordingLLMClient`.
 
 ### Stage 6 — Pilot, calibration, baseline report
 
-Smoke run (L0+L1) → fix harness defects → judge calibration (~150 replies hand-labelled once by Edoardo, κ ≥ 0.6, §9 #2) → first full run → `Docs/reports/<date>-prod-suite-full.md` → product defects filed as issues (never fixed inside the suite PR).
+Smoke run (L0+L1) → fix harness defects → judge calibration (~150 replies hand-labelled once by Edoardo, κ ≥ 0.6, §9 #2) → first full run → `Docs/reports/<date>-prod-suite-full.md` → product defects filed as issues and added to the known-bug registry, with their failing cases tagged (never fixed inside the suite PR).
 
 ### Stage 7 — Scale to more DPRs
 
@@ -880,7 +889,7 @@ Per-DPR template: `evals/prod/groundTruth/<DPR>.facts.json` via the Stage-1 slic
 
 ## 9. Owner decisions (all made; status as of 2026-10-01)
 
-Items 1–11 keep the first draft's numbering, so references such as "§9 #7" elsewhere in this plan still resolve; items 12–19 were added on 2026-09-30 and 2026-10-01. §1.6 holds the rationale.
+Items 1–11 keep the first draft's numbering, so references such as "§9 #7" elsewhere in this plan still resolve; items 12–20 were added on 2026-09-30 and 2026-10-01. §1.6 holds the rationale.
 
 1. **Test database (L1/L2):** the real Neon database with throwaway identities.
 2. **Judge and calibration:** Opus 5.5 on the Claude plan, a different model from the product. The owner hand-labels ~150 replies once as atomic yes/no criteria (≈3–5 hours); judge scores count only after the judge agrees with those labels at κ ≥ 0.6 (HR-4).
@@ -901,6 +910,7 @@ Items 1–11 keep the first draft's numbering, so references such as "§9 #7" el
 17. **Prerequisite coverage (KB-36, KB-37):** its own plan — extract Shanghai, SPS and Nursing prerequisites, fix the suffix labels, and make plan 39 A2's warning also fire on empty records.
 18. **Fresh DPR:** the 10/01/2026 DPR becomes the second fixture in Stage 1; the April DPR stays as the stale-record fixture (§1.6).
 19. **Publishing order:** PR #57 merges first, then this plan's docs PR; Stage-0 task branches start from `main` after that (no stacked PRs).
+20. **Known-bug cases:** cases for open ledger bugs carry `knownBug` (§5); they report as known-failing instead of failing CI, and an unexpected pass in tier D fails CI until the fixing PR removes the tag.
 
 **Still optional:** independent academic advisers checking part of the answer key.
 
