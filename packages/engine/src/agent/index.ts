@@ -182,6 +182,58 @@ export type {
 export { materializeSections } from "./sectionMaterialization/materialize.js";
 export type { MaterializeArgs } from "./sectionMaterialization/materialize.js";
 
+// Phase 38 — FOSE section-feasibility (the materialize_feasible path) + the
+// escalation bridge + agent-curation guardrails. Exported so the web layer
+// (the /api/v2/materialize route + the chat-v2 escalation wiring) can reach
+// the deterministic core without importing through deep subpaths.
+export {
+    materializeFeasible,
+    materializeFeasibleResultSchema,
+} from "./sectionMaterialization/materializeFeasible.js";
+export type {
+    MaterializeFeasibleResult,
+    MaterializeFeasibleArgs,
+    FeasibleCandidateView,
+    CandidateCourseView,
+    ComponentView,
+} from "./sectionMaterialization/materializeFeasible.js";
+export { materializeFeasibleTool } from "./tools/materializeFeasible.js";
+export {
+    classifySectionFailure,
+    generateResolutionLadder,
+    validateResolutionCandidates,
+    makeFrozenSeamEvaluator,
+    runSectionReplanLoop,
+} from "./sectionMaterialization/sectionReplanBridge.js";
+export type {
+    SectionFailure,
+    SectionFailureKind,
+    SectionFailureInput,
+    ResolutionBatch,
+    ResolutionResult,
+    ValidatedResolution,
+    BatchEvaluation,
+    BatchEvaluator,
+    SectionReplanLoopDeps,
+    SectionReplanLoopOptions,
+    SectionReplanLoopResult,
+} from "./sectionMaterialization/sectionReplanBridge.js";
+export {
+    findWithinTermAlternatives,
+    makeLeafSiblingsResolver,
+} from "./sectionMaterialization/withinTermSwap.js";
+export { buildSectionReplanLoopDeps } from "./sectionMaterialization/sectionReplanWiring.js";
+export { proposeSectionReplanTool } from "./tools/proposeSectionReplan.js";
+export type { ProposeSectionReplanOutput } from "./tools/proposeSectionReplan.js";
+export {
+    validateAgentSelection,
+    deterministicTop5,
+    revalidatePick,
+    paginate,
+    buildAutoSwapAdvice,
+    agentSelectionSchema,
+} from "./sectionMaterialization/agentCuration.js";
+
 export { OpenAIEngineClient, toOpenAIMessage } from "./clients/openaiClient.js";
 export type { OpenAIClientOptions } from "./clients/openaiClient.js";
 export { AnthropicEngineClient, toAnthropicMessage } from "./clients/anthropicClient.js";

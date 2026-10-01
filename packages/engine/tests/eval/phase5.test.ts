@@ -100,6 +100,11 @@ describe("buildTool + ToolRegistry", () => {
         //     planner conflicted with `plan_forward_degree` for "what should I take
         //     next semester" routing, leaving session.forwardSchedule unset and the
         //     schedule sidebar empty. The tool's source file is kept for unit tests.
+        // 2026-07-14 FOSE (plan 38) deactivation:
+        //   - materialize_feasible + propose_section_replan UNREGISTERED from the
+        //     live agent (owner dropped FOSE — no live-seat-data source). Their
+        //     tool code + exports are kept (importable, unit-tested); see
+        //     registry.ts. The "22 LIVE" count excludes them.
         const reg = buildDefaultRegistry();
         const names = reg.list().map((t) => t.name).sort();
         expect(names).toEqual([

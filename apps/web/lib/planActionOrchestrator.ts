@@ -42,10 +42,15 @@ import {
     computeDprFingerprint,
     solveWhatIfAssumption,
     whatIfAssumptionLabel,
+    materializeFeasible,
+    runSectionReplanLoop,
+    buildSectionReplanLoopDeps,
     type ToolSession,
     type DegreeProgressReport,
     type WhatIfOutcome,
     type WhatIfAssumptionMarker,
+    type MaterializeFeasibleResult,
+    type SectionReplanLoopResult,
 } from "@nyupath/engine";
 import type {
     Course,
@@ -459,6 +464,150 @@ function buildSession(state: LoadedSessionState, env: Record<string, string | un
         ...(prereqs ? { prereqs } : {}),
     };
     return session;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 38 E1 — materialize_feasible stage (READ-ONLY)
+// ---------------------------------------------------------------------------
+
+/** Successful materialize-feasible result for the /api/v2/materialize route. */
+export interface RunMaterializeOk {
+    ok: true;
+    studentId: string;
+    result: MaterializeFeasibleResult;
+}
+
+/**
+ * Run the read-only `materialize_feasible` engine for one target term:
+ * bootstrap the session from the store, extract that term's
+ * `specific_planned` courses, and return the VERIFIED candidate set
+ * (Phase-0.3 schema) + `unavailableCourses` + cite-or-hedge notes.
+ *
+ * R1 GUARDRAIL: this stage NEVER persists — it reads the session and
+ * runs a pure/read-only engine. `students.parsed_dpr` is never touched
+ * (no `persistMutation` / `persistSchedule` call exists on this path).
+ *
+ * `deps.searchFn` / `deps.cache` are test-injection seams; production
+ * omits them so the engine uses the live FOSE client.
+ */
+export async function runMaterializeFeasibleStage(
+    studentId: string,
+    targetTerm: string,
+    deps: {
+        searchFn?: (termCode: string, keyword: string) => Promise<unknown[]>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        cache?: any;
+        env?: Record<string, string | undefined>;
+    } = {},
+): Promise<RunMaterializeOk | { ok: false; error: RunProposeError }> {
+    const env = deps.env ?? process.env;
+    const loaded = await loadSessionState(studentId, env);
+    if (!loaded.ok) return loaded;
+
+    const session = buildSession(loaded.state, env);
+    const plan = session.forwardSchedule;
+    if (!plan) {
+        return { ok: false, error: { kind: "no_schedule", message: "No committed forward plan to materialize sections for." } };
+    }
+
+    const semester = plan.semesters.find((s) => s.term === targetTerm);
+    if (!semester) {
+        const terms = plan.semesters.map((s) => s.term).join(", ");
+        return { ok: false, error: { kind: "bad_input", message: `Term "${targetTerm}" is not in the plan. Available: ${terms || "(none)"}.` } };
+    }
+
+    const courseIds = semester.slots
+        .filter((s): s is Extract<typeof s, { kind: "specific_planned" }> => s.kind === "specific_planned")
+        .map((s) => s.courseId);
+
+    if (courseIds.length === 0) {
+        return {
+            ok: true,
+            studentId,
+            result: {
+                state: "unavailable",
+                termCode: targetTerm,
+                message: `No concrete courses are scheduled in ${targetTerm} (only placeholders/IP/empty). Bind placeholders first, then re-check section feasibility.`,
+                candidates: [],
+                truncated: false,
+                hedges: [],
+                unavailableCourses: [],
+            },
+        };
+    }
+
+    try {
+        const result = await materializeFeasible({
+            termCode: targetTerm,
+            courseIds,
+            ...(session.schedulePreferences?.schedulingPreferences
+                ? { schedulingPreferences: session.schedulePreferences.schedulingPreferences }
+                : {}),
+            ...(deps.searchFn ? { searchFn: deps.searchFn } : {}),
+            ...(deps.cache ? { cache: deps.cache } : {}),
+        });
+        return { ok: true, studentId, result };
+    } catch (err) {
+        return {
+            ok: false,
+            error: { kind: "engine_error", message: `materialize_feasible failed: ${err instanceof Error ? err.message : String(err)}` },
+        };
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 38 E3/E4 — section-replan stage (READ-ONLY; the route stages the
+// resulting mutations via runProposeStage → plan_proposal)
+// ---------------------------------------------------------------------------
+
+export interface RunSectionReplanOk {
+    ok: true;
+    studentId: string;
+    result: SectionReplanLoopResult;
+}
+
+/**
+ * Run the §2⑤ bounded outer loop server-side for the chat-v2 route: bootstrap
+ * the session, then materialize → escalate → re-materialize (bounded) to a
+ * VALID re-plan (or an honest no-op). READ-ONLY: it computes the recommended
+ * mutations but persists NOTHING (R1) — the route stages them through the
+ * existing `runProposeStage` → plan_proposal → Confirm chokepoint.
+ */
+export async function runSectionReplanStage(
+    studentId: string,
+    opts: {
+        rejectedCourseIds?: string[];
+        searchFn?: (termCode: string, keyword: string) => Promise<unknown[]>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        cache?: any;
+        env?: Record<string, string | undefined>;
+    } = {},
+): Promise<RunSectionReplanOk | { ok: false; error: RunProposeError }> {
+    const env = opts.env ?? process.env;
+    const loaded = await loadSessionState(studentId, env);
+    if (!loaded.ok) return loaded;
+
+    const session = buildSession(loaded.state, env);
+    const plan = session.forwardSchedule;
+    if (!plan) {
+        return { ok: false, error: { kind: "no_schedule", message: "No committed forward plan to re-plan." } };
+    }
+
+    try {
+        const deps = buildSectionReplanLoopDeps(session, loaded.state.dpr, {
+            ...(opts.searchFn ? { searchFn: opts.searchFn } : {}),
+            ...(opts.cache ? { cache: opts.cache } : {}),
+        });
+        const result = await runSectionReplanLoop(plan, deps, {
+            ...(opts.rejectedCourseIds ? { rejectedCourseIds: opts.rejectedCourseIds } : {}),
+        });
+        return { ok: true, studentId, result };
+    } catch (err) {
+        return {
+            ok: false,
+            error: { kind: "engine_error", message: `section re-plan failed: ${err instanceof Error ? err.message : String(err)}` },
+        };
+    }
 }
 
 // ---------------------------------------------------------------------------

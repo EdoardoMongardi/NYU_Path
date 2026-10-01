@@ -2,7 +2,7 @@
 
 > Last verified against code: 2026-06-13 (doc-sync pass: fixed the drifted `extractPendingMutationId` call-site line cite in the SSE chat route).
 
-A technical audit of the staging half of the two-step profile-mutation contract. This tool was not touched by the Phase 0-2 solver rebuild — it is a Phase-5 profile tool and remains one of the 21 live tools in `packages/engine/src/agent/registry.ts`.
+A technical audit of the staging half of the two-step profile-mutation contract. This tool was not touched by the Phase 0-2 solver rebuild — it is a Phase-5 profile tool and remains one of the 22 live tools in `packages/engine/src/agent/registry.ts`.
 
 Source: `packages/engine/src/agent/tools/updateProfile.ts` (lines 89-192).
 

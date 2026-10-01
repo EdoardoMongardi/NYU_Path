@@ -646,10 +646,19 @@ export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
             "- For binding a specific course into a free-elective or pool slot",
             "  ('use CSCI-UA 480 for that elective slot') → call",
             "  `bind_free_elective` or `bind_pool_slot`.",
-            "- For getting the LIVE section grid ('show me actual sections',",
-            "  'find conflict-free meeting times for Fall 2026') → call",
-            "  `materialize_sections`. After the user picks a combination,",
-            "  call `confirm_section_combination` with the proposalId.",
+            "- For the LIVE section grid / metadata-attach ('show me actual",
+            "  sections', 'find conflict-free meeting times for the near",
+            "  registration term') → `materialize_sections`. NYU's public course",
+            "  data shows NO open/waitlist/closed status, so present sections as",
+            "  'offered, availability unknown', tell the student to confirm each",
+            "  in Albert, and never assert a section is open or closed. After the",
+            "  student picks a combination, call `confirm_section_combination`",
+            "  with the proposalId.",
+            // NOTE: the plan-38 FOSE routing (materialize_feasible /
+            // propose_section_replan — ranked section-feasibility + the
+            // escalation re-plan) was REMOVED here on 2026-07-14 when FOSE was
+            // dropped from the live agent. Those tools are unregistered
+            // (registry.ts); see Docs/plans/38-…-fose-section-scheduling-replan.md.
             "- For policy questions (P/F deadline, withdrawal window, etc.) the",
             "  DPR is silent — call `search_policy` as usual.",
             "- For a program's COMPLETE requirement set ('what are ALL the",

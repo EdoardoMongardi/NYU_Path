@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "check:docs": "vitest run packages/engine/tests/agent/docConsistency.test.ts packages/engine/tests/agent/frozenContractManifest.test.ts"
   },
   "engines": {
     "node": ">=18"

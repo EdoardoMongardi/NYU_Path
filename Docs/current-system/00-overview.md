@@ -2,7 +2,7 @@
 
 > Last verified against code: 2026-06-19 (Plans 35/36/37 — what-if taxonomy, scenarios workspace, slot-editor — reflected below). Prior: 2026-06-16 (Phase 4 complete); 2026-06-15 (cohort gate subsystem removed); 2026-06-13: added probe_counterfactual to the tool catalog, corrected the response validator to 8 checks, marked the Phase-3 advisor layer shipped, fixed the engine-docs count to 23.
 
-> **Status — Phase 4 (Experience & continuity) is COMPLETE (2026-06-16)** and **Plans 35, 36, 37 are COMPLETE (2026-06-18/19, on `feat/plan37-slot-editor`, not yet merged)**. Phase 4 built ON TOP of the unchanged Phases 0–3 engine + advisor: the user-facing workspace (advisor chat left + plan canvas right over **one shared live state**), the **propose → preview → confirm** edit model, and the DB wiring. **Plan 35** added the 3-branch what-if taxonomy (Branch A = program-change Albert What-If audit upload; Branch B = current-term withdraw/pass-fail via DPR transforms + confirmable `propose_whatif_assumption`; Branch C = confidence-disclaimed estimate) and W/pass-fail → requirement-engine modeling. **Plan 36** replaced the single sidebar with a **3-zone shell** (`ThreeZoneShell`: chat LEFT rail · `ScheduleWorkspace` CENTER hero · `ProfileRail` RIGHT zone), a scenario model (`committed anchor + proposed/whatif scenarios + compare`), `scheduleDiff.ts`, `CompareView`, chat `ScheduleCard` / `WhatIfUploadCard`, and the `@nyupath/engine/client` client-safe entry (fixes the `node:` bundle crash that prevented `/chat` from loading in a browser). **Plan 37** added a **workspace slot-editor** (per-slot `SlotActionPopover` on `specific_planned`/`in_progress` slots + per-term `+ Add course`; all propose-only, same pipeline as chat), the **chat-confirm bridge** (`plan_proposal` SSE event → proposed scenario + Confirm rail; typed "confirm"/"yes" intercept; consume-once store), **render-only-valid** (invalid proposed → red card, no Confirm; Override retired), **never-commit-invalid** (both confirm paths return HTTP 422 on infeasible), and an **8th validator axis** (`passFailLimitsRespected` — per-school P/F career cap). Both verbatim design-§10 exit gates are **MET and verified LIVE against Neon**: (1) the chat/sidebar parity tests (`apps/web/tests/chatSidebarParity.test.ts`), and (2) e2e confirm→persist (`apps/web/tests/e2eConfirmPersist.test.ts`, plus the OTP-login smoke `otpLoginSmoke.test.ts`). See [`web/db-and-stores.md`](web/db-and-stores.md), [`web/plan-action-orchestrator.md`](web/plan-action-orchestrator.md), and the plans `Docs/plans/33-2026-06-15-planning-engine-phase4-experience.md`, `35-2026-06-17-whatif-and-wpf-requirement-modeling.md`, `36-2026-06-18-scenarios-workspace-ui.md`, `37-2026-06-19-slot-editor-and-pf-validation.md`.
+> **Status — Phase 4 (Experience & continuity) is COMPLETE (2026-06-16); Plans 35, 36, 37 COMPLETE + merged to `origin/main` (`32cf861`); Plan 38 (FOSE section-scheduling) DROPPED from the live agent — final decision 2026-07-14: its two tools `materialize_feasible` + `propose_section_replan` are UNREGISTERED from the default registry (`ALL_NYUPATH_TOOLS`) and their section-feasibility routing block was removed from the system prompt, so the live agent can no longer call them (registry back to **22 live tools**, was 24).** The FOSE tool code, imports, exports, and unit tests REMAIN in the repo (importable + still unit-tested) — this is a disconnection, not a deletion, revivable by re-registering the two tools + restoring the prompt routing. It was dropped because no acceptable live-seat-data source exists: the official NYU live-enrollment API is absent, the public PeopleSoft class search that shows open/closed is reCAPTCHA-gated (defeating it is off-limits), and a student-driven browser helper isn't worth the build/maintenance/policy cost for this project. The near-term section fill (`materialize_sections` / `confirm_section_combination` — Phase-15/17 CORE, auto-chained from `plan_forward_degree`) is NOT plan 38 and REMAINS live; the frozen engine contract + R1 guardrail are untouched. Guard test: `packages/engine/tests/agent/foseDeactivated.test.ts`. See `CLAUDE.md` Current status + `engine/section-materialization.md` §8c. Phase 4 built ON TOP of the unchanged Phases 0–3 engine + advisor: the user-facing workspace (advisor chat left + plan canvas right over **one shared live state**), the **propose → preview → confirm** edit model, and the DB wiring. **Plan 35** added the 3-branch what-if taxonomy (Branch A = program-change Albert What-If audit upload; Branch B = current-term withdraw/pass-fail via DPR transforms + confirmable `propose_whatif_assumption`; Branch C = confidence-disclaimed estimate) and W/pass-fail → requirement-engine modeling. **Plan 36** replaced the single sidebar with a **3-zone shell** (`ThreeZoneShell`: chat LEFT rail · `ScheduleWorkspace` CENTER hero · `ProfileRail` RIGHT zone), a scenario model (`committed anchor + proposed/whatif scenarios + compare`), `scheduleDiff.ts`, `CompareView`, chat `ScheduleCard` / `WhatIfUploadCard`, and the `@nyupath/engine/client` client-safe entry (fixes the `node:` bundle crash that prevented `/chat` from loading in a browser). **Plan 37** added a **workspace slot-editor** (per-slot `SlotActionPopover` on `specific_planned`/`in_progress` slots + per-term `+ Add course`; all propose-only, same pipeline as chat), the **chat-confirm bridge** (`plan_proposal` SSE event → proposed scenario + Confirm rail; typed "confirm"/"yes" intercept; consume-once store), **render-only-valid** (invalid proposed → red card, no Confirm; Override retired), **never-commit-invalid** (both confirm paths return HTTP 422 on infeasible), and an **8th validator axis** (`passFailLimitsRespected` — per-school P/F career cap). Both verbatim design-§10 exit gates are **MET and verified LIVE against Neon**: (1) the chat/sidebar parity tests (`apps/web/tests/chatSidebarParity.test.ts`), and (2) e2e confirm→persist (`apps/web/tests/e2eConfirmPersist.test.ts`, plus the OTP-login smoke `otpLoginSmoke.test.ts`). See [`web/db-and-stores.md`](web/db-and-stores.md), [`web/plan-action-orchestrator.md`](web/plan-action-orchestrator.md), and the plans `Docs/plans/33-2026-06-15-planning-engine-phase4-experience.md`, `35-2026-06-17-whatif-and-wpf-requirement-modeling.md`, `36-2026-06-18-scenarios-workspace-ui.md`, `37-2026-06-19-slot-editor-and-pf-validation.md`.
 
 > **About this document set.** This is a code-truth audit of the NYU Path codebase. Every claim was derived from reading the actual source files. No code comments, no existing documentation, and no narrative prose were used as evidence. Where code and surrounding writing disagreed, the code won.
 
@@ -22,7 +22,7 @@ NYU Path is a **chat-based academic advisor** for **NYU undergraduates**. A stud
 graph LR
     STUDENT([🧑‍🎓 Student]) -->|asks a question| CHAT[💬 Chat UI]
     CHAT --> BRAIN{🧠 Smart Advisor}
-    BRAIN -->|when it needs facts| TOOLS[🛠️ Toolbox<br/>21 specialists]
+    BRAIN -->|when it needs facts| TOOLS[🛠️ Toolbox<br/>22 specialists]
     TOOLS -->|fetches from| MEMORY[(📚 Knowledge:<br/>your DPR,<br/>NYU bulletin,<br/>live class data)]
     MEMORY -->|facts| TOOLS
     TOOLS -->|results| BRAIN
@@ -31,7 +31,7 @@ graph LR
     GUARD -.fails: redo it.-> BRAIN
 ```
 
-That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 21 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy/curriculum lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
+That's the whole product in one picture. The "smart advisor" is a language model. The "toolbox" is 22 deterministic functions (no language model — pure logic) that handle audit math, planning, and policy/curriculum lookup. The "safety check" is a set of rules that inspect the draft reply for hallucinations before it ever reaches the student.
 
 ---
 
@@ -76,7 +76,7 @@ This is the "brain" — an LLM (Anthropic's Claude Sonnet 4.6 by default, OpenAI
 
 ### The tools (deterministic functions)
 
-There are **21 of them** (the live registry is `packages/engine/src/agent/registry.ts`). Each one knows how to do one thing — for example, "run a full degree audit", "plan every term until graduation", or "search the policy bulletin for the rule on pass/fail courses". Tools are written in TypeScript. They read data files and the student's session, they run their algorithm, and they return a result. They never call the language model. The advisor uses tools the way a doctor uses a calculator and a reference book — to get numbers and facts the doctor shouldn't be guessing.
+There are **22 of them** (the live registry is `packages/engine/src/agent/registry.ts`). Each one knows how to do one thing — for example, "run a full degree audit", "plan every term until graduation", or "search the policy bulletin for the rule on pass/fail courses". Tools are written in TypeScript. They read data files and the student's session, they run their algorithm, and they return a result. They never call the language model. The advisor uses tools the way a doctor uses a calculator and a reference book — to get numbers and facts the doctor shouldn't be guessing.
 
 ### The planner (a constraint-search engine)
 
@@ -212,7 +212,7 @@ Every subsystem of the AI brain. The most important ones:
 
 Plus smaller pieces: the clarifier (handles ambiguous questions), the template matcher (curated answers for FAQs), the LLM clients (OpenAI/Anthropic adapters), and various data loaders.
 
-### `current-system/tools/` — 21 documents
+### `current-system/tools/` — 22 documents
 One file per **live** tool the AI can call. Each explains: what it does, what it needs, the algorithm, what it returns, and what other tools it works with. See the [tool catalog table](#8-quick-tool-catalog) below.
 
 ### `current-system/web/` — 12 documents
@@ -237,6 +237,7 @@ Segregated so the live docs stay clean. These describe tools and subsystems that
 | `view_forward_plan` | Shows the most recently built plan, no recompute |
 | `propose_plan_change` | "What would happen if I changed the plan in this way?" — shows impact |
 | `probe_counterfactual` | Read-only what-if: re-solves a hypothetical and narrates whether it stays valid or is "INFEASIBLE because <failing axis + reason>" |
+| `propose_whatif_assumption` | Confirmable current-term what-if (withdraw / pass-fail): re-runs the frozen pipeline on a DPR transform; a confirm persists only the resulting plan, never the DPR |
 | `confirm_plan_change` | Applies a previously proposed change |
 | `simulate_alternatives` | Tries 2–3 plan variants (summer, J-term, extend graduation) |
 | `compare_plan_alternatives` | Side-by-side comparison of alternatives the planner already produced |
@@ -254,7 +255,7 @@ Segregated so the live docs stay clean. These describe tools and subsystems that
 | `update_profile` | Proposes a profile change (school, catalog year, programs, visa) |
 | `confirm_profile_update` | Applies a proposed profile change |
 
-That's all **21** live tools (`packages/engine/src/agent/registry.ts`). Three tools that appeared in earlier versions of this doc are **gone**: `check_transfer_eligibility` and `check_overlap` were removed — internal-transfer eligibility and program double-counting are now answered by citing the bulletin through `search_policy` — and `plan_semester` (the legacy single-term planner) was fully deleted, not retained for reference. Docs for the removed pieces live in [`../deprecated/`](../deprecated/README.md).
+That's all **22** live tools (`packages/engine/src/agent/registry.ts`). Three tools that appeared in earlier versions of this doc are **gone**: `check_transfer_eligibility` and `check_overlap` were removed — internal-transfer eligibility and program double-counting are now answered by citing the bulletin through `search_policy` — and `plan_semester` (the legacy single-term planner) was fully deleted, not retained for reference. Docs for the removed pieces live in [`../deprecated/`](../deprecated/README.md).
 
 ---
 

@@ -66,7 +66,7 @@ import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
 import { consumeRequest } from "../../../../lib/rateLimit";
 import { readSessionFromRequest } from "../../../../lib/auth/session";
 import { extractPendingMutationId, extractAuditUploadOffer } from "../../../../lib/chatV2Client";
-import { runProposeStage } from "../../../../lib/planActionOrchestrator";
+import { runProposeStage, runSectionReplanStage } from "../../../../lib/planActionOrchestrator";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
 // SDK uses Node streams that the edge runtime doesn't support).
@@ -1088,6 +1088,51 @@ async function runV2Turn(args: V2TurnArgs): Promise<void> {
                         // Non-fatal: a staging failure must not break the turn.
                         console.error("[v2 route] plan_proposal staging failed:", err);
                     }
+                }
+            }
+        }
+
+        // Phase 38 E3 — when the agent called `propose_section_replan` this turn
+        // (materialize_feasible found no feasible schedule / the student rejected
+        // all), re-derive the bounded outer-loop's re-plan server-side and, when
+        // it yields a VALID re-plan, stage its mutations through the SAME
+        // `runProposeStage` → `plan_proposal` → Confirm chokepoint that
+        // propose_plan_change uses (no new UI). A "no-op" / "feasible" outcome
+        // emits no proposal (the agent narrates the honest verdict from the tool
+        // summary). R1 holds: staging ≠ committing — nothing is written to the DB
+        // (and never to parsed_dpr) until the student clicks Confirm.
+        if (userId !== "anonymous") {
+            const replanInv = finalResult.invocations
+                .filter((i) => i.toolName === "propose_section_replan")
+                .at(-1);
+            if (replanInv) {
+                try {
+                    const rejectedCourseIds = Array.isArray(replanInv.args?.rejectedCourseIds)
+                        ? (replanInv.args.rejectedCourseIds as string[])
+                        : undefined;
+                    const replan = await runSectionReplanStage(userId, { ...(rejectedCourseIds ? { rejectedCourseIds } : {}) });
+                    if (replan.ok && replan.result.kind === "replan" && replan.result.mutations.length > 0) {
+                        const proposeResult = await runProposeStage(userId, replan.result.mutations);
+                        if (proposeResult.ok) {
+                            writer.write({
+                                kind: "plan_proposal",
+                                pendingMutationId: proposeResult.response.pendingMutationId,
+                                feasible: proposeResult.response.feasible,
+                                consequences: proposeResult.response.consequences,
+                                ...(proposeResult.response.forwardSchedule
+                                    ? { proposedSchedule: proposeResult.response.forwardSchedule }
+                                    : {}),
+                                ...(proposeResult.response.planDiff
+                                    ? { planDiff: proposeResult.response.planDiff }
+                                    : {}),
+                            });
+                        }
+                    }
+                    // "no-op" / "feasible" / a typed error → no SSE; the agent's
+                    // text (from the tool summary) carries the honest verdict.
+                } catch (err) {
+                    // Non-fatal: a staging failure must not break the turn.
+                    console.error("[v2 route] section_replan staging failed:", err);
                 }
             }
         }

@@ -1,6 +1,6 @@
 # `@nyupath/engine` Package Index
 
-> Last verified against code: 2026-06-19 (plans 35/36/37: 22 live tools; `propose_whatif_assumption` added (Plan 35); `slotActionMatrix.ts`, `passFailLimitAxis.ts`, `data/passFailDefaults.ts`, expanded `client.ts` added (Plan 37); `planChangeHelpers.ts` gained `resolveBindMutations`/`findPlaceholderSlot` (Plan 37 J2). Prior: 2026-06-15 — cohort gate subsystem removed).
+> Last verified against code: 2026-07-14 (**22 live tools**. Plan 38 (FOSE section-scheduling) was **DROPPED from the live agent on 2026-07-14**: its two tools — `materialize_feasible` + `propose_section_replan` — are now **UNREGISTERED** (removed from `ALL_NYUPATH_TOOLS` in `registry.ts`) and unrouted (their section-feasibility block was removed from `systemPrompt.ts`), so the live agent can no longer call them. This is a disconnection, not a deletion: the tool code, imports, barrel exports, and unit tests REMAIN (importable, still unit-tested — guard `tests/agent/foseDeactivated.test.ts`; revivable by re-registering the two tools + restoring the prompt routing). The `sectionMaterialization/` modules `componentGrouping.ts`, `feasibleSchedules.ts`, `statusHelpers.ts`, `candidatePreRank.ts`, `materializeFeasible.ts`, `agentCuration.ts`, `ipSections.ts`, `sectionReplanBridge.ts`, `sectionReplanWiring.ts`, `withinTermSwap.ts` still exist; the barrel still re-exports the Phase-38 symbols; `tool.ts` still carries the optional `outputSchema?`. See `CLAUDE.md` Current status + `section-materialization.md` §8c.). Prior: 2026-06-19 (plans 35/36/37: 22 live tools; `slotActionMatrix.ts`, `passFailLimitAxis.ts` added; `planChangeHelpers.ts` gained `resolveBindMutations`).
 
 ## Purpose
 
@@ -72,7 +72,7 @@ agent/
   llmClient.ts recordingClient.ts registry.ts
   clients/        openaiClient.ts anthropicClient.ts index.ts
   verifiers/      multiIntentDetector.ts blockquoteAttribution.ts
-  tools/          22 tool modules (see §4)
+  tools/          24 tool modules (see §4)
   forwardSchedule/    solver, search, validator, materialize, alternatives, ...
                       slotActionMatrix.ts        ← Plan 37 D1 — 3-state × F3-window × P/F-policy action gate; also re-exported via client.ts
                       passFailLimitAxis.ts       ← Plan 37 C1 — 8th validator axis checkPassFailLimits(dpr, passFailConfig)
@@ -111,7 +111,7 @@ The agent group (`index.ts:48-125`) re-exports: the loop (`runAgentTurn`, `runAg
 
 ## 4. The agent barrel (`agent/index.ts`) and the 22 live tools
 
-The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types, and the tool registry. The registry (`registry.ts`) wires **exactly 22 live tools** into `ALL_NYUPATH_TOOLS`:
+The agent barrel re-exports the loop, validators, clients, loop-state utilities, section-materialization types + the Phase-38 FOSE symbols, and the tool registry. The registry (`registry.ts`) wires **exactly 22 live tools** into `ALL_NYUPATH_TOOLS` (listed below). The two FOSE section-feasibility tools — `materialize_feasible` and `propose_section_replan` — were **DROPPED from the live agent on 2026-07-14**: they are removed from `ALL_NYUPATH_TOOLS` and their prompt routing is gone, so the loop can no longer reach them. Their tool code + barrel exports remain (importable, still unit-tested — guard `tests/agent/foseDeactivated.test.ts`), revivable by re-registering + restoring the prompt routing:
 
 ```
 run_full_audit              what_if_audit              search_policy

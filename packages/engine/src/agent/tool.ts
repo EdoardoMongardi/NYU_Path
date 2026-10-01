@@ -210,6 +210,15 @@ export interface Tool<InputSchema extends z.ZodTypeAny, Output> {
     readonly isReadOnly: boolean;
     /** Max characters for the tool's stringified result (truncated above) */
     readonly maxResultChars: number;
+    /**
+     * Optional Zod schema describing the tool's OUTPUT shape (Phase 38 —
+     * mirrors the recovered Claude Code harness's `outputSchema`
+     * tool-contract field). When present, the tool's `call()` returns a
+     * value the schema validates, and downstream consumers (e.g. an
+     * agent-curation step) can rely on the structured shape. Optional so
+     * existing tools are unaffected.
+     */
+    readonly outputSchema?: z.ZodTypeAny;
     /** Phase 7-B Step 15 — composition mode. Defaults to "synthesis". */
     readonly outputMode?: OutputMode;
     /** Optional pre-call validation (returns user-facing reason for rejection) */
@@ -242,6 +251,7 @@ export function buildTool<InputSchema extends z.ZodTypeAny, Output>(
         isReadOnly?: boolean;
         maxResultChars?: number;
         outputMode?: OutputMode;
+        outputSchema?: z.ZodTypeAny;
         validateInput?: Tool<InputSchema, Output>["validateInput"];
         prompt: Tool<InputSchema, Output>["prompt"];
         call: Tool<InputSchema, Output>["call"];
@@ -256,6 +266,7 @@ export function buildTool<InputSchema extends z.ZodTypeAny, Output>(
         isReadOnly: def.isReadOnly ?? true,
         maxResultChars: def.maxResultChars ?? 2000,
         outputMode: def.outputMode ?? "synthesis",
+        outputSchema: def.outputSchema,
         validateInput: def.validateInput,
         prompt: def.prompt,
         call: def.call,

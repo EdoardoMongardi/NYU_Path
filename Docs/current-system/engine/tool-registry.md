@@ -1,6 +1,6 @@
 # Tool Registry & Tool Contract
 
-> Last verified against code: 2026-06-19 (Plan 37 — `proposeWhatIfAssumption` `validateInput` gains the D-7 IP-membership guard + D-4 P/F-eligibility gate; `/api/plan/add` gains the E3 course-existence 422; `/api/plan/whatif` route now runs `validateInput` before `.call`; **tool count corrected to 22** — `propose_whatif_assumption` was added in plan 35 but the count was not updated; the ordered list below now shows all 22).
+> Last verified against code: 2026-07-14 (Plan 38's two FOSE tools — `materialize_feasible` + `propose_section_replan` — were **DROPPED from the live agent / unregistered from the default registry on 2026-07-14**, bringing the registry back to **22 tools**; the FOSE section-feasibility layer is deactivated — no acceptable live-seat-data source (no official NYU live-enrollment API; the public PeopleSoft class search that shows open/closed is reCAPTCHA-gated) — though the tool code + imports + exports + unit tests remain in the repo, revivable by re-registering the two tools. See `CLAUDE.md` Current status). Prior: 2026-06-21 (Plan 38 — added the two read-only tools, count 24; the `tool.ts` contract also gained an optional `outputSchema?` field, used by `materialize_feasible`). 2026-06-19 (Plan 37 — `proposeWhatIfAssumption` validateInput guards; count corrected to 22).
 
 > **Source files:** `packages/engine/src/agent/tool.ts`, `packages/engine/src/agent/registry.ts`
 
@@ -36,7 +36,7 @@ Every tool implements this shape (generic over a Zod input schema and an output 
 | `name` | string | Stable identifier the model uses (e.g., `run_full_audit`). |
 | `description` | string | Free-form description shown to the model. Concatenated with `prompt(session)` in `toLLMToolDefs`. |
 | `inputSchema` | Zod schema | Validates the model's tool call args before `call` runs (`safeParse` in the loop). |
-| `isReadOnly` | boolean | Defaults to true via `buildTool`. Mutating tools set it to false — `plan_forward_degree`, `confirm_plan_change`, `confirm_section_combination`, and `update_profile` all declare `isReadOnly: false`. It is a labeling field (the loop does not gate on it), but it does flag the four tools that write to session. |
+| `isReadOnly` | boolean | Defaults to true via `buildTool`. Mutating tools set it to false — `plan_forward_degree`, `confirm_plan_change`, `confirm_section_combination`, and `confirm_profile_update` all declare `isReadOnly: false`. (Note `update_profile` is `isReadOnly: true` — it only STAGES a profile change; `confirm_profile_update` is the writer in that two-step.) It is a labeling field (the loop does not gate on it), but it does flag the four tools that write to session. |
 | `maxResultChars` | number | Cap on the stringified result (default 2000). `summarizeResult` output is truncated to this. |
 | `outputMode?` | `"template" \| "semi_hardened" \| "synthesis"` | Defaults to `"synthesis"`. See §3. |
 | `validateInput?(input, ctx)` | async fn | Optional pre-call check. Returns `{ ok: true }` or `{ ok: false, userMessage }`. A failed result is wrapped by the loop as `validation failed: <userMessage>`. |
@@ -104,7 +104,7 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 
 ## 5. `ALL_NYUPATH_TOOLS` — the wired set
 
-`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS` (`registry.ts:73-96`), containing exactly **22** tools in this fixed order:
+`agent/registry.ts` exports a single array, `ALL_NYUPATH_TOOLS`, containing exactly **22** tools in this fixed order. (Plan 38 had added `materialize_feasible` (#23) + `propose_section_replan` (#24), both read-only, part of the FOSE section-feasibility layer — but those two were **DROPPED from the live agent / unregistered from `ALL_NYUPATH_TOOLS` on 2026-07-14** and no longer appear in the array; their code + imports + exports + unit tests remain in the repo, revivable by re-registering — see the note below the list.):
 
 ```
 1.  run_full_audit
@@ -131,11 +131,13 @@ The agent loop calls `registry.list()` once at the start of each turn (via `toLL
 22. confirm_section_combination
 ```
 
+> **Dropped 2026-07-14:** `materialize_feasible` and `propose_section_replan` were added by plan 38 (as #23 + #24) but were **DROPPED from the live agent / unregistered on 2026-07-14** — they are no longer in `ALL_NYUPATH_TOOLS`, so the live agent can no longer call them, and their section-feasibility routing was removed from the system prompt. The tool code + imports + exports + unit tests remain in the repo (importable, still unit-tested); revival = re-registering the two tools + restoring the prompt routing.
+
 `buildDefaultRegistry()` (`registry.ts:102-104`) constructs a fresh `ToolRegistry` from a copy of `ALL_NYUPATH_TOOLS`. The chat route calls it once per turn, inline in the `runAgentTurnStreaming(...)` arguments (`apps/web/app/api/chat/v2/route.ts`).
 
 ### Plan 37 tool enhancements (guards on existing tools)
 
-No new tools were added **in plan 37**; the registry contains 22 tools (plan 35 added `propose_whatif_assumption`, correcting the previously-stated count of 21). Three live tool behaviors changed in plan 37:
+No new tools were added **in plan 37** (plan 35 added `propose_whatif_assumption`); **plan 38 then added two read-only tools — `materialize_feasible` and `propose_section_replan` — but both were DROPPED from the live agent / unregistered on 2026-07-14, leaving the registry at 22.** Those two belong to the FOSE section-feasibility layer, which is now deactivated (dropped from the live agent — no acceptable live-seat-data source; the tool code + unit tests remain in the repo, revivable by re-registering; see `CLAUDE.md` Current status + `section-materialization.md` §8c). Three live tool behaviors changed in plan 37:
 
 - **`propose_whatif_assumption` — D-7 IP-membership guard + D-4 P/F-eligibility gate.** `proposeWhatIfAssumptionTool.validateInput` now checks two conditions before calling the tool:
   1. **IP-membership (D-7):** the `courseId` arg must be an `in_progress` row in the authoritative DPR. A withdraw/pass-fail targeting a `completed` or `specific_planned` course is rejected with a clear message ("Withdraw / pass-fail applies only to a course you're currently taking (in progress). <course> is <completed / planned> — to remove a planned course, drop it instead."). This makes the D-2 PLANNED-slot restriction a real engine guard, not just a dormant UI gate.

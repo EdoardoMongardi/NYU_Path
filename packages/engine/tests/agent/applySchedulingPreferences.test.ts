@@ -381,3 +381,38 @@ describe("applySchedulingPreferences — rerankWeights aggregate by product", ()
         expect(wBoth).toBeCloseTo(wAvoid * wPrefer, 6);
     });
 });
+
+// ---- Phase 38 (D2) — strict instructor / section rejection ----
+
+describe("applySchedulingPreferences — reject instructor / section (Phase 38 D2)", () => {
+    it("rejectInstructor drops sections taught by a rejected professor (case-insensitive substring)", () => {
+        const chen = makeSection("CSCI-UA 421", "c1", [M_9_1015], { instructor: "Amy Chen" });
+        const lee = makeSection("CSCI-UA 421", "c2", [W_9_1015], { instructor: "Sang Lee" });
+        const prefs: SchedulingPreferences = { rejectInstructor: ["chen"] };
+        const res = applySchedulingPreferences([chen, lee], prefs);
+        expect(res.surviving.map(s => s.crn)).toEqual(["c2"]);
+        expect(res.eliminatedByStrict.map(e => e.sectionId)).toEqual(["c1"]);
+        expect(res.eliminatedByStrict[0]!.reason.toLowerCase()).toContain("instructor");
+    });
+
+    it("rejectSection drops a specific CRN", () => {
+        const a = makeSection("X", "keep", [M_9_1015]);
+        const b = makeSection("X", "drop-me", [W_9_1015]);
+        const res = applySchedulingPreferences([a, b], { rejectSection: ["drop-me"] });
+        expect(res.surviving.map(s => s.crn)).toEqual(["keep"]);
+    });
+
+    it("rejecting every instructor of a course wipes it (→ course-wipe → bridge)", () => {
+        const s1 = makeSection("CSCI-UA 421", "c1", [M_9_1015], { instructor: "Amy Chen" });
+        const s2 = makeSection("CSCI-UA 421", "c2", [W_9_1015], { instructor: "Amy Chen" });
+        const res = applySchedulingPreferences([s1, s2], { rejectInstructor: ["Amy Chen"] });
+        expect(res.surviving).toHaveLength(0);
+    });
+
+    it("empty reject arrays are treated as absent (isPrefsEmpty)", () => {
+        const s = makeSection("X", "x1", [M_9_1015]);
+        const res = applySchedulingPreferences([s], { rejectInstructor: [], rejectSection: [] });
+        expect(res.surviving).toHaveLength(1);
+        expect(res.eliminatedByStrict).toHaveLength(0);
+    });
+});
