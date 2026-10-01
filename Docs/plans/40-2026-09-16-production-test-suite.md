@@ -353,7 +353,7 @@ The product runs Sonnet with extended thinking at temperature 1 on the streaming
 
 ### 4.5 Run modes
 
-`smoke` (~25 cases, every category, L0+L1, <15 min) · `full` (all cases, all levels) · `regression` (RecordingLLMClient replays of a frozen full run — no LLM cost — to catch engine/route regressions) · `judge-calibration` (human vs LLM-judge agreement on a fixed 40-case sample, Cohen's κ ≥ 0.7 gate, reusing `packages/engine/tests/eval/cohensKappa.ts`).
+`smoke` (~25 cases, every category, L0+L1, <15 min) · `full` (all cases, all levels) · `regression` (RecordingLLMClient replays of a frozen full run — no LLM cost — to catch engine/route regressions) · `judge-calibration` (human vs LLM-judge agreement on a fixed 40-case sample, Cohen's κ ≥ 0.6 (owner labels, §1.6) gate, reusing `packages/engine/tests/eval/cohensKappa.ts`).
 
 ---
 
@@ -862,7 +862,7 @@ Interface contracts fixed here so Stage 4 can author against them: `evals/prod/c
 
 ### Stage 6 — Pilot, calibration, baseline report
 
-Smoke run (L0+L1) → fix harness defects → judge calibration (40 cases, human labels by Edoardo, κ ≥ 0.7) → first full run → `Docs/reports/<date>-prod-suite-full.md` → product defects filed as issues (never fixed inside the suite PR).
+Smoke run (L0+L1) → fix harness defects → judge calibration (40 cases, human labels by Edoardo, κ ≥ 0.6 (owner labels, §1.6)) → first full run → `Docs/reports/<date>-prod-suite-full.md` → product defects filed as issues (never fixed inside the suite PR).
 
 ### Stage 7 — Scale to more DPRs
 
