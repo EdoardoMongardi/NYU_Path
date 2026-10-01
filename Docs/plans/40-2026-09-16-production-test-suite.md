@@ -211,7 +211,10 @@ A full offline probe ran the real pipeline on the redacted fixture at a pinned c
 | Checkpointing | File-based, per §4.6 | Decided |
 | Determinism (§9 #10) | Production settings, report pass rates | Settled: Sonnet 5.5 rejects any temperature other than 1. |
 | Owner facts (§9 #6) | F-1 student; graduation target Spring 2027; Fall 2026 registration = CORE-UA 700, MATH-UA 251, MATH-UA 343, MPAJZ-UE 71 (16 credits); unofficial transcript printed 07/29/2026 shows Spring 2026 grades, including **MATH-UA 334 = P**, and the Dean's List for the academic year | Received. Consequences below. |
-| Fallback model | `claude-sonnet-4-6` during the transition (replacing gpt-4.1-mini, the weakest model surveyed) | Recommended — pending owner confirmation (§9 #4) |
+| Fallback model | `claude-sonnet-4-6` during the transition (replacing gpt-4.1-mini, the weakest model surveyed) | **Decided by the owner.** A cross-vendor fallback is revisited after the comparison (GPT-6.1 Sol is the candidate). |
+| Judge calibration | The owner hand-labels ~150 judged replies once, as atomic yes/no criteria (≈3–5 hours); the Opus 5.5 judge must agree with those labels at **κ ≥ 0.6** before its scores count. A different-vendor judge would not remove this step: labels check whether the judge is right, not only whether it is biased. | **Decided by the owner.** Replaces the inconsistent 0.7 / 0.8 thresholds. |
+| Model comparison | 30 hard cases × 2 runs on **Sonnet 5.5, Gemini 3.8 Flash, GLM-5.3-Flash, GPT-6.1 Sol** (no Sonnet 4.6 baseline); ≈$17–22 API; scored on owner-verified yes/no checks rather than the Opus judge, to avoid same-vendor bias; the winner becomes the primary model, with Sonnet 5.5 the default until then. Task 0.9. | **Decided by the owner.** |
+| Remaining §9 items | Recommendations accepted as listed in §9 | **Decided by the owner.** |
 
 **Consequences of the owner facts for the answer key (Stage 1):**
 - **MATH-UA 251 is running** (section 001 on the registration). The catalog marks it spring-only, but the record wins; R1142/70 stays satisfied by an in-progress course.
@@ -382,7 +385,7 @@ Five of these invalidate the suite's results if ignored, so they are Stage-0/Sta
 | HR-1 | **Production runs at temperature 1.** Extended thinking is on by default on the streaming path and the client then forces `temperature: 1` (`anthropicClient.ts:74-75, :178`). | Any plan for "n runs at temperature 0" is unachievable on the surface we claim to test. | Deep-dive D2 decides the configuration: either accept variance and report pass *rates* (§4.4), or run with `NYUPATH_DISABLE_THINKING=1` and state plainly that the suite measures a non-default configuration. Not both. |
 | HR-2 | **A second, unvalidated model rewrites plan explanations.** `/api/plan/explain-polish` runs Haiku over the deterministic `explainPlanDiff` template when the polish flag is on. | Plan-edit categories would score Haiku prose instead of the engine's text, silently, depending on an env flag. | Pin the flag per run mode and record it in the run manifest; author C41 cases for both states. |
 | HR-3 | **Circularity has no enforcement.** All twelve skeptics flagged circular seeds; roughly a third of proposed seeds derived "truth" from the system's own output, data files, or validator. | The suite would confirm the system agrees with itself. | D8: the case schema requires a `groundTruthMethod` enum plus a source pointer, and a CI guard fails any case whose source resolves into `packages/engine` or `apps/web`. |
-| HR-4 | **The judge is uncalibrated.** Best committed κ is 0.793; the largest round scored κ 0.139 with zero human labels on the live sheet. | Judge scores would be reported as evidence when they are not yet. | Judge scores stay **advisory** until κ ≥ 0.8 on a freshly human-labelled sheet; deterministic checks alone gate pass/fail until then. |
+| HR-4 | **The judge is uncalibrated.** Best committed κ is 0.793; the largest round scored κ 0.139 with zero human labels on the live sheet. | Judge scores would be reported as evidence when they are not yet. | Judge scores stay **advisory** until κ ≥ 0.6 against the owner's ~150 labels (§1.6); deterministic checks alone gate pass/fail until then. |
 | HR-5 | **Latency budgets would measure an invisible clock.** The UI does not reveal answer text as tokens arrive — reveal is gated on turn completion and then paced at ~220 chars/s (`page.tsx:296-315`). | Time-to-first-token describes something the student never sees; a 2,000-character reply adds roughly nine seconds after `done`. | Report both: transport metrics for diagnosis, and **time-to-first-visible-answer** and **time-to-fully-revealed** as the student-facing numbers. D6 specifies the instrumentation. |
 | HR-6 | Rate limits and identity: 30 chat turns/day, 60 plan actions, 10 uploads, in-process and reset on restart, with "anonymous" bucketed globally. | A ~1,050-case suite cannot run under them. | Stage 0.3's env overrides plus per-run identities. |
 | HR-7 | **No stable selectors** — 3 `data-testid` attributes in the whole chat UI. | The ~64 UI cases are unwritable. | Stage 0.4's hook PR must land before UI authoring (D7). |
@@ -448,7 +451,7 @@ UI cases (`category: "O"`) add a `ui` block: `{ "steps": [{ "action": "click", "
 ## 6. Scoring model
 
 1. **Deterministic layer (pass/fail per turn):** tool routing (`toolsAnyOf`), required/forbidden substrings and regexes, numeric grounding (every number in the reply appears in a tool result or the ground truth), rail presence rule, validator verdict, HTTP/SSE contract, plan-invariant checker (T2), latency budget.
-2. **Judge layer (0–5 per dimension, T3):** groundedness, completeness vs. ground truth, adviser quality (risk/trade-off, one focused follow-up, no over-hedging), clarity. The judge must be a **different model from the one under test** — the Phase-10 baseline runner graded the agent with its own model id, which is self-grading and its scores are not evidence. Reuse `packages/engine/tests/eval/judgePrompt.ts`'s claim-level rubric shape (generalizing its CAS/CS-specific rules) and `cohensKappa.ts`; no κ has ever been computed for the 4-axis rubric, so Stage 6 computes one before any judge score is trusted (κ ≥ 0.7 on the calibration sample).
+2. **Judge layer (0–5 per dimension, T3):** groundedness, completeness vs. ground truth, adviser quality (risk/trade-off, one focused follow-up, no over-hedging), clarity. The judge must be a **different model from the one under test** — the Phase-10 baseline runner graded the agent with its own model id, which is self-grading and its scores are not evidence. Reuse `packages/engine/tests/eval/judgePrompt.ts`'s claim-level rubric shape (generalizing its CAS/CS-specific rules) and `cohensKappa.ts`; no κ has ever been computed for the 4-axis rubric, so Stage 6 computes one before any judge score is trusted (κ ≥ 0.6 against the owner's labels, §1.6).
 3. **Human layer:** Edoardo spot-checks every `ownerConfirm` case and a random 10% of judged cases per full run.
 4. **Report:** `Docs/reports/<date>-prod-suite-<mode>.md` + JSON — per-category pass rates, judge means, latency percentiles, flaky list, regressions vs. the previous run, and a "system said X / truth is Y / provenance" table for every failure.
 
@@ -787,8 +790,18 @@ Not a one-line change: Sonnet 5.5 returns 400 on `thinking.type: "enabled"` with
 - [ ] **Step 1: Failing tests** — a per-model profile: for `claude-sonnet-5-5` the streaming body has `thinking: { type: "adaptive", display: "summarized" }`, `output_config: { effort: "medium" }` (overridable by `NYUPATH_EFFORT`), and **no** `temperature`, `top_p` or `top_k`; the block path likewise sends no temperature; `NYUPATH_DISABLE_THINKING=1` sends `thinking: { type: "between_tools" }`. For `claude-sonnet-4-6` the existing budget behavior is unchanged (it remains the fallback). A streamed response with `stop_reason: "refusal"` throws a typed `ModelRefusalError`; the streaming path sets `finishReason` from `stop_reason`; the loop treats an empty final text as an error rather than a reply. Factory defaults: primary `anthropic` / `claude-sonnet-5-5`, fallback `anthropic` / `claude-sonnet-4-6` (pending §9 #4).
 - [ ] **Step 2: Implement** — a small capability table (`BUDGET_THINKING_MODELS = new Set(["claude-sonnet-4-6", "claude-haiku-4-5-20251001"])`; everything else gets the adaptive profile); thread `stop_reason` into the streaming result; throw on refusal so the existing fallback path runs; keep `display: "summarized"` so the chat's thinking stream is not silently emptied (Sonnet 5.5's default is `"omitted"`).
 - [ ] **Step 3: Verify** — both `tsc --noEmit` + `npx vitest run`; one live streaming turn on `claude-sonnet-5-5` through `runAgentTurnStreaming` with the fixture DPR (expect tool use + non-empty reply, record tokens and latency); one forced-fallback check.
-- [ ] **Step 4: Acceptance comparison (if approved, §9 #14)** — ~30 hard cases × 2 runs, Sonnet 4.6 vs Sonnet 5.5, ≤ $20.
+- [ ] **Step 4:** run the model comparison of Task 0.9 once Tasks 0.7 and 0.8 are merged; Sonnet 5.5 stays the default unless another candidate wins.
 - [ ] **Step 5: Commit** — `feat(engine): primary model claude-sonnet-5-5 (adaptive thinking, effort medium, refusal handling)`.
+
+#### Task 0.9: The ~$20 model comparison (decided 2026-10-01)
+
+**Goal:** pick the primary model on evidence from NYU Path's own hardest cases: Sonnet 5.5 vs Gemini 3.8 Flash vs GLM-5.3-Flash vs GPT-6.1 Sol, 30 cases × 2 runs, ≈$17–22.
+
+- [ ] **Step 1: Clients.** Make `OpenAIEngineClient` accept a configurable base URL, API key variable and per-model reasoning setting, so OpenAI-compatible endpoints (Google's Gemini compatibility endpoint; Fireworks' US endpoint for GLM-5.3-Flash) can be called with native tool definitions. Add a Responses-API path for GPT-6.1 Sol, whose tools work only there. Before any spend, verify each vendor's tool calling with one 3-tool smoke call and record the request shape that works. Set reasoning effort explicitly — public scores collapse at low effort (Gemini 3.8 Flash 33.2 at low vs 45.8 at medium on τ³). Unit-test each client with a stubbed SDK, as in Task 0.8.
+- [ ] **Step 2: Cases.** Pick 30 cases whose expected answer is already fixed by Stages 1–2 slices: multi-part policy synthesis (the double-counting rule that made Sonnet the default in June, repeat rule, P/F rules, overload), planning dialogue on the fixture (Spring 2027 with the F-1 floor), Branch-B what-ifs (including the MATH-UA 334 pass/fail case), refusals, and one stale-DPR case. Each case gets 3–5 atomic yes/no checks.
+- [ ] **Step 3: Run** through the engine-level runner with file checkpoints (§4.6), two runs per model, prompt caching on where the vendor supports it; record tokens, cost and latency per turn.
+- [ ] **Step 4: Score.** Deterministic checks first; the owner verifies the yes/no checks on all replies (30 × 4 × 2 ≈ 240 short reviews). Report pass rate, run-to-run agreement, cost per turn and latency per model.
+- [ ] **Step 5: Decide** with the owner. A non-Anthropic winner triggers a data-handling review before production: Google's developer API may process data in any country (Vertex offers zero data retention); Fireworks stores nothing for open models; OpenAI keeps abuse logs up to 30 days and the Responses API stores data unless `store=false`. The test itself uses only the redacted fixture.
 
 ### Stage 1 — DEEP: the DPR ground-truth key (agents + owner confirm)
 
@@ -865,25 +878,11 @@ Per-DPR template: `evals/prod/groundTruth/<DPR>.facts.json` via the Stage-1 slic
 - New living doc when Stage 5 lands: `Docs/current-system/surrounding/evaluation-harness.md` (+ `Docs/index.json` rows for `evals/prod/**`).
 - `Docs/reports/` receives every pilot/full run report.
 
-## 9. Open decisions for Edoardo (status as of 2026-09-30)
+## 9. Open decisions for Edoardo (status as of 2026-10-01)
 
-**Decided or settled:** primary model Sonnet 5.5 (§1.6); prompt caching; execution tiers and checkpoints (§4.6); determinism (#10, settled by the model); rate-limit overrides (#5, Task 0.3); owner facts received (#6, §1.6).
+**All decided** — see §1.6 for the full table. Summary: primary model Sonnet 5.5 until the Task 0.9 comparison (Sonnet 5.5 · Gemini 3.8 Flash · GLM-5.3-Flash · GPT-6.1 Sol) picks a winner; fallback Sonnet 4.6; prompt caching; execution tiers and file checkpoints; the owner hand-labels ~150 replies once (κ ≥ 0.6); real Neon with throwaway accounts; F-1 as the primary variant; latency measured as time to first visible answer; three repetitions only for release gates; frozen-seam defects (KB-21/22/33) and the prerequisite-coverage fixes (KB-36/37, incl. plan 39 A2's trigger) each get their own plan; the April bulletin snapshot is kept for v1; ~60 cross-school cases are added now; a fresh DPR becomes the second fixture.
 
-**Still open — recommendation in bold:**
-1. **Test database:** **real Neon with throwaway accounts.**
-2. **Judge and calibration:** the judge is Opus 5.5 on the Claude plan — same vendor as the product, different model. Options: (a) judge scores stay advisory and nobody hand-labels; (b) **the owner hand-labels ~150 answers once (≈3–5 hours of yes/no checks) and the judge must agree with those labels at κ ≥ 0.6**; (c) add a second labeler for a 50-answer subset to measure human agreement. Replaces the inconsistent 0.7 / 0.8 thresholds elsewhere in this plan.
-3. **Visa variants:** **F-1 is the primary variant for this owner;** run domestic variants only where visa status changes the answer.
-4. **Fallback model:** **claude-sonnet-4-6 during the transition;** decide on a cross-vendor fallback after the comparison stage.
-5. **Latency:** **measure time to first visible answer** (the UI reveals text only after the turn), not first token; targets as proposed in the earlier §9 text.
-6. **Repetitions:** **three only for release gates**, one otherwise.
-7. **Frozen-seam defects (KB-21, KB-22, KB-33):** **fix in their own plan.**
-8. **Bulletin snapshot:** **keep 2026-04-21 for v1;** re-scrape as its own task.
-9. **All-NYU cases:** **add the ~60 cross-school questions now** (deep-dive D5).
-10. **Prerequisite coverage (KB-36, KB-37):** **schedule the Shanghai/SPS/Nursing extraction fix and the suffix-label fix as their own plan, and correct plan 39 A2's trigger to also fire on empty records.**
-11. **Fresh DPR:** **download a current DPR from Albert** as the second fixture (§1.6).
-12. **Plan-40 branch:** **push and open the docs PR.**
-13. **Independent advisers** checking part of the answer key: optional.
-14. **Small model comparison before switching (Task 0.8 Step 4):** **yes, ≤ $20** — 30 hard cases × 2 runs, Sonnet 4.6 vs 5.5; cheaper vendors (Gemini 3.8 Flash, GLM-5.3-Flash) later, when their client work is justified.
+**Still optional:** independent academic advisers checking part of the answer key.
 
 ## Appendix A — Investigation provenance
 
