@@ -33,6 +33,7 @@ import {
     isValidSchoolCode,
 } from "../lib/wizard/homeSchool";
 import { getStores, resetStoresForTests } from "../lib/db/store";
+import { TEST_SECRET, chatRequestAs } from "./_planRouteTestUtils";
 
 // ------------------------------------------------------------
 // DPR fixtures — reuse the shared redacted fixture (derives "cas") and
@@ -240,6 +241,7 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         anthropic: process.env.ANTHROPIC_API_KEY,
         dbUrl: process.env.DATABASE_URL,
         sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+        secret: process.env.SECRET_KEY,
     };
 
     beforeEach(() => {
@@ -247,6 +249,7 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         delete process.env.NYUPATH_SESSION_STORE_PATH;
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-e52";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-e52";
+        process.env.SECRET_KEY = TEST_SECRET;
         resetStoresForTests();
         holder.session = undefined;
     });
@@ -260,6 +263,8 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        if (ORIGINAL.secret === undefined) delete process.env.SECRET_KEY;
+        else process.env.SECRET_KEY = ORIGINAL.secret;
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -272,10 +277,9 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         // rule's only editable home-school case).
         await seedConfirmedProfile(userId, { homeSchool: "unknown" });
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: unknownDprPayload(),
-            userId,
             homeSchool: "stern",
         }) as never);
         expect(res.status).toBe(200);
@@ -290,10 +294,9 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         const userId = "e52-change-shanghai";
         await seedConfirmedProfile(userId, { homeSchool: "unknown" });
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: unknownDprPayload(),
-            userId,
             homeSchool: "shanghai",
         }) as never);
         expect(res.status).toBe(200);
@@ -312,10 +315,9 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         // Capture the audit-log length BEFORE the turn (the seed wrote one).
         const before = (stores.profileStore as unknown as { auditLog: unknown[] }).auditLog.length;
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: validDprPayload(),
-            userId,
             homeSchool: "stern", // SAME as persisted
         }) as never);
         expect(res.status).toBe(200);
@@ -333,7 +335,6 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         const res = await POST(fakeRequest({
             message: "What courses should I take next semester for my major?",
             parsedData: validDprPayload(),
-            userId: "anonymous",
             homeSchool: "stern",
         }) as never);
         expect(res.status).toBe(200);
@@ -349,10 +350,9 @@ describe("v2 route persists an explicit home-school CHANGE (E5.2)", () => {
         const stores = getStores({});
         const before = (stores.profileStore as unknown as { auditLog: unknown[] }).auditLog.length;
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: validDprPayload(),
-            userId,
             homeSchool: "hogwarts", // not a known NYU school code
         }) as never);
         expect(res.status).toBe(200);

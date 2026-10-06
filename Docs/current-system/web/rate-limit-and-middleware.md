@@ -1,6 +1,6 @@
 # Rate Limit and Middleware
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-10-06 (chat route: the bucket key is the session-cookie `sub`, or the shared `"anonymous"` bucket for every unauthenticated caller — a body `userId` is ignored). Prior 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
@@ -78,7 +78,7 @@ The rate-limit module itself is agnostic about what `userId` means — it's just
 | `/api/auth/otp/issue`              | `otp-ip:<first hop of X-Forwarded-For or X-Real-IP>`     | 5/day |
 | `/api/onboard`                     | `onboard-ip:<first hop of X-Forwarded-For or X-Real-IP>` | 10/day |
 | `/api/onboard/refresh-dpr`         | `refresh-dpr:<studentId from JWT sub>`                   | 10/day |
-| Chat route (default `DEFAULT_LIMIT`) | (caller passes a studentId or `"anonymous"`)            | 30/day |
+| `/api/chat/v2` (default `DEFAULT_LIMIT`) | session-cookie `sub`, else the shared `"anonymous"` | 30/day |
 
 The `DEFAULT_LIMIT = 30` constant (`apps/web/lib/rateLimit.ts:19`) is only used when callers omit the second argument. The OTP issue and onboard routes pass their own smaller caps explicitly.
 
@@ -114,7 +114,7 @@ Callers map blocked responses to HTTP 429 with `Retry-After: <retryAfterSeconds>
 
 ### Anonymous users
 
-The comment block at `apps/web/lib/rateLimit.ts:53-62` notes that `userId === "anonymous"` is bucketed globally, so any caller that passes the literal `"anonymous"` shares a single soft cap. In the live routes today this only happens when no IP header is present: the OTP-issue and onboard keys fall back to `otp-ip:anonymous` / `onboard-ip:anonymous` when both `X-Forwarded-For` and `X-Real-IP` are absent. The `refresh-dpr` route always has a real studentId (it is auth-gated), so it never buckets anonymously. The comment's framing — "once W12 lands and real userIds arrive, each student gets their own bucket" — describes a future state; for authenticated routes the studentId bucketing is already in place via `auth.sub`.
+The comment block at `apps/web/lib/rateLimit.ts:53-62` notes that `userId === "anonymous"` is bucketed globally, so any caller that passes the literal `"anonymous"` shares a single soft cap. In the live routes today this happens in two places. The chat route charges **every** request without a valid session cookie to the bare `"anonymous"` bucket — it ignores any `userId` in the body, so a forged id can neither dodge the limit nor spend a student's per-NetID quota (the chat page always has the cookie; only direct API traffic lands here). The OTP-issue and onboard keys fall back to `otp-ip:anonymous` / `onboard-ip:anonymous` when both `X-Forwarded-For` and `X-Real-IP` are absent. The `refresh-dpr` route always has a real studentId (it is auth-gated), so it never buckets anonymously. The comment's framing — "once W12 lands and real userIds arrive, each student gets their own bucket" — describes a future state; for authenticated routes the studentId bucketing is already in place via `auth.sub`.
 
 ### What rateLimit.ts does NOT do
 

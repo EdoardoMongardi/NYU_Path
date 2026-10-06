@@ -47,8 +47,7 @@
 //                                  post-handoff (the bug routed here).
 //
 // MOUNT STUBS — jsdom lacks `Element.prototype.scrollIntoView` (the page
-// calls it on every addMessage) and may lack `crypto.randomUUID` (used by
-// `getOrCreateClientId` on the first chat send); we stub both.
+// calls it on every addMessage); we stub it.
 // `requestAnimationFrame` + `localStorage` already exist in jsdom.
 // ============================================================
 
@@ -170,15 +169,6 @@ beforeEach(() => {
     vi.unstubAllGlobals();
     // jsdom lacks scrollIntoView; the page calls it on every addMessage.
     Element.prototype.scrollIntoView = vi.fn();
-    // getOrCreateClientId reads crypto.randomUUID on the first send.
-    if (!globalThis.crypto) {
-        // @ts-expect-error — minimal shim for environments without crypto.
-        globalThis.crypto = {};
-    }
-    if (typeof globalThis.crypto.randomUUID !== "function") {
-        // @ts-expect-error — test shim.
-        globalThis.crypto.randomUUID = () => "test-uuid-0000";
-    }
 });
 
 describe("F1 fix — wizard→chat handoff completes onboarding", () => {

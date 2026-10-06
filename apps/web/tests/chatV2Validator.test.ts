@@ -38,6 +38,8 @@ import {
     makeFeasibleScheduleWithSemesters,
     specificSlot,
     seedStudentState,
+    TEST_SECRET,
+    chatRequestAs,
 } from "./_planRouteTestUtils";
 
 // ------------------------------------------------------------
@@ -101,10 +103,6 @@ function validDprPayload(): { kind: "dpr"; report: unknown } {
     return { kind: "dpr", report: r.report };
 }
 
-function fakeRequest(body: unknown): { json: () => Promise<unknown> } {
-    return { json: async () => body };
-}
-
 // Drain the SSE stream to one string. The route writes `validator_block`
 // (when blocked) BEFORE `done`, then closes in `finally` — so once the
 // reader reports done=true the terminal validator has already run.
@@ -151,6 +149,7 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         anthropic: process.env.ANTHROPIC_API_KEY,
         dbUrl: process.env.DATABASE_URL,
         sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+        secret: process.env.SECRET_KEY,
     };
 
     beforeEach(() => {
@@ -162,6 +161,7 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         // is mocked so no real provider call is made.
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-validator";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-validator";
+        process.env.SECRET_KEY = TEST_SECRET;
         resetStoresForTests();
         holder.validate = undefined;
         holder.session = undefined;
@@ -177,6 +177,8 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        if (ORIGINAL.secret === undefined) delete process.env.SECRET_KEY;
+        else process.env.SECRET_KEY = ORIGINAL.secret;
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -207,10 +209,9 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         // post-loop validateResponse runs over it.
         holder.finalText = UNGROUNDED_CLAIM;
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: CLEAR_MESSAGE,
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
         const sse = await drainSse(res);
@@ -226,10 +227,9 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         // Grounded: CSCI-UA 102 IS in Fall 2027 per the stored plan.
         holder.finalText = GROUNDED_CLAIM;
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: CLEAR_MESSAGE,
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
         const sse = await drainSse(res);
@@ -248,10 +248,9 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         // finalText irrelevant here — we drive the captured closure directly.
         holder.finalText = "ok";
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: CLEAR_MESSAGE,
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
         await drainSse(res);
@@ -276,10 +275,9 @@ describe("v2 route plan-claim validator wiring (D5.2)", () => {
         const userId = "validator-inloop-noplan";
         // No seedPlanFor — nothing persisted.
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: CLEAR_MESSAGE,
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
         await drainSse(res);

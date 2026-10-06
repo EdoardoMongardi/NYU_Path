@@ -1,6 +1,6 @@
 # Chat Route — `/api/chat/v2` (SSE Streaming Endpoint)
 
-> Last verified against code: 2026-06-19 (Plan 37: `plan_proposal` added to SSE event union table §10; `whatif_audit_request` verified present). Prior 2026-06-15: Phase 4 E1: profile read-back — new §5.5 documents the confirmed-profile read-back into `session.student` (E1.2: 4 editable fields, precedence body>persisted>DPR, ordered before schoolConfig load); the top honest-caveat + §5.1 revised since profile read-hydration is no longer deferred. Same-day prior pass: cohort gate subsystem removed — the per-turn cohort lookup, the `cohortLookup` store field, and the recovery/limited-availability path are all gone; the agent loop now runs unconditionally every turn. Earlier 2026-06-13 pass: refreshed `route.ts` line citations and added the post-loop proactive-elicitation append on the OK terminal path; see §11.
+> Last verified against code: 2026-10-06 (security: identity now comes ONLY from the session cookie — a body `userId` is ignored, an unauthenticated caller is `"anonymous"` with no durable store access and the shared anonymous rate-limit bucket; §2–§5 updated). Prior 2026-06-19 (Plan 37: `plan_proposal` added to SSE event union table §10; `whatif_audit_request` verified present). Prior 2026-06-15: Phase 4 E1: profile read-back — new §5.5 documents the confirmed-profile read-back into `session.student` (E1.2: 4 editable fields, precedence body>persisted>DPR, ordered before schoolConfig load); the top honest-caveat + §5.1 revised since profile read-hydration is no longer deferred. Same-day prior pass: cohort gate subsystem removed — the per-turn cohort lookup, the `cohortLookup` store field, and the recovery/limited-availability path are all gone; the agent loop now runs unconditionally every turn. Earlier 2026-06-13 pass: refreshed `route.ts` line citations and added the post-loop proactive-elicitation append on the OK terminal path; see §11.
 
 ## Purpose
 
@@ -40,23 +40,22 @@ The client POSTs a JSON body of type `V2RequestBody` (`route.ts:97-115`):
 - `graduationTarget` — optional, free-form (e.g., `"Spring 2027"` or `"spring2027"`). Normalized into `graduationTerm` for the system prompt by `normalizeGraduationTarget` (`route.ts:376`).
 - `history` — optional array of prior `{ role: "user" | "assistant"; content }` items. The route forwards them into the loop as `priorMessages` (the page's client policy sends the last 10).
 - `correlationId` — optional. Passed through to the agent loop for log tracing.
-- `userId` — optional fallback identity. Only honored when the auth cookie is absent.
+- `userId` — **not accepted** (removed 2026-10-06). A `userId` in the body is ignored for everything, including the rate-limit bucket: identity comes only from the session cookie ([§3](#3-authentication--authorization)). Honoring it let a cookie-less caller read and write any student's rows by naming their NetID.
 - `homeSchool` — optional. When a non-empty string, threaded through as `homeSchoolOverride` so `deriveHomeSchool` is bypassed (`route.ts:230-232`). **No production client currently sends this** — see [§5.2](#52-home-school-derivation-and-the-unknown-fallback).
 
 ## 3. Authentication / Authorization
 
-`readSessionFromRequest(req)` (`route.ts:185`) extracts the auth subject from the session cookie. The cookie-derived `sub` always wins; the request body's `userId` is the fallback, and the literal string `"anonymous"` is the last-resort identity when neither is present (`route.ts:186`).
+`readSessionFromRequest(req)` (`route.ts:196`) verifies the signed `nyupath_session` cookie and returns its claims. The route's `userId` is the cookie's `sub` and **only** that: with no valid cookie (absent, expired, bad signature) the caller is the literal `"anonymous"` (`route.ts:197`). The request body cannot name an identity — a body `userId` is ignored.
 
-The route itself does **not** redirect or reject unauthenticated requests — that gate lives one layer above at `apps/web/app/chat/layout.tsx`, a Server Component that calls `readSessionFromCookies()` and `redirect("/login")` before any chat-page client JS runs. So `/api/chat/v2` only sees requests from users who already passed the layout gate (or direct curl traffic). Authenticated-only side-effects (plan/prefs hydration, bootstrap profile upsert, chat-history append, session-summary append) are explicitly gated on `userId !== "anonymous"` (`route.ts:270`, `341`, `870`, `931`).
+The route itself does **not** redirect or reject unauthenticated requests — that gate lives one layer above at `apps/web/app/chat/layout.tsx`, a Server Component that calls `readSessionFromCookies()` and `redirect("/login")` before any chat-page client JS runs. So the chat page always reaches `/api/chat/v2` with the cookie; only direct API traffic (curl, a test harness) arrives without one. Such a caller still gets an answer, but with **no durable store access**: every route-level read and write is gated on `userId !== "anonymous"` — the confirmed-profile read-back (`route.ts:339`), plan/prefs hydration (`426`), the bootstrap profile upsert (`505`), the homeSchool / visaStatus change-persists (`550`, `598`), `plan_proposal` staging (`1064`), the chat-history append (`1197`) and the session-summary append (`1258`) — and the `ToolSession` it hands the agent carries no `profileStore` / `scheduleStore` / `chatHistoryStore` (`route.ts:453`), so the tools' persistence hooks (which key on `session.student.id`) are no-ops. The one remaining read is `sessionStore.get("anonymous")` for the prompt's session summaries (`route.ts:691`); nothing ever writes that key, so it is always empty.
 
 ## 4. Rate Limiting
 
-`consumeRequest(userId)` (`route.ts:193`) enforces a per-student daily quota (default 30 messages / UTC day). When the bucket is empty the route returns HTTP 429 with diagnostic headers: `Retry-After` (seconds), `X-RateLimit-Limit`, `X-RateLimit-Remaining` (`"0"`), and `X-RateLimit-Reset` (ISO timestamp). The body carries a polite "Daily message limit reached, resets at … reach out to your adviser" message (`route.ts:195-211`).
+`consumeRequest(userId)` (`route.ts:204`) enforces a per-student daily quota (default 30 messages / UTC day). When the bucket is empty the route returns HTTP 429 with diagnostic headers: `Retry-After` (seconds), `X-RateLimit-Limit`, `X-RateLimit-Remaining` (`"0"`), and `X-RateLimit-Reset` (ISO timestamp). The body carries a polite "Daily message limit reached, resets at … reach out to your adviser" message (`route.ts:195-211`).
 
-Bucketing follows the resolved id:
+Bucketing follows the resolved id (`route.ts:204`):
 - Authenticated users get a per-NetID bucket.
-- Pre-auth callers get a per-browser-UUID bucket (the page mints a stable UUID; see the UI doc).
-- The literal `"anonymous"` shares one global bucket.
+- Every unauthenticated caller shares the one global `"anonymous"` bucket. A body id plays no part, so a forged id can neither dodge the limit nor spend a student's quota.
 
 ## 5. Session Bootstrap
 
@@ -64,7 +63,7 @@ The route loads the `stores` registry (`route.ts:214`, `getStores()`) and rebuil
 
 The `ToolSession` is assembled **inline** at `route.ts:291-317` with:
 - `student` — the freshly built profile.
-- `profileStore`, `scheduleStore`, `chatHistoryStore` — wired durable store handles.
+- `profileStore`, `scheduleStore`, `chatHistoryStore` — wired durable store handles, **only for an authenticated student** (`userId !== "anonymous"`). An anonymous session gets none, so a tool call can't persist anything (otherwise every cookie-less caller would write into one shared `"anonymous"` row).
 - `lastUserMessage` — the current message (so tool `validateInput` hooks can apply scope guards).
 - `schoolConfig` — `loadSchoolConfig(student.homeSchool)`, wrapped in try/catch → `null` on failure (`route.ts:240-246`).
 - `courses` / `prereqs` — from the module-cached `getCatalog()`; file-read failure degrades to no catalog (`route.ts:251-257`, spread in at `307`).

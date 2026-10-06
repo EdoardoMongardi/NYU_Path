@@ -35,6 +35,7 @@ import type { DegreeProgressReport } from "@nyupath/engine";
 import type { StudentProfile } from "@nyupath/shared";
 import { computeHomeSchoolProposal } from "../lib/wizard/homeSchool";
 import { getStores, resetStoresForTests } from "../lib/db/store";
+import { TEST_SECRET, chatRequestAs } from "./_planRouteTestUtils";
 
 // ------------------------------------------------------------
 // DPR fixtures — the shared redacted fixture confidently derives "cas";
@@ -127,10 +128,6 @@ function unknownDprPayload(): { kind: "dpr"; report: unknown } {
     return { kind: "dpr", report: makeUnderivableDpr() };
 }
 
-function fakeRequest(body: unknown): { json: () => Promise<unknown> } {
-    return { json: async () => body };
-}
-
 async function drainSse(res: Response): Promise<void> {
     const reader = res.body!.getReader();
     while (true) {
@@ -170,6 +167,7 @@ describe("v2 route — DPR-derived home school is read-only (F2)", () => {
         anthropic: process.env.ANTHROPIC_API_KEY,
         dbUrl: process.env.DATABASE_URL,
         sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+        secret: process.env.SECRET_KEY,
     };
 
     beforeEach(() => {
@@ -177,6 +175,7 @@ describe("v2 route — DPR-derived home school is read-only (F2)", () => {
         delete process.env.NYUPATH_SESSION_STORE_PATH;
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-f2";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-f2";
+        process.env.SECRET_KEY = TEST_SECRET;
         resetStoresForTests();
         holder.session = undefined;
     });
@@ -190,6 +189,8 @@ describe("v2 route — DPR-derived home school is read-only (F2)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        if (ORIGINAL.secret === undefined) delete process.env.SECRET_KEY;
+        else process.env.SECRET_KEY = ORIGINAL.secret;
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -202,10 +203,9 @@ describe("v2 route — DPR-derived home school is read-only (F2)", () => {
         const stores = getStores({});
         const before = (stores.profileStore as unknown as { auditLog: unknown[] }).auditLog.length;
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: casDprPayload(),
-            userId,
             homeSchool: "stern", // attempted override against a CAS-deriving DPR
         }) as never);
         expect(res.status).toBe(200);
@@ -228,10 +228,9 @@ describe("v2 route — DPR-derived home school is read-only (F2)", () => {
         // student's earlier confirmed pick ("unknown" — not yet chosen).
         await seedConfirmedProfile(userId, { homeSchool: "unknown" });
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: unknownDprPayload(),
-            userId,
             homeSchool: "shanghai", // legitimate pick — the DPR can't show the school
         }) as never);
         expect(res.status).toBe(200);
@@ -248,10 +247,9 @@ describe("v2 route — DPR-derived home school is read-only (F2)", () => {
         const userId = "f2-visa-still-editable";
         await seedConfirmedProfile(userId, { homeSchool: "cas", visaStatus: "domestic" });
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: casDprPayload(),
-            userId,
             visaStatus: "f1",
         }) as never);
         expect(res.status).toBe(200);

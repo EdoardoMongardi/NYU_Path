@@ -27,6 +27,7 @@ import { parseDpr, type ChatTurnResult } from "@nyupath/engine";
 import type { DegreeProgressReport } from "@nyupath/engine";
 import type { StudentProfile } from "@nyupath/shared";
 import { getStores, resetStoresForTests } from "../lib/db/store";
+import { TEST_SECRET, chatRequestAs } from "./_planRouteTestUtils";
 
 // ------------------------------------------------------------
 // DPR fixture — reuse the shared redacted fixture (mirrors
@@ -121,6 +122,7 @@ describe("v2 route persists an explicit visaStatus CHANGE (E5.3)", () => {
         anthropic: process.env.ANTHROPIC_API_KEY,
         dbUrl: process.env.DATABASE_URL,
         sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+        secret: process.env.SECRET_KEY,
     };
 
     beforeEach(() => {
@@ -128,6 +130,7 @@ describe("v2 route persists an explicit visaStatus CHANGE (E5.3)", () => {
         delete process.env.NYUPATH_SESSION_STORE_PATH;
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-e53";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-e53";
+        process.env.SECRET_KEY = TEST_SECRET;
         resetStoresForTests();
         holder.session = undefined;
     });
@@ -141,6 +144,8 @@ describe("v2 route persists an explicit visaStatus CHANGE (E5.3)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        if (ORIGINAL.secret === undefined) delete process.env.SECRET_KEY;
+        else process.env.SECRET_KEY = ORIGINAL.secret;
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -150,10 +155,9 @@ describe("v2 route persists an explicit visaStatus CHANGE (E5.3)", () => {
         // Persisted profile says "domestic"; the student now corrects to "f1".
         await seedConfirmedProfile(userId, { visaStatus: "domestic" });
 
-        const res = await POST_V2(fakeRequest({
+        const res = await POST_V2(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: validDprPayload(),
-            userId,
             visaStatus: "f1",
         }) as never);
         expect(res.status).toBe(200);
@@ -170,10 +174,9 @@ describe("v2 route persists an explicit visaStatus CHANGE (E5.3)", () => {
         // does NOT fire the clarifier short-circuit — the turn always reaches
         // the (mocked) agent loop and `holder.session` is set.
         holder.session = undefined;
-        const res2 = await POST_V2(fakeRequest({
+        const res2 = await POST_V2(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: validDprPayload(),
-            userId,
             // visaStatus intentionally omitted — must be read back.
         }) as never);
         expect(res2.status).toBe(200);
@@ -190,10 +193,9 @@ describe("v2 route persists an explicit visaStatus CHANGE (E5.3)", () => {
         const stores = getStores({});
         const before = (stores.profileStore as unknown as { auditLog: unknown[] }).auditLog.length;
 
-        const res = await POST_V2(fakeRequest({
+        const res = await POST_V2(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my major?",
             parsedData: validDprPayload(),
-            userId,
             visaStatus: "f1", // SAME as persisted
         }) as never);
         expect(res.status).toBe(200);
@@ -210,7 +212,6 @@ describe("v2 route persists an explicit visaStatus CHANGE (E5.3)", () => {
         const res = await POST_V2(fakeRequest({
             message: "What courses should I take next semester for my major?",
             parsedData: validDprPayload(),
-            userId: "anonymous",
             visaStatus: "f1",
         }) as never);
         expect(res.status).toBe(200);

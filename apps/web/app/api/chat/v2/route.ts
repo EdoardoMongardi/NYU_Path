@@ -117,10 +117,8 @@ interface V2RequestBody {
     graduationTarget?: string | null;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     correlationId?: string;
-    /** Phase 7-A: stable user id (cookie-derived when authenticated,
-     *  per-browser UUID otherwise). Used for the per-student daily
-     *  rate limit, session-summary persistence, and end-of-turn writes. */
-    userId?: string;
+    // No `userId`: identity comes ONLY from the session cookie (see
+    // POST). A body id is caller-controlled, so the route ignores it.
     /** CAS-1 (Task 1.5): onboarding-confirmed home school for this student
      *  (e.g. "cas", "stern", "tandon", "shanghai", "nyuad", …).
      *  When present, threads through as homeSchoolOverride so
@@ -189,20 +187,20 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
     const fallback = createFallbackClient(); // null is OK — the loop tolerates a missing fallback.
 
-    // Phase 7-E W12.5 — derive the canonical userId from the session
-    // cookie if present (authenticated student). Fall back to the
-    // body's per-browser UUID for the anonymous-mode path that cohort
-    // A may still hit during operator self-testing. The cookie always
-    // wins — a malicious client cannot escape rate-limit by sending a
-    // forged body.userId once the user is signed in.
+    // Phase 7-E W12.5 — the canonical userId is the session cookie's
+    // subject, and ONLY that. Without a valid cookie the caller is
+    // "anonymous": every durable read/write below is skipped and the
+    // ToolSession carries no store. A `userId` in the body is ignored —
+    // honoring it let a cookie-less caller read and write any student's
+    // rows by naming their NetID.
     const authClaims = await readSessionFromRequest(req);
-    const userId = authClaims?.sub ?? body.userId ?? "anonymous";
+    const userId = authClaims?.sub ?? "anonymous";
 
     // Phase 7-E W10.5 — per-student daily rate limit (cohort-A cost
-    // guard + abuse signal). 30 messages / UTC day default. With W12,
-    // authenticated students get a per-NetID bucket; pre-auth callers
-    // get a per-browser-UUID bucket; the literal "anonymous" id shares
-    // one global bucket as a last resort.
+    // guard + abuse signal). 30 messages / UTC day default.
+    // Authenticated students get a per-NetID bucket; every
+    // unauthenticated caller shares the global "anonymous" bucket (so a
+    // forged id can neither dodge the limit nor spend a student's quota).
     const rateCheck = consumeRequest(userId);
     if (!rateCheck.ok) {
         return NextResponse.json(
@@ -448,15 +446,23 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     const session: ToolSession = {
         student,
-        profileStore: stores.profileStore,
-        // Phase 16 Task A — durable schedule + chat-history. The
-        // schedule store is read by plan_forward_degree +
-        // confirm_plan_change after a successful tool call (no-throw
-        // persistence). The chat-history store is written by this
-        // route AFTER the agent loop finishes (post-`done` event)
-        // — tools never write to it directly.
-        scheduleStore: stores.scheduleStore,
-        chatHistoryStore: stores.chatHistoryStore,
+        // Durable stores only for an authenticated student. Tools key
+        // their writes on `student.id`, so an anonymous session must
+        // carry no store — otherwise every cookie-less caller would
+        // write into one shared "anonymous" row.
+        ...(userId !== "anonymous"
+            ? {
+                profileStore: stores.profileStore,
+                // Phase 16 Task A — durable schedule + chat-history. The
+                // schedule store is read by plan_forward_degree +
+                // confirm_plan_change after a successful tool call (no-throw
+                // persistence). The chat-history store is written by this
+                // route AFTER the agent loop finishes (post-`done` event)
+                // — tools never write to it directly.
+                scheduleStore: stores.scheduleStore,
+                chatHistoryStore: stores.chatHistoryStore,
+            }
+            : {}),
         // Phase 11 follow-up — thread the latest user message so
         // tool validateInput hooks can apply scope guards based on the
         // user's intent. Generic across all tools.
