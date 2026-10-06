@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { POST } from "../app/api/chat/v2/route";
 import { parseDpr, type ChatTurnResult } from "@nyupath/engine";
 import { getStores, resetStoresForTests } from "../lib/db/store";
+import { TEST_SECRET, chatRequestAs } from "./_planRouteTestUtils";
 
 // ------------------------------------------------------------
 // Mock ONLY the streaming agent loop. The post-loop session-summary
@@ -143,6 +144,7 @@ describe("v2 route session-summary persistence (post-loop append)", () => {
         anthropic: process.env.ANTHROPIC_API_KEY,
         dbUrl: process.env.DATABASE_URL,
         sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+        secret: process.env.SECRET_KEY,
     };
 
     beforeEach(() => {
@@ -155,6 +157,7 @@ describe("v2 route session-summary persistence (post-loop append)", () => {
         // provider call is ever made with it.
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-summary-test";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-summary-test";
+        process.env.SECRET_KEY = TEST_SECRET;
         resetStoresForTests();
     });
 
@@ -167,6 +170,8 @@ describe("v2 route session-summary persistence (post-loop append)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        if (ORIGINAL.secret === undefined) delete process.env.SECRET_KEY;
+        else process.env.SECRET_KEY = ORIGINAL.secret;
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -180,10 +185,9 @@ describe("v2 route session-summary persistence (post-loop append)", () => {
         const appendSpy = vi.spyOn(stores.sessionStore, "appendSummary");
 
         const userId = "summary-student-1";
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What should I take next semester?",
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
 
@@ -211,7 +215,7 @@ describe("v2 route session-summary persistence (post-loop append)", () => {
         const stores = getStores({});
         const appendSpy = vi.spyOn(stores.sessionStore, "appendSummary");
 
-        // No userId in the body and no auth cookie → userId === "anonymous",
+        // No auth cookie → userId === "anonymous",
         // which must never write to shared session storage.
         const res = await POST(fakeRequest({
             message: "What should I take next semester?",

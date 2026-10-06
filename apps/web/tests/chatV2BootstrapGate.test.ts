@@ -23,7 +23,7 @@
 // Harness mirrors chatV2Hydration.test.ts: resetStoresForTests() in
 // beforeEach, vi.mock("@nyupath/engine", importOriginal) stubbing
 // runAgentTurnStreaming (no real LLM), fake API keys,
-// validDprPayload() parse, NON-ambiguous message, userId in the body,
+// validDprPayload() parse, NON-ambiguous message, a signed session cookie,
 // drain the SSE.
 // ============================================================
 
@@ -36,6 +36,7 @@ import {
 } from "@nyupath/engine";
 import type { StudentProfile } from "@nyupath/shared";
 import { getStores, resetStoresForTests } from "../lib/db/store";
+import { TEST_SECRET, chatRequestAs } from "./_planRouteTestUtils";
 
 // ------------------------------------------------------------
 // Mock ONLY the streaming agent loop (see chatV2Hydration.test.ts). The
@@ -75,10 +76,6 @@ function validDprPayload(): { kind: "dpr"; report: unknown } {
     return { kind: "dpr", report: r.report };
 }
 
-function fakeRequest(body: unknown): { json: () => Promise<unknown> } {
-    return { json: async () => body };
-}
-
 async function drainSse(res: Response): Promise<void> {
     const reader = res.body!.getReader();
     while (true) {
@@ -96,6 +93,7 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         anthropic: process.env.ANTHROPIC_API_KEY,
         dbUrl: process.env.DATABASE_URL,
         sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+        secret: process.env.SECRET_KEY,
     };
 
     beforeEach(() => {
@@ -105,6 +103,7 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         delete process.env.NYUPATH_SESSION_STORE_PATH;
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-bootstrap-gate";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-bootstrap-gate";
+        process.env.SECRET_KEY = TEST_SECRET;
         resetStoresForTests();
     });
 
@@ -117,6 +116,8 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        if (ORIGINAL.secret === undefined) delete process.env.SECRET_KEY;
+        else process.env.SECRET_KEY = ORIGINAL.secret;
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -156,10 +157,9 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         // edited profile with the body-DPR-derived one (homeSchool back to
         // "cas", the marker flag + minor gone). Post-fix the gate skips
         // the upsert because a profile already exists.
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: NON_AMBIGUOUS_MESSAGE,
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
         await drainSse(res);
@@ -186,10 +186,9 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         // Nothing persisted yet.
         expect(await stores.profileStore.get(userId)).toBeNull();
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: NON_AMBIGUOUS_MESSAGE,
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
         await drainSse(res);
@@ -213,10 +212,9 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
         };
 
         // First message — initial onboarding persists (one audit row).
-        const res1 = await POST(fakeRequest({
+        const res1 = await POST(await chatRequestAs(userId, {
             message: NON_AMBIGUOUS_MESSAGE,
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         await drainSse(res1);
         const auditLenAfterFirst = profileStore.auditLog.length;
@@ -224,10 +222,9 @@ describe("v2 route bootstrap profile persist gate (P3.2)", () => {
 
         // Second message — profile already exists, so the gated bootstrap
         // must NOT append another audit row.
-        const res2 = await POST(fakeRequest({
+        const res2 = await POST(await chatRequestAs(userId, {
             message: NON_AMBIGUOUS_MESSAGE,
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         await drainSse(res2);
         expect(profileStore.auditLog.length).toBe(auditLenAfterFirst);

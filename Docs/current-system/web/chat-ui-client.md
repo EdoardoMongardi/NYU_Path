@@ -1,6 +1,6 @@
 # Chat UI Client — React Page & SSE Consumer
 
-> Last verified against code: 2026-06-19 (Plan 37 — workspace slot-editor + P/F validation + chat-confirm bridge + never-commit-invalid + visa-mandatory: slot-action popover + `SlotActionPopover`/`slotActionView`, `plan_proposal` SSE event + `applyPlanProposalEvent` + `shouldInterceptAsConfirm` typed-confirm intercept + consume-once pending-mutation store, render-only-valid scenarios (invalid proposed → red card, no Confirm; Branch-B what-if confirmable; Branch-A audit read-only), force/Override retired (M1/M2 — 422 on infeasible, `student-preferred-invalid-draft` no longer minted), visa-mandatory `canBuildPlan`/`visaChosen` (H1), sidebar deleted (G2); **Plan 37 follow-ups**: `passFailForSchool` threaded client-side so `canElect:false` schools' P/F button pre-disabled in popover; `setForwardSchedule` draft-slotting state-routing (infeasible-draft/student-preferred-invalid-draft → no-op for committed anchor).
+> Last verified against code: 2026-10-06 (the page no longer mints or sends a per-browser `userId` — `getOrCreateClientId` and the `nyupath:client-id` localStorage key are gone; the v2 route takes identity from the session cookie only). Prior 2026-06-19 (Plan 37 — workspace slot-editor + P/F validation + chat-confirm bridge + never-commit-invalid + visa-mandatory: slot-action popover + `SlotActionPopover`/`slotActionView`, `plan_proposal` SSE event + `applyPlanProposalEvent` + `shouldInterceptAsConfirm` typed-confirm intercept + consume-once pending-mutation store, render-only-valid scenarios (invalid proposed → red card, no Confirm; Branch-B what-if confirmable; Branch-A audit read-only), force/Override retired (M1/M2 — 422 on infeasible, `student-preferred-invalid-draft` no longer minted), visa-mandatory `canBuildPlan`/`visaChosen` (H1), sidebar deleted (G2); **Plan 37 follow-ups**: `passFailForSchool` threaded client-side so `canElect:false` schools' P/F button pre-disabled in popover; `setForwardSchedule` draft-slotting state-routing (infeasible-draft/student-preferred-invalid-draft → no-op for committed anchor).
 >
 > Plan 37 changes documented here: §2 event union gains `plan_proposal`; §3 plan-state store gains consume-once pending-mutation tracking; §3 send path gains the typed-confirm intercept; §4 bubble/Override path retired (force inert, no Override button); §7 gains the workspace slot-editor flow + the chat-confirm bridge; §7 visa-mandatory noted; §9 supporting modules gains `courseExists.ts` + `planProposalEvent.ts` + `typedConfirmIntercept.ts`. `next.config.ts` node:-stub is REVERTED (Plan 36 proper fix: a client-safe engine entry `@nyupath/engine/client` — the stub note in §1 is corrected below).
 >
@@ -49,7 +49,7 @@ The page also handles login restore on mount (`/api/session/restore`) to skip on
 
 ### Transport
 
-`streamChatV2(body, init)` (`chatV2Client.ts:105-165`) is the main generator the chat page consumes. It does **not** use the browser's `EventSource` API — that would constrain it to GET requests. Instead it uses `fetch()` with a `POST` and reads `response.body.getReader()` directly. This lets it send the full request body (parsed DPR, history, userId, etc.) in one shot.
+`streamChatV2(body, init)` (`chatV2Client.ts:105-165`) is the main generator the chat page consumes. It does **not** use the browser's `EventSource` API — that would constrain it to GET requests. Instead it uses `fetch()` with a `POST` and reads `response.body.getReader()` directly. This lets it send the full request body (parsed DPR, history, visa status, etc.) in one shot. The body carries no identity — the browser sends the HttpOnly session cookie with the same-origin `fetch`, and the route reads the student from that alone.
 
 The transport flow:
 1. POST to `endpoint` (defaults to `/api/chat/v2`) with `Content-Type: application/json` and an optional `AbortSignal`.
@@ -166,10 +166,8 @@ Why it matters: chat-driven updates (SSE events + `/api/plan/*` HTTP responses) 
 `handleSendV2(userText)` (`page.tsx:492-533`) is the SSE driver:
 1. Builds `recentHistory` from the last 10 non-welcome messages.
 2. Pre-creates an empty assistant `Message` so tokens stream INTO it (sets `startedAt`, empty `thinkingText`, `thinkingRevealed=0`, `contentRevealed=0`).
-3. Iterates `streamChatV2({ message, parsedData, visaStatus, graduationTarget, history, userId: getOrCreateClientId() })`.
+3. Iterates `streamChatV2({ message, parsedData, visaStatus, graduationTarget, history, homeSchool? })` — no `userId`; the route identifies the student from the session cookie.
 4. Dispatches each event to `applyEvent(ev, assistant.id, toolStatuses)`.
-
-`getOrCreateClientId()` (`page.tsx:48-61`) reads/creates a UUID from `localStorage` under the key `nyupath:client-id`. Falls back to a `cohortA-<timestamp>-<random>` if `crypto.randomUUID` is unavailable; falls back to `"anonymous"` when `localStorage` itself throws.
 
 `handleSendV1(userText)` (`page.tsx:685-707`) is the legacy onboarding path. It POSTs to `/api/chat` (JSON, not SSE), receives a single response, and adds the assistant message plus any returned `onboardingStep`, `visaStatus`, or `graduationTarget` updates.
 
@@ -257,7 +255,7 @@ sequenceDiagram
     Note over User,Page: User sends a turn
     User->>Page: Type + Enter
     Page->>Page: addMessage(user) + pre-create empty assistant
-    Page->>Stream: streamChatV2({ message, parsedData, history, userId })
+    Page->>Stream: streamChatV2({ message, parsedData, history })
     Stream->>Page: POST /api/chat/v2 (SSE)
 
     loop For each SSE block

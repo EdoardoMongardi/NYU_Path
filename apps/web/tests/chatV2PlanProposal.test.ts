@@ -32,6 +32,8 @@ import {
     makeFeasibleScheduleWithSemesters,
     specificSlot,
     seedStudentState,
+    TEST_SECRET,
+    chatRequestAs,
 } from "./_planRouteTestUtils";
 
 // ---------------------------------------------------------------------------
@@ -91,10 +93,6 @@ function validDprPayload(): { kind: "dpr"; report: unknown } {
     return { kind: "dpr", report: r.report };
 }
 
-function fakeRequest(body: unknown): { json: () => Promise<unknown> } {
-    return { json: async () => body };
-}
-
 async function drainSse(res: Response): Promise<string> {
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
@@ -137,6 +135,7 @@ describe("v2 route plan_proposal SSE emit (Task I1)", () => {
         anthropic: process.env.ANTHROPIC_API_KEY,
         dbUrl: process.env.DATABASE_URL,
         sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+        secret: process.env.SECRET_KEY,
     };
 
     beforeEach(() => {
@@ -144,6 +143,7 @@ describe("v2 route plan_proposal SSE emit (Task I1)", () => {
         delete process.env.NYUPATH_SESSION_STORE_PATH;
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-plan-proposal-test";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-plan-proposal-test";
+        process.env.SECRET_KEY = TEST_SECRET;
         resetStoresForTests();
     });
 
@@ -156,6 +156,8 @@ describe("v2 route plan_proposal SSE emit (Task I1)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        if (ORIGINAL.secret === undefined) delete process.env.SECRET_KEY;
+        else process.env.SECRET_KEY = ORIGINAL.secret;
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -169,11 +171,10 @@ describe("v2 route plan_proposal SSE emit (Task I1)", () => {
         ]);
         await seedStudentState(userId, schedule);
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "Move CSCI-UA 201 to Fall 2027.",
             parsedData: validDprPayload(),
             history: [],
-            userId,
         }) as never);
         expect(res.status).toBe(200);
 
@@ -223,11 +224,10 @@ describe("v2 route plan_proposal SSE emit (Task I1)", () => {
         ]);
         await seedStudentState(userId, schedule);
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "Propose a change.",
             parsedData: validDprPayload(),
             history: [],
-            userId,
         }) as never);
         expect(res.status).toBe(200);
 

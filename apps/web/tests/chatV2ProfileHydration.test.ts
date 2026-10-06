@@ -35,6 +35,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseDpr, type ChatTurnResult } from "@nyupath/engine";
 import { getStores, resetStoresForTests } from "../lib/db/store";
+import { TEST_SECRET, chatRequestAs } from "./_planRouteTestUtils";
 import type { StudentProfile } from "@nyupath/shared";
 
 // ------------------------------------------------------------
@@ -159,6 +160,7 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         anthropic: process.env.ANTHROPIC_API_KEY,
         dbUrl: process.env.DATABASE_URL,
         sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+        secret: process.env.SECRET_KEY,
     };
 
     beforeEach(() => {
@@ -170,6 +172,7 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         // loop is mocked so no real provider call is made.
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-hydration";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-hydration";
+        process.env.SECRET_KEY = TEST_SECRET;
         resetStoresForTests();
         holder.session = undefined;
     });
@@ -183,6 +186,8 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        if (ORIGINAL.secret === undefined) delete process.env.SECRET_KEY;
+        else process.env.SECRET_KEY = ORIGINAL.secret;
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -194,12 +199,11 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         // the persisted value must win.
         await seedConfirmedProfile(userId, { homeSchool: "stern" });
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             // NON-ambiguous message — an ambiguous one would trip the
             // clarifier gate and early-return BEFORE runAgentTurnStreaming.
             message: "What courses should I take next semester for my computer science major?",
             parsedData: validDprPayload(),
-            userId,
             // deliberately NO homeSchool on the body
         }) as never);
         expect(res.status).toBe(200);
@@ -219,10 +223,9 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
             visaStatus: "f1",
         });
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my economics major?",
             parsedData: validDprPayload(),
-            userId,
             // no body.visaStatus, no body.homeSchool
         }) as never);
         expect(res.status).toBe(200);
@@ -244,10 +247,9 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         // uploads a corrected DPR).
         await seedConfirmedProfile(userId, { homeSchool: "cas" });
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my engineering major?",
             parsedData: validDprPayload(),
-            userId,
             homeSchool: "tandon",
         }) as never);
         expect(res.status).toBe(200);
@@ -263,10 +265,9 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         // legitimate editable home-school case. The override must win.
         await seedConfirmedProfile(userId, { homeSchool: "unknown" });
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my engineering major?",
             parsedData: unknownDprPayload(),
-            userId,
             homeSchool: "tandon",
         }) as never);
         expect(res.status).toBe(200);
@@ -282,10 +283,9 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         // THIS turn — the freshest explicit signal must win.
         await seedConfirmedProfile(userId, { visaStatus: "f1" });
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my computer science major?",
             parsedData: validDprPayload(),
-            userId,
             visaStatus: "domestic",
         }) as never);
         expect(res.status).toBe(200);
@@ -300,10 +300,9 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         // Persist NOTHING — the read-back must leave the DPR-derived
         // values untouched and the turn must still complete.
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my computer science major?",
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
         await drainSse(res);
@@ -320,7 +319,6 @@ describe("v2 route confirmed-profile read-back into session.student (E1.2)", () 
         const res = await POST(fakeRequest({
             message: "What courses should I take next semester for my computer science major?",
             parsedData: validDprPayload(),
-            userId: "anonymous",
         }) as never);
         expect(res.status).toBe(200);
         await drainSse(res);

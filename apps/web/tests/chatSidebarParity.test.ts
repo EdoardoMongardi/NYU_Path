@@ -138,12 +138,6 @@ function validDprPayload(): { kind: "dpr"; report: unknown } {
     return { kind: "dpr", report: r.report };
 }
 
-// The v2 route reads `req.json()` only (no cookie auth — userId is in
-// the body). The plan routes use a cookie + JWT (fakePlanRequest).
-function fakeJsonRequest(body: unknown): { json: () => Promise<unknown> } {
-    return { json: async () => body };
-}
-
 async function drainSse(res: Response): Promise<void> {
     const reader = res.body!.getReader();
     // eslint-disable-next-line no-constant-condition
@@ -255,12 +249,13 @@ describe("chat/sidebar PARITY — both edit channels converge on one persisted s
         //     constructed session. This is INTENTIONALLY next-turn — the
         //     sidebar edit is NOT pushed mid-turn; it is re-read on the
         //     subsequent turn. ---
+        //     Same session cookie as the sidebar calls — the v2 route
+        //     takes the student's identity from it alone.
         const chatRes = await chatV2POST(
-            fakeJsonRequest({
+            fakePlanRequest(token, {
                 message:
                     "What courses should I take next semester for my computer science major?",
                 parsedData: validDprPayload(),
-                userId: studentId,
             }) as never,
         );
         expect(chatRes.status).toBe(200);

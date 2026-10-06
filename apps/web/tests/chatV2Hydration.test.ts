@@ -24,6 +24,8 @@ import {
     makeFeasibleScheduleWithSemesters,
     specificSlot,
     seedStudentState,
+    TEST_SECRET,
+    chatRequestAs,
 } from "./_planRouteTestUtils";
 
 // ------------------------------------------------------------
@@ -74,10 +76,6 @@ function validDprPayload(): { kind: "dpr"; report: unknown } {
     return { kind: "dpr", report: r.report };
 }
 
-function fakeRequest(body: unknown): { json: () => Promise<unknown> } {
-    return { json: async () => body };
-}
-
 async function drainSse(res: Response): Promise<void> {
     const reader = res.body!.getReader();
     while (true) {
@@ -92,6 +90,7 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         anthropic: process.env.ANTHROPIC_API_KEY,
         dbUrl: process.env.DATABASE_URL,
         sessionPath: process.env.NYUPATH_SESSION_STORE_PATH,
+        secret: process.env.SECRET_KEY,
     };
 
     beforeEach(() => {
@@ -103,6 +102,7 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         // loop is mocked so no real provider call is made.
         process.env.OPENAI_API_KEY = "sk-test-fake-key-for-hydration";
         process.env.ANTHROPIC_API_KEY = "sk-ant-test-fake-key-for-hydration";
+        process.env.SECRET_KEY = TEST_SECRET;
         resetStoresForTests();
         holder.session = undefined;
     });
@@ -116,6 +116,8 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         else process.env.DATABASE_URL = ORIGINAL.dbUrl;
         if (ORIGINAL.sessionPath === undefined) delete process.env.NYUPATH_SESSION_STORE_PATH;
         else process.env.NYUPATH_SESSION_STORE_PATH = ORIGINAL.sessionPath;
+        if (ORIGINAL.secret === undefined) delete process.env.SECRET_KEY;
+        else process.env.SECRET_KEY = ORIGINAL.secret;
         resetStoresForTests();
         vi.restoreAllMocks();
     });
@@ -137,12 +139,11 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         const stores = getStores({});
         await stores.scheduleStore.persistPreferences(userId, prefs);
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             // NON-ambiguous message — an ambiguous one would trip the
             // clarifier gate and early-return BEFORE runAgentTurnStreaming.
             message: "What courses should I take next semester for my computer science major?",
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
         await drainSse(res);
@@ -165,10 +166,9 @@ describe("v2 route per-turn plan + prefs hydration (P3.1)", () => {
         // Persist NOTHING to any store. The profile/DPR are supplied by the
         // request body, so the schedule + prefs slots must hydrate to undefined.
 
-        const res = await POST(fakeRequest({
+        const res = await POST(await chatRequestAs(userId, {
             message: "What courses should I take next semester for my computer science major?",
             parsedData: validDprPayload(),
-            userId,
         }) as never);
         expect(res.status).toBe(200);
         await drainSse(res);

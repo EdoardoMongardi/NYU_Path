@@ -1,6 +1,6 @@
 # Authentication Routes
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-10-06 (§5: the cookie is the only identity source on every route — `/api/chat/v2` no longer falls back to a body `userId`). Prior 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
@@ -183,7 +183,7 @@ Both call `verifySessionToken(token)` (`apps/web/lib/auth/session.ts:61-76`) whi
 3. Returns `null` if `sub` or `email` claims are not strings.
 4. Catches any throw (expired, bad signature, malformed) and returns `null`.
 
-A `null` from either helper means "no authenticated session" — the calling route returns 401.
+A `null` from either helper means "no authenticated session" — the calling route returns 401. The one exception is `/api/chat/v2`, which still answers but as `"anonymous"`: no durable read or write, no store on the agent's session, and the shared anonymous rate-limit bucket ([chat-route-sse.md §3](chat-route-sse.md#3-authentication--authorization)). No route takes a student identity from the request body.
 
 ## 6. OTP utility internals
 

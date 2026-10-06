@@ -235,3 +235,10 @@ export function fakeRequest(cookieValue: string | undefined, body: unknown): Fak
     };
     return self;
 }
+
+/** A request authenticated as `sub` through the signed session cookie —
+ *  the chat v2 route's ONLY identity source (it ignores a body `userId`).
+ *  Needs `process.env.SECRET_KEY = TEST_SECRET`. */
+export async function chatRequestAs(sub: string, body: unknown): Promise<FakeRequest> {
+    return fakeRequest(await issueTestToken(sub), body);
+}
