@@ -7,13 +7,15 @@
 //
 // Codes are 6 digits, expire 10 minutes after issuance, and are
 // hashed at rest (sha256). Double-redemption is rejected via the
-// `consumedAt` column. Resend free tier (100 emails/day) covers
+// `consumedAt` column. Each verify reserves one of the row's
+// MAX_VERIFY_ATTEMPTS before comparing, so a code can't be guessed
+// for its whole TTL (the route adds per-email/per-IP rate limits). Resend free tier (100 emails/day) covers
 // cohort A; a `RESEND_API_KEY=__test__` sentinel skips the network
 // call so test environments don't need a real key.
 // ============================================================
 
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
-import { and, eq, gt, isNull, desc } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, desc, sql } from "drizzle-orm";
 import { SignJWT } from "jose";
 import { Resend } from "resend";
 import { getDb } from "../db/client.js";
@@ -21,6 +23,8 @@ import { emailOtps, students } from "../db/schema.js";
 
 const NYU_EMAIL_RE = /^[a-z0-9._%+-]+@nyu\.edu$/i;
 const OTP_TTL_MS = 10 * 60 * 1000;
+/** Verify attempts allowed per issued code (right or wrong) before it is dead. */
+export const MAX_VERIFY_ATTEMPTS = 5;
 
 /** Phase 7-E W12.2 — allow non-NYU addresses listed in AUTH_TEST_EMAILS
  *  (comma-separated). Lets the operator self-test sign-up before the
@@ -53,7 +57,14 @@ export interface IssueResult {
 
 export interface VerifyResult {
     ok: boolean;
-    reason?: "invalid_email" | "db_unavailable" | "no_pending_otp" | "expired" | "code_mismatch" | "already_consumed";
+    reason?:
+        | "invalid_email"
+        | "db_unavailable"
+        | "no_pending_otp"
+        | "expired"
+        | "code_mismatch"
+        | "already_consumed"
+        | "too_many_attempts";
     /** Signed JWT with `sub: <studentId>` when ok=true. */
     token?: string;
     studentId?: string;
@@ -134,8 +145,24 @@ export async function verifyOtp(
         .orderBy(desc(emailOtps.issuedAt))
         .limit(1);
 
+    // The newest pending code is THE code. It is selected without an
+    // attempts filter on purpose: skipping a burned row would hand the
+    // caller a fresh budget against an older, still-live code.
     const row = rows[0];
     if (!row) return { ok: false, reason: "no_pending_otp" };
+    const thisRow = and(eq(emailOtps.email, lowerEmail), eq(emailOtps.issuedAt, row.issuedAt));
+
+    // Reserve an attempt atomically BEFORE comparing, so concurrent
+    // guesses can't each compare against a stale count.
+    const reserved = await db
+        .update(emailOtps)
+        .set({ attempts: sql`${emailOtps.attempts} + 1` })
+        .where(and(thisRow, isNull(emailOtps.consumedAt), lt(emailOtps.attempts, MAX_VERIFY_ATTEMPTS)))
+        .returning({ attempts: emailOtps.attempts });
+    if (reserved.length === 0) {
+        // Either the budget is spent or a concurrent verify consumed it.
+        return { ok: false, reason: row.attempts >= MAX_VERIFY_ATTEMPTS ? "too_many_attempts" : "no_pending_otp" };
+    }
 
     const expectedHash = Buffer.from(row.codeHash, "hex");
     const providedHash = Buffer.from(sha256(code), "hex");
@@ -143,10 +170,14 @@ export async function verifyOtp(
         return { ok: false, reason: "code_mismatch" };
     }
 
-    await db
+    // Conditional consume: only one of two concurrent correct
+    // submissions wins the row and mints a session.
+    const consumed = await db
         .update(emailOtps)
         .set({ consumedAt: now })
-        .where(and(eq(emailOtps.email, lowerEmail), eq(emailOtps.issuedAt, row.issuedAt)));
+        .where(and(thisRow, isNull(emailOtps.consumedAt)))
+        .returning({ email: emailOtps.email });
+    if (consumed.length === 0) return { ok: false, reason: "already_consumed" };
 
     const studentId = emailToStudentId(lowerEmail);
     await db

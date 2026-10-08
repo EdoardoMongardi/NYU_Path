@@ -19,6 +19,7 @@ import {
     serial,
     primaryKey,
     index,
+    integer,
 } from "drizzle-orm/pg-core";
 
 export const students = pgTable("students", {
@@ -72,7 +73,10 @@ export const auditLog = pgTable("audit_log", {
  * Email-OTP auth (Phase 7-B Step 11). One row per outstanding OTP;
  * rows expire 10 minutes after issuance and are deleted on consume.
  * The `consumedAt` column lets us reject double-redemption without
- * relying on best-effort row deletion.
+ * relying on best-effort row deletion. `attempts` counts verify
+ * attempts against the row; verifyOtp reserves one before comparing
+ * and treats the row as dead once it reaches the cap, so a code can't
+ * be brute-forced across its TTL.
  */
 export const emailOtps = pgTable("email_otps", {
     email: text("email").notNull(),
@@ -80,6 +84,7 @@ export const emailOtps = pgTable("email_otps", {
     issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
 }, (t) => ({
     pk: primaryKey({ columns: [t.email, t.issuedAt] }),
     byEmail: index("email_otps_email_idx").on(t.email),

@@ -1,6 +1,6 @@
 # Authentication Routes
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-10-08 (OTP verify brute-force hardening: per-code attempt budget, verify rate limits, trusted client IP).
 
 ## TL;DR
 
@@ -47,7 +47,7 @@ flowchart LR
 
 ## 2. POST /api/auth/otp/issue
 
-**File:** `apps/web/app/api/auth/otp/issue/route.ts:31`
+**File:** `apps/web/app/api/auth/otp/issue/route.ts:25`
 **Runtime:** Node.js (`runtime = "nodejs"`).
 
 ### Request shape
@@ -59,27 +59,38 @@ If the body is not valid JSON, returns 400 with `"Body must be JSON with an emai
 
 ### Rate limit (per IP)
 
-Before any work, the route applies a per-IP daily quota of 5 issuances via `consumeRequest` (`apps/web/app/api/auth/otp/issue/route.ts:21,32`). The bucket key is `otp-ip:<ip>`, where the IP is taken from the first hop of `X-Forwarded-For`, falling back to `X-Real-IP`, falling back to the literal string `anonymous` (`apps/web/app/api/auth/otp/issue/route.ts:23-29`). On block, returns HTTP 429 with body `{ ok: false, error: "Too many login attempts from this IP. Try again after <resetAt>." }` and a `Retry-After` header in seconds.
+Before any work, the route applies a per-IP daily quota of 5 issuances via `consumeRequest` (`apps/web/app/api/auth/otp/issue/route.ts:23,26`). The bucket key is `otp-ip:<ip>`, where the IP comes from the shared `clientIp` helper (`apps/web/lib/clientIp.ts:30`) — see [Client IP (trust model)](#client-ip-trust-model) below. On block, returns HTTP 429 with body `{ ok: false, error: "Too many login attempts from this IP. Try again after <resetAt>." }` and a `Retry-After` header in seconds.
 
-This limiter is entirely in-process and resets on every server restart, and the IP key is read from the spoofable `X-Forwarded-For` header — see [rate-limit-and-middleware.md, Known limitations](./rate-limit-and-middleware.md#4-known-limitations). Treat it as an abuse speed bump, not a hard control. There is no per-email cap.
+This limiter is entirely in-process (per server instance) and resets on every restart — see [rate-limit-and-middleware.md, Known limitations](./rate-limit-and-middleware.md#4-known-limitations). Treat it as an abuse speed bump, not a hard control. There is no per-email cap on issuance; the brute-force guard that holds across instances is the per-code attempt budget in `verifyOtp` (§3, §6).
+
+### Client IP (trust model)
+
+`clientIp(headers, env)` (`apps/web/lib/clientIp.ts:30-41`) is used by both OTP routes:
+
+1. When `VERCEL` is set (Vercel exposes `VERCEL=1` at runtime), the first entry of `x-vercel-forwarded-for`.
+2. Otherwise — or if that header is absent — the first hop of `X-Forwarded-For`, then `X-Real-IP`, then the literal `anonymous` (one shared bucket).
+
+The assumption: **production runs on Vercel.** Vercel sets `x-vercel-forwarded-for` to the client's public IP and overwrites `X-Forwarded-For` / `X-Real-IP` to prevent spoofing ([Vercel request headers](https://vercel.com/docs/headers/request-headers), checked 2026-10-08), so a caller cannot pick its own bucket there. `x-vercel-forwarded-for` is preferred because it survives a proxy placed in front of Vercel. The Vercel header is ignored when `VERCEL` is unset, because off Vercel a client could send it.
+
+Off Vercel (local dev, or a self-host without an overwriting proxy) every one of these headers is client-controlled, so an IP bucket there is only a speed bump. The helper deliberately does **not** fall back to the rightmost `X-Forwarded-For` hop: behind a multi-proxy chain that would put every user in the nearest proxy's bucket and let one caller lock everyone out. The onboard and what-if-audit routes still derive their IP inline from the first `X-Forwarded-For` hop (see [rate-limit-and-middleware.md](./rate-limit-and-middleware.md)).
 
 ### Email allowlist
 
-`issueOtp` accepts the email only if it matches `^[a-z0-9._%+-]+@nyu\.edu$` (`apps/web/lib/auth/otp.ts:22`) OR appears in the comma-separated `AUTH_TEST_EMAILS` env var (`apps/web/lib/auth/otp.ts:29-36`). When neither matches, returns 400 with the message about only accepting `@nyu.edu` addresses (`apps/web/app/api/auth/otp/issue/route.ts:51-58`).
+`issueOtp` accepts the email only if it matches `^[a-z0-9._%+-]+@nyu\.edu$` (`apps/web/lib/auth/otp.ts:24`) OR appears in the comma-separated `AUTH_TEST_EMAILS` env var (`apps/web/lib/auth/otp.ts:33-40`). When neither matches, returns 400 with the message about only accepting `@nyu.edu` addresses (`apps/web/app/api/auth/otp/issue/route.ts:45-53`).
 
 ### Code generation and persistence
 
-`issueOtp` (`apps/web/lib/auth/otp.ts:72`) does:
-1. Generates a 6-digit decimal code using `crypto.randomInt(0, 1_000_000)` zero-padded to 6 characters (`apps/web/lib/auth/otp.ts:80`).
-2. Records `issuedAt = now` and `expiresAt = now + 10 minutes` (TTL `OTP_TTL_MS = 10 * 60 * 1000` at `apps/web/lib/auth/otp.ts:23`).
-3. Inserts a row into the `email_otps` table with the lowercased email, the sha256 hash of the code, `issuedAt`, and `expiresAt` (`apps/web/lib/auth/otp.ts:83-88`). The plaintext code is never written to the DB.
+`issueOtp` (`apps/web/lib/auth/otp.ts:83`) does:
+1. Generates a 6-digit decimal code using `crypto.randomInt(0, 1_000_000)` zero-padded to 6 characters (`apps/web/lib/auth/otp.ts:91`).
+2. Records `issuedAt = now` and `expiresAt = now + 10 minutes` (TTL `OTP_TTL_MS = 10 * 60 * 1000` at `apps/web/lib/auth/otp.ts:25`).
+3. Inserts a row into the `email_otps` table with the lowercased email, the sha256 hash of the code, `issuedAt`, and `expiresAt` (`apps/web/lib/auth/otp.ts:94-99`); `attempts` defaults to 0 and `consumedAt` to null. The plaintext code is never written to the DB.
 
 ### Email send (Resend)
 
 The send path branches on `RESEND_API_KEY`:
 - Missing key → returns `{ ok: false, reason: "send_failed" }`, which the route maps to HTTP 502.
-- Key equals literal string `__test__` → skips the network call entirely and returns `{ ok: true, debugCode: code }`. The route then echoes that debug code in the response body so tests can complete end-to-end (`apps/web/lib/auth/otp.ts:90-96`, `apps/web/app/api/auth/otp/issue/route.ts:71-74`).
-- Any other value → constructs a `Resend` client, calls `resend.emails.send` with `from = RESEND_FROM ?? "NYU Path <onboarding@resend.dev>"`, `to = email`, subject `"Your NYU Path login code"`, and a plain-text body containing the code (`apps/web/lib/auth/otp.ts:98-105`).
+- Key equals literal string `__test__` → skips the network call entirely and returns `{ ok: true, debugCode: code }`. The route then echoes that debug code in the response body so tests can complete end-to-end (`apps/web/lib/auth/otp.ts:101-107`, `apps/web/app/api/auth/otp/issue/route.ts:65-68`).
+- Any other value → constructs a `Resend` client, calls `resend.emails.send` with `from = RESEND_FROM ?? "NYU Path <onboarding@resend.dev>"`, `to = email`, subject `"Your NYU Path login code"`, and a plain-text body containing the code (`apps/web/lib/auth/otp.ts:109-116`).
 
 ### Response shapes
 
@@ -89,12 +100,25 @@ The send path branches on `RESEND_API_KEY`:
 - Send failure: HTTP 502.
 - Rate-limited: HTTP 429 with `Retry-After` header.
 
-Result reasons map to status codes at `apps/web/app/api/auth/otp/issue/route.ts:50-69`.
+Result reasons map to status codes at `apps/web/app/api/auth/otp/issue/route.ts:44-64`.
 
 ## 3. POST /api/auth/otp/verify
 
-**File:** `apps/web/app/api/auth/otp/verify/route.ts:16`
+**File:** `apps/web/app/api/auth/otp/verify/route.ts:37`
 **Runtime:** Node.js.
+
+Because the signed `nyupath_session` cookie is the only identity the app trusts, this route is the sole gate to any student's data. It is brute-force guarded twice: in-process rate limits here, and a durable per-code attempt budget inside `verifyOtp` (§6).
+
+### Rate limits (per IP and per email)
+
+Both are checked with `consumeRequest` **before** any code comparison; either one blocking returns HTTP 429 with `Retry-After` (seconds to the next UTC midnight) and `{ ok: false, error: "Too many login attempts from this IP|for this email. Try again after <resetAt>." }` (`apps/web/app/api/auth/otp/verify/route.ts:30-35`).
+
+| Bucket key | Limit | Checked | Why this number |
+|---|---|---|---|
+| `otp-verify-ip:<clientIp>` | 25 / UTC day | first, before the body is parsed (`route.ts:38-39`) | 5 issued codes/IP/day × 5 attempts per code |
+| `otp-verify-email:<trimmed, lower-cased email>` | 10 / UTC day | after body validation (`route.ts:50-52`) | two codes' worth of attempts |
+
+The IP comes from `clientIp` ([trust model](#client-ip-trust-model)). Every verify call counts, successful or not. Trade-off: anyone who knows a student's email can spend that email's 10 daily verifies and lock the student out of logging in until UTC midnight (8 pm New York time during daylight saving); an IP-only limit would avoid that but would let a rotating-IP attacker keep guessing. These buckets are in-process, so they multiply by instance count and reset on restart — the attempt budget below is the control that holds across instances.
 
 ### Request shape
 
@@ -104,30 +128,34 @@ JSON body with two fields:
 
 ### Code validation flow
 
-`verifyOtp` (`apps/web/lib/auth/otp.ts:112`) executes:
+`verifyOtp` (`apps/web/lib/auth/otp.ts:123`) executes:
 1. Re-applies the same `isAllowedEmail` check (NYU domain or AUTH_TEST_EMAILS). Failure returns `reason: "invalid_email"`.
-2. Selects the latest unconsumed, unexpired `email_otps` row for the lowercased email — ordered by `issuedAt DESC`, limited to 1 (`apps/web/lib/auth/otp.ts:124-135`). If no row matches, returns `reason: "no_pending_otp"`.
-3. Compares the stored sha256 hash against `sha256(providedCode)` using `crypto.timingSafeEqual` (`apps/web/lib/auth/otp.ts:140-144`) — constant-time. If lengths or bytes differ, returns `reason: "code_mismatch"`.
-4. Marks the row consumed by setting `consumedAt = now` on the matched (email, issuedAt) tuple (`apps/web/lib/auth/otp.ts:146-149`). This single-use marking guards against double redemption — subsequent verifies for that code will fail the "unconsumed" filter in step 2.
-5. Derives the studentId by lowercasing the email and taking the prefix before `@` (`apps/web/lib/auth/otp.ts:66-70`). Upserts a `students` row with `(studentId, email)` ON CONFLICT updates `email` and `updatedAt` (`apps/web/lib/auth/otp.ts:152-158`). This is what makes login double as signup.
-6. Signs an HS256 JWT with `sub = studentId`, custom claim `email = lowerEmail`, `iat = now`, `exp = +30d`, using `SECRET_KEY` from env (`apps/web/lib/auth/otp.ts:160-167`). Missing `SECRET_KEY` returns `reason: "db_unavailable"`.
+2. Selects the latest unconsumed, unexpired `email_otps` row for the lowercased email — ordered by `issuedAt DESC`, limited to 1 (`apps/web/lib/auth/otp.ts:135-146`). If no row matches, returns `reason: "no_pending_otp"`. This SELECT deliberately does **not** filter on `attempts`: the newest pending code is *the* code, and skipping a burned row would hand the caller a fresh budget against an older, still-live code.
+3. **Reserves one attempt** with a single conditional UPDATE: `attempts = attempts + 1 WHERE (email, issuedAt) AND consumedAt IS NULL AND attempts < MAX_VERIFY_ATTEMPTS` (5), `RETURNING attempts` (`apps/web/lib/auth/otp.ts:157-164`). If no row comes back, returns `reason: "too_many_attempts"` (or `no_pending_otp` if a concurrent verify consumed the row first). Reserving *before* comparing is what makes the cap hold under concurrency.
+4. Compares the stored sha256 hash against `sha256(providedCode)` using `crypto.timingSafeEqual` (`apps/web/lib/auth/otp.ts:167-171`) — constant-time. If lengths or bytes differ, returns `reason: "code_mismatch"` (the attempt stays spent).
+5. Marks the row consumed with a conditional UPDATE: `consumedAt = now WHERE (email, issuedAt) AND consumedAt IS NULL`, `RETURNING` (`apps/web/lib/auth/otp.ts:175-180`). If no row comes back, a concurrent correct submission won the row and this one returns `reason: "already_consumed"` — so two simultaneous correct submissions mint only one session.
+6. Derives the studentId by lowercasing the email and taking the prefix before `@` (`apps/web/lib/auth/otp.ts:77-81`). Upserts a `students` row with `(studentId, email)` ON CONFLICT updates `email` and `updatedAt` (`apps/web/lib/auth/otp.ts:182-189`). This is what makes login double as signup.
+7. Signs an HS256 JWT with `sub = studentId`, custom claim `email = lowerEmail`, `iat = now`, `exp = +30d`, using `SECRET_KEY` from env (`apps/web/lib/auth/otp.ts:191-198`). Missing `SECRET_KEY` returns `reason: "db_unavailable"`.
 
 ### Session creation and cookie set
 
-On success, the route builds `NextResponse.json({ ok: true, studentId })` and calls `setSessionCookie(res, token)` (`apps/web/app/api/auth/otp/verify/route.ts:44-46`). The JWT itself is never put in the response body.
+On success, the route builds `NextResponse.json({ ok: true, studentId })` and calls `setSessionCookie(res, token)` (`apps/web/app/api/auth/otp/verify/route.ts:73-75`). The JWT itself is never put in the response body.
 
 ### Failure messages and status mapping
 
-All failure modes are funneled into a small set of human-readable messages so the client UI stays consistent (`apps/web/app/api/auth/otp/verify/route.ts:30-41`):
+All failure modes are funneled into a small set of human-readable messages so the client UI stays consistent (`apps/web/app/api/auth/otp/verify/route.ts:55-72`). The `/login` page shows whatever `error` comes back, so no client change is needed for new messages.
 
 | `reason`           | Status | Message                                                              |
 |--------------------|--------|----------------------------------------------------------------------|
+| (IP rate limit)    | 429    | "Too many login attempts from this IP. Try again after <resetAt>." + `Retry-After` |
+| (email rate limit) | 429    | "Too many login attempts for this email. Try again after <resetAt>." + `Retry-After` |
 | `expired`          | 401    | "That code has expired. Request a new one."                           |
 | `code_mismatch`    | 401    | "That code doesn't match. Double-check the email and try again."      |
+| `too_many_attempts`| 401    | "Too many incorrect codes. Request a new code."                       |
 | `no_pending_otp`   | 401    | "No active code for that email. Request a new one."                   |
 | `invalid_email`    | 400    | "That email isn't allowed."                                           |
 | `db_unavailable`   | 503    | "Auth backend is unavailable. Try again in a moment."                 |
-| (anything else)    | 401    | "Couldn't verify the code. Try again."                                |
+| (anything else, incl. `already_consumed`) | 401 | "Couldn't verify the code. Try again."                |
 
 Note: the `expired` mapping appears in the status switch but `verifyOtp`'s current SELECT filter (`gt(emailOtps.expiresAt, now)`) means an expired code falls into the `no_pending_otp` branch in practice — both render as 401 to the client.
 
@@ -191,27 +219,35 @@ A `null` from either helper means "no authenticated session" — the calling rou
 
 ### Code generation
 
-- 6-digit numeric, generated with `crypto.randomInt(0, 1_000_000)` (`apps/web/lib/auth/otp.ts:80`) — uses the OS CSPRNG, so codes are cryptographically unpredictable, not pseudo-random.
+- 6-digit numeric, generated with `crypto.randomInt(0, 1_000_000)` (`apps/web/lib/auth/otp.ts:91`) — uses the OS CSPRNG, so codes are cryptographically unpredictable, not pseudo-random.
 - Zero-padded to width 6 so leading-zero codes (e.g. `004217`) render correctly in the email and survive transit as strings.
 
 ### TTL
 
-- `OTP_TTL_MS = 10 * 60 * 1000` (`apps/web/lib/auth/otp.ts:23`) — 10 minutes from `issuedAt` to `expiresAt`.
+- `OTP_TTL_MS = 10 * 60 * 1000` (`apps/web/lib/auth/otp.ts:25`) — 10 minutes from `issuedAt` to `expiresAt`.
 - Stored as an absolute timestamp on the row, not a relative TTL — clock drift on the server is the only window for off-by-N-seconds edge cases.
 
 ### Single-use guarantee
 
 Single-use is enforced at the DB layer by the `consumedAt` column:
 - On verify, the SELECT filter is `consumedAt IS NULL AND expiresAt > now`. A consumed row is invisible.
-- The marking UPDATE sets `consumedAt = now` keyed on `(email, issuedAt)`. The `issuedAt` discriminator means re-issuing OTPs to the same email produces a new row each time; an earlier code can still be selected if it was the most recent unconsumed one, but each row is consumed at most once.
+- The marking UPDATE sets `consumedAt = now` keyed on `(email, issuedAt)` **and** `consumedAt IS NULL`, and checks the returned row, so the row is consumed at most once even when two correct submissions race. The `issuedAt` discriminator means re-issuing OTPs to the same email produces a new row each time; an earlier code can still be selected if it was the most recent unconsumed one.
 
-There is no per-email rate limit beyond what the `/issue` route's per-IP guard enforces; multiple `/issue` calls for the same email just create more rows. The verify path picks the latest (`orderBy(desc(emailOtps.issuedAt)).limit(1)`).
+Multiple `/issue` calls for the same email just create more rows (only the per-IP issue limit applies). The verify path picks the latest (`orderBy(desc(emailOtps.issuedAt)).limit(1)`).
+
+### Attempt budget
+
+- `MAX_VERIFY_ATTEMPTS = 5` (`apps/web/lib/auth/otp.ts:27`), stored per row in `email_otps.attempts` (`integer NOT NULL DEFAULT 0`, migration `apps/web/drizzle/0004_otp_verify_attempts.sql`).
+- Every verify — right or wrong — reserves one attempt with an atomic `UPDATE … WHERE attempts < 5 … RETURNING` before the code is compared. After 5 attempts the row is dead: even the correct code returns `too_many_attempts`, and the student must request a new code. Postgres re-checks the WHERE after taking the row lock, so concurrent guesses cannot exceed the budget (verified against a local Postgres 17: 20 concurrent reserves → exactly 5 succeed).
+- Because the select ignores `attempts`, burning the newest code does not re-open an older pending one.
+- This is the control that holds across serverless instances and restarts. Worst case per email: each issued code buys 5 guesses (5 / 10^6 chance), and issuance is bounded by the per-IP issue limit plus the Resend sending quota.
+- Deploy order: apply migration `0004` **before** deploying this code — the verify query references the `attempts` column. The migration is additive (existing rows get 0), so the old code keeps working against the migrated table.
 
 ### Hashing
 
-- `sha256` (no salt, no pepper) of the plain code (`apps/web/lib/auth/otp.ts:62-64`).
+- `sha256` (no salt, no pepper) of the plain code (`apps/web/lib/auth/otp.ts:73-75`).
 - A salt would block precomputed-rainbow attacks on the hash, but with a 6-digit code space the entire universe is 10^6 entries — anyone who exfiltrates the table can brute-force any single hash in milliseconds. The hash mostly prevents casual disclosure to an operator scanning logs/the DB.
-- Comparison uses `timingSafeEqual` on the hex-decoded buffers (`apps/web/lib/auth/otp.ts:140-144`) — constant-time, no early-exit on first-byte mismatch.
+- Comparison uses `timingSafeEqual` on the hex-decoded buffers (`apps/web/lib/auth/otp.ts:167-171`) — constant-time, no early-exit on first-byte mismatch.
 
 ## 7. Login page UI flow
 

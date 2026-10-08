@@ -3,7 +3,8 @@
 // ============================================================
 // Body: { email }. Issues a fresh 6-digit OTP, persists hash, sends
 // the code via Resend. Per-IP rate-limited (5/UTC-day) so a flood
-// against /issue can't burn Resend quota or spam an inbox.
+// against /issue can't burn Resend quota or spam an inbox. The IP
+// comes from `clientIp` (trusted only on Vercel — see lib/clientIp.ts).
 //
 // Always returns 200 unless the request is structurally malformed
 // or the email is rejected (non-NYU + not on AUTH_TEST_EMAILS).
@@ -14,22 +15,15 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { issueOtp } from "../../../../../lib/auth/otp";
+import { clientIp } from "../../../../../lib/clientIp";
 import { consumeRequest } from "../../../../../lib/rateLimit";
 
 export const runtime = "nodejs";
 
 const OTP_LIMIT_PER_DAY = 5;
 
-function ipKey(req: NextRequest): string {
-    const fwd = req.headers.get("x-forwarded-for");
-    if (fwd) return `otp-ip:${fwd.split(",")[0]!.trim()}`;
-    const real = req.headers.get("x-real-ip");
-    if (real) return `otp-ip:${real.trim()}`;
-    return "otp-ip:anonymous";
-}
-
 export async function POST(req: NextRequest): Promise<Response> {
-    const rate = consumeRequest(ipKey(req), OTP_LIMIT_PER_DAY);
+    const rate = consumeRequest(`otp-ip:${clientIp(req.headers)}`, OTP_LIMIT_PER_DAY);
     if (!rate.ok) {
         return NextResponse.json(
             { ok: false, error: `Too many login attempts from this IP. Try again after ${rate.resetAt}.` },
