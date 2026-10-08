@@ -38,6 +38,7 @@ Two eras, numbered continuously:
 - `2026-05-03-PHASE_12_8_*` — bulletin-parse data-quality issues + 30/30 manual QA sample.
 - `2026-06-04-schoolconfig-spotcheck/` — adversarial per-school verification of all 11 `data/schools/*.json` configs against live bulletins (drove the NYUAD/SPS/Gallatin corrections).
 - `2026-06-05-AUDIT_FINDINGS.md` — the consolidated code-truth issue audit (CAS-coupling, divergent pipelines, solver gaps) that motivated the planning-engine rebuild design.
+- `2026-10-06-chat-v2-identity-planting-runbook.md` — forensic runbook for the pre-PR-#58 chat-v2 body-`userId` hole: the read-only audit query (`apps/web/scripts/audit-identity-planting.sql`) + its synthetic self-test fixture, how to read the classes, and the owner-run purge / fresh-DPR steps.
 
 ## specs/
 
