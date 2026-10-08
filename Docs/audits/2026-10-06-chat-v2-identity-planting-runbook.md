@@ -113,4 +113,4 @@ Rule out benign explanations first:
 
 - **Privacy gap:** self-serve `/api/session/delete` does not delete `email_otps` rows, so email + login timestamps outlive "delete all my data".
 - **Id collision:** `AUTH_TEST_EMAILS` lets non-NYU addresses log in as their local part. `abc@gmail.com` would log in as NetID `abc`. Keep that allowlist empty in production.
-- **Hardening (separate TDD PR):** when `verifyOtp` adopts a row with `email IS NULL`, reset it instead of inheriting it. This closes the adoption path for anything planted before #58, or by any future bug.
+- **Hardening — PR #60** (`fix/otp-first-login-adoption-reset`): at an id's **first-ever verified login**, `verifyOtp` now resets an email-less `students` row (delete → cascade → fresh row) instead of adopting it. An email-less row with a prior verified login (the `recreated_after_login` class) is kept. This closes the adoption path for anything still planted, but it does **not** clean rows already adopted (`2_`/`3_`) — those still need §4. Purging `1_UNCLAIMED_NETID` rows now is still recommended: they hold a planter's DPR (PII) until that NetID's first login, which may never come.
