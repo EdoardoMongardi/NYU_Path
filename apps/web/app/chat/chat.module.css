@@ -332,6 +332,23 @@
     background: #fff0b8;
 }
 
+/* The account this session acts for — sits before "Sign out" and takes
+ * over its auto left margin. */
+.signedInAs {
+    margin-left: auto;
+    flex-shrink: 0;
+    max-width: 40%;
+    font-size: 0.78rem;
+    color: #5b4a00;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.signedInAs + .logoutButton {
+    margin-left: 0.5rem;
+}
+
 /* Phase 7-E W2.3 — fallback link beneath the upload area, only
  * shown while we're awaiting a DPR. Lets the student switch to
  * the legacy unofficial-transcript flow when their DPR isn't
@@ -401,6 +418,26 @@
 
     .inputArea {
         padding: 12px 16px 16px;
+    }
+
+    /* Disclaimer + "Sign out" keep the first line; the signed-in
+     * account gets a full-width line of its own underneath. */
+    .disclaimerBanner {
+        flex-wrap: wrap;
+    }
+
+    .disclaimerText {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .signedInAs {
+        order: 1;
+        flex: 0 0 100%;
+        max-width: none;
+        margin-left: 0;
+        padding-left: 1.25rem;
+        box-sizing: border-box;
     }
 }
 

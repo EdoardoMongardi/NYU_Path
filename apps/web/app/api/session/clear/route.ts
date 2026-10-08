@@ -14,6 +14,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { rejectCrossSiteRequest } from "../../../../lib/auth/requestGuards";
 import { eq } from "drizzle-orm";
 import { readSessionFromRequest } from "../../../../lib/auth/session";
 import { getDb } from "../../../../lib/db/client";
@@ -30,6 +31,10 @@ import {
 export const runtime = "nodejs";
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
+    // A cross-site request is refused before anything else
+    // (lib/auth/requestGuards.ts).
+    const refused = rejectCrossSiteRequest(req);
+    if (refused) return refused;
     // Server-side env gate. NEXT_PUBLIC_* is exposed to the client
     // bundle by Next.js, but client visibility doesn't make it safe —
     // re-check on the server so a malicious client can't fire this in

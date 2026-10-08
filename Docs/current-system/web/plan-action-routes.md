@@ -1,6 +1,6 @@
 # Plan Action Routes — Deterministic Plan Mutation API
 
-> Last verified against code: 2026-06-19 (Plans 35/36/37 — `/api/plan/whatif` now validates input (D-7/D-4); `/api/plan/add` returns 422 on unknown course; `/api/plan/confirm` returns 422 on infeasible regardless of `force`; `/api/plan/drop` releases matching pin; what-if route added; error-mapping updated). Prior: 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-10-08 (PR #58 review fixes — every plan-action route, including `explain-polish` and `stage2`, refuses a cross-site request (403) or a declared non-JSON body (415) before auth; §3.1 step 0). Prior 2026-06-19 (Plans 35/36/37 — `/api/plan/whatif` now validates input (D-7/D-4); `/api/plan/add` returns 422 on unknown course; `/api/plan/confirm` returns 422 on infeasible regardless of `force`; `/api/plan/drop` releases matching pin; what-if route added; error-mapping updated). Prior: 2026-06-16 (Phase 4 E3: never-instant preview/review card; drag removed); 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 > **Phase 4 E3 — the routes are UNCHANGED; the edit GESTURE and the edit SURFACE changed (both client-side).** The `/api/plan/*` routes stayed propose-only through the E3 group — propose stages a `pendingMutationId` + a non-persisted validated schedule, confirm applies. Two things changed in the browser only: (1) **drag-to-move/exchange was removed ENTIRELY** — the per-course ⋯ menu (Swap / Drop / Lock / Move) + the `+ Add course` input are now the sole edit inputs, which **supersedes the Phase-17 instant-move / drag-grid** description in this doc (the §7 "drag should feel instant" framing below is historical); and (2) every ⋯ verb now PROPOSES and the staged proposal is reconciled into a canvas **preview + review card** (or a RED invalid card on `feasible:false`) — applying only on Confirm. That reconciliation is entirely client-side; see [ui-components.md](./ui-components.md) and [chat-ui-client.md](./chat-ui-client.md). The route contracts, schemas, two-stage handshake, and error mapping in the sections below are unaffected.
 
@@ -55,7 +55,7 @@ flowchart LR
     Bubble -.->|fire-and-forget| Stage2[/api/plan/stage2/]
 ```
 
-All routes run on the Node.js runtime (each file declares `runtime = "nodejs"`). All routes share the same auth contract (cookie-based session) and the same daily rate-limit bucket — except `explain-polish` and `stage2`, which use dedicated buckets.
+All routes run on the Node.js runtime (each file declares `runtime = "nodejs"`). Every route first calls `guardJsonMutation` — a cross-site request gets 403, a body declaring a non-JSON `Content-Type` gets 415 ([auth-routes.md §9](auth-routes.md#9-cross-site-request-guard)); the verb routes get it through `preflight` (§3.1), `explain-polish` and `stage2` call it directly. All routes share the same auth contract (cookie-based session) and the same daily rate-limit bucket — except `explain-polish` and `stage2`, which use dedicated buckets.
 
 ## 2. Per-Route Documentation
 
@@ -101,7 +101,7 @@ The second mutation is load-bearing: the solver's exclusion set is term-agnostic
 
 **Response shape (200):** `PlanActionResponse`.
 
-**Error cases:** Same as `/api/plan/add` plus 400 for the no-op `fromTerm === toTerm` case (surfaced by the helper's "empty mutation list" check at `apps/web/lib/planActionRouteHelpers.ts:160-162`).
+**Error cases:** Same as `/api/plan/add` plus 400 for the no-op `fromTerm === toTerm` case (surfaced by the helper's "empty mutation list" check at `apps/web/lib/planActionRouteHelpers.ts:180`).
 
 ---
 
@@ -317,29 +317,30 @@ Stage 2 is best-effort: a FOSE failure for one term produces an `unavailable` en
 
 The helper module centralizes the boilerplate that every per-verb route would otherwise duplicate. It exports two main entry points:
 
-### 3.1 `preflight` (internal — `apps/web/lib/planActionRouteHelpers.ts:46-96`)
+### 3.1 `preflight` (internal — `apps/web/lib/planActionRouteHelpers.ts:50`)
 
 Runs the gates every plan-action route needs, in order:
 
+0. **Cross-site / content type.** `guardJsonMutation(req)` — 403 for a cross-site request, 415 for a declared non-JSON body — before auth or the rate-limit charge.
 1. **Auth.** `readSessionFromRequest(req)` resolves the session from cookies. Missing session → 401 `{ error: "Unauthorized" }`.
-2. **Rate-limit.** `consumeRequest("plan-action:<studentId>", PLAN_ACTION_LIMIT_PER_DAY)` debits one unit from the per-student per-day bucket. The cap is 60 (`apps/web/lib/planActionRouteHelpers.ts:35`). On exhaustion, returns 429 with `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers.
+2. **Rate-limit.** `consumeRequest("plan-action:<studentId>", PLAN_ACTION_LIMIT_PER_DAY)` debits one unit from the per-student per-day bucket. The cap is 60 (`apps/web/lib/planActionRouteHelpers.ts:39`). On exhaustion, returns 429 with `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers.
 3. **JSON parse.** Attempts `req.json()`. Malformed JSON → 400 with the underlying parse error in the body.
 
 On success, returns `{ ok: true, studentId, body }`. The studentId is extracted from `auth.sub`.
 
-### 3.2 `handleProposeRoute<T>` (`apps/web/lib/planActionRouteHelpers.ts:141-168`)
+### 3.2 `handleProposeRoute<T>` (`apps/web/lib/planActionRouteHelpers.ts:161`)
 
 Each propose verb (`add`, `move`, `swap`, `drop`, `lock`) calls this with three arguments: the request, a Zod schema for the body, and a `buildMutations` callback that lifts the validated input to a `PlanMutation[]`.
 
 Flow:
 1. Run `preflight`. Early-return its response on any 4xx/5xx.
-2. Validate the body via `schema.parse`. On failure, format Zod issues via `formatZodIssues` (`apps/web/lib/planActionRouteHelpers.ts:127-134`) and return 400.
+2. Validate the body via `schema.parse`. On failure, format Zod issues via `formatZodIssues` (`apps/web/lib/planActionRouteHelpers.ts:147`) and return 400.
 3. Call `buildMutations(parsed)`. If the resulting array is empty, return 400 `"Empty mutation list — nothing to propose."` (this is how `/api/plan/move` surfaces the no-op same-term case).
 4. Call `runProposeStage(studentId, mutations)` from the orchestrator.
 5. On orchestrator failure, map the typed error to an HTTP status via `mapProposeError`.
 6. On success, return 200 JSON with the orchestrator's response.
 
-### 3.3 `handleConfirmRoute` (`apps/web/lib/planActionRouteHelpers.ts:176-201`)
+### 3.3 `handleConfirmRoute` (`apps/web/lib/planActionRouteHelpers.ts:231`)
 
 Used only by `/api/plan/confirm`. Same preflight as propose, then:
 
@@ -365,7 +366,7 @@ Source: `apps/web/lib/planActionRouteHelpers.ts` (`mapProposeError` + `mapConfir
 
 ### 3.5 Test-only exports
 
-`_PLAN_ACTION_LIMIT_PER_DAY_FOR_TESTS` and `_RATE_BUCKET_PREFIX_FOR_TESTS` are re-exported for the route test suites (`apps/web/lib/planActionRouteHelpers.ts:204-205`).
+`_PLAN_ACTION_LIMIT_PER_DAY_FOR_TESTS` and `_RATE_BUCKET_PREFIX_FOR_TESTS` are re-exported for the route test suites (`apps/web/lib/planActionRouteHelpers.ts:259-260`).
 
 ## 4. Common Patterns
 

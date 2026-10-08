@@ -1,6 +1,6 @@
 # Rate Limit and Middleware
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-10-08 (PR #58 review fixes — the per-route cross-site request guard, §2 + §3). Prior: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
 
 ## TL;DR
 
@@ -161,7 +161,8 @@ Gates the operator-only observability dashboard at `/admin/observability` (and a
 Critically for understanding the app's auth posture:
 
 - It does NOT touch the `nyupath_session` cookie. Session auth for `/login`, `/chat`, `/api/session/*`, `/api/onboard/refresh-dpr`, and the v2 chat route is enforced by each route handler calling `readSessionFromRequest` (from `apps/web/lib/auth/session.ts`), not by the middleware.
-- It does NOT apply CORS headers. Same-origin requests from the Next.js app don't need them; cross-origin requests would simply fail without any middleware intervention.
+- It does NOT apply CORS headers. Same-origin requests from the Next.js app don't need them; a cross-origin `fetch` that needs a preflight simply fails.
+- It does NOT refuse cross-site requests. That is a per-route guard: every state-changing `/api` handler calls `rejectCrossSiteRequest` / `guardJsonMutation` (`apps/web/lib/auth/requestGuards.ts`) before it reads the session, parses the body or charges a rate-limit bucket — see [auth-routes.md §9](./auth-routes.md#9-cross-site-request-guard). It lives in the handlers rather than here because this middleware matches `/admin/*` only and Next 16 deprecates the `middleware.ts` convention; a test fails if a mutating handler skips the guard.
 - It does NOT call `consumeRequest`. The rate limiter is invoked by individual route handlers (OTP issue, onboard, refresh-dpr, the chat route), not by the middleware.
 - It does NOT redirect unauthenticated visitors of `/chat` to `/login`. That gate lives in the `/chat` Server Component layout (`apps/web/app/chat/layout.tsx`), which calls `readSessionFromCookies()` and `redirect("/login")` when there is no valid session — see the [auth-routes doc, §8](./auth-routes.md#8-chat-route-gating).
 
@@ -176,11 +177,12 @@ A consolidated view of what wraps what:
 | Wrapper                | Applies to                                       | Concern                                  |
 |------------------------|--------------------------------------------------|------------------------------------------|
 | `middleware.ts`         | `/admin/*` only                                  | Basic-Auth gate for the operator dash    |
+| `rejectCrossSiteRequest` / `guardJsonMutation` | every state-changing `/api` handler | Refuse cross-site (403) / non-JSON (415) requests — runs FIRST |
 | `consumeRequest` per IP | `/api/auth/otp/issue`, `/api/onboard`            | Pre-auth abuse guard                     |
 | `consumeRequest` per student | `/api/onboard/refresh-dpr`, chat route       | Post-auth daily quota                    |
 | `readSessionFromRequest` | `/api/session/clear`, `/api/session/restore`, `/api/onboard/refresh-dpr`, chat route | JWT cookie verification |
 
-The rate limiter and the auth check are independent — neither calls the other, and a request can be rejected by either without ever reaching the route's business logic. The order is NOT uniform across routes, because the bucket key dictates it:
+The rate limiter and the auth check are independent — neither calls the other, and a request can be rejected by either without ever reaching the route's business logic. The cross-site guard always runs before both, so a cross-site request never charges a bucket. After it, the order is NOT uniform across routes, because the bucket key dictates it:
 
 - **IP-keyed, pre-auth routes** (`/api/auth/otp/issue`, `/api/onboard`) run rate-limit FIRST, then parse the body. They have no session to read, and the IP-derived key needs no auth, so an unauthenticated flood is rejected before any work (`apps/web/app/api/auth/otp/issue/route.ts:32`).
 - **Student-keyed, post-auth route** (`/api/onboard/refresh-dpr`) runs auth FIRST (`readSessionFromRequest`), then rate-limit, then parses the multipart body. It must derive `studentId = auth.sub` before it can build the `refresh-dpr:<studentId>` bucket key, so auth necessarily precedes the limiter (`apps/web/app/api/onboard/refresh-dpr/route.ts:51,59`). The rate-limit still runs before the body is read, so a flood of 10 MB PDFs can't allocate an `ArrayBuffer`.

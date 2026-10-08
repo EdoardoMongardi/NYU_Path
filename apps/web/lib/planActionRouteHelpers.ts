@@ -4,6 +4,7 @@
 // Tiny shared HTTP plumbing for the deterministic plan-action
 // routes (/api/plan/<verb>). Each route does:
 //
+//   0. cross-site / non-JSON refusal via guardJsonMutation → 403/415
 //   1. auth gate via readSessionFromRequest → 401 if absent
 //   2. rate-limit via consumeRequest("plan-action:<studentId>") →
 //      429 if over the daily quota (separate bucket from chat).
@@ -19,6 +20,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ZodError, type ZodTypeAny } from "zod";
+import { guardJsonMutation } from "./auth/requestGuards.js";
 import { readSessionFromRequest } from "./auth/session.js";
 import { consumeRequest } from "./rateLimit.js";
 import {
@@ -49,6 +51,10 @@ async function preflight(req: NextRequest): Promise<
     | { ok: true; studentId: string; body: unknown }
     | { ok: false; response: NextResponse }
 > {
+    // Cross-site and non-JSON requests are refused before auth or the
+    // rate-limit charge (lib/auth/requestGuards.ts).
+    const refused = guardJsonMutation(req);
+    if (refused) return { ok: false, response: refused };
     const auth = await readSessionFromRequest(req);
     if (!auth) {
         return {

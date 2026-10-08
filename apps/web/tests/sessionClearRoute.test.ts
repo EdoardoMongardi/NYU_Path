@@ -107,6 +107,11 @@ describe("/api/session/clear (Phase 16 Task B)", () => {
         let txCommitted = false;
 
         class StubDb {
+            // verifySessionToken's revocation lookup — no tombstone.
+            select() {
+                const chain = { from: () => chain, where: () => chain, limit: async () => [] };
+                return chain;
+            }
             delete(table: unknown) {
                 recordedDeletes.push({ op: "delete", table });
                 return this;

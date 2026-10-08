@@ -1,10 +1,10 @@
 # Authentication Routes
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-10-08 (PR #58 review fixes: cross-site guard, deletion revokes the session, `test:` subjects).
 
 ## TL;DR
 
-This is the login system — no passwords, just email codes. A student types their NYU email, the server sends a six-digit code to their inbox, the student types the code back in, and they're in. There's no separate signup step: the first successful login also creates the student's account in the database. After verification, the server hands the browser an invisible signed token that proves the student is who they say they are for the next 30 days. The student's NetID becomes their permanent identifier, used everywhere in the system to look up their plan, conversations, and preferences. Logging out simply throws the token away.
+This is the login system — no passwords, just email codes. A student types their NYU email, the server sends a six-digit code to their inbox, the student types the code back in, and they're in. There's no separate signup step: the first successful login also creates the student's account in the database. After verification, the server hands the browser an invisible signed token that proves the student is who they say they are for the next 30 days. The student's NetID becomes their permanent identifier, used everywhere in the system to look up their plan, conversations, and preferences. Logging out simply throws the token away; deleting the account also revokes every token issued until then. A request that comes from another website is refused outright, so no other site can sign a student in as someone else or act on their account.
 
 ```mermaid
 flowchart LR
@@ -30,7 +30,9 @@ Three routes make up the surface area:
 - `POST /api/auth/otp/verify` — student types the code, server sets the session cookie and returns the canonical studentId.
 - `POST /api/auth/logout` — server clears the cookie.
 
-The session is keyed on a JWT whose `sub` claim is the NYU NetID prefix (the local-part of the email before `@nyu.edu`). That same string is the studentId used as a foreign key across `students`, `forward_schedules`, `schedule_preferences`, `chat_messages`, `audit_log`, and `session_summaries`.
+The session is keyed on a JWT whose `sub` claim is the studentId: the NYU NetID prefix (the local-part before `@nyu.edu`) for an `@nyu.edu` address, or `test:<full lower-cased email>` for an operator-allowlisted address (`AUTH_TEST_EMAILS`) — see §3 step 5. That same string is the studentId used as a foreign key across `students`, `forward_schedules`, `schedule_preferences`, `chat_messages`, `audit_log`, and `session_summaries`.
+
+All three routes refuse a cross-site request before doing anything (§9), and the two OTP routes also refuse a body that declares a non-JSON `Content-Type`.
 
 The `/login` page (`apps/web/app/login/page.tsx`) is the only place where humans interact with these routes directly. It is a two-step single-page UI: enter email, then enter the emailed code.
 
@@ -47,7 +49,7 @@ flowchart LR
 
 ## 2. POST /api/auth/otp/issue
 
-**File:** `apps/web/app/api/auth/otp/issue/route.ts:31`
+**File:** `apps/web/app/api/auth/otp/issue/route.ts:32`
 **Runtime:** Node.js (`runtime = "nodejs"`).
 
 ### Request shape
@@ -55,11 +57,13 @@ flowchart LR
 JSON body with one field:
 - `email` — required string.
 
+First, `guardJsonMutation(req)` (§9) refuses a cross-site request (403) or a declared non-JSON body (415) — before the per-IP quota below is charged, so a cross-site page can't burn a visitor's login quota.
+
 If the body is not valid JSON, returns 400 with `"Body must be JSON with an email field."`. If `email` is missing or non-string, returns 400 with `"email is required."`.
 
 ### Rate limit (per IP)
 
-Before any work, the route applies a per-IP daily quota of 5 issuances via `consumeRequest` (`apps/web/app/api/auth/otp/issue/route.ts:21,32`). The bucket key is `otp-ip:<ip>`, where the IP is taken from the first hop of `X-Forwarded-For`, falling back to `X-Real-IP`, falling back to the literal string `anonymous` (`apps/web/app/api/auth/otp/issue/route.ts:23-29`). On block, returns HTTP 429 with body `{ ok: false, error: "Too many login attempts from this IP. Try again after <resetAt>." }` and a `Retry-After` header in seconds.
+After the cross-site guard, the route applies a per-IP daily quota of 5 issuances via `consumeRequest` (`apps/web/app/api/auth/otp/issue/route.ts:21,32`). The bucket key is `otp-ip:<ip>`, where the IP is taken from the first hop of `X-Forwarded-For`, falling back to `X-Real-IP`, falling back to the literal string `anonymous` (`apps/web/app/api/auth/otp/issue/route.ts:23-29`). On block, returns HTTP 429 with body `{ ok: false, error: "Too many login attempts from this IP. Try again after <resetAt>." }` and a `Retry-After` header in seconds.
 
 This limiter is entirely in-process and resets on every server restart, and the IP key is read from the spoofable `X-Forwarded-For` header — see [rate-limit-and-middleware.md, Known limitations](./rate-limit-and-middleware.md#4-known-limitations). Treat it as an abuse speed bump, not a hard control. There is no per-email cap.
 
@@ -93,7 +97,7 @@ Result reasons map to status codes at `apps/web/app/api/auth/otp/issue/route.ts:
 
 ## 3. POST /api/auth/otp/verify
 
-**File:** `apps/web/app/api/auth/otp/verify/route.ts:16`
+**File:** `apps/web/app/api/auth/otp/verify/route.ts:17`
 **Runtime:** Node.js.
 
 ### Request shape
@@ -102,6 +106,10 @@ JSON body with two fields:
 - `email` — required string.
 - `code` — required string. Both fields are trimmed before being passed to `verifyOtp`.
 
+### Login-CSRF guard
+
+The route calls `guardJsonMutation(req)` (§9) before parsing anything. Without it, a cross-site `<form enctype="text/plain">` POST of an attacker's email + fresh code (a body that still parses as JSON) would sign the victim's browser in as the attacker, and the victim's DPR upload would then land under the attacker's studentId. A refused request never reaches `verifyOtp` and never gets a `Set-Cookie`.
+
 ### Code validation flow
 
 `verifyOtp` (`apps/web/lib/auth/otp.ts:112`) executes:
@@ -109,12 +117,14 @@ JSON body with two fields:
 2. Selects the latest unconsumed, unexpired `email_otps` row for the lowercased email — ordered by `issuedAt DESC`, limited to 1 (`apps/web/lib/auth/otp.ts:124-135`). If no row matches, returns `reason: "no_pending_otp"`.
 3. Compares the stored sha256 hash against `sha256(providedCode)` using `crypto.timingSafeEqual` (`apps/web/lib/auth/otp.ts:140-144`) — constant-time. If lengths or bytes differ, returns `reason: "code_mismatch"`.
 4. Marks the row consumed by setting `consumedAt = now` on the matched (email, issuedAt) tuple (`apps/web/lib/auth/otp.ts:146-149`). This single-use marking guards against double redemption — subsequent verifies for that code will fail the "unconsumed" filter in step 2.
-5. Derives the studentId by lowercasing the email and taking the prefix before `@` (`apps/web/lib/auth/otp.ts:66-70`). Upserts a `students` row with `(studentId, email)` ON CONFLICT updates `email` and `updatedAt` (`apps/web/lib/auth/otp.ts:152-158`). This is what makes login double as signup.
-6. Signs an HS256 JWT with `sub = studentId`, custom claim `email = lowerEmail`, `iat = now`, `exp = +30d`, using `SECRET_KEY` from env (`apps/web/lib/auth/otp.ts:160-167`). Missing `SECRET_KEY` returns `reason: "db_unavailable"`.
+5. Derives the studentId with `emailToStudentId` (`apps/web/lib/auth/otp.ts:74`): an `@nyu.edu` address maps to its NetID prefix; any other allowed address maps to `test:<full lower-cased email>`. The bare local-part is never used for a non-NYU address — it let `abc123@gmail.com` (if allowlisted) sign in as the NYU student `abc123` and read/write that student's rows. In one transaction (`apps/web/lib/auth/otp.ts:160-177`) it first releases this email from any OTHER `students` row (`email = NULL` where `email` matches and `student_id` differs — `students.email` is UNIQUE, so a row keyed on an older subject would otherwise fail every login), then upserts the `students` row with `(studentId, email)` ON CONFLICT updating `email` and `updatedAt`. This is what makes login double as signup.
+6. Signs an HS256 JWT with `sub = studentId`, custom claim `email = lowerEmail`, `iat = now`, `exp = +30d`, using `SECRET_KEY` from env (`apps/web/lib/auth/otp.ts:179-186`). Missing `SECRET_KEY` returns `reason: "db_unavailable"`.
+
+**Operator note — existing allowlisted accounts.** A non-NYU allowlisted account that signed in before the `test:` namespace has its rows under the bare local-part. After this change it signs in as `test:<email>`, a fresh account (re-onboard by uploading the DPR); the old rows are no longer reachable by login. Do not bulk-delete "non-NYU-email" rows to clean up: under the old scheme an allowlisted login could overwrite a real NYU student's `students.email` with the allowlisted address, so such a row may belong to a real student. Classify each row before deleting anything.
 
 ### Session creation and cookie set
 
-On success, the route builds `NextResponse.json({ ok: true, studentId })` and calls `setSessionCookie(res, token)` (`apps/web/app/api/auth/otp/verify/route.ts:44-46`). The JWT itself is never put in the response body.
+On success, the route builds `NextResponse.json({ ok: true, studentId })` and calls `setSessionCookie(res, token)` (`apps/web/app/api/auth/otp/verify/route.ts:49-50`). The JWT itself is never put in the response body.
 
 ### Failure messages and status mapping
 
@@ -133,10 +143,10 @@ Note: the `expired` mapping appears in the status switch but `verifyOtp`'s curre
 
 ## 4. POST /api/auth/logout
 
-**File:** `apps/web/app/api/auth/logout/route.ts:15`
+**File:** `apps/web/app/api/auth/logout/route.ts:16`
 **Runtime:** Node.js.
 
-The handler takes no arguments. It returns `{ ok: true }` and calls `clearSessionCookie(res)` (`apps/web/app/api/auth/logout/route.ts:16-19`). There is no server-side token blacklist: the JWT itself remains cryptographically valid until its 30-day expiry. Authentication state is bound entirely to the client holding the cookie — wipe the cookie, the client loses access.
+The handler first calls `rejectCrossSiteRequest(req)` (§9) — a cross-site page can't sign the student out — then returns `{ ok: true }` and calls `clearSessionCookie(res)`. Logout does not revoke the token: the JWT remains cryptographically valid until its 30-day expiry, and authentication state is bound to the client holding the cookie — wipe the cookie, the client loses access. Only self-serve account deletion revokes tokens server-side (§10).
 
 ## 5. Session cookie shape
 
@@ -149,39 +159,42 @@ The cookie is named `nyupath_session` (`apps/web/lib/auth/session.ts:23`). Its v
 - Algorithm: HS256 (HMAC-SHA256, symmetric, single shared secret).
 - Secret: `process.env.SECRET_KEY`. If missing at sign time, OTP verify returns `db_unavailable`. If missing at verify time, the cookie is treated as invalid.
 - Claims:
-  - `sub` — studentId (NetID prefix). Used as the canonical key everywhere downstream.
+  - `sub` — studentId (NetID prefix, or `test:<email>` for an allowlisted non-NYU login). Used as the canonical key everywhere downstream.
   - `email` — lowercased email.
-  - `iat` — set by `setIssuedAt()`.
+  - `iat` — set by `setIssuedAt()`; compared against a deletion revocation (§10).
   - `exp` — 30 days after issuance (`setExpirationTime("30d")` at `apps/web/lib/auth/otp.ts:166`).
 
 The token is NOT encrypted, only signed — anyone with the cookie can decode the email and studentId, but they cannot forge new tokens without `SECRET_KEY`.
 
 ### Cookie attributes
 
-Set in `setSessionCookie` (`apps/web/lib/auth/session.ts:35-45`):
+Set in `setSessionCookie` (`apps/web/lib/auth/session.ts:45`):
 
 | Attribute   | Value                                                            |
 |-------------|------------------------------------------------------------------|
 | `httpOnly`  | `true` — blocks JavaScript reads in the browser.                  |
-| `sameSite`  | `lax` — blocks cross-site POSTs but lets navigation links work.   |
+| `sameSite`  | `lax` — a cross-site POST arrives without it, but navigation links work. Not enough alone — login CSRF needs no cookie, and a same-site sibling subdomain does get Lax cookies — so state-changing routes also run the §9 guard. |
 | `secure`    | `true` in production, `false` otherwise (for localhost dev).      |
 | `path`      | `/` — visible to all routes under the domain.                     |
 | `maxAge`    | `30 * 24 * 60 * 60` seconds (30 days) — matches the JWT `exp`.    |
 
-`clearSessionCookie` (`apps/web/lib/auth/session.ts:48-58`) writes a same-named cookie with empty value and `maxAge: 0`, which the browser interprets as immediate deletion.
+`clearSessionCookie` (`apps/web/lib/auth/session.ts:58`) writes a same-named cookie with empty value and `maxAge: 0`, which the browser interprets as immediate deletion.
 
 ### Reading the cookie
 
 Two helpers handle reads, depending on context:
 
-- `readSessionFromRequest(req)` (`apps/web/lib/auth/session.ts:81-100`) — for Route Handlers receiving a `NextRequest`. Prefers `req.cookies.get(SESSION_COOKIE)`; if the request mock doesn't have that API (tests), falls back to parsing the `cookie` header by hand.
-- `readSessionFromCookies()` (`apps/web/lib/auth/session.ts:104-109`) — for Server Components using `next/headers`.
+- `readSessionFromRequest(req)` (`apps/web/lib/auth/session.ts:109`) — for Route Handlers receiving a `NextRequest`. Prefers `req.cookies.get(SESSION_COOKIE)`; if the request mock doesn't have that API (tests), falls back to parsing the `cookie` header by hand.
+- `readSessionFromCookies()` (`apps/web/lib/auth/session.ts:132`) — for Server Components using `next/headers`.
 
-Both call `verifySessionToken(token)` (`apps/web/lib/auth/session.ts:61-76`) which:
+Both call `verifySessionToken(token)` (`apps/web/lib/auth/session.ts:72`) which:
 1. Returns `null` if `SECRET_KEY` is unset.
 2. Calls `jose.jwtVerify` with `algorithms: ["HS256"]`.
 3. Returns `null` if `sub` or `email` claims are not strings.
 4. Catches any throw (expired, bad signature, malformed) and returns `null`.
+5. Returns `null` if the student deleted their account at or after the token's `iat` (`isSessionRevoked`, §10). If that lookup itself fails, it logs `[auth] session revocation check failed` and returns `null` — fail closed.
+
+The returned `SessionClaims` carry `sub`, `email`, and `iat` (seconds).
 
 A `null` from either helper means "no authenticated session" — the calling route returns 401.
 
@@ -247,3 +260,36 @@ Note: this `/login` page is the documented entry point. There is a separate Next
 The `/chat` surface is protected by a Server Component layout, not by `middleware.ts`. `ChatLayout` (`apps/web/app/chat/layout.tsx:18-22`) awaits `readSessionFromCookies()` and, if the result is `null`, calls `redirect("/login")`. Because this runs on the server before any client JS, a logged-out visitor never sees the chat shell — they are bounced to `/login` during the server render.
 
 The layout's header comment explains why a layout was chosen over middleware: Next.js middleware runs in the Edge runtime, which cannot import `node:crypto` (used by `jose` under the hood for HS256 verification). The layout runs in the same Node runtime as the chat route, keeping the HS256 verify path in one place. The `/admin/*` Basic-Auth middleware (`apps/web/middleware.ts`) sidesteps this by pinning itself to the Node runtime via `config.runtime = "nodejs"`.
+
+## 9. Cross-site request guard
+
+**File:** `apps/web/lib/auth/requestGuards.ts`
+
+Every state-changing `/api` handler (POST/PUT/PATCH/DELETE) calls the guard before it reads the session, parses the body or charges a rate-limit bucket. `apps/web/tests/crossSiteRequestGuard.test.ts` fails if a handler under `app/api` skips it.
+
+- `rejectCrossSiteRequest(req)` (`requestGuards.ts:63`) → 403 `{ ok: false, error: "Cross-site request refused. Use NYU Path directly." }` unless the request is same-origin. It follows Go 1.25's `CrossOriginProtection`:
+  1. `Sec-Fetch-Site` present (every current browser): allow only `same-origin` or `none`; refuse `same-site` and `cross-site`.
+  2. Otherwise an `Origin` header must name this host (`Host`, or `X-Forwarded-Host` behind a proxy). `Origin: null` never matches.
+  3. Neither header: not a browser request (curl, server-side fetch, tests), so it can't be carrying a victim's cookies — allowed.
+- `rejectNonJsonBody(req)` (`requestGuards.ts:78`) → 415 `{ ok: false, error: "Content-Type must be application/json." }` when the request declares any other `Content-Type`. `text/plain`, urlencoded and multipart are the only bodies an HTML form (or a no-preflight fetch) can send, so this closes login CSRF even in a browser that sends neither header above. A request that declares no `Content-Type` isn't a form post and passes.
+- `guardJsonMutation(req)` (`requestGuards.ts:90`) = cross-site check, then the JSON check.
+
+| Route | Guard |
+|---|---|
+| `/api/auth/otp/issue`, `/api/auth/otp/verify`, `/api/chat`, `/api/chat/v2`, `/api/plan/explain-polish`, `/api/plan/stage2` | `guardJsonMutation` |
+| `/api/plan/{add,drop,move,swap,lock,confirm,whatif}` | `guardJsonMutation`, in the shared `preflight` (`apps/web/lib/planActionRouteHelpers.ts`) |
+| `/api/onboard`, `/api/onboard/refresh-dpr`, `/api/whatif-audit` (multipart uploads), `/api/session/delete`, `/api/session/clear`, `/api/auth/logout` (no body) | `rejectCrossSiteRequest` |
+
+`GET /api/session/restore` is a read and is not guarded.
+
+## 10. Session revocation (self-serve delete)
+
+**File:** `apps/web/lib/auth/revocation.ts`
+
+The session JWT is stateless, so wiping a student's rows does not end their sessions by itself: a later request from another open tab, or a chat turn already in flight, would write the account back (every Postgres store write upserts the `students` row). So `/api/session/delete` ([session-and-onboarding-routes.md](./session-and-onboarding-routes.md)) records a revocation and clears the cookie:
+
+- **Tombstone.** `recordSessionRevocation(tx, studentId, at)` (`revocation.ts:64`) upserts `session_revocations(student_id, revoked_at)` inside the delete's wipe transaction (table: [db-and-stores.md](./db-and-stores.md)). The table has no foreign key to `students`, so the tombstone outlives the row it revokes. Without `DATABASE_URL` the tombstones live in a process-wide map on `globalThis` (Next loads route handlers and the `/chat` layout as separate module instances; both must see it).
+- **Every later request.** `isSessionRevoked({ sub, iat })` (`revocation.ts:96`) is true when `iat * 1000 <= revoked_at` — a token minted in the same second as the deletion counts as revoked (the safe side). `verifySessionToken` returns `null` for it, so every route answers 401 and `/chat` redirects to `/login`. A token issued after the deletion — the student signs in again — verifies normally.
+- **An in-flight chat turn.** The chat route fences its stores for the turn with `fenceStoresForSession(stores, claims)` (`revocation.ts:149`): each write (`persistMutation`, `persistSchedule`, `persistPreferences`, `clearScheduleForStudent`, `appendMessage`, `clearForStudent`, `appendSummary`, `replace`) first re-checks the revocation and throws `SessionRevokedError` if the session is revoked or the check fails. Every call site already treats persistence as no-throw (log and continue), so the turn finishes without writing the account back. Reads pass through.
+
+Residual race: a fenced write that checked the tombstone just before the delete committed can still land a moment after it.

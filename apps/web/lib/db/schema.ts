@@ -158,3 +158,16 @@ export const pendingMutations = pgTable("pending_mutations", {
     byStudent: index("pending_mutations_student_idx").on(t.studentId),
     byExpiry: index("pending_mutations_expires_idx").on(t.expiresAt),
 }));
+
+/**
+ * Self-serve deletion (PR #58 review) — one tombstone per student whose
+ * sessions were revoked. `/api/session/delete` writes it in the same
+ * transaction as the wipe; `verifySessionToken` rejects any token issued
+ * at or before `revoked_at` (see lib/auth/revocation.ts). Deliberately NO
+ * foreign key to `students`: the tombstone must outlive the row it
+ * revokes. Deleting again moves `revoked_at` forward.
+ */
+export const sessionRevocations = pgTable("session_revocations", {
+    studentId: text("student_id").primaryKey(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }).notNull(),
+});

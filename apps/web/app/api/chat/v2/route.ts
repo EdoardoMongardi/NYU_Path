@@ -21,6 +21,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { guardJsonMutation } from "../../../../lib/auth/requestGuards";
 import { join } from "node:path";
 import {
     runAgentTurnStreaming,
@@ -65,7 +66,13 @@ import { getStores } from "../../../../lib/db/store";
 import { getPolicyRagBundle } from "../../../../lib/policyRagSetup";
 import { consumeRequest } from "../../../../lib/rateLimit";
 import { readSessionFromRequest } from "../../../../lib/auth/session";
+import { fenceStoresForSession } from "../../../../lib/auth/revocation";
 import { extractPendingMutationId, extractAuditUploadOffer } from "../../../../lib/chatV2Client";
+import {
+    V2RequestBodySchema,
+    formatV2BodyError,
+    type V2RequestBody,
+} from "../../../../lib/chatV2RequestBody";
 import { runProposeStage } from "../../../../lib/planActionOrchestrator";
 
 // Required for SSE — Node.js streaming, NOT edge runtime (the OpenAI
@@ -107,45 +114,33 @@ function isValidVisaStatus(v: unknown): v is NonNullable<StudentProfile["visaSta
  *  declared programs and NYU's pre-computed audit. */
 type ParsedDataPayload = { kind: "dpr"; report: unknown };
 
-interface V2RequestBody {
-    message: string;
-    parsedData?: ParsedDataPayload;
-    visaStatus?: string;
-    /** Phase 7-E temporal-context fix — collected during onboarding,
-     *  free-form (e.g., "Spring 2027" or "spring2027"). Normalized
-     *  into the prompt as `graduationTerm`. */
-    graduationTarget?: string | null;
-    history?: Array<{ role: "user" | "assistant"; content: string }>;
-    correlationId?: string;
-    /** Phase 7-A: stable user id (cookie-derived when authenticated,
-     *  per-browser UUID otherwise). Used for the per-student daily
-     *  rate limit, session-summary persistence, and end-of-turn writes. */
-    userId?: string;
-    /** CAS-1 (Task 1.5): onboarding-confirmed home school for this student
-     *  (e.g. "cas", "stern", "tandon", "shanghai", "nyuad", …).
-     *  When present, threads through as homeSchoolOverride so
-     *  deriveHomeSchool is bypassed entirely. Full onboarding UI control
-     *  is Phase 4; for now clients may send this from an explicit selection. */
-    homeSchool?: string;
-}
-
 export async function POST(req: NextRequest): Promise<Response> {
-    let body: V2RequestBody;
+    // Cross-site and non-JSON requests are refused before anything else
+    // (lib/auth/requestGuards.ts).
+    const refused = guardJsonMutation(req);
+    if (refused) return refused;
+    let rawBody: unknown;
     try {
-        body = await req.json();
+        rawBody = await req.json();
     } catch {
         return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
-    if (!body.message || typeof body.message !== "string") {
-        return NextResponse.json({ error: "`message` is required and must be a string." }, { status: 400 });
+    // Size/shape caps on everything that reaches the LLM (message length,
+    // history count + item size, user/assistant roles only) — see
+    // lib/chatV2RequestBody.ts. Rejected before any store, rate-limit or
+    // model work.
+    const parsedBody = V2RequestBodySchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+        return NextResponse.json({ error: formatV2BodyError(parsedBody.error) }, { status: 400 });
     }
+    const body: V2RequestBody = parsedBody.data;
     // DPR-only: a valid Degree Progress Report is required to reach the
     // agent. There is no transcript fallback — if the client hasn't
     // completed DPR onboarding, ask them to do so and stop here.
     const pd = body.parsedData;
     const isDprPayload = (
-        pd: ParsedDataPayload | undefined,
-    ): pd is { kind: "dpr"; report: DegreeProgressReport } =>
+        pd: unknown,
+    ): pd is ParsedDataPayload =>
         !!pd && typeof pd === "object" && "kind" in pd && pd.kind === "dpr";
 
     if (!isDprPayload(pd)) {
@@ -224,7 +219,13 @@ export async function POST(req: NextRequest): Promise<Response> {
         );
     }
 
-    const stores = getStores();
+    // An authenticated turn's stores are FENCED: if the student deletes
+    // their account while this turn is in flight, every later write
+    // (bootstrap persist, tool persistence, end-of-turn history/summary)
+    // refuses instead of writing the account back
+    // (lib/auth/revocation.ts). The existing no-throw persistence
+    // call sites log and swallow the SessionRevokedError.
+    const stores = authClaims ? fenceStoresForSession(getStores(), authClaims) : getStores();
 
     // E5.2 — VALIDATE an explicit home-school override against the known
     // school registry BEFORE it threads into the profile or persists. A

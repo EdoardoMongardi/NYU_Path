@@ -13,7 +13,7 @@
 // ============================================================
 
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
-import { and, eq, gt, isNull, desc } from "drizzle-orm";
+import { and, eq, gt, isNull, desc, ne } from "drizzle-orm";
 import { SignJWT } from "jose";
 import { Resend } from "resend";
 import { getDb } from "../db/client.js";
@@ -63,10 +63,18 @@ function sha256(s: string): string {
     return createHash("sha256").update(s).digest("hex");
 }
 
-function emailToStudentId(email: string): string {
-    // NetID prefix as the canonical studentId. Stable even if the
-    // email changes (NYU treats the prefix as the immutable identity).
-    return email.toLowerCase().split("@")[0]!;
+/** The canonical studentId (JWT `sub`) for a verified email.
+ *
+ *  An @nyu.edu address maps to its NetID prefix — stable even if the
+ *  email changes (NYU treats the prefix as the immutable identity).
+ *  Any OTHER allowed address (an AUTH_TEST_EMAILS operator account) is
+ *  namespaced as `test:<full lower-cased email>`. Its local-part is not
+ *  a NetID: keying it bare would let abc123@gmail.com sign in as the
+ *  NYU student abc123 and read/write that student's rows. */
+export function emailToStudentId(email: string): string {
+    const lower = email.toLowerCase();
+    if (NYU_EMAIL_RE.test(lower)) return lower.split("@")[0]!;
+    return `test:${lower}`;
 }
 
 export async function issueOtp(
@@ -149,13 +157,24 @@ export async function verifyOtp(
         .where(and(eq(emailOtps.email, lowerEmail), eq(emailOtps.issuedAt, row.issuedAt)));
 
     const studentId = emailToStudentId(lowerEmail);
-    await db
-        .insert(students)
-        .values({ studentId, email: lowerEmail })
-        .onConflictDoUpdate({
-            target: students.studentId,
-            set: { email: lowerEmail, updatedAt: new Date() },
-        });
+    await db.transaction(async (tx) => {
+        // `students.email` is UNIQUE. A row keyed on an older subject for
+        // this email (an allowlisted account from before the `test:`
+        // namespace) would make the upsert below fail on every login, so
+        // the verified email first moves off any other row. The email is
+        // informational — rows key on studentId.
+        await tx
+            .update(students)
+            .set({ email: null, updatedAt: new Date() })
+            .where(and(eq(students.email, lowerEmail), ne(students.studentId, studentId)));
+        await tx
+            .insert(students)
+            .values({ studentId, email: lowerEmail })
+            .onConflictDoUpdate({
+                target: students.studentId,
+                set: { email: lowerEmail, updatedAt: new Date() },
+            });
+    });
 
     const secret = env.SECRET_KEY;
     if (!secret) return { ok: false, reason: "db_unavailable" };

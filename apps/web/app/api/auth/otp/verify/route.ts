@@ -8,12 +8,17 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { guardJsonMutation } from "../../../../../lib/auth/requestGuards";
 import { verifyOtp } from "../../../../../lib/auth/otp";
 import { setSessionCookie } from "../../../../../lib/auth/session";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest): Promise<Response> {
+    // Cross-site and non-JSON requests are refused before anything else
+    // (lib/auth/requestGuards.ts).
+    const refused = guardJsonMutation(req);
+    if (refused) return refused;
     let body: { email?: string; code?: string };
     try {
         body = await req.json();

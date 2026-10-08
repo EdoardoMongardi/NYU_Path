@@ -97,6 +97,17 @@ describe("/api/session/delete (Phase 4 Task E6.4 — always-on self-serve deleti
         let txCommitted = false;
 
         class StubDb {
+            // verifySessionToken's revocation lookup — no tombstone yet.
+            select() {
+                const chain = { from: () => chain, where: () => chain, limit: async () => [] };
+                return chain;
+            }
+            // The revocation tombstone the delete records in its transaction
+            // (asserted in sessionRevocationOnDelete.test.ts).
+            insert() {
+                const chain = { values: () => chain, onConflictDoUpdate: async () => undefined };
+                return chain;
+            }
             delete(table: unknown) {
                 recordedDeletes.push({ op: "delete", table });
                 return this;

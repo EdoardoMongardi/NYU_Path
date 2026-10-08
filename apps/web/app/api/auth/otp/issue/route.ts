@@ -13,6 +13,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { guardJsonMutation } from "../../../../../lib/auth/requestGuards";
 import { issueOtp } from "../../../../../lib/auth/otp";
 import { consumeRequest } from "../../../../../lib/rateLimit";
 
@@ -29,6 +30,10 @@ function ipKey(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
+    // Cross-site and non-JSON requests are refused before anything else
+    // (lib/auth/requestGuards.ts).
+    const refused = guardJsonMutation(req);
+    if (refused) return refused;
     const rate = consumeRequest(ipKey(req), OTP_LIMIT_PER_DAY);
     if (!rate.ok) {
         return NextResponse.json(

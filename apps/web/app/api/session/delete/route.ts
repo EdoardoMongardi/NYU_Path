@@ -13,6 +13,12 @@
 // Auth is still required: the caller must present a valid session
 // (401 otherwise), and may only delete their OWN data (`auth.sub`).
 //
+// Deleting also ENDS the student's sessions. The JWT is stateless, so
+// the wipe records a revocation tombstone in the same transaction
+// (lib/auth/revocation.ts) — every token issued up to now stops
+// verifying, so another open tab or an in-flight chat turn can't write
+// the account back — and the response clears the cookie.
+//
 // The cascade FKs on the child tables (`forward_schedules`,
 // `schedule_preferences`, `chat_messages`, `audit_log`,
 // `session_summaries`, `pending_mutations`) all `ON DELETE CASCADE`
@@ -22,8 +28,10 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { rejectCrossSiteRequest } from "../../../../lib/auth/requestGuards";
 import { eq } from "drizzle-orm";
-import { readSessionFromRequest } from "../../../../lib/auth/session";
+import { recordSessionRevocation } from "../../../../lib/auth/revocation";
+import { clearSessionCookie, readSessionFromRequest } from "../../../../lib/auth/session";
 import { getDb } from "../../../../lib/db/client";
 import { resetStoresForTests } from "../../../../lib/db/store";
 import {
@@ -39,21 +47,28 @@ import {
 export const runtime = "nodejs";
 
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
+    // A cross-site request is refused before anything else
+    // (lib/auth/requestGuards.ts).
+    const refused = rejectCrossSiteRequest(req);
+    if (refused) return refused;
     // NO env gate here — this is the standing, always-on deletion right.
-    // Auth is the only guard: a caller may only delete their own data.
+    // Past the cross-site check, auth is the only guard: a caller may
+    // only delete their own data.
     const auth = await readSessionFromRequest(req);
     if (!auth) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const studentId = auth.sub;
 
+    const revokedAt = new Date();
     const db = getDb(process.env);
     if (!db) {
         // No DB wired (in-memory mode). Reset the cached store bundle
         // so the next request re-initializes; the student's in-memory
         // state will already be cleared by that.
         resetStoresForTests();
-        return NextResponse.json({ ok: true });
+        await recordSessionRevocation(null, studentId, revokedAt);
+        return signedOut();
     }
 
     // Single transaction so a partial wipe never leaves the student
@@ -61,6 +76,10 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     // is deleted LAST.
     try {
         await db.transaction(async (tx) => {
+            // Revoke first: if any delete below fails the whole
+            // transaction (tombstone included) rolls back, and the
+            // student is still signed in to retry.
+            await recordSessionRevocation(tx, studentId, revokedAt);
             // Explicit child deletes mirror the docstring's contract —
             // even though the cascade FKs would handle these via the
             // `students` delete below, listing them keeps the wipe
@@ -98,5 +117,11 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
         );
     }
 
-    return NextResponse.json({ ok: true });
+    return signedOut();
+}
+
+function signedOut(): NextResponse {
+    const res = NextResponse.json({ ok: true });
+    clearSessionCookie(res);
+    return res;
 }

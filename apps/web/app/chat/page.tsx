@@ -7,6 +7,7 @@ import {
     extractPendingMutationId,
     streamPlanActionPolish,
     streamPlanActionStage2,
+    toChatV2History,
     type ChatV2Event,
     type ForwardMaterializationPayload,
 } from "../../lib/chatV2Client";
@@ -255,6 +256,9 @@ export default function ChatPage() {
     // self-serve account-deletion control (disables the button so a
     // student can't fire DELETE /api/session/delete twice).
     const [deletingAccount, setDeletingAccount] = useState(false);
+    // The account this session acts for (from /api/session/restore),
+    // shown beside "Sign out" so a session someone else planted is visible.
+    const [signedInAs, setSignedInAs] = useState<string | null>(null);
     // H5.1 (plan 36) — in-flight guard for the ProfileRail "↻ Update DPR"
     // control. The scheduleSidebar formerly held this `refreshing` state
     // internally; with the profile-level concerns lifted to the rail, the
@@ -346,6 +350,7 @@ export default function ChatPage() {
                 const res = await fetch("/api/session/restore", { credentials: "same-origin" });
                 if (!res.ok) return; // 401 (anonymous) or transient — skip silently
                 const data = await res.json() as {
+                    signedInAs?: string;
                     profile: unknown | null;
                     dpr: unknown | null;
                     forwardSchedule: ForwardSchedule | null;
@@ -354,6 +359,7 @@ export default function ChatPage() {
                     chatMessages: ChatMessageRecord[];
                 };
                 if (cancelled) return;
+                if (typeof data.signedInAs === "string") setSignedInAs(data.signedInAs);
                 if (!data.dpr || !data.profile) {
                     // New student (or pre-Phase-16 data): existing
                     // onboarding flow handles them.
@@ -514,10 +520,8 @@ export default function ChatPage() {
     };
 
     const handleSendV2 = async (userText: string, seed?: SendSeed) => {
-        const recentHistory = messages
-            .filter(m => m.id !== "welcome")
-            .slice(-10)
-            .map(m => ({ role: m.role, content: m.content }));
+        // Last N turns, each trimmed to the route's per-item cap.
+        const recentHistory = toChatV2History(messages.filter(m => m.id !== "welcome"));
 
         // Seed overrides win over the (possibly not-yet-flushed) closure
         // state so a same-tick wizard injection sends the confirmed values.
@@ -2077,10 +2081,15 @@ export default function ChatPage() {
                 visible at all times in the chat view. */}
             <div className={styles.disclaimerBanner} role="note">
                 <span className={styles.disclaimerIcon} aria-hidden="true">⚠</span>
-                <span>
+                <span className={styles.disclaimerText}>
                     AI advising assistant. <strong>Not a substitute for an academic adviser.</strong>{" "}
                     Verify all decisions with NYU advising before acting.
                 </span>
+                {signedInAs && (
+                    <span className={styles.signedInAs} title={`Signed in as ${signedInAs}`}>
+                        Signed in as <strong>{signedInAs}</strong>
+                    </span>
+                )}
                 <button
                     type="button"
                     onClick={async () => {

@@ -30,6 +30,7 @@
 // ============================================================
 
 import { NextRequest } from "next/server";
+import { guardJsonMutation } from "../../../../lib/auth/requestGuards";
 import { z } from "zod";
 import {
     materializeSections,
@@ -128,6 +129,10 @@ function pickCourseIdsForTerm(
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
+    // Cross-site and non-JSON requests are refused before anything else
+    // (lib/auth/requestGuards.ts).
+    const refused = guardJsonMutation(req);
+    if (refused) return refused;
     // Auth gate.
     const auth = await readSessionFromRequest(req);
     if (!auth) {

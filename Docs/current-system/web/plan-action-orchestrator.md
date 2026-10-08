@@ -118,7 +118,7 @@ A parallel guard sits in `runConfirmWhatIfAssumption`: after `solveWhatIfAssumpt
 
 **The retired Phase-17 "force → student-preferred-invalid-draft" reclassification no longer exists.** The `opts.force` parameter is read only to satisfy the TypeScript `no-unused-vars` check (`void force;`); it does not branch the logic.
 
-Source: `apps/web/lib/planActionOrchestrator.ts` — `runConfirmStage` (plan-change guard) + `runConfirmWhatIfAssumption` (what-if guard); `apps/web/lib/planActionRouteHelpers.ts:132-134` (`mapConfirmError` 422 branch).
+Source: `apps/web/lib/planActionOrchestrator.ts` — `runConfirmStage` (plan-change guard) + `runConfirmWhatIfAssumption` (what-if guard); `apps/web/lib/planActionRouteHelpers.ts:138` (`mapConfirmError` 422 branch).
 
 ### 2.3 Server-side pending-mutation states
 
@@ -178,7 +178,7 @@ Source: `apps/web/lib/planActionOrchestrator.ts:100-104`. Variants:
 - `no_schedule` — `scheduleStore.loadLatestSchedule` returned null/threw, or returned a schedule that wasn't classifiable into either `forwardSchedule` or `studentDraftPlan`.
 - `engine_error` — `proposePlanChangeTool.call` threw.
 
-Mapped by `mapProposeError` (invoked from `handleProposeRoute`) to 409 / 409 / 409 / 500 respectively (`apps/web/lib/planActionRouteHelpers.ts:101-110`).
+Mapped by `mapProposeError` (invoked from `handleProposeRoute`) to 409 / 409 / 409 / 500 respectively (`apps/web/lib/planActionRouteHelpers.ts:109`).
 
 ### 4.2 `RunConfirmError`
 
