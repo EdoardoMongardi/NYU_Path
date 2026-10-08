@@ -226,6 +226,14 @@ describe("other state-changing routes refuse a cross-site request", () => {
         expect(res.status).toBe(403);
     });
 
+    it("/api/plan/add refuses before its catalog pre-check reads the body", async () => {
+        const { POST } = await import("../app/api/plan/add/route");
+        const res = await POST(
+            await crossSite("/api/plan/add", "POST", "csrf_add", JSON.stringify({ courseId: "ZZZZ-UA 9999", term: "2027-spring" })),
+        );
+        expect(res.status).toBe(403);
+    });
+
     it("/api/auth/logout can't be forced cross-site", async () => {
         const { POST } = await import("../app/api/auth/logout/route");
         const res = await POST(await crossSite("/api/auth/logout", "POST", "csrf_logout"));
@@ -237,10 +245,19 @@ describe("other state-changing routes refuse a cross-site request", () => {
 // ---- coverage: no state-changing /api handler may skip the guard ----
 
 const API_ROOT = join(__dirname, "..", "app", "api");
-const GUARD_CALL = /\b(guardJsonMutation|rejectCrossSiteRequest)\(/;
-// The plan-action routes share `preflight` in planActionRouteHelpers.ts,
-// which calls the guard (exercised by the /api/plan/drop case above).
-const SHARED_GUARDED_HANDLER = /\bhandle(Propose|ProposeWhatIf|Confirm)Route\b/;
+// Any export of a mutating handler, however it is declared.
+const MUTATING_EXPORT =
+    /export\s+(?:async\s+)?function\s+(?:POST|PUT|PATCH|DELETE)\b|export\s+(?:const|let|var)\s+(?:POST|PUT|PATCH|DELETE)\b/;
+// A directly guarded handler: the guard is its FIRST statement (only
+// comments before it), so nothing — session read, body parse, rate-limit
+// charge — runs for a refused request.
+const GUARD_FIRST =
+    /export\s+async\s+function\s+(?:POST|PUT|PATCH|DELETE)\(req: NextRequest\)[^\n]*\{\s*(?:\/\/[^\n]*\n\s*)*const refused = (?:guardJsonMutation|rejectCrossSiteRequest)\(req\);\s*if \(refused\) return refused;/;
+// The plan-action verbs delegate to these helpers, whose shared
+// `preflight` calls the guard first (exercised by the /api/plan/drop
+// case above).
+const SHARED_GUARDED_HANDLER =
+    /export\s+async\s+function\s+(?:POST|PUT|PATCH|DELETE)\(req: NextRequest\)[^\n]*\{\s*(?:\/\/[^\n]*\n\s*)*(?:const \w+ = )?(?:return\s+)?handle(?:Propose|ProposeWhatIf|Confirm)Route\b/;
 
 function routeFiles(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
@@ -259,8 +276,16 @@ describe("every state-changing /api route handler is guarded", () => {
 
     it.each(files.map((f) => [relative(API_ROOT, f), f]))("%s", (_rel, file) => {
         const src = readFileSync(file, "utf-8");
-        const mutating = /export\s+async\s+function\s+(POST|PUT|PATCH|DELETE)\b/.test(src);
-        if (!mutating) return;
-        expect(GUARD_CALL.test(src) || SHARED_GUARDED_HANDLER.test(src)).toBe(true);
+        if (!MUTATING_EXPORT.test(src)) return;
+        expect(GUARD_FIRST.test(src) || SHARED_GUARDED_HANDLER.test(src)).toBe(true);
+    });
+
+    it("the coverage patterns reject an unguarded or late-guarded handler", () => {
+        const late = `export async function POST(req: NextRequest) {\n    const auth = await readSessionFromRequest(req);\n    const refused = guardJsonMutation(req);\n    if (refused) return refused;\n}`;
+        const constExport = `export const POST = async (req: NextRequest) => new Response("ok");`;
+        for (const src of [late, constExport]) {
+            expect(MUTATING_EXPORT.test(src)).toBe(true);
+            expect(GUARD_FIRST.test(src) || SHARED_GUARDED_HANDLER.test(src)).toBe(false);
+        }
     });
 });

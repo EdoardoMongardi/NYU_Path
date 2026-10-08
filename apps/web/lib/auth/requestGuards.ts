@@ -27,10 +27,12 @@
 // A browser can't forge either header, and an HTML form can't set them.
 //
 // The JSON check refuses a body whose declared Content-Type is anything
-// but application/json — text/plain, urlencoded and multipart are the
-// only bodies a cross-site form (or a no-preflight fetch) can send, so
-// this closes login CSRF even for a browser that sends neither header
-// above. A request that declares no Content-Type isn't a form post.
+// but application/json. An HTML form always declares text/plain,
+// urlencoded or multipart, so this closes the form vector of login CSRF
+// even in a browser that sends neither header above. A request that
+// declares NO Content-Type passes this check — a no-cors fetch() with
+// an untyped Blob body is one — but fetch() always sends Origin on a
+// cross-origin POST, so the origin check above refuses it.
 // ============================================================
 
 import { NextResponse } from "next/server";

@@ -128,6 +128,16 @@ describe("/api/chat/v2 body caps", () => {
         expect(res.status).toBe(400);
     });
 
+    it("accepts a long free-text graduationTarget instead of failing every turn", async () => {
+        // The legacy onboarding step and the wizard both store free text the
+        // student typed; one long sentence must not 400 the whole session.
+        const res = await post({
+            message: "hi",
+            graduationTarget: `I hope to graduate in Spring 2027 ${"but it depends on study abroad ".repeat(10)}`,
+        });
+        expect(res.status).toBe(503);
+    });
+
     it("keeps the existing message-required and DPR-required errors", async () => {
         const noMessage = await POST(fakeRequest({ parsedData: validDprPayload() }) as never);
         expect(noMessage.status).toBe(400);
@@ -136,6 +146,14 @@ describe("/api/chat/v2 body caps", () => {
         const noDpr = await POST(fakeRequest({ message: "hi" }) as never);
         expect(noDpr.status).toBe(400);
         expect((await noDpr.json()).error).toMatch(/degree progress report/i);
+    });
+});
+
+describe("V2RequestBodySchema informational fields", () => {
+    it("truncates graduationTarget rather than rejecting it (only its season + year are ever used)", () => {
+        const parsed = V2RequestBodySchema.parse({ message: "hi", graduationTarget: "Spring 2027 ".repeat(100) });
+        expect(parsed.graduationTarget!.length).toBeLessThanOrEqual(200);
+        expect(parsed.graduationTarget!.startsWith("Spring 2027")).toBe(true);
     });
 });
 

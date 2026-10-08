@@ -44,7 +44,7 @@ describe("emailToStudentId", () => {
 // ---- verifyOtp against a recording stub DB ----
 
 type Op =
-    | { op: "update"; table: unknown; set?: Record<string, unknown> }
+    | { op: "update"; table: unknown; set?: Record<string, unknown>; where?: unknown }
     | { op: "insert"; table: unknown; values?: Record<string, unknown>; conflictSet?: Record<string, unknown> };
 
 class StubDb {
@@ -68,7 +68,9 @@ class StubDb {
                 (rec as { set?: Record<string, unknown> }).set = v;
                 return chain;
             },
-            where: async () => undefined,
+            where: async (clause: unknown) => {
+                (rec as { where?: unknown }).where = clause;
+            },
         };
         return chain;
     }
@@ -150,6 +152,14 @@ describe("verifyOtp subject + students upsert", () => {
         const insertIdx = stub.ops.findIndex((o) => o.op === "insert" && o.table === schema.students);
         expect(releaseIdx).toBeGreaterThanOrEqual(0);
         expect(insertIdx).toBeGreaterThan(releaseIdx);
+
+        // The release touches ONLY other rows holding this email — never
+        // every row, never the row being signed into.
+        const release = stub.ops[releaseIdx] as Extract<Op, { op: "update" }>;
+        const { PgDialect } = await import("drizzle-orm/pg-core");
+        const { sql, params } = new PgDialect().sqlToQuery(release.where as never);
+        expect(sql).toBe('("students"."email" = $1 and "students"."student_id" <> $2)');
+        expect(params).toEqual([email, "test:abc123@gmail.com"]);
     });
 
     it("still signs an @nyu.edu login as the bare NetID", async () => {

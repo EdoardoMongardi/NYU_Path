@@ -10,7 +10,8 @@
 //     `{ role: "user" | "assistant", content: string }` with content at
 //     most CHAT_HISTORY_ITEM_MAX_CHARS — a `system` (or any other) role
 //     can't be smuggled into the agent's prior messages;
-//   - the small string fields are length-capped.
+//   - the small string fields are length-capped (`graduationTarget`,
+//     free text the student typed, is truncated instead).
 // `parsedData` stays `unknown` here: the route checks it is a DPR
 // payload (with its own onboarding prompt) and validates the report
 // against the engine's DPR schema. Unknown keys are stripped.
@@ -24,6 +25,7 @@ import {
 } from "./chatV2Client";
 
 const MESSAGE_REQUIRED = "`message` is required and must be a string.";
+const GRADUATION_TARGET_MAX_CHARS = 200;
 
 export const V2RequestBodySchema = z.object({
     message: z
@@ -35,9 +37,15 @@ export const V2RequestBodySchema = z.object({
     /** Onboarding artifact — the route requires `{ kind: "dpr", report }`. */
     parsedData: z.unknown().optional(),
     visaStatus: z.string().max(32).nullish(),
-    /** Collected during onboarding, free-form (e.g., "Spring 2027" or
-     *  "spring2027"). Normalized into the prompt as `graduationTerm`. */
-    graduationTarget: z.string().max(64).nullish(),
+    /** Collected during onboarding, free-form text the student typed
+     *  (e.g., "Spring 2027", or a whole sentence). Only the season + year
+     *  `normalizeGraduationTarget` extracts reaches the prompt, so an
+     *  over-long value is TRUNCATED, never rejected — rejecting it would
+     *  fail every turn of the session, since the page re-sends it. */
+    graduationTarget: z
+        .string()
+        .transform((s) => s.slice(0, GRADUATION_TARGET_MAX_CHARS))
+        .nullish(),
     history: z
         .array(
             z.object({

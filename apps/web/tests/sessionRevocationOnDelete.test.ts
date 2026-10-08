@@ -158,6 +158,30 @@ describe("verifySessionToken honors a revocation", () => {
         expect(await otherInstance.verifySessionToken(token)).toBeNull();
     });
 
+    it("treats a missing session_revocations table as nothing revoked (no delete can commit without it)", async () => {
+        // Deploying before migration 0004 must not sign every student out:
+        // the delete route writes its tombstone in the wipe transaction, so
+        // without the table no delete has ever committed.
+        vi.resetModules();
+        const undefinedTable = Object.assign(new Error("Failed query: select ..."), {
+            cause: Object.assign(new Error('relation "session_revocations" does not exist'), { code: "42P01" }),
+        });
+        vi.doMock("../lib/db/client", () => ({
+            getDb: () => ({
+                select: () => {
+                    const chain = { from: () => chain, where: () => chain, limit: async () => { throw undefinedTable; } };
+                    return chain;
+                },
+            }),
+        }));
+        const fresh = await import("../lib/auth/session");
+        const token = await tokenFor("rev_no_table");
+        const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+        expect((await fresh.verifySessionToken(token))?.sub).toBe("rev_no_table");
+        expect(errSpy).toHaveBeenCalled(); // still loud: the migration is missing
+        errSpy.mockRestore();
+    });
+
     it("fails closed when the revocation lookup throws", async () => {
         vi.resetModules();
         vi.doMock("../lib/db/client", () => ({

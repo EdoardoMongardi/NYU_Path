@@ -120,7 +120,16 @@ The route calls `guardJsonMutation(req)` (§9) before parsing anything. Without 
 5. Derives the studentId with `emailToStudentId` (`apps/web/lib/auth/otp.ts:74`): an `@nyu.edu` address maps to its NetID prefix; any other allowed address maps to `test:<full lower-cased email>`. The bare local-part is never used for a non-NYU address — it let `abc123@gmail.com` (if allowlisted) sign in as the NYU student `abc123` and read/write that student's rows. In one transaction (`apps/web/lib/auth/otp.ts:160-177`) it first releases this email from any OTHER `students` row (`email = NULL` where `email` matches and `student_id` differs — `students.email` is UNIQUE, so a row keyed on an older subject would otherwise fail every login), then upserts the `students` row with `(studentId, email)` ON CONFLICT updating `email` and `updatedAt`. This is what makes login double as signup.
 6. Signs an HS256 JWT with `sub = studentId`, custom claim `email = lowerEmail`, `iat = now`, `exp = +30d`, using `SECRET_KEY` from env (`apps/web/lib/auth/otp.ts:179-186`). Missing `SECRET_KEY` returns `reason: "db_unavailable"`.
 
-**Operator note — existing allowlisted accounts.** A non-NYU allowlisted account that signed in before the `test:` namespace has its rows under the bare local-part. After this change it signs in as `test:<email>`, a fresh account (re-onboard by uploading the DPR); the old rows are no longer reachable by login. Do not bulk-delete "non-NYU-email" rows to clean up: under the old scheme an allowlisted login could overwrite a real NYU student's `students.email` with the allowlisted address, so such a row may belong to a real student. Classify each row before deleting anything.
+**Operator note — existing allowlisted accounts.** A non-NYU allowlisted account that signed in before the `test:` namespace has its rows under the bare local-part. After this change it signs in as `test:<email>`, a fresh account (re-onboard by uploading the DPR); the old rows are no longer reachable by login. Do not bulk-delete "non-NYU-email" rows to clean up: under the old scheme an allowlisted login could overwrite a real NYU student's `students.email` with the allowlisted address, so such a row may belong to a real student. Classify each row before deleting anything. A read-only starting point lists the candidates — bare (non-`test:`) subjects whose email is not an `@nyu.edu` address, including rows whose email this login flow has since released to `NULL`:
+
+```sql
+SELECT student_id, email, created_at, updated_at, (parsed_dpr IS NOT NULL) AS has_dpr
+FROM students
+WHERE student_id NOT LIKE 'test:%'
+  AND (email IS NULL OR email NOT ILIKE '%@nyu.edu');
+```
+
+A legacy operator row keyed on a bare local-part that happens to equal a real NetID would be inherited by that NYU student at their first login, so this check is worth running once after deploy.
 
 ### Session creation and cookie set
 
@@ -265,19 +274,20 @@ The layout's header comment explains why a layout was chosen over middleware: Ne
 
 **File:** `apps/web/lib/auth/requestGuards.ts`
 
-Every state-changing `/api` handler (POST/PUT/PATCH/DELETE) calls the guard before it reads the session, parses the body or charges a rate-limit bucket. `apps/web/tests/crossSiteRequestGuard.test.ts` fails if a handler under `app/api` skips it.
+Every state-changing `/api` handler (POST/PUT/PATCH/DELETE) calls the guard as its first statement, before it reads the session, parses the body or charges a rate-limit bucket. `apps/web/tests/crossSiteRequestGuard.test.ts` scans every `app/api/**/route.ts` and fails if a mutating export (however declared) doesn't start with the guard or delegate straight to the guarded plan-action helpers.
 
-- `rejectCrossSiteRequest(req)` (`requestGuards.ts:63`) → 403 `{ ok: false, error: "Cross-site request refused. Use NYU Path directly." }` unless the request is same-origin. It follows Go 1.25's `CrossOriginProtection`:
+- `rejectCrossSiteRequest(req)` (`requestGuards.ts:65`) → 403 `{ ok: false, error: "Cross-site request refused. Use NYU Path directly." }` unless the request is same-origin. It follows Go 1.25's `CrossOriginProtection`:
   1. `Sec-Fetch-Site` present (every current browser): allow only `same-origin` or `none`; refuse `same-site` and `cross-site`.
   2. Otherwise an `Origin` header must name this host (`Host`, or `X-Forwarded-Host` behind a proxy). `Origin: null` never matches.
   3. Neither header: not a browser request (curl, server-side fetch, tests), so it can't be carrying a victim's cookies — allowed.
-- `rejectNonJsonBody(req)` (`requestGuards.ts:78`) → 415 `{ ok: false, error: "Content-Type must be application/json." }` when the request declares any other `Content-Type`. `text/plain`, urlencoded and multipart are the only bodies an HTML form (or a no-preflight fetch) can send, so this closes login CSRF even in a browser that sends neither header above. A request that declares no `Content-Type` isn't a form post and passes.
-- `guardJsonMutation(req)` (`requestGuards.ts:90`) = cross-site check, then the JSON check.
+- `rejectNonJsonBody(req)` (`requestGuards.ts:80`) → 415 `{ ok: false, error: "Content-Type must be application/json." }` when the request declares any other `Content-Type`. An HTML form always declares `text/plain`, urlencoded or multipart, so this closes the form vector of login CSRF even in a browser that sends neither header above. A request that declares no `Content-Type` passes this check (a no-cors `fetch()` with an untyped `Blob` body is one), but `fetch()` always sends `Origin` on a cross-origin POST, so the origin check refuses it.
+- `guardJsonMutation(req)` (`requestGuards.ts:92`) = cross-site check, then the JSON check.
 
 | Route | Guard |
 |---|---|
 | `/api/auth/otp/issue`, `/api/auth/otp/verify`, `/api/chat`, `/api/chat/v2`, `/api/plan/explain-polish`, `/api/plan/stage2` | `guardJsonMutation` |
-| `/api/plan/{add,drop,move,swap,lock,confirm,whatif}` | `guardJsonMutation`, in the shared `preflight` (`apps/web/lib/planActionRouteHelpers.ts`) |
+| `/api/plan/{drop,move,swap,lock,confirm,whatif}` | `guardJsonMutation`, in the shared `preflight` (`apps/web/lib/planActionRouteHelpers.ts`) |
+| `/api/plan/add` | `guardJsonMutation` directly (before its catalog pre-check peeks the body), then again in `preflight` |
 | `/api/onboard`, `/api/onboard/refresh-dpr`, `/api/whatif-audit` (multipart uploads), `/api/session/delete`, `/api/session/clear`, `/api/auth/logout` (no body) | `rejectCrossSiteRequest` |
 
 `GET /api/session/restore` is a read and is not guarded.
@@ -289,7 +299,8 @@ Every state-changing `/api` handler (POST/PUT/PATCH/DELETE) calls the guard befo
 The session JWT is stateless, so wiping a student's rows does not end their sessions by itself: a later request from another open tab, or a chat turn already in flight, would write the account back (every Postgres store write upserts the `students` row). So `/api/session/delete` ([session-and-onboarding-routes.md](./session-and-onboarding-routes.md)) records a revocation and clears the cookie:
 
 - **Tombstone.** `recordSessionRevocation(tx, studentId, at)` (`revocation.ts:64`) upserts `session_revocations(student_id, revoked_at)` inside the delete's wipe transaction (table: [db-and-stores.md](./db-and-stores.md)). The table has no foreign key to `students`, so the tombstone outlives the row it revokes. Without `DATABASE_URL` the tombstones live in a process-wide map on `globalThis` (Next loads route handlers and the `/chat` layout as separate module instances; both must see it).
-- **Every later request.** `isSessionRevoked({ sub, iat })` (`revocation.ts:96`) is true when `iat * 1000 <= revoked_at` — a token minted in the same second as the deletion counts as revoked (the safe side). `verifySessionToken` returns `null` for it, so every route answers 401 and `/chat` redirects to `/login`. A token issued after the deletion — the student signs in again — verifies normally.
-- **An in-flight chat turn.** The chat route fences its stores for the turn with `fenceStoresForSession(stores, claims)` (`revocation.ts:149`): each write (`persistMutation`, `persistSchedule`, `persistPreferences`, `clearScheduleForStudent`, `appendMessage`, `clearForStudent`, `appendSummary`, `replace`) first re-checks the revocation and throws `SessionRevokedError` if the session is revoked or the check fails. Every call site already treats persistence as no-throw (log and continue), so the turn finishes without writing the account back. Reads pass through.
+- **Every later request.** `isSessionRevoked({ sub, iat })` (`revocation.ts:119`) is true when `iat * 1000 <= revoked_at` — a token minted in the same second as the deletion counts as revoked (the safe side). `verifySessionToken` returns `null` for it, so every route answers 401 and `/chat` redirects to `/login`. A token issued after the deletion — the student signs in again — verifies normally.
+- **An in-flight chat turn.** The chat route fences its stores for the turn with `fenceStoresForSession(stores, claims)` (`revocation.ts:172`): each write (`persistMutation`, `persistSchedule`, `persistPreferences`, `clearScheduleForStudent`, `appendMessage`, `clearForStudent`, `appendSummary`, `replace`) first re-checks the revocation and throws `SessionRevokedError` if the session is revoked or the check fails. Every call site already treats persistence as no-throw (log and continue), so the turn finishes without writing the account back. Reads pass through. One end-of-turn write is not fenced: `runProposeStage` (staging a `plan_proposal`) uses `getStores()` directly — it needs the student's profile (`no_profile` after a delete), and a `pending_mutations` insert has only a foreign key to `students` (no `students` upsert), so it can't resurrect the account.
+- **Lookup failures.** Any revocation-lookup error fails closed (`verifySessionToken` → `null`, a fenced write → `SessionRevokedError`) — except Postgres `undefined_table` (`42P01`, anywhere in the error's cause chain): the code was deployed before migration `0004`. Then no delete can have committed (the delete writes its tombstone inside the wipe transaction, which fails without the table), so "nothing revoked" is the truth; the lookup logs `[auth] session_revocations table is missing — apply drizzle migration 0004` and returns no revocation instead of signing every student out into a `/login` loop. Self-serve delete returns 500 until the migration is applied.
 
 Residual race: a fenced write that checked the tombstone just before the delete committed can still land a moment after it.

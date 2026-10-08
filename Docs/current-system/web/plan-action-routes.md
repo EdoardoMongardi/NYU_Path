@@ -55,7 +55,7 @@ flowchart LR
     Bubble -.->|fire-and-forget| Stage2[/api/plan/stage2/]
 ```
 
-All routes run on the Node.js runtime (each file declares `runtime = "nodejs"`). Every route first calls `guardJsonMutation` — a cross-site request gets 403, a body declaring a non-JSON `Content-Type` gets 415 ([auth-routes.md §9](auth-routes.md#9-cross-site-request-guard)); the verb routes get it through `preflight` (§3.1), `explain-polish` and `stage2` call it directly. All routes share the same auth contract (cookie-based session) and the same daily rate-limit bucket — except `explain-polish` and `stage2`, which use dedicated buckets.
+All routes run on the Node.js runtime (each file declares `runtime = "nodejs"`). Every route first calls `guardJsonMutation` — a cross-site request gets 403, a body declaring a non-JSON `Content-Type` gets 415 ([auth-routes.md §9](auth-routes.md#9-cross-site-request-guard)); the verb routes get it through `preflight` (§3.1); `explain-polish`, `stage2`, and `add` (before its catalog pre-check peeks the body) call it directly. All routes share the same auth contract (cookie-based session) and the same daily rate-limit bucket — except `explain-polish` and `stage2`, which use dedicated buckets.
 
 ## 2. Per-Route Documentation
 

@@ -77,18 +77,41 @@ export async function recordSessionRevocation(
         .onConflictDoUpdate({ target: sessionRevocations.studentId, set: { revokedAt: at } });
 }
 
+/** Postgres `undefined_table`, on the error or anywhere in its cause
+ *  chain (drizzle wraps driver errors). */
+function isUndefinedTableError(err: unknown): boolean {
+    for (let e: unknown = err, depth = 0; e && depth < 5; e = (e as { cause?: unknown }).cause, depth++) {
+        if ((e as { code?: unknown }).code === "42P01") return true;
+    }
+    return false;
+}
+
 async function revokedAt(
     studentId: string,
     env: Record<string, string | undefined>,
 ): Promise<Date | null> {
     const db = getDb(env);
     if (!db) return inMemoryRevocations.get(studentId) ?? null;
-    const rows = await db
-        .select({ revokedAt: sessionRevocations.revokedAt })
-        .from(sessionRevocations)
-        .where(eq(sessionRevocations.studentId, studentId))
-        .limit(1);
-    return rows[0]?.revokedAt ?? null;
+    try {
+        const rows = await db
+            .select({ revokedAt: sessionRevocations.revokedAt })
+            .from(sessionRevocations)
+            .where(eq(sessionRevocations.studentId, studentId))
+            .limit(1);
+        return rows[0]?.revokedAt ?? null;
+    } catch (err) {
+        // Deployed before migration 0004. The delete route writes its
+        // tombstone inside the wipe transaction, so without this table no
+        // delete has ever committed — "nothing revoked" is the truth, and
+        // failing closed here would sign every student out (a /login
+        // loop). Every other lookup error still throws (callers fail
+        // closed).
+        if (!isUndefinedTableError(err)) throw err;
+        console.error(
+            "[auth] session_revocations table is missing — apply drizzle migration 0004 (db:migrate); self-serve delete fails until it exists",
+        );
+        return null;
+    }
 }
 
 /** True when the session was issued at or before the student's latest

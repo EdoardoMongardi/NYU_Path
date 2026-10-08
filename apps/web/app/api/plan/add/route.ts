@@ -17,6 +17,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { guardJsonMutation } from "../../../../lib/auth/requestGuards";
 import { handleProposeRoute } from "../../../../lib/planActionRouteHelpers";
 import { courseExists } from "../../../../lib/courseExists";
 import type { PlanMutation } from "@nyupath/shared";
@@ -30,6 +31,10 @@ const InputSchema = z.object({
 type Input = z.infer<typeof InputSchema>;
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+    // Cross-site and non-JSON requests are refused before the E3 pre-check
+    // reads the body (lib/auth/requestGuards.ts; preflight repeats it).
+    const refused = guardJsonMutation(req);
+    if (refused) return refused;
     // E3 — existence check: peek at the body on a clone so the original
     // request stream is intact for handleProposeRoute's auth + rate-limit
     // + parse pipeline. If the body is unreadable or the courseId field is

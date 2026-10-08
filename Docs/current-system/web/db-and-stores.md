@@ -170,7 +170,7 @@ One tombstone per student whose sessions were revoked by `/api/session/delete`. 
 
 Written inside the delete's wipe transaction (`recordSessionRevocation`); read on every `verifySessionToken` call and before every write of a fenced chat turn (`isSessionRevoked`) — see [auth-routes.md §10](./auth-routes.md#10-session-revocation-self-serve-delete). Rows are tiny and never deleted (a student who signs in again simply holds tokens newer than `revoked_at`). Without a DB the tombstones live in a process-wide in-memory map.
 
-> **Deploy order:** apply `0004` (`db:migrate`) BEFORE deploying the code that reads it. The revocation lookup fails closed, so on a database without the table every authenticated request is treated as signed out, and a self-serve delete returns 500 (its transaction can't write the tombstone and rolls back).
+> **Deploy order:** apply `0004` (`db:migrate`) BEFORE deploying the code that reads it. If it is forgotten, sign-in keeps working — the lookup treats Postgres `undefined_table` as "nothing revoked" (true: no delete can commit without the table) and logs `[auth] session_revocations table is missing` on every check — but self-serve delete returns 500 (its transaction can't write the tombstone and rolls back) until the migration is applied. Every OTHER lookup error fails closed.
 
 **`students.email` on login.** `verifyOtp` keeps `students.email` (UNIQUE) pointing at the row its login now maps to: in one transaction it sets `email = NULL` on any other row holding that email, then upserts its own row ([auth-routes.md §3](./auth-routes.md#3-post-apiauthotpverify)). This matters after the `test:` subject change, where an allowlisted account's old row still carries its email.
 
