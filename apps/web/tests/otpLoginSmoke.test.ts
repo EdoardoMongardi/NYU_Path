@@ -48,7 +48,7 @@ import { issueOtp, verifyOtp } from "../lib/auth/otp";
 import { verifySessionToken } from "../lib/auth/session";
 import { getDb, closeDb } from "../lib/db/client";
 import { resetStoresForTests } from "../lib/db/store";
-import { emailOtps, students } from "../lib/db/schema";
+import { chatMessages, emailOtps, students } from "../lib/db/schema";
 import { TEST_SECRET } from "./_planRouteTestUtils";
 
 // A fixed, obviously-test-scoped @nyu.edu address. The `@nyu.edu` domain
@@ -170,4 +170,68 @@ describe.skipIf(!process.env.DATABASE_URL)("OTP login smoke (live Neon)", () => 
         expect(replay.reason).toBe("no_pending_otp");
     }, 120_000); // live Neon round-trips are slow (~20-30s) — bake the timeout in so a
     //              plain `npx vitest run` (no --testTimeout flag) still passes.
+
+    /** Plant an email-less students row carrying a profile, a DPR and a chat
+     *  message — the shape the pre-#58 chat route left under a forged id. */
+    async function plantEmailLessRow(): Promise<void> {
+        const db = getDb(process.env)!;
+        await db.insert(students).values({
+            studentId: TEST_STUDENT_ID,
+            profile: { planted: true },
+            parsedDpr: { planted: true },
+        });
+        await db.insert(chatMessages).values({
+            studentId: TEST_STUDENT_ID,
+            role: "user",
+            content: "planted",
+        });
+    }
+
+    async function loginOnce(): Promise<void> {
+        const issued = await issueOtp(TEST_EMAIL, process.env);
+        const verified = await verifyOtp(TEST_EMAIL, issued.debugCode!, process.env);
+        expect(verified.ok).toBe(true);
+    }
+
+    async function readRow() {
+        const db = getDb(process.env)!;
+        const [row] = await db
+            .select({ email: students.email, profile: students.profile, parsedDpr: students.parsedDpr })
+            .from(students)
+            .where(eq(students.studentId, TEST_STUDENT_ID));
+        const chat = await db
+            .select({ id: chatMessages.id })
+            .from(chatMessages)
+            .where(eq(chatMessages.studentId, TEST_STUDENT_ID));
+        return { row, chatCount: chat.length };
+    }
+
+    it("first-ever login RESETS a planted never-claimed row instead of adopting it", async () => {
+        await wipeOtpFixture(); // no prior verified login for the id
+        await plantEmailLessRow();
+
+        await loginOnce();
+
+        const { row, chatCount } = await readRow();
+        expect(row!.email).toBe(TEST_EMAIL);
+        expect(row!.profile).toBeNull();
+        expect(row!.parsedDpr).toBeNull();
+        expect(chatCount).toBe(0); // children cascaded away
+    }, 120_000);
+
+    it("a later login KEEPS an email-less row re-created after a self-serve delete", async () => {
+        await wipeOtpFixture();
+        await loginOnce(); // the id now has a verified login
+        // self-serve delete keeps the cookie; re-onboarding re-creates the row
+        // without an email
+        await getDb(process.env)!.delete(students).where(eq(students.studentId, TEST_STUDENT_ID));
+        await plantEmailLessRow();
+
+        await loginOnce();
+
+        const { row, chatCount } = await readRow();
+        expect(row!.email).toBe(TEST_EMAIL);
+        expect(row!.profile).toEqual({ planted: true });
+        expect(chatCount).toBe(1);
+    }, 120_000);
 });

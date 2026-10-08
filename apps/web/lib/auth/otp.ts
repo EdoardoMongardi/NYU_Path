@@ -17,7 +17,8 @@ import { and, eq, gt, isNull, desc } from "drizzle-orm";
 import { SignJWT } from "jose";
 import { Resend } from "resend";
 import { getDb } from "../db/client.js";
-import { emailOtps, students } from "../db/schema.js";
+import { emailOtps } from "../db/schema.js";
+import { claimStudentRow } from "./claimStudentRow.js";
 
 const NYU_EMAIL_RE = /^[a-z0-9._%+-]+@nyu\.edu$/i;
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -149,13 +150,12 @@ export async function verifyOtp(
         .where(and(eq(emailOtps.email, lowerEmail), eq(emailOtps.issuedAt, row.issuedAt)));
 
     const studentId = emailToStudentId(lowerEmail);
-    await db
-        .insert(students)
-        .values({ studentId, email: lowerEmail })
-        .onConflictDoUpdate({
-            target: students.studentId,
-            set: { email: lowerEmail, updatedAt: new Date() },
-        });
+    // Never inherit a row this NetID has never logged in to (see claimStudentRow).
+    await claimStudentRow(db, {
+        studentId,
+        email: lowerEmail,
+        currentOtp: { email: lowerEmail, issuedAt: row.issuedAt },
+    });
 
     const secret = env.SECRET_KEY;
     if (!secret) return { ok: false, reason: "db_unavailable" };
