@@ -10,10 +10,11 @@
 // offline / in-memory fallback:
 //   - issueOtp writes a sha256(code) hash row into the LIVE `email_otps`
 //     table; with `RESEND_API_KEY=__test__` it SKIPS the Resend network
-//     call and surfaces the code back as `debugCode` (otp.ts:92),
-//   - verifyOtp reads the most-recent unconsumed/unexpired row, marks it
-//     consumed (single-use), UPSERTS a `students` row, and mints a signed
-//     HS256 JWT with `sub: <studentId>` (otp.ts:146-169).
+//     call and surfaces the code back as `debugCode` (otp.ts:106),
+//   - verifyOtp reads the most-recent unconsumed/unexpired row, reserves
+//     one of its MAX_VERIFY_ATTEMPTS, marks it consumed (single-use),
+//     UPSERTS a `students` row, and mints a signed HS256 JWT with
+//     `sub: <studentId>` (otp.ts:135-200).
 //
 // GATING — INVERTED from the offline DB tests, mirroring E6.5. The
 // offline DB suites DELETE `process.env.DATABASE_URL` so they run on the
@@ -33,8 +34,8 @@
 //
 // HOW TO RUN IT LIVE (controller):
 //   1. Provision a Neon branch and apply the Drizzle migrations
-//      (`pnpm --filter @nyupath/web db:migrate` — needs 0000..0003 so
-//      the `email_otps` + `students` tables exist).
+//      (`pnpm --filter @nyupath/web db:migrate` — needs 0000..0004 so
+//      the `email_otps` (incl. `attempts`) + `students` tables exist).
 //   2. Export `DATABASE_URL=<neon-branch-connection-string>` for the
 //      vitest process. RESEND_API_KEY + SECRET_KEY are set INSIDE the
 //      test (the `__test__` sentinel → no real email; a TEST_SECRET so
@@ -44,7 +45,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
-import { issueOtp, verifyOtp } from "../lib/auth/otp";
+import { issueOtp, verifyOtp, MAX_VERIFY_ATTEMPTS } from "../lib/auth/otp";
 import { verifySessionToken } from "../lib/auth/session";
 import { getDb, closeDb } from "../lib/db/client";
 import { resetStoresForTests } from "../lib/db/store";
@@ -52,9 +53,9 @@ import { emailOtps, students } from "../lib/db/schema";
 import { TEST_SECRET } from "./_planRouteTestUtils";
 
 // A fixed, obviously-test-scoped @nyu.edu address. The `@nyu.edu` domain
-// passes `isAllowedEmail` (otp.ts:30) WITHOUT AUTH_TEST_EMAILS; the
+// passes `isAllowedEmail` (otp.ts:34) WITHOUT AUTH_TEST_EMAILS; the
 // `e2e-otp-smoke` prefix is the deterministic studentId derived by
-// `emailToStudentId` (otp.ts:66-70 → local-part before the `@`), kept
+// `emailToStudentId` (otp.ts:77-81 → local-part before the `@`), kept
 // impossible to collide with a real NetID.
 const TEST_EMAIL = "e2e-otp-smoke@nyu.edu";
 // emailToStudentId(TEST_EMAIL) → the local-part, lower-cased.
@@ -84,9 +85,9 @@ describe.skipIf(!process.env.DATABASE_URL)("OTP login smoke (live Neon)", () => 
 
     beforeAll(async () => {
         // `__test__` sentinel → issueOtp skips the Resend network call and
-        // surfaces the generated code as `debugCode` (otp.ts:92).
+        // surfaces the generated code as `debugCode` (otp.ts:106).
         process.env.RESEND_API_KEY = "__test__";
-        // verifyOtp needs SECRET_KEY to sign the JWT (otp.ts:160). Use the
+        // verifyOtp needs SECRET_KEY to sign the JWT (otp.ts:191). Use the
         // live one if present; else a deterministic TEST_SECRET so
         // verifySessionToken (which reads the same SECRET_KEY) verifies it.
         if (!process.env.SECRET_KEY) process.env.SECRET_KEY = TEST_SECRET;
@@ -122,7 +123,7 @@ describe.skipIf(!process.env.DATABASE_URL)("OTP login smoke (live Neon)", () => 
         const issued = await issueOtp(TEST_EMAIL, process.env);
         expect(issued.ok).toBe(true);
         expect(typeof issued.debugCode).toBe("string");
-        // 6-digit zero-padded code (otp.ts:80).
+        // 6-digit zero-padded code (otp.ts:91).
         expect(issued.debugCode).toMatch(/^\d{6}$/);
         const code = issued.debugCode!;
 
@@ -170,4 +171,34 @@ describe.skipIf(!process.env.DATABASE_URL)("OTP login smoke (live Neon)", () => 
         expect(replay.reason).toBe("no_pending_otp");
     }, 120_000); // live Neon round-trips are slow (~20-30s) — bake the timeout in so a
     //              plain `npx vitest run` (no --testTimeout flag) still passes.
+
+    it("burns a code after MAX_VERIFY_ATTEMPTS wrong guesses — the right code is then rejected", async () => {
+        const db = getDb(process.env);
+        expect(db).not.toBeNull();
+        if (!db) return;
+        await wipeOtpFixture();
+
+        const issued = await issueOtp(TEST_EMAIL, process.env);
+        expect(issued.ok).toBe(true);
+        const code = issued.debugCode!;
+        const wrong = code === "000000" ? "000001" : "000000";
+
+        for (let i = 0; i < MAX_VERIFY_ATTEMPTS; i++) {
+            const miss = await verifyOtp(TEST_EMAIL, wrong, process.env);
+            expect(miss.reason).toBe("code_mismatch");
+        }
+        // The real UPDATE ... WHERE attempts < N counted every guess.
+        const rows = await db
+            .select({ attempts: emailOtps.attempts, consumedAt: emailOtps.consumedAt })
+            .from(emailOtps)
+            .where(eq(emailOtps.email, TEST_EMAIL));
+        expect(rows).toHaveLength(1);
+        expect(rows[0]!.attempts).toBe(MAX_VERIFY_ATTEMPTS);
+        expect(rows[0]!.consumedAt).toBeNull();
+
+        const late = await verifyOtp(TEST_EMAIL, code, process.env);
+        expect(late.ok).toBe(false);
+        expect(late.token).toBeUndefined();
+        expect(late.reason).toBe("too_many_attempts");
+    }, 120_000);
 });

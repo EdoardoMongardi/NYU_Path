@@ -1,10 +1,10 @@
 # Rate Limit and Middleware
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-10-08 (OTP verify rate limits + the shared `clientIp` helper).
 
 ## TL;DR
 
-Two pieces of background plumbing protect the app from abuse. The first is a simple daily counter that caps how many questions a student (or an unauthenticated visitor) can fire at the server in a 24-hour window — say, 30 chat messages, 60 sidebar clicks, 5 login attempts from one IP. Each route picks its own cap and key, so a flood of login attempts doesn't burn the chat allowance. The second is a gatekeeper that sits in front of the operator-only admin dashboard, asking for a username and password before letting anyone in. Together they keep the system polite to honest users and unfriendly to bad actors, without getting in the way of normal usage.
+Two pieces of background plumbing protect the app from abuse. The first is a simple daily counter that caps how many questions a student (or an unauthenticated visitor) can fire at the server in a 24-hour window — say, 30 chat messages, 60 sidebar clicks, 5 login codes requested from one IP, 10 code guesses for one email. Each route picks its own cap and key, so a flood of login attempts doesn't burn the chat allowance. The second is a gatekeeper that sits in front of the operator-only admin dashboard, asking for a username and password before letting anyone in. Together they keep the system polite to honest users and unfriendly to bad actors, without getting in the way of normal usage.
 
 ```mermaid
 flowchart LR
@@ -75,14 +75,19 @@ The rate-limit module itself is agnostic about what `userId` means — it's just
 
 | Route                              | Key shape                                                | Limit |
 |------------------------------------|----------------------------------------------------------|-------|
-| `/api/auth/otp/issue`              | `otp-ip:<first hop of X-Forwarded-For or X-Real-IP>`     | 5/day |
+| `/api/auth/otp/issue`              | `otp-ip:<clientIp>`                                      | 5/day |
+| `/api/auth/otp/verify`             | `otp-verify-ip:<clientIp>`                               | 25/day |
+| `/api/auth/otp/verify`             | `otp-verify-email:<trimmed, lower-cased email>`          | 10/day |
 | `/api/onboard`                     | `onboard-ip:<first hop of X-Forwarded-For or X-Real-IP>` | 10/day |
+| `/api/whatif-audit`                | `whatif-audit-ip:<first hop of X-Forwarded-For or X-Real-IP>` | 10/day |
 | `/api/onboard/refresh-dpr`         | `refresh-dpr:<studentId from JWT sub>`                   | 10/day |
 | Chat route (default `DEFAULT_LIMIT`) | (caller passes a studentId or `"anonymous"`)            | 30/day |
 
-The `DEFAULT_LIMIT = 30` constant (`apps/web/lib/rateLimit.ts:19`) is only used when callers omit the second argument. The OTP issue and onboard routes pass their own smaller caps explicitly.
+The `DEFAULT_LIMIT = 30` constant (`apps/web/lib/rateLimit.ts:19`) is only used when callers omit the second argument. The OTP, onboard and what-if-audit routes pass their own smaller caps explicitly.
 
-The auth and onboard routes derive the IP themselves — neither uses a shared helper — by reading `X-Forwarded-For` (taking the first comma-separated entry, trimmed), falling back to `X-Real-IP`, falling back to the literal string `"anonymous"`. Each route prefixes its key with a route-specific namespace (`otp-ip:`, `onboard-ip:`, `refresh-dpr:`) so the same IP can hit different routes without sharing counters.
+The two OTP routes take the IP from the shared `clientIp` helper (`apps/web/lib/clientIp.ts:30`). When `VERCEL` is set it reads `x-vercel-forwarded-for`, which Vercel sets itself (and it overwrites `X-Forwarded-For` / `X-Real-IP`), so a caller can't choose its own bucket. Otherwise it falls back to the first `X-Forwarded-For` hop, then `X-Real-IP`, then `"anonymous"` — see [auth-routes.md, Client IP (trust model)](./auth-routes.md#client-ip-trust-model). The onboard and what-if-audit routes still derive the IP inline with that same fallback order but no Vercel header. Each route prefixes its key with a route-specific namespace (`otp-ip:`, `otp-verify-ip:`, `otp-verify-email:`, `onboard-ip:`, `whatif-audit-ip:`, `refresh-dpr:`) so the same IP can hit different routes without sharing counters.
+
+The OTP verify limits are a first line only. Because this store is in-process (below), the brute-force control that holds across instances is the per-code attempt budget in `verifyOtp` (5 attempts per issued code, stored in `email_otps.attempts`) — see [auth-routes.md §6](./auth-routes.md#attempt-budget).
 
 ### Storage
 
@@ -114,7 +119,7 @@ Callers map blocked responses to HTTP 429 with `Retry-After: <retryAfterSeconds>
 
 ### Anonymous users
 
-The comment block at `apps/web/lib/rateLimit.ts:53-62` notes that `userId === "anonymous"` is bucketed globally, so any caller that passes the literal `"anonymous"` shares a single soft cap. In the live routes today this only happens when no IP header is present: the OTP-issue and onboard keys fall back to `otp-ip:anonymous` / `onboard-ip:anonymous` when both `X-Forwarded-For` and `X-Real-IP` are absent. The `refresh-dpr` route always has a real studentId (it is auth-gated), so it never buckets anonymously. The comment's framing — "once W12 lands and real userIds arrive, each student gets their own bucket" — describes a future state; for authenticated routes the studentId bucketing is already in place via `auth.sub`.
+The comment block at `apps/web/lib/rateLimit.ts:53-62` notes that `userId === "anonymous"` is bucketed globally, so any caller that passes the literal `"anonymous"` shares a single soft cap. In the live routes today this only happens when no IP header is present: the IP-keyed buckets fall back to `otp-ip:anonymous`, `otp-verify-ip:anonymous`, `onboard-ip:anonymous` and `whatif-audit-ip:anonymous` when no usable IP header is present (on Vercel the platform always sets one). The `refresh-dpr` route always has a real studentId (it is auth-gated), so it never buckets anonymously. The comment's framing — "once W12 lands and real userIds arrive, each student gets their own bucket" — describes a future state; for authenticated routes the studentId bucketing is already in place via `auth.sub`.
 
 ### What rateLimit.ts does NOT do
 
@@ -182,12 +187,13 @@ A consolidated view of what wraps what:
 
 The rate limiter and the auth check are independent — neither calls the other, and a request can be rejected by either without ever reaching the route's business logic. The order is NOT uniform across routes, because the bucket key dictates it:
 
-- **IP-keyed, pre-auth routes** (`/api/auth/otp/issue`, `/api/onboard`) run rate-limit FIRST, then parse the body. They have no session to read, and the IP-derived key needs no auth, so an unauthenticated flood is rejected before any work (`apps/web/app/api/auth/otp/issue/route.ts:32`).
+- **IP-keyed, pre-auth routes** (`/api/auth/otp/issue`, `/api/auth/otp/verify`, `/api/onboard`) run the IP rate-limit FIRST, then parse the body. They have no session to read, and the IP-derived key needs no auth, so an unauthenticated flood is rejected before any work (`apps/web/app/api/auth/otp/issue/route.ts:26`, `apps/web/app/api/auth/otp/verify/route.ts:38-39`). `/verify` then applies its per-email limit right after body validation and before any code comparison (`apps/web/app/api/auth/otp/verify/route.ts:50-52`).
 - **Student-keyed, post-auth route** (`/api/onboard/refresh-dpr`) runs auth FIRST (`readSessionFromRequest`), then rate-limit, then parses the multipart body. It must derive `studentId = auth.sub` before it can build the `refresh-dpr:<studentId>` bucket key, so auth necessarily precedes the limiter (`apps/web/app/api/onboard/refresh-dpr/route.ts:51,59`). The rate-limit still runs before the body is read, so a flood of 10 MB PDFs can't allocate an `ArrayBuffer`.
 
 ## 4. Known limitations
 
 - **Rate limiting is entirely in-process and resets on restart.** `lib/rateLimit.ts` is a single-process `Map` with no Postgres or Redis backing, even on deployments where Postgres is provisioned. Every server restart resets every quota to zero, and a multi-instance deployment would multiply each cap by the instance count (5 OTP issues per IP per instance, not 5 globally). The code's own comments describe migrating to Redis/Postgres "when W12 lands"; that has not happened.
-- **IP-keyed limits are spoofable.** The OTP-issue and onboard buckets key on the first hop of the client-supplied `X-Forwarded-For` header (then `X-Real-IP`). Neither is validated against a trusted proxy, so a caller that sets a fresh `X-Forwarded-For` value per request gets a fresh 5/day (OTP) or 10/day (onboard) bucket each time. This is an abuse-signal speed bump, not a hard control.
-- **Per-route caps are honest but small.** The live caps are: OTP issue 5/day per IP, onboard 10/day per IP, refresh-dpr 10/day per student. The `DEFAULT_LIMIT = 30` constant exists for callers that omit a limit; it is the documented chat-route default but is only applied wherever a caller invokes `consumeRequest` without a second argument.
+- **IP-keyed limits are only trustworthy on Vercel.** The OTP buckets use `clientIp`, which on Vercel (`VERCEL` set) reads the platform-set `x-vercel-forwarded-for`; Vercel also overwrites `X-Forwarded-For` / `X-Real-IP`, so callers can't forge an IP there. Off Vercel (local dev, a self-host with no overwriting proxy) every IP header is client-controlled, so a caller that sends a fresh `X-Forwarded-For` per request gets a fresh bucket each time — a speed bump, not a control. The onboard and what-if-audit routes don't use `clientIp` yet, so they lack the `x-vercel-forwarded-for` preference (still safe on Vercel itself, since Vercel overwrites the first `X-Forwarded-For` hop).
+- **The per-email verify limit can be used to lock a student out.** Anyone who knows a student's email can spend that email's 10 daily verifies; the student then gets 429 until UTC midnight even with a valid code. This is the accepted trade-off for capping guesses per account.
+- **Per-route caps are honest but small.** The live caps are: OTP issue 5/day per IP, OTP verify 25/day per IP and 10/day per email, onboard 10/day per IP, what-if-audit 10/day per IP, refresh-dpr 10/day per student. The `DEFAULT_LIMIT = 30` constant exists for callers that omit a limit; it is the documented chat-route default but is only applied wherever a caller invokes `consumeRequest` without a second argument.
 - **Stale code comment in the observability page.** The header comment in `apps/web/app/admin/observability/page.tsx:17-19` still claims the dashboard runs with "no auth" and that an IP allow-list is a "TODO once W12 ships." That is stale: `apps/web/middleware.ts` already Basic-Auth gates every `/admin/*` route (constant-time credential compare, fail-closed 503 when `OBSERVABILITY_USER` / `OBSERVABILITY_PASS` are unset). The dashboard is not publicly reachable; only the comment is out of date.

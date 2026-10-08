@@ -1,6 +1,6 @@
 # Database and Stores
 
-> Last verified against code: 2026-06-16 (Phase 4 E6 — DB wiring + live exit gates). Prior: 2026-06-15 (cohort gate subsystem removed).
+> Last verified against code: 2026-10-08 (`email_otps.attempts` + migration `0004`). Prior: 2026-06-16 (Phase 4 E6 — DB wiring + live exit gates). Prior: 2026-06-15 (cohort gate subsystem removed).
 
 ## Purpose
 
@@ -38,7 +38,7 @@ All tables are declared in `apps/web/lib/db/schema.ts`. They are intentionally n
 
 ### Table: students
 
-The canonical row per student. One row per `studentId`. Defined at `schema.ts:28`.
+The canonical row per student. One row per `studentId`. Defined at `schema.ts:25`.
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -57,7 +57,7 @@ The canonical row per student. One row per `studentId`. Defined at `schema.ts:28
 
 ### Table: session_summaries
 
-A rolling window of natural-language summaries per student. Defined at `schema.ts:51`.
+A rolling window of natural-language summaries per student. Defined at `schema.ts:47`.
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -71,7 +71,7 @@ Index `session_summaries_student_idx` on `(student_id, id)` lets the loader pull
 
 ### Table: audit_log
 
-An immutable append-only history of confirmed profile mutations. Defined at `schema.ts:63`.
+An immutable append-only history of confirmed profile mutations. Defined at `schema.ts:59`.
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -87,7 +87,7 @@ Index `audit_log_student_idx` on `(student_id, confirmed_at)`.
 
 ### Table: email_otps
 
-One row per outstanding one-time password. Defined at `schema.ts:89`.
+One row per outstanding one-time password. Defined at `schema.ts:81`.
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -96,12 +96,13 @@ One row per outstanding one-time password. Defined at `schema.ts:89`.
 | issued_at | timestamptz, not null, default now | When the code was sent |
 | expires_at | timestamptz, not null | When the code stops being valid |
 | consumed_at | timestamptz | Marker that the OTP was redeemed (prevents double-redemption) |
+| attempts | integer, not null, default 0 | Verify attempts spent on this code; `verifyOtp` reserves one per call and stops at 5 (migration `0004_otp_verify_attempts.sql` — see [auth-routes.md, Attempt budget](./auth-routes.md#attempt-budget)) |
 
 Composite primary key over `(email, issued_at)`. Index `email_otps_email_idx` on `email` for cheap lookup of the live row.
 
 ### Table: forward_schedules
 
-Durable plan history. Soft-delete via `superseded_at`. Defined at `schema.ts:106`.
+Durable plan history. Soft-delete via `superseded_at`. Defined at `schema.ts:99`.
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -117,7 +118,7 @@ Index `forward_schedules_student_active_idx` on `(student_id, computed_at)`.
 
 ### Table: schedule_preferences
 
-One row per student — preferences are intent, not history. Defined at `schema.ts:124`.
+One row per student — preferences are intent, not history. Defined at `schema.ts:117`.
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -127,7 +128,7 @@ One row per student — preferences are intent, not history. Defined at `schema.
 
 ### Table: chat_messages
 
-Append-only chat transcript. Defined at `schema.ts:139`.
+Append-only chat transcript. Defined at `schema.ts:132`.
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -145,7 +146,7 @@ Index `chat_messages_student_idx` on `(student_id, id)`.
 
 ### Table: pending_mutations (Phase 4 E6.3)
 
-Durable staging for the deterministic plan-action propose→confirm round-trip. Defined at `schema.ts:151`; migration `0003_phase4_pending_mutations.sql`.
+Durable staging for the deterministic plan-action propose→confirm round-trip. Defined at `schema.ts:156`; migration `0003_phase4_pending_mutations.sql`.
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -256,9 +257,11 @@ This is the standard drizzle-kit setup: editing `schema.ts` and running the kit'
 "db:migrate": "drizzle-kit migrate"
 ```
 
-`drizzle-kit migrate` is the **apply** command (not `generate`, which only writes a new SQL file, nor `push`, which diffs the schema straight onto the DB without going through the journal). It reads the `DATABASE_URL` from `drizzle.config.ts`, walks the journal at `apps/web/drizzle/meta/_journal.json`, and applies any not-yet-applied SQL files (`0000_strong_riptide.sql` → `0001_phase16_persistence.sql` → `0002_drop_cohort.sql` → `0003_phase4_pending_mutations.sql`) **in journal order**, tracking what it has applied in drizzle's bookkeeping table.
+`drizzle-kit migrate` is the **apply** command (not `generate`, which only writes a new SQL file, nor `push`, which diffs the schema straight onto the DB without going through the journal). It reads the `DATABASE_URL` from `drizzle.config.ts`, walks the journal at `apps/web/drizzle/meta/_journal.json`, and applies any not-yet-applied SQL files (`0000_strong_riptide.sql` → `0001_phase16_persistence.sql` → `0002_drop_cohort.sql` → `0003_phase4_pending_mutations.sql` → `0004_otp_verify_attempts.sql`) **in journal order**, tracking what it has applied in drizzle's bookkeeping table.
 
 `0003_phase4_pending_mutations.sql` (journal idx 3, Phase 4 E6.3) is **additive** — it creates the `pending_mutations` table + its two indexes and adds the `ON DELETE cascade` FK to `students`. Unlike `0002` it drops nothing.
+
+`0004_otp_verify_attempts.sql` (journal idx 4) is **additive** — one statement, `ALTER TABLE "email_otps" ADD COLUMN "attempts" integer DEFAULT 0 NOT NULL`. Existing rows get 0. Apply it **before** deploying the matching code: the new `verifyOtp` reads and updates `attempts`, while the previous code ignores the column, so migrate-then-deploy is safe in both directions.
 
 **How an operator runs it** (the live run is gated by E6.1 — provisioning the Neon `DATABASE_URL`):
 
@@ -278,8 +281,8 @@ DATABASE_URL='postgres://…neon…' npm run db:migrate
 
 **Fresh Neon baseline vs. running the `0000→0001→0002` sequence — pick the right path.** These two paths diverge and must not be mixed:
 
-- **A brand-new / empty Neon branch (the supported path):** run the **full journaled sequence** with `db:migrate`. It applies `0000 → 0001 → 0002 → 0003` in order, leaving the journal and drizzle's applied-migrations table internally consistent. Because `0002` drops a table/column/type that `0000`+`0001` created, the net end-state on a fresh DB is identical to the current `schema.ts`, just reached by build-then-drop. **Do this** — it keeps every environment on the same migration history.
-- **Do NOT hand-apply a squashed baseline.** If you instead let drizzle-kit `generate` a single fresh baseline from the current `schema.ts` and apply only that, the resulting journal will have **one** entry (`0000_*`) rather than four. That database can never again receive the real `0001`/`0002`/`0003` files (their tags aren't in its journal), so it permanently diverges from every other environment and from the repo's `drizzle/` history. Squashing the migration history is a deliberate, repo-wide decision — not something an operator does ad hoc while provisioning one Neon branch.
+- **A brand-new / empty Neon branch (the supported path):** run the **full journaled sequence** with `db:migrate`. It applies `0000 → 0001 → 0002 → 0003 → 0004` in order, leaving the journal and drizzle's applied-migrations table internally consistent. Because `0002` drops a table/column/type that `0000`+`0001` created, the net end-state on a fresh DB is identical to the current `schema.ts`, just reached by build-then-drop. **Do this** — it keeps every environment on the same migration history.
+- **Do NOT hand-apply a squashed baseline.** If you instead let drizzle-kit `generate` a single fresh baseline from the current `schema.ts` and apply only that, the resulting journal will have **one** entry (`0000_*`) rather than five. That database can never again receive the real `0001`–`0004` files (their tags aren't in its journal), so it permanently diverges from every other environment and from the repo's `drizzle/` history. Squashing the migration history is a deliberate, repo-wide decision — not something an operator does ad hoc while provisioning one Neon branch.
 
 In short: **one history, applied in full via `db:migrate`.**
 
@@ -290,11 +293,11 @@ In short: **one history, applied in full via `db:migrate`.**
 Until Phase 4, **every** DB test ran offline (the offline suites `delete process.env.DATABASE_URL` so they exercise the in-memory / Stub path). Phase 4 added the first two tests that run against a **real Postgres** (a Neon branch), both in `apps/web/tests/`:
 
 - **`e2eConfirmPersist.test.ts` (E6.5 — EXIT GATE #2).** The end-to-end propose→confirm→persist round-trip against live Neon. It is the **first live exercise** of the E6.3 `PostgresPendingMutationStore` (durable `pending_mutations` staging), the supersede-then-insert `PostgresScheduleStore.persistSchedule`, the Decision-#32 restore routing (valid → `forwardSchedule`; draft → `studentDraftPlan`), the `schedule_preferences` upsert, and the `audit_log` append. **PASSED live** against the provisioned Neon branch.
-- **`otpLoginSmoke.test.ts` (E6.6).** The email-OTP login round-trip against live Neon — `issueOtp` writes a `sha256(code)` row into `email_otps` (with `RESEND_API_KEY=__test__` it skips the Resend network and surfaces the code as `debugCode`), `verifyOtp` consumes it single-use, upserts a `students` row, and mints a signed HS256 JWT. **PASSED live**, confirming "leaving the memory fallback" is sound for auth (the companion to E6.5).
+- **`otpLoginSmoke.test.ts` (E6.6).** The email-OTP login round-trip against live Neon — `issueOtp` writes a `sha256(code)` row into `email_otps` (with `RESEND_API_KEY=__test__` it skips the Resend network and surfaces the code as `debugCode`), `verifyOtp` consumes it single-use, upserts a `students` row, and mints a signed HS256 JWT. **PASSED live**, confirming "leaving the memory fallback" is sound for auth (the companion to E6.5). A second case (added 2026-10-08) checks that 5 wrong codes leave `attempts = 5` on the live row and that the right code is then refused with `too_many_attempts`; it has **not yet been run live** (it needs `0004` applied). The same SQL was checked against a local Postgres 17 instead: 20 concurrent attempt reservations → exactly 5 succeed; 4 concurrent consumes → exactly 1 wins.
 
 Both are **gated INVERTED from the offline suites** — `describe.skipIf(!process.env.DATABASE_URL)` — so they **RUN ONLY when a real `DATABASE_URL` is wired** and **SKIP in the default `npx vitest run`** (the offline suite stays green at the same pass count, adding exactly one SKIPPED test each). Both are **self-cleaning** (fixed, clearly-test-scoped ids; wipe their own rows in `beforeAll` + `afterAll` via a direct `getDb()` transaction — idempotent, no residue) and bake in a **120-second** per-hook/per-test timeout because live Neon round-trips over WebSocket are slow (~20–30 s).
 
-To run them live: provision a Neon branch, apply all of `0000..0003` (so `pending_mutations` + `email_otps` exist — see the runbook caveat above), then `DATABASE_URL=… npx vitest run apps/web/tests/e2eConfirmPersist.test.ts apps/web/tests/otpLoginSmoke.test.ts` from the repo root.
+To run them live: provision a Neon branch, apply all of `0000..0004` (so `pending_mutations` + `email_otps` incl. `attempts` exist — see the runbook caveat above), then `DATABASE_URL=… npx vitest run apps/web/tests/e2eConfirmPersist.test.ts apps/web/tests/otpLoginSmoke.test.ts` from the repo root.
 
 ## The store factory — `store.ts`
 
