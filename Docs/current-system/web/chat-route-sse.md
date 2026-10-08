@@ -1,6 +1,6 @@
 # Chat Route — `/api/chat/v2` (SSE Streaming Endpoint)
 
-> Last verified against code: 2026-06-19 (Plan 37: `plan_proposal` added to SSE event union table §10; `whatif_audit_request` verified present). Prior 2026-06-15: Phase 4 E1: profile read-back — new §5.5 documents the confirmed-profile read-back into `session.student` (E1.2: 4 editable fields, precedence body>persisted>DPR, ordered before schoolConfig load); the top honest-caveat + §5.1 revised since profile read-hydration is no longer deferred. Same-day prior pass: cohort gate subsystem removed — the per-turn cohort lookup, the `cohortLookup` store field, and the recovery/limited-availability path are all gone; the agent loop now runs unconditionally every turn. Earlier 2026-06-13 pass: refreshed `route.ts` line citations and added the post-loop proactive-elicitation append on the OK terminal path; see §11.
+> Last verified against code: 2026-10-08 (PR #58 review fixes: §2 the body is schema-validated with size/role caps and cross-site / non-JSON requests are refused first; §3 + §13 an authenticated turn's stores are fenced against a mid-turn account deletion). Prior 2026-06-19 (Plan 37: `plan_proposal` added to SSE event union table §10; `whatif_audit_request` verified present). Prior 2026-06-15: Phase 4 E1: profile read-back — new §5.5 documents the confirmed-profile read-back into `session.student` (E1.2: 4 editable fields, precedence body>persisted>DPR, ordered before schoolConfig load); the top honest-caveat + §5.1 revised since profile read-hydration is no longer deferred. Same-day prior pass: cohort gate subsystem removed — the per-turn cohort lookup, the `cohortLookup` store field, and the recovery/limited-availability path are all gone; the agent loop now runs unconditionally every turn. Earlier 2026-06-13 pass: refreshed `route.ts` line citations and added the post-loop proactive-elicitation append on the OK terminal path; see §11.
 
 ## Purpose
 
@@ -32,22 +32,28 @@ In short: every real "answer-the-student" turn flows through v2. The route does 
 
 ## 2. Request Shape
 
-The client POSTs a JSON body of type `V2RequestBody` (`route.ts:97-115`):
+Before anything else, `guardJsonMutation(req)` (`route.ts:120`) refuses a cross-site request (403) or a body that declares a non-JSON `Content-Type` (415) — see [auth-routes.md §9](auth-routes.md#9-cross-site-request-guard).
 
-- `message` — required string; the user's chat turn. Missing/non-string → HTTP 400 (`route.ts:126-128`).
+The client POSTs a JSON body validated by `V2RequestBodySchema` (`apps/web/lib/chatV2RequestBody.ts`; `route.ts:132`) BEFORE any store read, rate-limit charge or model call. Everything in it is caller-controlled and much of it reaches the LLM, so it is capped. A failed parse is HTTP 400: a `message` problem keeps its own wording; anything else is `Invalid request body — <path>: <issue>` for up to three paths. Unknown keys are stripped. The caps are constants in `apps/web/lib/chatV2Client.ts`, shared with the page:
+
+- `message` — required non-empty string of at most `CHAT_MESSAGE_MAX_CHARS` (8,000). Missing/non-string/empty → 400 "`message` is required and must be a string."; longer → 400 "`message` is too long (max 8000 characters)." 
 - `parsedData` — required; DPR-only. The single accepted shape is `{ kind: "dpr"; report }`. The route checks the payload is a DPR payload (kind `"dpr"`) via the inline `isDprPayload` guard; if it isn't (or `parsedData` is absent) it returns HTTP 400 with an "I need your Albert Degree Progress Report (DPR)…" message and `onboardingStep: "awaiting_dpr"` (`route.ts:138-148`). When the kind matches, the route runs the engine's `degreeProgressReportSchema.safeParse` against `report` and rejects malformed payloads with a separate HTTP 400 listing the first three failing paths (`route.ts:153-162`).
-- `visaStatus` — optional string. Only `"f1"` or `"domestic"` are threaded into the profile builder (`route.ts:225-227`).
-- `graduationTarget` — optional, free-form (e.g., `"Spring 2027"` or `"spring2027"`). Normalized into `graduationTerm` for the system prompt by `normalizeGraduationTarget` (`route.ts:376`).
-- `history` — optional array of prior `{ role: "user" | "assistant"; content }` items. The route forwards them into the loop as `priorMessages` (the page's client policy sends the last 10).
-- `correlationId` — optional. Passed through to the agent loop for log tracing.
-- `userId` — optional fallback identity. Only honored when the auth cookie is absent.
-- `homeSchool` — optional. When a non-empty string, threaded through as `homeSchoolOverride` so `deriveHomeSchool` is bypassed (`route.ts:230-232`). **No production client currently sends this** — see [§5.2](#52-home-school-derivation-and-the-unknown-fallback).
+- `visaStatus` — optional string (≤ 32 chars) or null. Only `"f1"` or `"domestic"` are threaded into the profile builder (`route.ts:225-227`).
+- `graduationTarget` — optional free-form string or null (e.g., `"Spring 2027"`, `"spring2027"`, or a sentence the student typed). TRUNCATED to 200 chars, never rejected — the page re-sends it every turn, so rejecting one long value would fail the whole session. Only the season + year `normalizeGraduationTarget` extracts reaches the prompt (as `graduationTerm`).
+- `history` — optional array of at most `CHAT_HISTORY_MAX_ITEMS` (10) prior turns, each exactly `{ role: "user" | "assistant"; content: string }` with `content` at most `CHAT_HISTORY_ITEM_MAX_CHARS` (24,000 — above the longest reply the loop can produce at `maxTokens: 4096`). Any other role (`system`, `tool`, …) is rejected, so a client can't smuggle an elevated-role message into the agent's prior messages. The route forwards them into the loop as `priorMessages`. The page builds this list with `toChatV2History`, which keeps the last 10 and trims each item to the same cap, so a long reply can't make every later turn fail validation.
+- `correlationId` — optional string (≤ 128). Passed through to the agent loop for log tracing.
+- `userId` — optional string (≤ 128); fallback identity. Only honored when the auth cookie is absent.
+- `homeSchool` — optional string (≤ 64). When a non-empty string, threaded through as `homeSchoolOverride` so `deriveHomeSchool` is bypassed (`route.ts:230-232`). **No production client currently sends this** — see [§5.2](#52-home-school-derivation-and-the-unknown-fallback).
 
 ## 3. Authentication / Authorization
 
 `readSessionFromRequest(req)` (`route.ts:185`) extracts the auth subject from the session cookie. The cookie-derived `sub` always wins; the request body's `userId` is the fallback, and the literal string `"anonymous"` is the last-resort identity when neither is present (`route.ts:186`).
 
 The route itself does **not** redirect or reject unauthenticated requests — that gate lives one layer above at `apps/web/app/chat/layout.tsx`, a Server Component that calls `readSessionFromCookies()` and `redirect("/login")` before any chat-page client JS runs. So `/api/chat/v2` only sees requests from users who already passed the layout gate (or direct curl traffic). Authenticated-only side-effects (plan/prefs hydration, bootstrap profile upsert, chat-history append, session-summary append) are explicitly gated on `userId !== "anonymous"` (`route.ts:270`, `341`, `870`, `931`).
+
+A cookie whose token was revoked by a self-serve account deletion fails `readSessionFromRequest` like an expired one ([auth-routes.md §10](auth-routes.md#10-session-revocation-self-serve-delete)). For an authenticated turn the route also FENCES its stores: `stores = fenceStoresForSession(getStores(), authClaims)` (`route.ts:228`). Every write through them — the bootstrap persist, the homeSchool/visa change-persists, tool persistence via the `ToolSession`, and the end-of-turn chat-history and session-summary appends — first re-checks the revocation and throws `SessionRevokedError` if the student deleted their account mid-turn (or the check fails). Those call sites already log and swallow persistence errors, so the turn completes without writing the account back. Reads pass through.
+
+> **Known gap until the cookie-only identity change lands (PR #58):** a request whose cookie is missing, revoked, or unverifiable (a failed revocation lookup fails closed) still falls back to `body.userId`, unfenced. The real page sends a per-browser UUID there, so a tab left open after a delete writes its turn under that UUID rather than the deleted NetID, and a hand-crafted cookie-less request can name any id. PR #58 makes the cookie the only identity (401 without it), which closes both.
 
 ## 4. Rate Limiting
 
@@ -218,7 +224,7 @@ The `/admin/observability` dashboard reads the same file. Without this sink, fal
 
 ## 13. Persistence After the Turn
 
-After the `done` event is written but before the stream closes, the route performs best-effort writes — all gated on `userId !== "anonymous"`:
+After the `done` event is written but before the stream closes, the route performs best-effort writes — all gated on `userId !== "anonymous"`, and all through the fenced stores (§3), so none of them lands after the student deleted their account mid-turn:
 
 1. **Chat history append** (`route.ts:870-922`):
    - User message first (preserves user → assistant ordering on restore).
@@ -230,7 +236,7 @@ All writes are wrapped in try/catch with `console.error` on failure; persistence
 
 ## 14. Error Handling
 
-1. **Request validation** — invalid JSON (`route.ts:124`), missing `message` (`route.ts:126-128`), missing/non-DPR `parsedData` → the "upload your DPR" 400 with `onboardingStep: "awaiting_dpr"` (`route.ts:138-148`), DPR schema failure (`route.ts:153-162`): all return HTTP 4xx synchronously, no SSE stream opened.
+1. **Request validation** — cross-site request → 403 / declared non-JSON body → 415 (`route.ts:120`), invalid JSON, a body failing `V2RequestBodySchema` (missing/over-long `message`, too many / over-long / wrong-role `history` items, over-long string fields — `route.ts:132`), missing/non-DPR `parsedData` → the "upload your DPR" 400 with `onboardingStep: "awaiting_dpr"` (`route.ts:138-148`), DPR schema failure (`route.ts:153-162`): all return HTTP 4xx synchronously, no SSE stream opened.
 2. **Environment errors** — primary client not configured → HTTP 503 (`route.ts:166-176`); rate-limit exceeded → HTTP 429 (`route.ts:194-211`). Both before the stream opens.
 3. **Runtime errors during the turn** — `runV2Turn`'s body is wrapped in try/catch that emits a final `error` SSE event and closes (`route.ts:949-956`). Unconditional — any throw in the loop, validator, or persistence path lands here.
 4. **Non-ok loop termination** — when `finalResult` is null or `finalResult.kind !== "ok"` (and not `context_limit`), the route emits `error` with `Agent loop ended in non-ok state: <kind>` or `Agent loop did not yield a final result.` and closes (`route.ts:765-772`).

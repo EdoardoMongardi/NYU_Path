@@ -28,6 +28,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { rejectCrossSiteRequest } from "../../../lib/auth/requestGuards";
 import { extractText } from "unpdf";
 import {
     parseDpr,
@@ -162,6 +163,10 @@ export async function planWhatIfExploration(
 // ============================================================
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+    // A cross-site request is refused before anything else
+    // (lib/auth/requestGuards.ts).
+    const refused = rejectCrossSiteRequest(req);
+    if (refused) return refused;
     // Gate BEFORE touching the multipart body.
     const rate = consumeRequest(ipFromRequest(req), WHATIF_AUDIT_LIMIT_PER_DAY);
     if (!rate.ok) {

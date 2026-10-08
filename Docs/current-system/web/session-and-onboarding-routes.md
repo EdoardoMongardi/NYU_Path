@@ -1,6 +1,6 @@
 # Session and Onboarding Routes
 
-> Last verified against code: 2026-06-19 (Plan 37 H1 — visa is now a MANDATORY explicit choice; `canBuildPlan` gates "Build my plan" on `parsedDpr && visaChosen`; `/api/session/restore` state-routing: `infeasible-draft` / `student-preferred-invalid-draft` → `studentDraftPlan`, all other states → `forwardSchedule`). Prior: 2026-06-16 (Phase 4 follow-ups F1-F3 — DPR-field authority, IP-window model, wizard mounted). [§6](#6-onboarding--preference-wizard-live-the-awaiting_dpr-onboarding-surface) is now revised: the `OnboardingWizard` is **MOUNTED + LIVE** as the `awaiting_dpr` onboarding surface (`page.tsx:1863-1867`, F1) — it replaces the legacy welcome/upload ask-and-reply UI for that state. New [§6.6](#66-dpr-derived-field-enforcement-read-only--re-upload-redirect-f2) documents F2: DPR-derived fields (home school, declared major/minor, catalog year, courses, grades) are READ-ONLY (the v2 route ignores a `body.homeSchool` override when `deriveHomeSchool` is CONFIDENT; the Confirm-profile step renders a confidently-derived school read-only via `computeHomeSchoolProposal.derivedFromDpr`; the agent redirects change requests to "upload a new DPR" — CORE RULE 14; `update_profile` refuses a DPR-mismatched `catalogYear`/`declaredPrograms`). New [§6.7](#67-the-wizard--chat-handoff-handlewizardreachplan-f1) documents the button-triggered handoff. Prior pass: 2026-06-16 (Phase 4 E5 — the wizard built + tested, mount then deferred). [§5](#5-legacy-apichat--onboarding-state-machine)'s `correcting_data` known-limitation notes the v2 path DOES persist a `visaStatus`/`homeSchool` correction (the legacy `/api/chat` step is still a no-op).
+> Last verified against code: 2026-10-08 (PR #58 review fixes — new [§1b](#1b-delete-apisessiondelete--standing-self-serve-deletion) documents `/api/session/delete`, which now revokes the student's sessions + clears the cookie; every state-changing route here refuses a cross-site request first; `/api/session/restore` returns `signedInAs`). Prior 2026-06-19 (Plan 37 H1 — visa is now a MANDATORY explicit choice; `canBuildPlan` gates "Build my plan" on `parsedDpr && visaChosen`; `/api/session/restore` state-routing: `infeasible-draft` / `student-preferred-invalid-draft` → `studentDraftPlan`, all other states → `forwardSchedule`). Prior: 2026-06-16 (Phase 4 follow-ups F1-F3 — DPR-field authority, IP-window model, wizard mounted). [§6](#6-onboarding--preference-wizard-live-the-awaiting_dpr-onboarding-surface) is now revised: the `OnboardingWizard` is **MOUNTED + LIVE** as the `awaiting_dpr` onboarding surface (`page.tsx:1863-1867`, F1) — it replaces the legacy welcome/upload ask-and-reply UI for that state. New [§6.6](#66-dpr-derived-field-enforcement-read-only--re-upload-redirect-f2) documents F2: DPR-derived fields (home school, declared major/minor, catalog year, courses, grades) are READ-ONLY (the v2 route ignores a `body.homeSchool` override when `deriveHomeSchool` is CONFIDENT; the Confirm-profile step renders a confidently-derived school read-only via `computeHomeSchoolProposal.derivedFromDpr`; the agent redirects change requests to "upload a new DPR" — CORE RULE 14; `update_profile` refuses a DPR-mismatched `catalogYear`/`declaredPrograms`). New [§6.7](#67-the-wizard--chat-handoff-handlewizardreachplan-f1) documents the button-triggered handoff. Prior pass: 2026-06-16 (Phase 4 E5 — the wizard built + tested, mount then deferred). [§5](#5-legacy-apichat--onboarding-state-machine)'s `correcting_data` known-limitation notes the v2 path DOES persist a `visaStatus`/`homeSchool` correction (the legacy `/api/chat` step is still a no-op).
 > Prior: 2026-06-15 (Phase 4 E1.2: Purpose notes the v2 chat route reads the four confirmed `confirm_profile_update` fields back into the per-turn `session.student`, cross-ref [chat-route-sse.md §5.5](chat-route-sse.md#55-confirmed-profile-read-back-into-sessionstudent-e12). Same-day prior pass: cohort gate subsystem removed: §1 no longer lists the dropped `cohort_assignments` table in the wipe order).
 
 ## Purpose
@@ -39,13 +39,13 @@ flowchart TB
 
 ## 1. DELETE /api/session/clear
 
-**File:** `apps/web/app/api/session/clear/route.ts:35`
+**File:** `apps/web/app/api/session/clear/route.ts:33`
 **Runtime:** Node.js.
 **HTTP method:** `DELETE` only.
 
 ### Gate
 
-This route is intentionally hidden behind two layers:
+`rejectCrossSiteRequest(req)` runs first (403 for a cross-site request — [auth-routes.md §9](auth-routes.md#9-cross-site-request-guard)). Past that, the route is intentionally hidden behind two layers:
 
 1. Server env gate: `process.env.NEXT_PUBLIC_ENABLE_TEST_CLEAR !== "1"` returns HTTP 403 `{ error: "Forbidden" }` immediately (`apps/web/app/api/session/clear/route.ts:40-42`). The `NEXT_PUBLIC_` prefix means Next.js exposes the var to the client bundle, but the route re-reads it server-side so a hand-crafted POST in prod can't bypass it.
 2. Auth gate: `readSessionFromRequest(req)` must return a valid session. Failure → HTTP 401 `{ error: "Unauthorized" }` (`apps/web/app/api/session/clear/route.ts:44-47`).
@@ -78,6 +78,25 @@ A failing transaction logs `[session/clear] transaction failed:` to the server c
 ### Response
 
 Success: HTTP 200 `{ ok: true }`.
+
+## 1b. DELETE /api/session/delete — standing self-serve deletion
+
+**File:** `apps/web/app/api/session/delete/route.ts:49`
+**Runtime:** Node.js.
+**HTTP method:** `DELETE` only. Called by the profile rail's **Delete my account & data** button (`handleDeleteAccount` in `page.tsx`).
+
+Unlike `/api/session/clear` this route has **no env gate** — deleting one's data is a standing right, not a test affordance. The guards are:
+
+1. `rejectCrossSiteRequest(req)` (`route.ts:52`) — 403 for a cross-site request ([auth-routes.md §9](auth-routes.md#9-cross-site-request-guard)).
+2. `readSessionFromRequest(req)` (`route.ts:57`) — 401 `{ error: "Unauthorized" }` without a valid session. The JWT `sub` is the only studentId it deletes.
+
+**What it does:**
+
+- **In-memory mode** (no `DATABASE_URL`): `resetStoresForTests()` drops the store bundle, then the revocation is recorded in the process-wide map (`route.ts:69-70`).
+- **DB mode:** one `db.transaction` (`route.ts:78`) that first records the revocation tombstone (`recordSessionRevocation(tx, studentId, revokedAt)` → `session_revocations`), then deletes from `chat_messages`, `forward_schedules`, `schedule_preferences`, `audit_log`, `session_summaries`, `pending_mutations`, and finally `students`. A failure rolls the whole thing back — tombstone included — so the student stays signed in to retry; the route returns 500 with the error message.
+- **Response:** 200 `{ ok: true }` with the session cookie cleared (`signedOut()`, `route.ts:123`). The page then reloads, and the `/chat` layout redirects to `/login`.
+
+**Why the revocation:** the JWT is stateless, so wiping the rows alone left it valid for up to 30 days — one later chat turn from another open tab, or a turn already in flight, re-created the `students` row and `parsed_dpr` (every Postgres store write upserts `students`). With the tombstone, every token issued up to the deletion stops verifying, and an in-flight chat turn's fenced stores refuse their writes. A new login after the deletion works normally. Details: [auth-routes.md §10](auth-routes.md#10-session-revocation-self-serve-delete).
 
 ## 2. GET /api/session/restore
 
@@ -127,6 +146,7 @@ Always HTTP 200 (when authenticated):
 
 ```
 {
+  signedInAs: string,            // the session's email
   profile: StudentProfile | null,
   dpr: DegreeProgressReport | null,
   forwardSchedule: ForwardSchedule | null,
@@ -136,7 +156,7 @@ Always HTTP 200 (when authenticated):
 }
 ```
 
-The page's logic (per the comment header) is:
+The page shows `signedInAs` beside **Sign out** in the disclaimer banner for every signed-in student, onboarded or not — a session someone else planted (login CSRF) is then visible. Its other logic (per the comment header) is:
 - `profile === null` → fall through to onboarding.
 - `profile !== null && dpr === null` → re-onboard (pre-Phase-16 legacy data).
 - Otherwise → land the user back in the conversation.
@@ -150,7 +170,7 @@ This route is **DPR-only**: it accepts a single `dpr` PDF and parses it determin
 
 ### Auth
 
-This route is NOT auth-gated. A student uploads their DPR before they have any persisted state, so there's no studentId to key off. The per-IP rate limit is the only abuse guard (see below).
+This route is NOT auth-gated. A student uploads their DPR before they have any persisted state, so there's no studentId to key off. A cross-site request is refused first (`rejectCrossSiteRequest`, `route.ts:44`); past that, the per-IP rate limit is the only abuse guard (see below).
 
 ### Per-IP daily rate limit
 
@@ -203,7 +223,7 @@ The route returns one of two `onboardingStep` values that the client uses to ren
 
 ## 4. POST /api/onboard/refresh-dpr
 
-**File:** `apps/web/app/api/onboard/refresh-dpr/route.ts:50`
+**File:** `apps/web/app/api/onboard/refresh-dpr/route.ts:56`
 **Runtime:** Node.js.
 
 ### Purpose
@@ -212,7 +232,7 @@ The sidebar's "Update DPR" button posts here with a fresh DPR PDF. The route com
 
 ### Auth
 
-`readSessionFromRequest(req)` must succeed; otherwise HTTP 401 (`apps/web/app/api/onboard/refresh-dpr/route.ts:51-54`). The JWT `sub` becomes the studentId for every downstream operation.
+A cross-site request is refused first (`rejectCrossSiteRequest`, `route.ts:59`). Then `readSessionFromRequest(req)` must succeed; otherwise HTTP 401 (`apps/web/app/api/onboard/refresh-dpr/route.ts:61-64`). The JWT `sub` becomes the studentId for every downstream operation.
 
 ### Per-student daily rate limit
 

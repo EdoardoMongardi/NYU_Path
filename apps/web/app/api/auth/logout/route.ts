@@ -7,12 +7,16 @@
 // cohort B+ a session-revocation table can be added.
 // ============================================================
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { rejectCrossSiteRequest } from "../../../../lib/auth/requestGuards";
 import { clearSessionCookie } from "../../../../lib/auth/session";
 
 export const runtime = "nodejs";
 
-export async function POST(): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
+    // A cross-site page can't sign the student out (lib/auth/requestGuards.ts).
+    const refused = rejectCrossSiteRequest(req);
+    if (refused) return refused;
     const res = NextResponse.json({ ok: true });
     clearSessionCookie(res);
     return res;

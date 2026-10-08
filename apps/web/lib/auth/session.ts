@@ -4,13 +4,20 @@
 // One cookie: nyupath_session = <signed JWT> (HS256, 30-day TTL).
 // Issued by the OTP-verify route after a successful login. Read by
 // the v2 chat route to derive the authenticated `userId` (the JWT
-// subject — the NYU NetID prefix or, for the operator self-test,
-// the local-part of an allowlisted email).
+// subject — the NYU NetID prefix or, for an operator-allowlisted
+// non-NYU email, `test:<email>`; see emailToStudentId in otp.ts).
+//
+// The JWT is stateless, so a valid signature is not enough: a token
+// issued at or before the student's self-serve deletion is revoked
+// (lib/auth/revocation.ts) and verifies as null.
 //
 // Cookie attributes:
 //   - HttpOnly      — JS can't read the token → mitigates XSS
-//   - SameSite=Lax  — blocks CSRF on the chat route while still
-//                     letting the user navigate in from email links
+//   - SameSite=Lax  — a cross-site POST arrives without it, while the
+//                     user can still navigate in from email links. Not
+//                     enough alone (login CSRF, same-site attackers):
+//                     state-changing routes also refuse cross-site
+//                     requests (lib/auth/requestGuards.ts)
 //   - Secure        — HTTPS only in production; relaxed for localhost
 //   - Path=/        — needed across /, /chat, /api/*
 //   - Max-Age=30d   — matches the JWT exp claim
@@ -19,16 +26,19 @@
 import { jwtVerify } from "jose";
 import type { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { isSessionRevoked } from "./revocation";
 
 export const SESSION_COOKIE = "nyupath_session";
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 export interface SessionClaims {
-    /** NYU NetID prefix or operator-allowlisted local-part — the
-     *  canonical studentId we key everything off (rate-limit bucket,
-     *  session_summaries.studentId, students.studentId). */
+    /** NYU NetID prefix, or `test:<email>` for an operator-allowlisted
+     *  login — the canonical studentId we key everything off (rate-limit
+     *  bucket, session_summaries.studentId, students.studentId). */
     sub: string;
     email: string;
+    /** JWT issued-at, seconds — compared against a revocation. */
+    iat?: number;
 }
 
 /** Set the session cookie on a NextResponse (used after OTP verify). */
@@ -57,22 +67,40 @@ export function clearSessionCookie(res: NextResponse): void {
     });
 }
 
-/** Verify a token and return claims, or null if missing/invalid/expired. */
+/** Verify a token and return claims, or null if missing/invalid/
+ *  expired/revoked. */
 export async function verifySessionToken(
     token: string,
     env: Record<string, string | undefined> = process.env,
 ): Promise<SessionClaims | null> {
     const secret = env.SECRET_KEY;
     if (!secret) return null;
+    let claims: SessionClaims;
     try {
         const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), {
             algorithms: ["HS256"],
         });
         if (typeof payload.sub !== "string" || typeof payload.email !== "string") return null;
-        return { sub: payload.sub, email: payload.email };
+        claims = {
+            sub: payload.sub,
+            email: payload.email,
+            ...(typeof payload.iat === "number" ? { iat: payload.iat } : {}),
+        };
     } catch {
         return null;
     }
+    // Self-serve deletion revokes every token issued up to that moment.
+    // If the lookup fails we can't show the session wasn't revoked, so
+    // it fails closed (the student sees a signed-out state).
+    try {
+        if (await isSessionRevoked(claims, env)) return null;
+    } catch (err) {
+        console.error(
+            `[auth] session revocation check failed; treating the session as invalid: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return null;
+    }
+    return claims;
 }
 
 /** Read + verify the session cookie from a route-handler `NextRequest`.

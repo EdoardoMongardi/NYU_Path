@@ -101,6 +101,33 @@ export type PlanActionBubbleSseEvent =
      *  in the input list has produced an enrichment event. */
     | { kind: "plan_action_stage2_done"; slotKey: string };
 
+// Request-size caps for /api/chat/v2. The route's body schema
+// (lib/chatV2RequestBody.ts) rejects anything larger with a 400, and
+// `toChatV2History` trims the page's history to the same caps so a long
+// reply can never make every later turn fail validation.
+/** Longest `message` the route accepts (~2k tokens). */
+export const CHAT_MESSAGE_MAX_CHARS = 8_000;
+/** Most prior turns the route accepts in `history`. */
+export const CHAT_HISTORY_MAX_ITEMS = 10;
+/** Longest single `history` item. Above the longest assistant reply the
+ *  agent loop can produce (maxTokens 4096 ≈ 16–20k chars of prose). */
+export const CHAT_HISTORY_ITEM_MAX_CHARS = 24_000;
+
+/** The page's last `CHAT_HISTORY_MAX_ITEMS` messages as `history`
+ *  items, each trimmed to `CHAT_HISTORY_ITEM_MAX_CHARS`. Callers drop
+ *  non-turn bubbles (e.g. the welcome message) first. */
+export function toChatV2History(
+    messages: ReadonlyArray<{ role: "user" | "assistant"; content: string }>,
+): Array<{ role: "user" | "assistant"; content: string }> {
+    return messages.slice(-CHAT_HISTORY_MAX_ITEMS).map((m) => ({
+        role: m.role,
+        content:
+            m.content.length > CHAT_HISTORY_ITEM_MAX_CHARS
+                ? `${m.content.slice(0, CHAT_HISTORY_ITEM_MAX_CHARS - 1)}…`
+                : m.content,
+    }));
+}
+
 export interface ChatV2Request {
     message: string;
     parsedData: unknown;

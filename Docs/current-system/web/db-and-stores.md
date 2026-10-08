@@ -1,6 +1,6 @@
 # Database and Stores
 
-> Last verified against code: 2026-06-16 (Phase 4 E6 — DB wiring + live exit gates). Prior: 2026-06-15 (cohort gate subsystem removed).
+> Last verified against code: 2026-10-08 (PR #58 review fixes — new `session_revocations` table + migration `0004`; `verifyOtp` releases a re-keyed email before its `students` upsert). Prior: 2026-06-16 (Phase 4 E6 — DB wiring + live exit gates). Prior: 2026-06-15 (cohort gate subsystem removed).
 
 ## Purpose
 
@@ -159,6 +159,21 @@ Indexes `pending_mutations_student_idx` on `student_id` and `pending_mutations_e
 
 This table **replaces the in-process `Map`** the plan-action orchestrator used pre-E6.3 (`planActionOrchestrator.ts`), so a staged proposal survives a process restart and is visible to a sibling instance in a multi-instance deploy. The single-use delete, the cross-tenant guard, and the TTL all live **inside** the store's `take` (see `PendingMutationStore` below and [plan-action-orchestrator.md](./plan-action-orchestrator.md) §6.6/§6.7). The `ON DELETE cascade` to `students` means a self-serve deletion / test-clear (`/api/session/delete`, `/api/session/clear`) also wipes any staged proposals.
 
+### Table: session_revocations (self-serve deletion)
+
+One tombstone per student whose sessions were revoked by `/api/session/delete`. Defined at the end of `schema.ts`; migration `0004_session_revocations.sql`.
+
+| Column | Type | Purpose |
+|---|---|---|
+| student_id | text, primary key | The deleted studentId. **No foreign key** to `students` — the tombstone must outlive the row it revokes |
+| revoked_at | timestamptz, not null | Every session token with `iat` at or before this is revoked; deleting again moves it forward |
+
+Written inside the delete's wipe transaction (`recordSessionRevocation`); read on every `verifySessionToken` call and before every write of a fenced chat turn (`isSessionRevoked`) — see [auth-routes.md §10](./auth-routes.md#10-session-revocation-self-serve-delete). Rows are tiny and never deleted (a student who signs in again simply holds tokens newer than `revoked_at`). Without a DB the tombstones live in a process-wide in-memory map.
+
+> **Deploy order:** apply `0004` (`db:migrate`) BEFORE deploying the code that reads it. If it is forgotten, sign-in keeps working — the lookup treats Postgres `undefined_table` as "nothing revoked" (true: no delete can commit without the table) and logs `[auth] session_revocations table is missing` on every check — but self-serve delete returns 500 (its transaction can't write the tombstone and rolls back) until the migration is applied. Every OTHER lookup error fails closed.
+
+**`students.email` on login.** `verifyOtp` keeps `students.email` (UNIQUE) pointing at the row its login now maps to: in one transaction it sets `email = NULL` on any other row holding that email, then upserts its own row ([auth-routes.md §3](./auth-routes.md#3-post-apiauthotpverify)). This matters after the `test:` subject change, where an allowlisted account's old row still carries its email.
+
 ## Per-store documentation
 
 ### ProfileStore — `profileStorePostgres.ts`
@@ -256,9 +271,11 @@ This is the standard drizzle-kit setup: editing `schema.ts` and running the kit'
 "db:migrate": "drizzle-kit migrate"
 ```
 
-`drizzle-kit migrate` is the **apply** command (not `generate`, which only writes a new SQL file, nor `push`, which diffs the schema straight onto the DB without going through the journal). It reads the `DATABASE_URL` from `drizzle.config.ts`, walks the journal at `apps/web/drizzle/meta/_journal.json`, and applies any not-yet-applied SQL files (`0000_strong_riptide.sql` → `0001_phase16_persistence.sql` → `0002_drop_cohort.sql` → `0003_phase4_pending_mutations.sql`) **in journal order**, tracking what it has applied in drizzle's bookkeeping table.
+`drizzle-kit migrate` is the **apply** command (not `generate`, which only writes a new SQL file, nor `push`, which diffs the schema straight onto the DB without going through the journal). It reads the `DATABASE_URL` from `drizzle.config.ts`, walks the journal at `apps/web/drizzle/meta/_journal.json`, and applies any not-yet-applied SQL files (`0000_strong_riptide.sql` → `0001_phase16_persistence.sql` → `0002_drop_cohort.sql` → `0003_phase4_pending_mutations.sql` → `0004_session_revocations.sql`) **in journal order**, tracking what it has applied in drizzle's bookkeeping table.
 
 `0003_phase4_pending_mutations.sql` (journal idx 3, Phase 4 E6.3) is **additive** — it creates the `pending_mutations` table + its two indexes and adds the `ON DELETE cascade` FK to `students`. Unlike `0002` it drops nothing.
+
+`0004_session_revocations.sql` (journal idx 4, PR #58 review fixes) is **additive** — one `CREATE TABLE "session_revocations"` (two columns, no FK, no index beyond the primary key). It must be applied before the code that reads it is deployed (see the table section above).
 
 **How an operator runs it** (the live run is gated by E6.1 — provisioning the Neon `DATABASE_URL`):
 

@@ -114,6 +114,7 @@ describe("/api/session/restore (Phase 16 Task B)", () => {
         expect(res.status).toBe(200);
         const json = await res.json();
         expect(json).toEqual({
+            signedInAs: "brand_new_student@nyu.edu",
             profile: null,
             dpr: null,
             forwardSchedule: null,
@@ -121,6 +122,15 @@ describe("/api/session/restore (Phase 16 Task B)", () => {
             schedulePreferences: null,
             chatMessages: [],
         });
+    });
+
+    it("returns the session's email so the chat header can show which account is signed in", async () => {
+        // A planted session (login CSRF) is visible to the student only if
+        // the page names the account it is acting for.
+        const token = await issueTestToken("test:abc123@gmail.com", "abc123@gmail.com");
+        const res = await GET(fakeRequest(token) as never);
+        expect(res.status).toBe(200);
+        expect((await res.json()).signedInAs).toBe("abc123@gmail.com");
     });
 
     it("hydrates every slot for a returning student (profile + dpr + schedule + prefs + chat in chronological order)", async () => {

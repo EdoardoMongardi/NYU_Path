@@ -1,6 +1,6 @@
 # Chat UI Client — React Page & SSE Consumer
 
-> Last verified against code: 2026-06-19 (Plan 37 — workspace slot-editor + P/F validation + chat-confirm bridge + never-commit-invalid + visa-mandatory: slot-action popover + `SlotActionPopover`/`slotActionView`, `plan_proposal` SSE event + `applyPlanProposalEvent` + `shouldInterceptAsConfirm` typed-confirm intercept + consume-once pending-mutation store, render-only-valid scenarios (invalid proposed → red card, no Confirm; Branch-B what-if confirmable; Branch-A audit read-only), force/Override retired (M1/M2 — 422 on infeasible, `student-preferred-invalid-draft` no longer minted), visa-mandatory `canBuildPlan`/`visaChosen` (H1), sidebar deleted (G2); **Plan 37 follow-ups**: `passFailForSchool` threaded client-side so `canElect:false` schools' P/F button pre-disabled in popover; `setForwardSchedule` draft-slotting state-routing (infeasible-draft/student-preferred-invalid-draft → no-op for committed anchor).
+> Last verified against code: 2026-10-08 (PR #58 review fixes: `handleSendV2` builds `history` with `toChatV2History` — last 10 turns, each trimmed to the route's per-item cap; the disclaimer banner shows the signed-in account from `/api/session/restore`'s `signedInAs`; account deletion now ends the session, so the reload lands on `/login`). Prior 2026-06-19 (Plan 37 — workspace slot-editor + P/F validation + chat-confirm bridge + never-commit-invalid + visa-mandatory: slot-action popover + `SlotActionPopover`/`slotActionView`, `plan_proposal` SSE event + `applyPlanProposalEvent` + `shouldInterceptAsConfirm` typed-confirm intercept + consume-once pending-mutation store, render-only-valid scenarios (invalid proposed → red card, no Confirm; Branch-B what-if confirmable; Branch-A audit read-only), force/Override retired (M1/M2 — 422 on infeasible, `student-preferred-invalid-draft` no longer minted), visa-mandatory `canBuildPlan`/`visaChosen` (H1), sidebar deleted (G2); **Plan 37 follow-ups**: `passFailForSchool` threaded client-side so `canElect:false` schools' P/F button pre-disabled in popover; `setForwardSchedule` draft-slotting state-routing (infeasible-draft/student-preferred-invalid-draft → no-op for committed anchor).
 >
 > Plan 37 changes documented here: §2 event union gains `plan_proposal`; §3 plan-state store gains consume-once pending-mutation tracking; §3 send path gains the typed-confirm intercept; §4 bubble/Override path retired (force inert, no Override button); §7 gains the workspace slot-editor flow + the chat-confirm bridge; §7 visa-mandatory noted; §9 supporting modules gains `courseExists.ts` + `planProposalEvent.ts` + `typedConfirmIntercept.ts`. `next.config.ts` node:-stub is REVERTED (Plan 36 proper fix: a client-safe engine entry `@nyupath/engine/client` — the stub note in §1 is corrected below).
 >
@@ -164,7 +164,7 @@ Why it matters: chat-driven updates (SSE events + `/api/plan/*` HTTP responses) 
 5. Resets `isLoading` and refocuses the input.
 
 `handleSendV2(userText)` (`page.tsx:492-533`) is the SSE driver:
-1. Builds `recentHistory` from the last 10 non-welcome messages.
+1. Builds `recentHistory` with `toChatV2History` (`chatV2Client.ts`) from the non-welcome messages: the last `CHAT_HISTORY_MAX_ITEMS` (10), each trimmed to `CHAT_HISTORY_ITEM_MAX_CHARS` (24,000) — the same caps the route's body schema enforces ([chat-route-sse.md §2](chat-route-sse.md#2-request-shape)), so one very long reply can't make every later turn fail validation. (A user message over `CHAT_MESSAGE_MAX_CHARS`, 8,000, comes back as the route's 400 "`message` is too long" error event.)
 2. Pre-creates an empty assistant `Message` so tokens stream INTO it (sets `startedAt`, empty `thinkingText`, `thinkingRevealed=0`, `contentRevealed=0`).
 3. Iterates `streamChatV2({ message, parsedData, visaStatus, graduationTarget, history, userId: getOrCreateClientId() })`.
 4. Dispatches each event to `applyEvent(ev, assistant.id, toolStatuses)`.
@@ -211,6 +211,13 @@ A second `useEffect` (`page.tsx:245-361`) runs once on mount and fetches `/api/s
 6. Replay `chatMessages[]`: build `Message` records where assistant entries are marked already-settled (`startedAt === completedAt === createdAt` timestamp), `contentRevealed` is pre-filled to the full length, and `thinkingText` (when present) is pre-revealed with `hasRealThinking = true`. Tool invocations are surfaced as past-tense `ToolStatus`es.
 
 All restore failures are caught and logged; the page falls back to the existing onboarding flow.
+
+Before the `dpr`/`profile` check, the effect stores `signedInAs` (the session's email) — so it is set for new students too — and the disclaimer banner renders **Signed in as <email>** beside **Sign out** (`styles.signedInAs`; below 640 px it takes its own full-width line under the disclaimer). If someone else's session were ever planted in the browser (login CSRF), the student would see the wrong account named here.
+
+### Sign out and account deletion
+
+- **Sign out** POSTs `/api/auth/logout` (cookie cleared) and navigates to `/login`.
+- **Delete my account & data** (`handleDeleteAccount`) asks for confirmation, then `DELETE /api/session/delete`. The route wipes the student's rows, revokes every session token issued until then, and clears the cookie ([session-and-onboarding-routes.md §1b](session-and-onboarding-routes.md#1b-delete-apisessiondelete--standing-self-serve-deletion)), so the page's hard reload lands on `/login`; another tab still open on the old session gets 401s and can't write the account back.
 
 ### Message bubble rendering
 

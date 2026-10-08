@@ -14,6 +14,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { rejectCrossSiteRequest } from "../../../lib/auth/requestGuards";
 import { extractText } from "unpdf";
 import { parseDpr, type DegreeProgressReport } from "@nyupath/engine";
 import { consumeRequest } from "../../../lib/rateLimit";
@@ -38,6 +39,10 @@ function ipFromRequest(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
+    // A cross-site request is refused before anything else
+    // (lib/auth/requestGuards.ts).
+    const refused = rejectCrossSiteRequest(req);
+    if (refused) return refused;
     // Gate BEFORE we touch the multipart body so a flood of
     // 10MB uploads can't even allocate an ArrayBuffer.
     const rateKey = ipFromRequest(req);

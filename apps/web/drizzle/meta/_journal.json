@@ -29,6 +29,13 @@
       "when": 1781604840308,
       "tag": "0003_phase4_pending_mutations",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791473450212,
+      "tag": "0004_session_revocations",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
+import { guardJsonMutation } from "../../../lib/auth/requestGuards";
 import { OpenAIEngineClient, DEFAULT_PRIMARY_MODEL } from "@nyupath/engine";
 
 // ============================================================
@@ -26,6 +27,10 @@ import { OpenAIEngineClient, DEFAULT_PRIMARY_MODEL } from "@nyupath/engine";
 // ============================================================
 
 export async function POST(req: NextRequest) {
+    // Cross-site and non-JSON requests are refused before anything else
+    // (lib/auth/requestGuards.ts).
+    const refused = guardJsonMutation(req);
+    if (refused) return refused;
     try {
         const body = await req.json();
         const { message, onboardingStep, parsedData } = body as {

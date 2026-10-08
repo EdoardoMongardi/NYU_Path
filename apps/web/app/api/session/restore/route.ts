@@ -3,6 +3,8 @@
 // ============================================================
 // Returns everything needed to land a returning student back in
 // their last conversation:
+//   - signedInAs (the session's email — the chat header shows it, so a
+//     session planted by someone else is visible)
 //   - profile (StudentProfile | null)
 //   - dpr (DegreeProgressReport | null)
 //   - forwardSchedule | studentDraftPlan (ForwardSchedule | null —
@@ -98,6 +100,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     return NextResponse.json({
+        signedInAs: auth.email,
         profile,
         dpr,
         forwardSchedule,
