@@ -1,6 +1,6 @@
 # Authentication Routes
 
-> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41).
+> Last verified against code: 2026-06-10 (post planning-engine rebuild, PRs #35-#41); §"Code validation flow" step 5 re-verified 2026-10-08 (first-login claim / reset).
 
 ## TL;DR
 
@@ -22,7 +22,7 @@ flowchart LR
 
 ## 1. Overview
 
-NYU Path uses passwordless email one-time-password (OTP) authentication. There is no signup flow — every successful OTP verification upserts a row into `students`, so login and signup are the same event. After verification the server hands the client a signed JWT, but only via an HttpOnly cookie; the token is never echoed in the JSON response body.
+NYU Path uses passwordless email one-time-password (OTP) authentication. There is no signup flow — every successful OTP verification claims (creates or adopts) the `students` row, so login and signup are the same event. A never-claimed row found at an id's first-ever login is reset rather than adopted (see step 5 below). After verification the server hands the client a signed JWT, but only via an HttpOnly cookie; the token is never echoed in the JSON response body.
 
 Three routes make up the surface area:
 
@@ -109,7 +109,11 @@ JSON body with two fields:
 2. Selects the latest unconsumed, unexpired `email_otps` row for the lowercased email — ordered by `issuedAt DESC`, limited to 1 (`apps/web/lib/auth/otp.ts:124-135`). If no row matches, returns `reason: "no_pending_otp"`.
 3. Compares the stored sha256 hash against `sha256(providedCode)` using `crypto.timingSafeEqual` (`apps/web/lib/auth/otp.ts:140-144`) — constant-time. If lengths or bytes differ, returns `reason: "code_mismatch"`.
 4. Marks the row consumed by setting `consumedAt = now` on the matched (email, issuedAt) tuple (`apps/web/lib/auth/otp.ts:146-149`). This single-use marking guards against double redemption — subsequent verifies for that code will fail the "unconsumed" filter in step 2.
-5. Derives the studentId by lowercasing the email and taking the prefix before `@` (`apps/web/lib/auth/otp.ts:66-70`). Upserts a `students` row with `(studentId, email)` ON CONFLICT updates `email` and `updatedAt` (`apps/web/lib/auth/otp.ts:152-158`). This is what makes login double as signup.
+5. Derives the studentId by lowercasing the email and taking the prefix before `@` (`apps/web/lib/auth/otp.ts:66-70`). Then claims the `students` row via `claimStudentRow` (`apps/web/lib/auth/claimStudentRow.ts`), in one transaction that locks the row (`SELECT … FOR UPDATE`). This is what makes login double as signup:
+   - **no row** → insert `(studentId, email)`;
+   - **row already claimed** (`email` set) → upsert `email` + `updatedAt` (a returning student);
+   - **email-less row, and the id has a prior verified login** (any consumed `email_otps` row whose local part is the id, excluding the OTP just consumed) → same upsert. Self-serve delete and test-clear keep the session cookie, so re-onboarding re-creates the row without an email, and that data is the student's own;
+   - **email-less row, and the id has never logged in** → **reset**: `DELETE` the row (every child table cascades), insert a fresh `(studentId, email)` row, and `console.warn` the id. With PR #58 only a session cookie may write under a NetID, and none exists before its first login, so such a row was planted. Before #58 the chat v2 route honored a cookie-less `body.userId`. The reset stops a planted profile / `parsed_dpr` / chat / summaries / schedules being inherited. Rows adopted before this fix are handled by `Docs/audits/2026-10-06-chat-v2-identity-planting-runbook.md`.
 6. Signs an HS256 JWT with `sub = studentId`, custom claim `email = lowerEmail`, `iat = now`, `exp = +30d`, using `SECRET_KEY` from env (`apps/web/lib/auth/otp.ts:160-167`). Missing `SECRET_KEY` returns `reason: "db_unavailable"`.
 
 ### Session creation and cookie set
