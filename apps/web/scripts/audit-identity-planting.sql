@@ -38,11 +38,13 @@ otp AS (
     GROUP BY 1
 ),
 aud AS (
+    -- ANY audit row counts, not only the route's bootstrap-/homeschool-/visa-
+    -- ids: confirm_profile_update (a tool, so it also ran under the forged id)
+    -- writes its own ids AND re-persists parsed_dpr. Every other audit writer
+    -- (refresh-dpr) is cookie-authenticated, so nothing legitimate predates
+    -- the first login.
     SELECT student_id,
-           min(confirmed_at) FILTER (
-               WHERE pending_mutation_id LIKE 'bootstrap-%'
-                  OR pending_mutation_id LIKE 'homeschool-%'
-                  OR pending_mutation_id LIKE 'visa-%')      AS first_route_audit,
+           min(confirmed_at)                                 AS first_audit,
            max(confirmed_at) FILTER (
                WHERE pending_mutation_id LIKE 'dpr_refresh_%') AS last_dpr_refresh
     FROM audit_log
@@ -50,7 +52,14 @@ aud AS (
 ),
 chat AS (SELECT student_id, min(created_at)  AS first_at FROM chat_messages     GROUP BY 1),
 summ AS (SELECT student_id, min(created_at)  AS first_at FROM session_summaries GROUP BY 1),
-fs   AS (SELECT student_id, min(computed_at) AS first_at FROM forward_schedules GROUP BY 1),
+-- n_fps: refresh-dpr hard-deletes a student's schedules, and every legitimate
+-- writer fingerprints the student's STORED DPR (chat turns re-send the restored
+-- DPR; plan routes + what-if confirm read it from the DB). So >1 distinct
+-- fingerprint means a second DPR was planned under this id — the one signal
+-- that can catch a body-id write made AFTER the owner's login.
+fs   AS (SELECT student_id, min(computed_at) AS first_at,
+                count(DISTINCT dpr_fingerprint) AS n_fps
+         FROM forward_schedules GROUP BY 1),
 pm   AS (SELECT student_id, min(created_at)  AS first_at FROM pending_mutations GROUP BY 1),
 facts AS (
     SELECT s.student_id,
@@ -59,11 +68,12 @@ facts AS (
            s.parsed_dpr IS NOT NULL              AS has_dpr,
            s.created_at,
            o.first_login_at,
-           a.first_route_audit,
+           a.first_audit,
            a.last_dpr_refresh,
            c.first_at  AS chat_first,
            su.first_at AS summ_first,
            f.first_at  AS fs_first,
+           f.n_fps,
            sp.updated_at AS prefs_at,
            p.first_at  AS pm_first,
            (o.first_login_at - (SELECT skew FROM params)) AS cutoff
@@ -80,18 +90,17 @@ facts AS (
 signals AS (
     SELECT *,
            coalesce(created_at        < cutoff, false) AS sig_created,
-           coalesce(first_route_audit < cutoff, false) AS sig_audit,
+           coalesce(first_audit       < cutoff, false) AS sig_audit,
            coalesce(chat_first        < cutoff, false) AS sig_chat,
            coalesce(summ_first        < cutoff, false) AS sig_summary,
            coalesce(fs_first          < cutoff, false) AS sig_schedule,
            coalesce(prefs_at          < cutoff, false) AS sig_prefs,
-           coalesce(pm_first          < cutoff, false) AS sig_pending
+           coalesce(pm_first          < cutoff, false) AS sig_pending,
+           coalesce(n_fps > 1, false)                  AS sig_multi_dpr
     FROM facts
 ),
 classified AS (
     SELECT *,
-           (sig_created OR sig_audit OR sig_chat OR sig_summary
-             OR sig_schedule OR sig_prefs OR sig_pending) AS any_sig,
            CASE
              WHEN student_id = 'anonymous'                              THEN 'anonymous_literal'
              WHEN NOT claimed AND (student_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -99,25 +108,29 @@ classified AS (
              WHEN NOT claimed AND student_id <> lower(student_id)       THEN 'unadoptable_case_variant'
              WHEN NOT claimed AND first_login_at IS NULL                THEN '1_UNCLAIMED_NETID'
              WHEN claimed AND first_login_at IS NULL                    THEN 'anomaly_claimed_without_otp'
-             WHEN NOT claimed AND (sig_created OR sig_audit OR sig_chat OR sig_summary
-                                   OR sig_schedule OR sig_prefs OR sig_pending)
-                                                                        THEN 'anomaly_unclaimed_prelogin'
+             WHEN pre_login_sig AND NOT claimed                         THEN 'anomaly_unclaimed_prelogin'
+             WHEN pre_login_sig                                         THEN '2_ADOPTED_SUSPECT'
+             WHEN sig_multi_dpr                                         THEN '3_MULTI_DPR_SUSPECT'
              WHEN NOT claimed                                           THEN 'recreated_after_login'
-             WHEN sig_created OR sig_audit OR sig_chat OR sig_summary
-                  OR sig_schedule OR sig_prefs OR sig_pending           THEN '2_ADOPTED_SUSPECT'
              ELSE 'clean'
            END AS class
-    FROM signals
+    FROM (
+        SELECT *,
+               (sig_created OR sig_audit OR sig_chat OR sig_summary
+                 OR sig_schedule OR sig_prefs OR sig_pending) AS pre_login_sig
+        FROM signals
+    ) sg
 )
 SELECT class,
        count(*)                                   AS n,
        count(*) FILTER (WHERE has_dpr)            AS n_with_parsed_dpr,
        count(*) FILTER (WHERE has_profile)        AS n_with_profile,
        count(*) FILTER (WHERE last_dpr_refresh > first_login_at) AS n_dpr_refreshed_since_login,
-       -- id[signals] — signal codes: C=row created, A=bootstrap/homeschool/visa
-       -- audit, M=chat, S=summary, F=forward schedule, P=prefs, Q=pending
-       -- mutation (each = earliest row predates first login); +dpr = parsed_dpr
-       -- present; +refreshed = a cookie-auth DPR refresh happened after login.
+       -- id[signals] — pre-login codes (earliest row predates first login):
+       -- C=row created, A=any audit row, M=chat, S=summary, F=forward schedule,
+       -- P=prefs, Q=pending mutation. X = >1 distinct DPR fingerprint among the
+       -- schedules (any time). +dpr = parsed_dpr present; +refreshed = a
+       -- cookie-auth DPR refresh happened after login.
        array_agg(
            student_id || '[' || concat_ws(',',
                CASE WHEN sig_created  THEN 'C' END,
@@ -127,6 +140,7 @@ SELECT class,
                CASE WHEN sig_schedule THEN 'F' END,
                CASE WHEN sig_prefs    THEN 'P' END,
                CASE WHEN sig_pending  THEN 'Q' END,
+               CASE WHEN sig_multi_dpr THEN 'X' END,
                CASE WHEN has_dpr      THEN '+dpr' END,
                CASE WHEN last_dpr_refresh > first_login_at THEN '+refreshed' END
            ) || ']'
